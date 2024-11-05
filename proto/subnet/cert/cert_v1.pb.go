@@ -47,23 +47,23 @@ func (Curve) EnumDescriptor() ([]byte, []int) {
 	return fileDescriptor_a4eacf07e69f0ce9, []int{0}
 }
 
-type RawNebulaCertificate struct {
-	Details   *RawNebulaCertificateDetails `protobuf:"bytes,1,opt,name=Details,proto3" json:"Details,omitempty"`
+type RawSubnetCertificate struct {
+	Details   *RawSubnetCertificateDetails `protobuf:"bytes,1,opt,name=Details,proto3" json:"Details,omitempty"`
 	Signature []byte                       `protobuf:"bytes,2,opt,name=Signature,proto3" json:"Signature,omitempty"`
 }
 
-func (m *RawNebulaCertificate) Reset()         { *m = RawNebulaCertificate{} }
-func (m *RawNebulaCertificate) String() string { return proto.CompactTextString(m) }
-func (*RawNebulaCertificate) ProtoMessage()    {}
-func (*RawNebulaCertificate) Descriptor() ([]byte, []int) {
+func (m *RawSubnetCertificate) Reset()         { *m = RawSubnetCertificate{} }
+func (m *RawSubnetCertificate) String() string { return proto.CompactTextString(m) }
+func (*RawSubnetCertificate) ProtoMessage()    {}
+func (*RawSubnetCertificate) Descriptor() ([]byte, []int) {
 	return fileDescriptor_a4eacf07e69f0ce9, []int{0}
 }
-func (m *RawNebulaCertificate) XXX_Unmarshal(b []byte) error {
+func (m *RawSubnetCertificate) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *RawNebulaCertificate) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *RawSubnetCertificate) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_RawNebulaCertificate.Marshal(b, m, deterministic)
+		return xxx_messageInfo_RawSubnetCertificate.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -73,33 +73,33 @@ func (m *RawNebulaCertificate) XXX_Marshal(b []byte, deterministic bool) ([]byte
 		return b[:n], nil
 	}
 }
-func (m *RawNebulaCertificate) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_RawNebulaCertificate.Merge(m, src)
+func (m *RawSubnetCertificate) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RawSubnetCertificate.Merge(m, src)
 }
-func (m *RawNebulaCertificate) XXX_Size() int {
+func (m *RawSubnetCertificate) XXX_Size() int {
 	return m.Size()
 }
-func (m *RawNebulaCertificate) XXX_DiscardUnknown() {
-	xxx_messageInfo_RawNebulaCertificate.DiscardUnknown(m)
+func (m *RawSubnetCertificate) XXX_DiscardUnknown() {
+	xxx_messageInfo_RawSubnetCertificate.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_RawNebulaCertificate proto.InternalMessageInfo
+var xxx_messageInfo_RawSubnetCertificate proto.InternalMessageInfo
 
-func (m *RawNebulaCertificate) GetDetails() *RawNebulaCertificateDetails {
+func (m *RawSubnetCertificate) GetDetails() *RawSubnetCertificateDetails {
 	if m != nil {
 		return m.Details
 	}
 	return nil
 }
 
-func (m *RawNebulaCertificate) GetSignature() []byte {
+func (m *RawSubnetCertificate) GetSignature() []byte {
 	if m != nil {
 		return m.Signature
 	}
 	return nil
 }
 
-type RawNebulaCertificateDetails struct {
+type RawSubnetCertificateDetails struct {
 	Name string `protobuf:"bytes,1,opt,name=Name,proto3" json:"Name,omitempty"`
 	// Ips and Subnets are in big endian 32 bit pairs, 1st the ip, 2nd the mask
 	Ips       []uint32 `protobuf:"varint,2,rep,packed,name=Ips,proto3" json:"Ips,omitempty"`
@@ -114,18 +114,18 @@ type RawNebulaCertificateDetails struct {
 	Curve  Curve  `protobuf:"varint,100,opt,name=curve,proto3,enum=subnet.cert.Curve" json:"curve,omitempty"`
 }
 
-func (m *RawNebulaCertificateDetails) Reset()         { *m = RawNebulaCertificateDetails{} }
-func (m *RawNebulaCertificateDetails) String() string { return proto.CompactTextString(m) }
-func (*RawNebulaCertificateDetails) ProtoMessage()    {}
-func (*RawNebulaCertificateDetails) Descriptor() ([]byte, []int) {
+func (m *RawSubnetCertificateDetails) Reset()         { *m = RawSubnetCertificateDetails{} }
+func (m *RawSubnetCertificateDetails) String() string { return proto.CompactTextString(m) }
+func (*RawSubnetCertificateDetails) ProtoMessage()    {}
+func (*RawSubnetCertificateDetails) Descriptor() ([]byte, []int) {
 	return fileDescriptor_a4eacf07e69f0ce9, []int{1}
 }
-func (m *RawNebulaCertificateDetails) XXX_Unmarshal(b []byte) error {
+func (m *RawSubnetCertificateDetails) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *RawNebulaCertificateDetails) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *RawSubnetCertificateDetails) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_RawNebulaCertificateDetails.Marshal(b, m, deterministic)
+		return xxx_messageInfo_RawSubnetCertificateDetails.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -135,105 +135,105 @@ func (m *RawNebulaCertificateDetails) XXX_Marshal(b []byte, deterministic bool) 
 		return b[:n], nil
 	}
 }
-func (m *RawNebulaCertificateDetails) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_RawNebulaCertificateDetails.Merge(m, src)
+func (m *RawSubnetCertificateDetails) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RawSubnetCertificateDetails.Merge(m, src)
 }
-func (m *RawNebulaCertificateDetails) XXX_Size() int {
+func (m *RawSubnetCertificateDetails) XXX_Size() int {
 	return m.Size()
 }
-func (m *RawNebulaCertificateDetails) XXX_DiscardUnknown() {
-	xxx_messageInfo_RawNebulaCertificateDetails.DiscardUnknown(m)
+func (m *RawSubnetCertificateDetails) XXX_DiscardUnknown() {
+	xxx_messageInfo_RawSubnetCertificateDetails.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_RawNebulaCertificateDetails proto.InternalMessageInfo
+var xxx_messageInfo_RawSubnetCertificateDetails proto.InternalMessageInfo
 
-func (m *RawNebulaCertificateDetails) GetName() string {
+func (m *RawSubnetCertificateDetails) GetName() string {
 	if m != nil {
 		return m.Name
 	}
 	return ""
 }
 
-func (m *RawNebulaCertificateDetails) GetIps() []uint32 {
+func (m *RawSubnetCertificateDetails) GetIps() []uint32 {
 	if m != nil {
 		return m.Ips
 	}
 	return nil
 }
 
-func (m *RawNebulaCertificateDetails) GetSubnets() []uint32 {
+func (m *RawSubnetCertificateDetails) GetSubnets() []uint32 {
 	if m != nil {
 		return m.Subnets
 	}
 	return nil
 }
 
-func (m *RawNebulaCertificateDetails) GetGroups() []string {
+func (m *RawSubnetCertificateDetails) GetGroups() []string {
 	if m != nil {
 		return m.Groups
 	}
 	return nil
 }
 
-func (m *RawNebulaCertificateDetails) GetNotBefore() int64 {
+func (m *RawSubnetCertificateDetails) GetNotBefore() int64 {
 	if m != nil {
 		return m.NotBefore
 	}
 	return 0
 }
 
-func (m *RawNebulaCertificateDetails) GetNotAfter() int64 {
+func (m *RawSubnetCertificateDetails) GetNotAfter() int64 {
 	if m != nil {
 		return m.NotAfter
 	}
 	return 0
 }
 
-func (m *RawNebulaCertificateDetails) GetPublicKey() []byte {
+func (m *RawSubnetCertificateDetails) GetPublicKey() []byte {
 	if m != nil {
 		return m.PublicKey
 	}
 	return nil
 }
 
-func (m *RawNebulaCertificateDetails) GetIsCA() bool {
+func (m *RawSubnetCertificateDetails) GetIsCA() bool {
 	if m != nil {
 		return m.IsCA
 	}
 	return false
 }
 
-func (m *RawNebulaCertificateDetails) GetIssuer() []byte {
+func (m *RawSubnetCertificateDetails) GetIssuer() []byte {
 	if m != nil {
 		return m.Issuer
 	}
 	return nil
 }
 
-func (m *RawNebulaCertificateDetails) GetCurve() Curve {
+func (m *RawSubnetCertificateDetails) GetCurve() Curve {
 	if m != nil {
 		return m.Curve
 	}
 	return Curve_CURVE25519
 }
 
-type RawNebulaEncryptedData struct {
-	EncryptionMetadata *RawNebulaEncryptionMetadata `protobuf:"bytes,1,opt,name=EncryptionMetadata,proto3" json:"EncryptionMetadata,omitempty"`
+type RawSubnetEncryptedData struct {
+	EncryptionMetadata *RawSubnetEncryptionMetadata `protobuf:"bytes,1,opt,name=EncryptionMetadata,proto3" json:"EncryptionMetadata,omitempty"`
 	Ciphertext         []byte                       `protobuf:"bytes,2,opt,name=Ciphertext,proto3" json:"Ciphertext,omitempty"`
 }
 
-func (m *RawNebulaEncryptedData) Reset()         { *m = RawNebulaEncryptedData{} }
-func (m *RawNebulaEncryptedData) String() string { return proto.CompactTextString(m) }
-func (*RawNebulaEncryptedData) ProtoMessage()    {}
-func (*RawNebulaEncryptedData) Descriptor() ([]byte, []int) {
+func (m *RawSubnetEncryptedData) Reset()         { *m = RawSubnetEncryptedData{} }
+func (m *RawSubnetEncryptedData) String() string { return proto.CompactTextString(m) }
+func (*RawSubnetEncryptedData) ProtoMessage()    {}
+func (*RawSubnetEncryptedData) Descriptor() ([]byte, []int) {
 	return fileDescriptor_a4eacf07e69f0ce9, []int{2}
 }
-func (m *RawNebulaEncryptedData) XXX_Unmarshal(b []byte) error {
+func (m *RawSubnetEncryptedData) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *RawNebulaEncryptedData) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *RawSubnetEncryptedData) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_RawNebulaEncryptedData.Marshal(b, m, deterministic)
+		return xxx_messageInfo_RawSubnetEncryptedData.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -243,49 +243,49 @@ func (m *RawNebulaEncryptedData) XXX_Marshal(b []byte, deterministic bool) ([]by
 		return b[:n], nil
 	}
 }
-func (m *RawNebulaEncryptedData) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_RawNebulaEncryptedData.Merge(m, src)
+func (m *RawSubnetEncryptedData) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RawSubnetEncryptedData.Merge(m, src)
 }
-func (m *RawNebulaEncryptedData) XXX_Size() int {
+func (m *RawSubnetEncryptedData) XXX_Size() int {
 	return m.Size()
 }
-func (m *RawNebulaEncryptedData) XXX_DiscardUnknown() {
-	xxx_messageInfo_RawNebulaEncryptedData.DiscardUnknown(m)
+func (m *RawSubnetEncryptedData) XXX_DiscardUnknown() {
+	xxx_messageInfo_RawSubnetEncryptedData.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_RawNebulaEncryptedData proto.InternalMessageInfo
+var xxx_messageInfo_RawSubnetEncryptedData proto.InternalMessageInfo
 
-func (m *RawNebulaEncryptedData) GetEncryptionMetadata() *RawNebulaEncryptionMetadata {
+func (m *RawSubnetEncryptedData) GetEncryptionMetadata() *RawSubnetEncryptionMetadata {
 	if m != nil {
 		return m.EncryptionMetadata
 	}
 	return nil
 }
 
-func (m *RawNebulaEncryptedData) GetCiphertext() []byte {
+func (m *RawSubnetEncryptedData) GetCiphertext() []byte {
 	if m != nil {
 		return m.Ciphertext
 	}
 	return nil
 }
 
-type RawNebulaEncryptionMetadata struct {
+type RawSubnetEncryptionMetadata struct {
 	EncryptionAlgorithm string                     `protobuf:"bytes,1,opt,name=EncryptionAlgorithm,proto3" json:"EncryptionAlgorithm,omitempty"`
-	Argon2Parameters    *RawNebulaArgon2Parameters `protobuf:"bytes,2,opt,name=Argon2Parameters,proto3" json:"Argon2Parameters,omitempty"`
+	Argon2Parameters    *RawSubnetArgon2Parameters `protobuf:"bytes,2,opt,name=Argon2Parameters,proto3" json:"Argon2Parameters,omitempty"`
 }
 
-func (m *RawNebulaEncryptionMetadata) Reset()         { *m = RawNebulaEncryptionMetadata{} }
-func (m *RawNebulaEncryptionMetadata) String() string { return proto.CompactTextString(m) }
-func (*RawNebulaEncryptionMetadata) ProtoMessage()    {}
-func (*RawNebulaEncryptionMetadata) Descriptor() ([]byte, []int) {
+func (m *RawSubnetEncryptionMetadata) Reset()         { *m = RawSubnetEncryptionMetadata{} }
+func (m *RawSubnetEncryptionMetadata) String() string { return proto.CompactTextString(m) }
+func (*RawSubnetEncryptionMetadata) ProtoMessage()    {}
+func (*RawSubnetEncryptionMetadata) Descriptor() ([]byte, []int) {
 	return fileDescriptor_a4eacf07e69f0ce9, []int{3}
 }
-func (m *RawNebulaEncryptionMetadata) XXX_Unmarshal(b []byte) error {
+func (m *RawSubnetEncryptionMetadata) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *RawNebulaEncryptionMetadata) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *RawSubnetEncryptionMetadata) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_RawNebulaEncryptionMetadata.Marshal(b, m, deterministic)
+		return xxx_messageInfo_RawSubnetEncryptionMetadata.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -295,33 +295,33 @@ func (m *RawNebulaEncryptionMetadata) XXX_Marshal(b []byte, deterministic bool) 
 		return b[:n], nil
 	}
 }
-func (m *RawNebulaEncryptionMetadata) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_RawNebulaEncryptionMetadata.Merge(m, src)
+func (m *RawSubnetEncryptionMetadata) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RawSubnetEncryptionMetadata.Merge(m, src)
 }
-func (m *RawNebulaEncryptionMetadata) XXX_Size() int {
+func (m *RawSubnetEncryptionMetadata) XXX_Size() int {
 	return m.Size()
 }
-func (m *RawNebulaEncryptionMetadata) XXX_DiscardUnknown() {
-	xxx_messageInfo_RawNebulaEncryptionMetadata.DiscardUnknown(m)
+func (m *RawSubnetEncryptionMetadata) XXX_DiscardUnknown() {
+	xxx_messageInfo_RawSubnetEncryptionMetadata.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_RawNebulaEncryptionMetadata proto.InternalMessageInfo
+var xxx_messageInfo_RawSubnetEncryptionMetadata proto.InternalMessageInfo
 
-func (m *RawNebulaEncryptionMetadata) GetEncryptionAlgorithm() string {
+func (m *RawSubnetEncryptionMetadata) GetEncryptionAlgorithm() string {
 	if m != nil {
 		return m.EncryptionAlgorithm
 	}
 	return ""
 }
 
-func (m *RawNebulaEncryptionMetadata) GetArgon2Parameters() *RawNebulaArgon2Parameters {
+func (m *RawSubnetEncryptionMetadata) GetArgon2Parameters() *RawSubnetArgon2Parameters {
 	if m != nil {
 		return m.Argon2Parameters
 	}
 	return nil
 }
 
-type RawNebulaArgon2Parameters struct {
+type RawSubnetArgon2Parameters struct {
 	Version     int32  `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
 	Memory      uint32 `protobuf:"varint,2,opt,name=memory,proto3" json:"memory,omitempty"`
 	Parallelism uint32 `protobuf:"varint,4,opt,name=parallelism,proto3" json:"parallelism,omitempty"`
@@ -329,18 +329,18 @@ type RawNebulaArgon2Parameters struct {
 	Salt        []byte `protobuf:"bytes,5,opt,name=salt,proto3" json:"salt,omitempty"`
 }
 
-func (m *RawNebulaArgon2Parameters) Reset()         { *m = RawNebulaArgon2Parameters{} }
-func (m *RawNebulaArgon2Parameters) String() string { return proto.CompactTextString(m) }
-func (*RawNebulaArgon2Parameters) ProtoMessage()    {}
-func (*RawNebulaArgon2Parameters) Descriptor() ([]byte, []int) {
+func (m *RawSubnetArgon2Parameters) Reset()         { *m = RawSubnetArgon2Parameters{} }
+func (m *RawSubnetArgon2Parameters) String() string { return proto.CompactTextString(m) }
+func (*RawSubnetArgon2Parameters) ProtoMessage()    {}
+func (*RawSubnetArgon2Parameters) Descriptor() ([]byte, []int) {
 	return fileDescriptor_a4eacf07e69f0ce9, []int{4}
 }
-func (m *RawNebulaArgon2Parameters) XXX_Unmarshal(b []byte) error {
+func (m *RawSubnetArgon2Parameters) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *RawNebulaArgon2Parameters) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *RawSubnetArgon2Parameters) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_RawNebulaArgon2Parameters.Marshal(b, m, deterministic)
+		return xxx_messageInfo_RawSubnetArgon2Parameters.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -350,47 +350,47 @@ func (m *RawNebulaArgon2Parameters) XXX_Marshal(b []byte, deterministic bool) ([
 		return b[:n], nil
 	}
 }
-func (m *RawNebulaArgon2Parameters) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_RawNebulaArgon2Parameters.Merge(m, src)
+func (m *RawSubnetArgon2Parameters) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RawSubnetArgon2Parameters.Merge(m, src)
 }
-func (m *RawNebulaArgon2Parameters) XXX_Size() int {
+func (m *RawSubnetArgon2Parameters) XXX_Size() int {
 	return m.Size()
 }
-func (m *RawNebulaArgon2Parameters) XXX_DiscardUnknown() {
-	xxx_messageInfo_RawNebulaArgon2Parameters.DiscardUnknown(m)
+func (m *RawSubnetArgon2Parameters) XXX_DiscardUnknown() {
+	xxx_messageInfo_RawSubnetArgon2Parameters.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_RawNebulaArgon2Parameters proto.InternalMessageInfo
+var xxx_messageInfo_RawSubnetArgon2Parameters proto.InternalMessageInfo
 
-func (m *RawNebulaArgon2Parameters) GetVersion() int32 {
+func (m *RawSubnetArgon2Parameters) GetVersion() int32 {
 	if m != nil {
 		return m.Version
 	}
 	return 0
 }
 
-func (m *RawNebulaArgon2Parameters) GetMemory() uint32 {
+func (m *RawSubnetArgon2Parameters) GetMemory() uint32 {
 	if m != nil {
 		return m.Memory
 	}
 	return 0
 }
 
-func (m *RawNebulaArgon2Parameters) GetParallelism() uint32 {
+func (m *RawSubnetArgon2Parameters) GetParallelism() uint32 {
 	if m != nil {
 		return m.Parallelism
 	}
 	return 0
 }
 
-func (m *RawNebulaArgon2Parameters) GetIterations() uint32 {
+func (m *RawSubnetArgon2Parameters) GetIterations() uint32 {
 	if m != nil {
 		return m.Iterations
 	}
 	return 0
 }
 
-func (m *RawNebulaArgon2Parameters) GetSalt() []byte {
+func (m *RawSubnetArgon2Parameters) GetSalt() []byte {
 	if m != nil {
 		return m.Salt
 	}
@@ -399,17 +399,17 @@ func (m *RawNebulaArgon2Parameters) GetSalt() []byte {
 
 func init() {
 	proto.RegisterEnum("subnet.cert.Curve", Curve_name, Curve_value)
-	proto.RegisterType((*RawNebulaCertificate)(nil), "subnet.cert.RawNebulaCertificate")
-	proto.RegisterType((*RawNebulaCertificateDetails)(nil), "subnet.cert.RawNebulaCertificateDetails")
-	proto.RegisterType((*RawNebulaEncryptedData)(nil), "subnet.cert.RawNebulaEncryptedData")
-	proto.RegisterType((*RawNebulaEncryptionMetadata)(nil), "subnet.cert.RawNebulaEncryptionMetadata")
-	proto.RegisterType((*RawNebulaArgon2Parameters)(nil), "subnet.cert.RawNebulaArgon2Parameters")
+	proto.RegisterType((*RawSubnetCertificate)(nil), "subnet.cert.RawSubnetCertificate")
+	proto.RegisterType((*RawSubnetCertificateDetails)(nil), "subnet.cert.RawSubnetCertificateDetails")
+	proto.RegisterType((*RawSubnetEncryptedData)(nil), "subnet.cert.RawSubnetEncryptedData")
+	proto.RegisterType((*RawSubnetEncryptionMetadata)(nil), "subnet.cert.RawSubnetEncryptionMetadata")
+	proto.RegisterType((*RawSubnetArgon2Parameters)(nil), "subnet.cert.RawSubnetArgon2Parameters")
 }
 
 func init() { proto.RegisterFile("proto/subnet/cert/cert_v1.proto", fileDescriptor_a4eacf07e69f0ce9) }
 
 var fileDescriptor_a4eacf07e69f0ce9 = []byte{
-	// 544 bytes of a gzipped FileDescriptorProto
+	// 541 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x7c, 0x53, 0xcd, 0x6e, 0x13, 0x31,
 	0x10, 0x8e, 0x9b, 0x7f, 0xa7, 0xad, 0x22, 0x83, 0x2a, 0xf3, 0xa3, 0x65, 0xc9, 0x01, 0xad, 0x38,
 	0xa4, 0x74, 0x51, 0x90, 0x38, 0x26, 0x69, 0x85, 0x22, 0x44, 0x14, 0xb9, 0x02, 0x21, 0x2e, 0xc8,
@@ -417,36 +417,36 @@ var fileDescriptor_a4eacf07e69f0ce9 = []byte{
 	0xb1, 0x47, 0x8e, 0x28, 0x79, 0x11, 0x64, 0x67, 0xf3, 0x03, 0x0d, 0xbd, 0xac, 0x66, 0xbe, 0xf9,
 	0xc6, 0xfe, 0x3c, 0xdf, 0x2c, 0x7e, 0x96, 0x48, 0xa1, 0xc5, 0xa9, 0x4a, 0x87, 0x31, 0xe8, 0xd3,
 	0x11, 0xc8, 0xd5, 0xe7, 0xeb, 0xec, 0xac, 0x69, 0x2b, 0xa4, 0xb6, 0x2a, 0x35, 0x0d, 0xda, 0xb8,
-	0xc6, 0x0f, 0x19, 0xff, 0xd6, 0x87, 0x61, 0x1a, 0xf2, 0x2e, 0x48, 0x1d, 0x4c, 0x82, 0x11, 0xd7,
-	0x40, 0x3a, 0xb8, 0x7c, 0x0e, 0x9a, 0x07, 0xa1, 0xa2, 0xc8, 0x45, 0x5e, 0xcd, 0xf7, 0x9a, 0x3b,
-	0x6d, 0xcd, 0x7d, 0x3d, 0x19, 0x9f, 0xad, 0x1b, 0xc9, 0x53, 0x5c, 0xbd, 0x0c, 0xa6, 0x31, 0xd7,
-	0xa9, 0x04, 0x7a, 0xe0, 0x22, 0xef, 0x90, 0x6d, 0x81, 0xc6, 0xcd, 0x01, 0x7e, 0x72, 0xcf, 0x31,
-	0x84, 0xe0, 0x42, 0x9f, 0x47, 0x60, 0xaf, 0xaf, 0x32, 0x1b, 0x93, 0x3a, 0xce, 0xf7, 0x12, 0x45,
-	0x0f, 0xdc, 0xbc, 0x77, 0xc4, 0x4c, 0x48, 0x28, 0x2e, 0x5f, 0x5a, 0x5d, 0x8a, 0xe6, 0x2d, 0xba,
-	0x4e, 0xc9, 0x09, 0x2e, 0xbd, 0x93, 0x22, 0x4d, 0x14, 0x2d, 0xb8, 0x79, 0xaf, 0xca, 0xb2, 0xcc,
-	0xa8, 0xea, 0x0b, 0xdd, 0x81, 0x89, 0x90, 0x40, 0x8b, 0x2e, 0xf2, 0xf2, 0x6c, 0x0b, 0x90, 0xc7,
-	0xb8, 0xd2, 0x17, 0xba, 0x3d, 0xd1, 0x20, 0x69, 0xc9, 0x16, 0x37, 0xb9, 0xe9, 0x1c, 0xa4, 0xc3,
-	0x30, 0x18, 0xbd, 0x87, 0x39, 0x2d, 0xaf, 0xde, 0xb3, 0x01, 0x8c, 0xde, 0x9e, 0xea, 0xb6, 0x69,
-	0xc5, 0x45, 0x5e, 0x85, 0xd9, 0xd8, 0x68, 0xe8, 0x29, 0x95, 0x82, 0xa4, 0x55, 0x4b, 0xcf, 0x32,
-	0xe2, 0xe1, 0xe2, 0x28, 0x95, 0x33, 0xa0, 0x63, 0x17, 0x79, 0xc7, 0x3e, 0xf9, 0x6b, 0xb6, 0x5d,
-	0x53, 0x61, 0x2b, 0x42, 0xe3, 0x07, 0xc2, 0x27, 0x9b, 0x29, 0x5d, 0xc4, 0x23, 0x39, 0x4f, 0x34,
-	0x8c, 0xcf, 0xb9, 0xe6, 0xe4, 0x33, 0x26, 0x19, 0x10, 0x88, 0xf8, 0x03, 0x68, 0x3e, 0xe6, 0x9a,
-	0xdf, 0xef, 0xd6, 0x5d, 0x3e, 0xdb, 0x73, 0x06, 0x71, 0x30, 0xee, 0x06, 0xc9, 0x15, 0x48, 0x0d,
-	0xd7, 0x3a, 0x73, 0x6e, 0x07, 0x69, 0xdc, 0xa0, 0x1d, 0xeb, 0xf6, 0xf4, 0xbf, 0xc2, 0x0f, 0xb6,
-	0x68, 0x3b, 0x9c, 0x0a, 0x19, 0xe8, 0xab, 0x28, 0x73, 0x72, 0x5f, 0x89, 0x30, 0x5c, 0x6f, 0xcb,
-	0xa9, 0x88, 0xfd, 0x01, 0x97, 0x3c, 0x02, 0x0d, 0x52, 0xd9, 0x7b, 0x6b, 0xfe, 0x8b, 0xfd, 0x2f,
-	0xf9, 0x97, 0xcd, 0xee, 0xf4, 0x1b, 0x95, 0x8f, 0xfe, 0xcb, 0x37, 0x8b, 0x33, 0x03, 0xa9, 0x02,
-	0x11, 0x5b, 0x5d, 0x45, 0xb6, 0x4e, 0x8d, 0x69, 0x11, 0x44, 0x42, 0xce, 0xad, 0x82, 0x23, 0x96,
-	0x65, 0xc4, 0xc5, 0xb5, 0x84, 0x4b, 0x1e, 0x86, 0x10, 0x06, 0x2a, 0xa2, 0x05, 0x5b, 0xdc, 0x85,
-	0xcc, 0xdc, 0x02, 0x0d, 0x92, 0x9b, 0xb7, 0x99, 0x7d, 0x34, 0x84, 0x1d, 0xc4, 0xac, 0x88, 0xe2,
-	0xa1, 0xb6, 0x5b, 0x77, 0xc8, 0x6c, 0xfc, 0xf2, 0x39, 0x2e, 0x5a, 0xc3, 0xc9, 0x31, 0xc6, 0xdd,
-	0x8f, 0xec, 0xd3, 0x85, 0xdf, 0x6a, 0x9d, 0xbd, 0xad, 0xe7, 0x48, 0x05, 0x17, 0x06, 0x7e, 0xeb,
-	0x4d, 0x1d, 0x75, 0x9c, 0x9f, 0x0b, 0x07, 0xdd, 0x2e, 0x1c, 0xf4, 0x7b, 0xe1, 0xa0, 0xef, 0x4b,
-	0x27, 0x77, 0xbb, 0x74, 0x72, 0xbf, 0x96, 0x4e, 0xee, 0x4b, 0xc1, 0x0c, 0x65, 0x58, 0xb2, 0xff,
-	0xf5, 0xeb, 0x3f, 0x01, 0x00, 0x00, 0xff, 0xff, 0xe3, 0x38, 0xb3, 0xd6, 0xfa, 0x03, 0x00, 0x00,
+	0xc6, 0x0f, 0x19, 0xff, 0x76, 0x69, 0x91, 0x2e, 0x48, 0x1d, 0x4c, 0x82, 0x11, 0xd7, 0x40, 0x3a,
+	0xb8, 0x7c, 0x0e, 0x9a, 0x07, 0xa1, 0xa2, 0xc8, 0x45, 0x5e, 0xcd, 0xf7, 0x9a, 0x3b, 0x6d, 0xcd,
+	0x7d, 0x3d, 0x19, 0x9f, 0xad, 0x1b, 0xc9, 0x53, 0x5c, 0xbd, 0x0c, 0xa6, 0x31, 0xd7, 0xa9, 0x04,
+	0x7a, 0xe0, 0x22, 0xef, 0x90, 0x6d, 0x81, 0xc6, 0xcd, 0x01, 0x7e, 0x72, 0xcf, 0x31, 0x84, 0xe0,
+	0x42, 0x9f, 0x47, 0x60, 0xaf, 0xaf, 0x32, 0x1b, 0x93, 0x3a, 0xce, 0xf7, 0x12, 0x45, 0x0f, 0xdc,
+	0xbc, 0x77, 0xc4, 0x4c, 0x48, 0x28, 0x2e, 0xaf, 0x4e, 0x50, 0x34, 0x6f, 0xd1, 0x75, 0x4a, 0x4e,
+	0x70, 0xe9, 0x9d, 0x14, 0x69, 0xa2, 0x68, 0xc1, 0xcd, 0x7b, 0x55, 0x96, 0x65, 0x46, 0x55, 0x5f,
+	0xe8, 0x0e, 0x4c, 0x84, 0x04, 0x5a, 0x74, 0x91, 0x97, 0x67, 0x5b, 0x80, 0x3c, 0xc6, 0x95, 0xbe,
+	0xd0, 0xed, 0x89, 0x06, 0x49, 0x4b, 0xb6, 0xb8, 0xc9, 0x4d, 0xe7, 0x20, 0x1d, 0x86, 0xc1, 0xe8,
+	0x3d, 0xcc, 0x69, 0x79, 0xf5, 0x9e, 0x0d, 0x60, 0xf4, 0xf6, 0x54, 0xb7, 0x4d, 0x2b, 0x2e, 0xf2,
+	0x2a, 0xcc, 0xc6, 0x46, 0x43, 0x4f, 0xa9, 0x14, 0x24, 0xad, 0x5a, 0x7a, 0x96, 0x11, 0x0f, 0x17,
+	0x47, 0xa9, 0x9c, 0x01, 0x1d, 0xbb, 0xc8, 0x3b, 0xf6, 0xc9, 0x5f, 0xb3, 0xed, 0x9a, 0x0a, 0x5b,
+	0x11, 0x1a, 0x3f, 0x10, 0x3e, 0xd9, 0x4c, 0xe9, 0x22, 0x1e, 0xc9, 0x79, 0xa2, 0x61, 0x7c, 0xce,
+	0x35, 0x27, 0x9f, 0x31, 0xc9, 0x80, 0x40, 0xc4, 0x1f, 0x40, 0xf3, 0x31, 0xd7, 0xfc, 0x7e, 0xb7,
+	0xee, 0xf2, 0xd9, 0x9e, 0x33, 0x88, 0x83, 0x71, 0x37, 0x48, 0xae, 0x40, 0x6a, 0xb8, 0xd6, 0x99,
+	0x73, 0x3b, 0x48, 0xe3, 0x06, 0xed, 0x58, 0xb7, 0xa7, 0xff, 0x15, 0x7e, 0xb0, 0x45, 0xdb, 0xe1,
+	0x54, 0xc8, 0x40, 0x5f, 0x45, 0x99, 0x93, 0xfb, 0x4a, 0x84, 0xe1, 0x7a, 0x5b, 0x4e, 0x45, 0xec,
+	0x0f, 0xb8, 0xe4, 0x11, 0x68, 0x90, 0xca, 0xde, 0x5b, 0xf3, 0x5f, 0xec, 0x7f, 0xc9, 0xbf, 0x6c,
+	0x76, 0xa7, 0xdf, 0xa8, 0x7c, 0xf4, 0x5f, 0xbe, 0x59, 0x9c, 0x19, 0x48, 0x15, 0x88, 0xd8, 0xea,
+	0x2a, 0xb2, 0x75, 0x6a, 0x4c, 0x8b, 0x20, 0x12, 0x72, 0x6e, 0x15, 0x1c, 0xb1, 0x2c, 0x23, 0x2e,
+	0xae, 0x25, 0x5c, 0xf2, 0x30, 0x84, 0x30, 0x50, 0x11, 0x2d, 0xd8, 0xe2, 0x2e, 0x64, 0xe6, 0x16,
+	0x68, 0x90, 0xdc, 0xbc, 0xcd, 0xec, 0xa3, 0x21, 0xec, 0x20, 0x66, 0x45, 0x14, 0x0f, 0xb5, 0xdd,
+	0xba, 0x43, 0x66, 0xe3, 0x97, 0xcf, 0x71, 0xd1, 0x1a, 0x4e, 0x8e, 0x31, 0xee, 0x7e, 0x64, 0x9f,
+	0x2e, 0xfc, 0x56, 0xeb, 0xec, 0x6d, 0x3d, 0x47, 0x2a, 0xb8, 0x30, 0xf0, 0x5b, 0x6f, 0xea, 0xa8,
+	0xe3, 0xfc, 0x5c, 0x38, 0xe8, 0x76, 0xe1, 0xa0, 0xdf, 0x0b, 0x07, 0x7d, 0x5f, 0x3a, 0xb9, 0xdb,
+	0xa5, 0x93, 0xfb, 0xb5, 0x74, 0x72, 0x5f, 0x0a, 0x66, 0x28, 0xc3, 0x92, 0xfd, 0xaf, 0x5f, 0xff,
+	0x09, 0x00, 0x00, 0xff, 0xff, 0x67, 0x1e, 0xee, 0xcd, 0xfa, 0x03, 0x00, 0x00,
 }
 
-func (m *RawNebulaCertificate) Marshal() (dAtA []byte, err error) {
+func (m *RawSubnetCertificate) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -456,12 +456,12 @@ func (m *RawNebulaCertificate) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *RawNebulaCertificate) MarshalTo(dAtA []byte) (int, error) {
+func (m *RawSubnetCertificate) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *RawNebulaCertificate) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *RawSubnetCertificate) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -488,7 +488,7 @@ func (m *RawNebulaCertificate) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
-func (m *RawNebulaCertificateDetails) Marshal() (dAtA []byte, err error) {
+func (m *RawSubnetCertificateDetails) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -498,12 +498,12 @@ func (m *RawNebulaCertificateDetails) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *RawNebulaCertificateDetails) MarshalTo(dAtA []byte) (int, error) {
+func (m *RawSubnetCertificateDetails) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *RawNebulaCertificateDetails) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *RawSubnetCertificateDetails) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -604,7 +604,7 @@ func (m *RawNebulaCertificateDetails) MarshalToSizedBuffer(dAtA []byte) (int, er
 	return len(dAtA) - i, nil
 }
 
-func (m *RawNebulaEncryptedData) Marshal() (dAtA []byte, err error) {
+func (m *RawSubnetEncryptedData) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -614,12 +614,12 @@ func (m *RawNebulaEncryptedData) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *RawNebulaEncryptedData) MarshalTo(dAtA []byte) (int, error) {
+func (m *RawSubnetEncryptedData) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *RawNebulaEncryptedData) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *RawSubnetEncryptedData) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -646,7 +646,7 @@ func (m *RawNebulaEncryptedData) MarshalToSizedBuffer(dAtA []byte) (int, error) 
 	return len(dAtA) - i, nil
 }
 
-func (m *RawNebulaEncryptionMetadata) Marshal() (dAtA []byte, err error) {
+func (m *RawSubnetEncryptionMetadata) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -656,12 +656,12 @@ func (m *RawNebulaEncryptionMetadata) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *RawNebulaEncryptionMetadata) MarshalTo(dAtA []byte) (int, error) {
+func (m *RawSubnetEncryptionMetadata) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *RawNebulaEncryptionMetadata) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *RawSubnetEncryptionMetadata) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -688,7 +688,7 @@ func (m *RawNebulaEncryptionMetadata) MarshalToSizedBuffer(dAtA []byte) (int, er
 	return len(dAtA) - i, nil
 }
 
-func (m *RawNebulaArgon2Parameters) Marshal() (dAtA []byte, err error) {
+func (m *RawSubnetArgon2Parameters) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -698,12 +698,12 @@ func (m *RawNebulaArgon2Parameters) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *RawNebulaArgon2Parameters) MarshalTo(dAtA []byte) (int, error) {
+func (m *RawSubnetArgon2Parameters) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *RawNebulaArgon2Parameters) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *RawSubnetArgon2Parameters) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -749,7 +749,7 @@ func encodeVarintCertV1(dAtA []byte, offset int, v uint64) int {
 	dAtA[offset] = uint8(v)
 	return base
 }
-func (m *RawNebulaCertificate) Size() (n int) {
+func (m *RawSubnetCertificate) Size() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -766,7 +766,7 @@ func (m *RawNebulaCertificate) Size() (n int) {
 	return n
 }
 
-func (m *RawNebulaCertificateDetails) Size() (n int) {
+func (m *RawSubnetCertificateDetails) Size() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -819,7 +819,7 @@ func (m *RawNebulaCertificateDetails) Size() (n int) {
 	return n
 }
 
-func (m *RawNebulaEncryptedData) Size() (n int) {
+func (m *RawSubnetEncryptedData) Size() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -836,7 +836,7 @@ func (m *RawNebulaEncryptedData) Size() (n int) {
 	return n
 }
 
-func (m *RawNebulaEncryptionMetadata) Size() (n int) {
+func (m *RawSubnetEncryptionMetadata) Size() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -853,7 +853,7 @@ func (m *RawNebulaEncryptionMetadata) Size() (n int) {
 	return n
 }
 
-func (m *RawNebulaArgon2Parameters) Size() (n int) {
+func (m *RawSubnetArgon2Parameters) Size() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -884,7 +884,7 @@ func sovCertV1(x uint64) (n int) {
 func sozCertV1(x uint64) (n int) {
 	return sovCertV1(uint64((x << 1) ^ uint64((int64(x) >> 63))))
 }
-func (m *RawNebulaCertificate) Unmarshal(dAtA []byte) error {
+func (m *RawSubnetCertificate) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -907,10 +907,10 @@ func (m *RawNebulaCertificate) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: RawNebulaCertificate: wiretype end group for non-group")
+			return fmt.Errorf("proto: RawSubnetCertificate: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: RawNebulaCertificate: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: RawSubnetCertificate: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
@@ -943,7 +943,7 @@ func (m *RawNebulaCertificate) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.Details == nil {
-				m.Details = &RawNebulaCertificateDetails{}
+				m.Details = &RawSubnetCertificateDetails{}
 			}
 			if err := m.Details.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -1004,7 +1004,7 @@ func (m *RawNebulaCertificate) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *RawNebulaCertificateDetails) Unmarshal(dAtA []byte) error {
+func (m *RawSubnetCertificateDetails) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -1027,10 +1027,10 @@ func (m *RawNebulaCertificateDetails) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: RawNebulaCertificateDetails: wiretype end group for non-group")
+			return fmt.Errorf("proto: RawSubnetCertificateDetails: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: RawNebulaCertificateDetails: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: RawSubnetCertificateDetails: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
@@ -1415,7 +1415,7 @@ func (m *RawNebulaCertificateDetails) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *RawNebulaEncryptedData) Unmarshal(dAtA []byte) error {
+func (m *RawSubnetEncryptedData) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -1438,10 +1438,10 @@ func (m *RawNebulaEncryptedData) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: RawNebulaEncryptedData: wiretype end group for non-group")
+			return fmt.Errorf("proto: RawSubnetEncryptedData: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: RawNebulaEncryptedData: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: RawSubnetEncryptedData: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
@@ -1474,7 +1474,7 @@ func (m *RawNebulaEncryptedData) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.EncryptionMetadata == nil {
-				m.EncryptionMetadata = &RawNebulaEncryptionMetadata{}
+				m.EncryptionMetadata = &RawSubnetEncryptionMetadata{}
 			}
 			if err := m.EncryptionMetadata.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -1535,7 +1535,7 @@ func (m *RawNebulaEncryptedData) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *RawNebulaEncryptionMetadata) Unmarshal(dAtA []byte) error {
+func (m *RawSubnetEncryptionMetadata) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -1558,10 +1558,10 @@ func (m *RawNebulaEncryptionMetadata) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: RawNebulaEncryptionMetadata: wiretype end group for non-group")
+			return fmt.Errorf("proto: RawSubnetEncryptionMetadata: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: RawNebulaEncryptionMetadata: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: RawSubnetEncryptionMetadata: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
@@ -1626,7 +1626,7 @@ func (m *RawNebulaEncryptionMetadata) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.Argon2Parameters == nil {
-				m.Argon2Parameters = &RawNebulaArgon2Parameters{}
+				m.Argon2Parameters = &RawSubnetArgon2Parameters{}
 			}
 			if err := m.Argon2Parameters.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -1653,7 +1653,7 @@ func (m *RawNebulaEncryptionMetadata) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *RawNebulaArgon2Parameters) Unmarshal(dAtA []byte) error {
+func (m *RawSubnetArgon2Parameters) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -1676,10 +1676,10 @@ func (m *RawNebulaArgon2Parameters) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: RawNebulaArgon2Parameters: wiretype end group for non-group")
+			return fmt.Errorf("proto: RawSubnetArgon2Parameters: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: RawNebulaArgon2Parameters: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: RawSubnetArgon2Parameters: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:

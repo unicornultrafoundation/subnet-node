@@ -9,7 +9,7 @@ import (
 	"dario.cat/mergo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/unicornultrafoundation/subnet-masternode/test"
+	"github.com/unicornultrafoundation/subnet-node/test"
 	"gopkg.in/yaml.v2"
 )
 
