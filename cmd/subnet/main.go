@@ -5,9 +5,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/sirupsen/logrus"
-	util "github.com/unicornultrafoundation/subnet-node/common/error"
-	"github.com/unicornultrafoundation/subnet-node/config"
 	"github.com/unicornultrafoundation/subnet-node/subnet"
 )
 
@@ -20,7 +17,8 @@ var Build string
 
 func main() {
 	configPath := flag.String("config", "", "Path to either a file or directory to load configuration from")
-	configTest := flag.Bool("test", false, "Test the config and print the end result. Non zero exit indicates a faulty config")
+	repoPath := flag.String("repo", "", "Path to either a file or directory to load configuration from")
+
 	printVersion := flag.Bool("version", false, "Print version")
 	printUsage := flag.Bool("help", false, "Print command line usage")
 
@@ -42,27 +40,5 @@ func main() {
 		os.Exit(1)
 	}
 
-	l := logrus.New()
-	l.Out = os.Stdout
-
-	c := config.NewC(l)
-	err := c.Load(*configPath)
-	if err != nil {
-		fmt.Printf("failed to load config: %s", err)
-		os.Exit(1)
-	}
-
-	ctrl, err := subnet.Main(c, *configTest, Build, l, nil)
-	if err != nil {
-		util.LogWithContextIfNeeded("Failed to start", err, l)
-		os.Exit(1)
-	}
-
-	if !*configTest {
-		ctrl.Start()
-		notifyReady(l)
-		ctrl.ShutdownBlock()
-	}
-
-	os.Exit(0)
+	subnet.Main(*repoPath, *configPath)
 }

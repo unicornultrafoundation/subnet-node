@@ -2,6 +2,7 @@ package config
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"math"
@@ -16,6 +17,7 @@ import (
 	"time"
 
 	"dario.cat/mergo"
+	ic "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v2"
 )
@@ -192,6 +194,23 @@ func (c *C) GetString(k, d string) string {
 	}
 
 	return fmt.Sprintf("%v", r)
+}
+
+// GetString will get the string for k or return the default d if not found or invalid
+func (c *C) GetPrivKey(k, d string) (ic.PrivKey, error) {
+	str := c.GetString(k, d)
+	if str == "" {
+		return nil, nil
+	}
+
+	pkb, err := base64.StdEncoding.DecodeString(c.GetString(k, d))
+	if err != nil {
+		return nil, err
+	}
+
+	// currently storing key unencrypted. in the future we need to encrypt it.
+	// TODO(security)
+	return ic.UnmarshalPrivateKey(pkb)
 }
 
 // GetStringSlice will get the slice of strings for k or return the default d if not found or invalid
