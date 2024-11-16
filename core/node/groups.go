@@ -74,7 +74,6 @@ func LibP2P(bcfg *BuildCfg, cfg *config.C) fx.Option {
 // Identity groups units providing cryptographic identity
 func Identity(cfg *config.C) fx.Option {
 	// PeerID
-
 	cid := cfg.GetString("identity.peer_id", "")
 	if cid == "" {
 		return fx.Error(errors.New("identity was not set in config (was 'subnet init' run?)"))
@@ -125,6 +124,14 @@ func Online(bcfg *BuildCfg, cfg *config.C) fx.Option {
 	)
 }
 
+// Storage groups units which setup datastore based persistence and blockstore layers
+func Storage(bcfg *BuildCfg) fx.Option {
+	return fx.Options(
+		fx.Provide(RepoConfig),
+		fx.Provide(Datastore),
+	)
+}
+
 // IPFS builds a group of fx Options based on the passed BuildCfg
 func Subnet(ctx context.Context, bcfg *BuildCfg) fx.Option {
 	bcfgOpts, cfg := bcfg.options(ctx)
@@ -136,6 +143,7 @@ func Subnet(ctx context.Context, bcfg *BuildCfg) fx.Option {
 		bcfgOpts,
 		fx.Provide(baseProcess),
 		Identity(cfg),
+		Storage(bcfg),
 		IPNS,
 		Online(bcfg, cfg),
 	)

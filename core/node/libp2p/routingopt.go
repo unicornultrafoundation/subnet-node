@@ -96,6 +96,7 @@ func ConstructDefaultRouting(cfg *config.C, routingOpt RoutingOption) RoutingOpt
 func constructDHTRouting(mode dht.ModeOpt) RoutingOption {
 	return func(args RoutingOptionArgs) (routing.Routing, error) {
 		dhtOpts := []dht.Option{
+			dht.ProtocolPrefix("ipsn"),
 			dht.Concurrency(10),
 			dht.Mode(mode),
 			dht.Datastore(args.Datastore),
@@ -126,6 +127,7 @@ func constructDHTRouting(mode dht.ModeOpt) RoutingOption {
 // ConstructDelegatedRouting is used when Routing.Type = "custom"
 func ConstructDelegatedRouting(c *config.C, peerID string, addrs irouting.Addresses, privKey string) RoutingOption {
 	return func(args RoutingOptionArgs) (routing.Routing, error) {
+
 		return irouting.Parse(c,
 			&irouting.ExtraDHTParams{
 				BootstrapPeers: args.BootstrapPeers,

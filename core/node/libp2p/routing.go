@@ -90,7 +90,7 @@ func BaseRouting(cfg *config.C) interface{} {
 			}
 		}
 
-		if dualDHT != nil && cfg.GetBool("routing.accelerated_dht_client", true) {
+		if dualDHT != nil && cfg.GetBool("routing.accelerated_dht_client", false) {
 			bspeers, err := parseBootstrapPeers(cfg)
 			if err != nil {
 				return out, err

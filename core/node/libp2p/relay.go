@@ -52,7 +52,7 @@ func MaybeAutoRelay(cfg *config.C, enabled bool) fx.Option {
 	}
 
 	staticRelays := cfg.GetStringSlice("swarm.relay_client.static_relays", []string{})
-	peers, _ := parsPeers(cfg, "swarm.peering.peers")
+	peers, _ := parsePeers(cfg, "swarm.peering.peers")
 	if len(staticRelays) > 0 {
 		return fx.Provide(func() (opts Libp2pOpts, err error) {
 			if len(staticRelays) > 0 {

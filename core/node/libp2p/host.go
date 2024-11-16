@@ -99,14 +99,14 @@ func Host(mctx helpers.MetricsCtx, lc fx.Lifecycle, params P2PHostIn) (out P2PHo
 
 // ParseBootstrapPeers parses a bootstrap list from the config into a list of AddrInfos.
 func parseBootstrapPeers(cfg *config.C) ([]peer.AddrInfo, error) {
-	return parsPeers(cfg, "bootstrap")
+	return parsePeers(cfg, "bootstrap")
 }
 
-func parsPeers(cfg *config.C, k string) ([]peer.AddrInfo, error) {
+func parsePeers(cfg *config.C, k string) ([]peer.AddrInfo, error) {
 	// Retrieve the bootstrap list from config and check its type
 	rawBootstrap, ok := cfg.Get(k).([]interface{})
 	if !ok {
-		return nil, fmt.Errorf("expected []interface{} for key %s, got %T", k, cfg.Get(k))
+		return []peer.AddrInfo{}, nil
 	}
 
 	// Convert []interface{} to []string
