@@ -19,3 +19,7 @@ func (m *Mock) Datastore() Datastore { return m.D }
 func (m *Mock) SwarmKey() ([]byte, error) {
 	return nil, nil
 }
+
+func (m *Mock) Path() string {
+	return ""
+}

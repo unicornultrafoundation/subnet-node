@@ -6,9 +6,9 @@ import (
 	"fmt"
 
 	"github.com/libp2p/go-libp2p/core/peer"
-	rcmgr "github.com/libp2p/go-libp2p/p2p/host/resource-manager"
 	"github.com/unicornultrafoundation/subnet-node/config"
 	"github.com/unicornultrafoundation/subnet-node/core/node/libp2p"
+	"github.com/unicornultrafoundation/subnet-node/p2p"
 	"go.uber.org/fx"
 )
 
@@ -23,14 +23,49 @@ var BaseLibP2P = fx.Options(
 	fx.Invoke(libp2p.PNetChecker),
 )
 
-func LibP2P(cfg *config.C, userResourceOverrides rcmgr.PartialLimitConfig) fx.Option {
+func LibP2P(bcfg *BuildCfg, cfg *config.C) fx.Option {
 	connmgr := fx.Provide(libp2p.ConnectionManager(cfg))
 	autonat := fx.Provide(libp2p.AutoNATService(cfg))
 
+	ps, disc := fx.Options(), fx.Options()
+
+	enableAutoTLS := cfg.GetBool("autotls.enabled", false)
+	enableRelayTransport := cfg.GetBool("swarm.transports.network.relay", true)
+	enableRelayService := cfg.GetBool("swarm.relay_service.enabled", enableRelayTransport)
+	enableRelayClient := cfg.GetBool("swarm.relay_client.enabled", enableRelayService)
+
 	// Gather all the options
 	opts := fx.Options(
+		BaseLibP2P,
+		fx.Provide(libp2p.UserAgent()),
+		maybeProvide(libp2p.P2PForgeCertMgr(bcfg.Repo.Path(), cfg), enableAutoTLS),
+		maybeInvoke(libp2p.StartP2PAutoTLS, enableAutoTLS),
+		fx.Provide(libp2p.AddrFilters(cfg)),
+		fx.Provide(libp2p.AddrsFactory(cfg)),
+		fx.Provide(libp2p.SmuxTransport(cfg)),
+		fx.Provide(libp2p.RelayTransport(enableRelayTransport)),
+		fx.Provide(libp2p.RelayService(enableRelayService, cfg)),
+		fx.Provide(libp2p.Transports(cfg)),
+		fx.Provide(libp2p.ListenOn(cfg)),
+		fx.Invoke(libp2p.SetupDiscovery(cfg.GetBool("discovery.mdns.enabled", true))),
+		fx.Provide(libp2p.ForceReachability(cfg)),
+		fx.Provide(libp2p.HolePunching(cfg, enableRelayClient)),
+
+		fx.Provide(libp2p.Security(!bcfg.DisableEncryptedConnections, cfg)),
+
+		fx.Provide(libp2p.Routing),
+		fx.Provide(libp2p.ContentRouting),
+
+		fx.Provide(libp2p.BaseRouting(cfg)),
+		maybeProvide(libp2p.PubsubRouter, bcfg.getOpt("ipsnps")),
+
+		maybeProvide(libp2p.BandwidthCounter, !cfg.GetBool("swarm.disable_bandwidth_metrics", true)),
+		maybeProvide(libp2p.NatPortMap, !cfg.GetBool("swarm.disable_nat_portmap", true)),
+		libp2p.MaybeAutoRelay(cfg, enableRelayClient),
 		connmgr,
 		autonat,
+		ps,
+		disc,
 	)
 
 	return opts
@@ -42,10 +77,10 @@ func Identity(cfg *config.C) fx.Option {
 
 	cid := cfg.GetString("identity.peer_id", "")
 	if cid == "" {
-		return fx.Error(errors.New("identity was not set in config (was 'ipfs init' run?)"))
+		return fx.Error(errors.New("identity was not set in config (was 'subnet init' run?)"))
 	}
 	if len(cid) == 0 {
-		return fx.Error(errors.New("no peer ID in config! (was 'ipfs init' run?)"))
+		return fx.Error(errors.New("no peer ID in config! (was 'subnet init' run?)"))
 	}
 
 	id, err := peer.Decode(cid)
@@ -75,6 +110,21 @@ func Identity(cfg *config.C) fx.Option {
 	)
 }
 
+// IPNS groups namesys related units
+var IPNS = fx.Options(
+	fx.Provide(RecordValidator),
+)
+
+// Online groups online-only units
+func Online(bcfg *BuildCfg, cfg *config.C) fx.Option {
+	return fx.Options(
+		LibP2P(bcfg, cfg),
+		fx.Provide(DNSResolver),
+		fx.Provide(Peering),
+		fx.Provide(p2p.New),
+	)
+}
+
 // IPFS builds a group of fx Options based on the passed BuildCfg
 func Subnet(ctx context.Context, bcfg *BuildCfg) fx.Option {
 	bcfgOpts, cfg := bcfg.options(ctx)
@@ -82,5 +132,11 @@ func Subnet(ctx context.Context, bcfg *BuildCfg) fx.Option {
 		return bcfgOpts // error
 	}
 
-	return fx.Options()
+	return fx.Options(
+		bcfgOpts,
+		fx.Provide(baseProcess),
+		Identity(cfg),
+		IPNS,
+		Online(bcfg, cfg),
+	)
 }

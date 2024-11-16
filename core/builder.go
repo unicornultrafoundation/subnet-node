@@ -34,7 +34,7 @@ func NewNode(ctx context.Context, cfg *BuildCfg) (*SubnetNode, error) {
 	ctx, cancel := context.WithCancel(valueContext{ctx})
 
 	// add a metrics scope.
-	ctx = metrics.CtxScope(ctx, "ipfs")
+	ctx = metrics.CtxScope(ctx, "subnet")
 
 	n := &SubnetNode{
 		ctx: ctx,
@@ -82,7 +82,6 @@ func NewNode(ctx context.Context, cfg *BuildCfg) (*SubnetNode, error) {
 	if err := app.Start(ctx); err != nil {
 		return nil, logAndUnwrapFxError(err)
 	}
-
 	// TODO: How soon will bootstrap move to libp2p?
 	if !cfg.Online {
 		return n, nil

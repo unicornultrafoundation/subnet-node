@@ -7,8 +7,8 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/config"
 )
 
-func Security(cfg *config.C) interface{} {
-	if !cfg.GetBool("security.enable", true) {
+func Security(enabled bool, cfg *config.C) interface{} {
+	if !enabled {
 		return func() (opts Libp2pOpts) {
 			log.Errorf(`Your Subnet node has been configured to run WITHOUT ENCRYPTED CONNECTIONS.
 		You will not be able to connect to any nodes configured to use encrypted connections`)

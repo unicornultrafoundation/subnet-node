@@ -45,11 +45,14 @@ func RelayService(enable bool, cfg *config.C) func() (opts Libp2pOpts, err error
 	}
 }
 
-func MaybeAutoRelay(staticRelays []string, peers []peer.AddrInfo, enabled bool) fx.Option {
+// libp2p.MaybeAutoRelay(cfg.Swarm.RelayClient.StaticRelays, cfg.Peering, enableRelayClient),
+func MaybeAutoRelay(cfg *config.C, enabled bool) fx.Option {
 	if !enabled {
 		return fx.Options()
 	}
 
+	staticRelays := cfg.GetStringSlice("swarm.relay_client.static_relays", []string{})
+	peers, _ := parsPeers(cfg, "swarm.peering.peers")
 	if len(staticRelays) > 0 {
 		return fx.Provide(func() (opts Libp2pOpts, err error) {
 			if len(staticRelays) > 0 {

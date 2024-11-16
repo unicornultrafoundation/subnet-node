@@ -38,7 +38,7 @@ type SubnetNode struct {
 	Bootstrapper io.Closer                  `optional:"true"` // the periodic bootstrapper
 	PeerHost     p2phost.Host               `optional:"true"` // the network host (server+client)
 	Peering      *peering.PeeringService    `optional:"true"`
-	Routing      irouting.ProvideManyRouter `optional:"true"` // the routing system. recommend ipfs-dht
+	Routing      irouting.ProvideManyRouter `optional:"true"`
 
 	// Flags
 	IsOnline bool `optional:"true"` // Online is set when networking is enabled.

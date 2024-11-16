@@ -29,7 +29,8 @@ func run(repoPath string, configPath string) error {
 	}
 
 	node, err := core.NewNode(context.Background(), &core.BuildCfg{
-		Repo: r,
+		Repo:   r,
+		Online: true,
 	})
 
 	if err != nil {

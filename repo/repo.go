@@ -13,6 +13,8 @@ type Repo interface {
 	SwarmKey() ([]byte, error)
 
 	Close() error
+	// Path is the repo file-system path
+	Path() string
 }
 
 // Datastore is the interface required from a datastore to be

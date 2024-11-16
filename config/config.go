@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -194,6 +195,32 @@ func (c *C) GetString(k, d string) string {
 	}
 
 	return fmt.Sprintf("%v", r)
+}
+
+// GetStrings lấy giá trị từ key và trả về slice string nếu có, nếu không trả về slice d.
+func (c *C) GetStrings(k string, d []string) []string {
+	r := c.Get(k) // Lấy giá trị từ key k
+
+	// Kiểm tra nếu giá trị trả về là nil, trả về giá trị mặc định d
+	if r == nil {
+		return d
+	}
+
+	// Nếu giá trị trả về là kiểu slice, kiểm tra xem đó có phải là slice của string hay không
+	if reflect.TypeOf(r).Kind() == reflect.Slice {
+		// Chuyển giá trị thành slice
+		val := reflect.ValueOf(r)
+		if val.Len() > 0 && reflect.TypeOf(val.Index(0).Interface()).Kind() == reflect.String {
+			strs := make([]string, val.Len())
+			for i := 0; i < val.Len(); i++ {
+				strs[i] = val.Index(i).Interface().(string)
+			}
+			return strs
+		}
+	}
+
+	// Nếu giá trị trả về không phải là slice của string, trả về giá trị mặc định d
+	return d
 }
 
 // GetString will get the string for k or return the default d if not found or invalid

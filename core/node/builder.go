@@ -38,6 +38,14 @@ type BuildCfg struct {
 	Repo    repo.Repo
 }
 
+func (cfg *BuildCfg) getOpt(key string) bool {
+	if cfg.ExtraOpts == nil {
+		return false
+	}
+
+	return cfg.ExtraOpts[key]
+}
+
 // options creates fx option group from this build config
 func (cfg *BuildCfg) options(ctx context.Context) (fx.Option, *config.C) {
 	err := cfg.fillDefaults()

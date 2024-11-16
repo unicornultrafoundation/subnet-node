@@ -1,14 +1,13 @@
 package snrepo
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"sync"
 
-	"github.com/ipfs/boxo/keystore"
-	rcmgr "github.com/libp2p/go-libp2p/p2p/host/resource-manager"
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/config"
 	"github.com/unicornultrafoundation/subnet-node/misc/fsutil"
@@ -20,47 +19,24 @@ const (
 )
 
 var (
-
-	// packageLock must be held to while performing any operation that modifies an
-	// FSRepo's state field. This includes Init, Open, Close, and Remove.
 	packageLock sync.Mutex
 
-	// onlyOne keeps track of open FSRepo instances.
-	//
-	// TODO: once command Context / Repo integration is cleaned up,
-	// this can be removed. Right now, this makes ConfigCmd.Run
-	// function try to open the repo twice:
-	//
-	//     $ ipfs daemon &
-	//     $ ipfs config foo
-	//
-	// The reason for the above is that in standalone mode without the
-	// daemon, `ipfs config` tries to save work by not building the
-	// full IpfsNode, but accessing the Repo directly.
 	onlyOne repo.OnlyOne
 )
 
-type FNRepo struct {
+type SNRepo struct {
 	// has Close been called already
 	closed bool
 	// path is the file-system path
-	path string
-	// Path to the configuration file that may or may not be inside the FSRepo
-	// path (see config.Filename for more details).
+	path           string
 	configFilePath string
-	// lockfile is the file system lock to prevent others from opening
-	// the same fsrepo path concurrently
-	lockfile              io.Closer
-	config                *config.C
-	userResourceOverrides rcmgr.PartialLimitConfig
-	ds                    repo.Datastore
-	keystore              keystore.Keystore
+	lockfile       io.Closer
+	config         *config.C
+	ds             repo.Datastore
 }
 
-var _ repo.Repo = (*FNRepo)(nil)
+var _ repo.Repo = (*SNRepo)(nil)
 
-// Open the FSRepo at path. Returns an error if the repo is not
-// initialized.
 func Open(repoPath string) (repo.Repo, error) {
 	fn := func() (repo.Repo, error) {
 		return open(repoPath, "")
@@ -68,8 +44,6 @@ func Open(repoPath string) (repo.Repo, error) {
 	return onlyOne.Open(repoPath, fn)
 }
 
-// OpenWithUserConfig is the equivalent to the Open function above but with the
-// option to set the configuration file path instead of using the default.
 func OpenWithUserConfig(repoPath string, userConfigFilePath string) (repo.Repo, error) {
 	fn := func() (repo.Repo, error) {
 		return open(repoPath, userConfigFilePath)
@@ -89,7 +63,7 @@ func open(repoPath string, userConfigFilePath string) (repo.Repo, error) {
 	return r, nil
 }
 
-func newFSRepo(rpath string, userConfigFilePath string) (*FNRepo, error) {
+func newFSRepo(rpath string, userConfigFilePath string) (*SNRepo, error) {
 	expPath, err := fsutil.ExpandHome(filepath.Clean(rpath))
 	if err != nil {
 		return nil, err
@@ -105,32 +79,29 @@ func newFSRepo(rpath string, userConfigFilePath string) (*FNRepo, error) {
 		os.Exit(1)
 	}
 
-	return &FNRepo{
+	return &SNRepo{
 		configFilePath: userConfigFilePath,
 		path:           expPath,
 		config:         c,
 	}, nil
 }
 
-// Close closes the FSRepo, releasing held resources.
-func (r *FNRepo) Close() error {
-	return nil
-}
-
-func (r *FNRepo) Config() *config.C {
+func (r *SNRepo) Config() *config.C {
 	return r.config
 }
 
-// Datastore returns a repo-owned datastore. If FSRepo is Closed, return value
-// is undefined.
-func (r *FNRepo) Datastore() repo.Datastore {
+func (r *SNRepo) Path() string {
+	return r.path
+}
+
+func (r *SNRepo) Datastore() repo.Datastore {
 	packageLock.Lock()
 	d := r.ds
 	packageLock.Unlock()
 	return d
 }
 
-func (r *FNRepo) SwarmKey() ([]byte, error) {
+func (r *SNRepo) SwarmKey() ([]byte, error) {
 	repoPath := filepath.Clean(r.path)
 	spath := filepath.Join(repoPath, swarmKeyFile)
 
@@ -144,4 +115,20 @@ func (r *FNRepo) SwarmKey() ([]byte, error) {
 	defer f.Close()
 
 	return io.ReadAll(f)
+}
+
+func (r *SNRepo) Close() error {
+	packageLock.Lock()
+	defer packageLock.Unlock()
+
+	if r.closed {
+		return errors.New("repo is closed")
+	}
+
+	if err := r.ds.Close(); err != nil {
+		return err
+	}
+
+	r.closed = true
+	return r.lockfile.Close()
 }

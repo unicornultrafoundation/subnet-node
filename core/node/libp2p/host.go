@@ -39,6 +39,7 @@ type P2PHostOut struct {
 }
 
 func Host(mctx helpers.MetricsCtx, lc fx.Lifecycle, params P2PHostIn) (out P2PHostOut, err error) {
+
 	opts := []libp2p.Option{libp2p.NoListenAddrs}
 	for _, o := range params.Opts {
 		opts = append(opts, o...)
@@ -98,30 +99,37 @@ func Host(mctx helpers.MetricsCtx, lc fx.Lifecycle, params P2PHostIn) (out P2PHo
 
 // ParseBootstrapPeers parses a bootstrap list from the config into a list of AddrInfos.
 func parseBootstrapPeers(cfg *config.C) ([]peer.AddrInfo, error) {
-	// Lấy danh sách bootstrap từ config và chuyển thành []interface{}
-	rawBootstrap := cfg.Get("bootstrap").([]interface{})
+	return parsPeers(cfg, "bootstrap")
+}
 
-	// Chuyển đổi []interface{} thành []string
+func parsPeers(cfg *config.C, k string) ([]peer.AddrInfo, error) {
+	// Retrieve the bootstrap list from config and check its type
+	rawBootstrap, ok := cfg.Get(k).([]interface{})
+	if !ok {
+		return nil, fmt.Errorf("expected []interface{} for key %s, got %T", k, cfg.Get(k))
+	}
+
+	// Convert []interface{} to []string
 	addrs := make([]string, len(rawBootstrap))
 	for i, addr := range rawBootstrap {
 		strAddr, ok := addr.(string)
 		if !ok {
-			return nil, fmt.Errorf("invalid address format at index %d", i)
+			return nil, fmt.Errorf("invalid address format at index %d: expected string, got %T", i, addr)
 		}
 		addrs[i] = strAddr
 	}
 
-	// Tạo danh sách Multiaddr từ các chuỗi địa chỉ
+	// Create a list of Multiaddr from the string addresses
 	maddrs := make([]ma.Multiaddr, len(addrs))
 	for i, addr := range addrs {
 		var err error
 		maddrs[i], err = ma.NewMultiaddr(addr)
 		if err != nil {
-			return nil, fmt.Errorf("invalid multiaddr %s: %w", addr, err)
+			return nil, fmt.Errorf("invalid multiaddr at index %d (%s): %w", i, addr, err)
 		}
 	}
 
-	// Chuyển đổi Multiaddr thành AddrInfo
+	// Convert Multiaddr to AddrInfo
 	addrInfos, err := peer.AddrInfosFromP2pAddrs(maddrs...)
 	if err != nil {
 		return nil, fmt.Errorf("error converting to AddrInfo: %w", err)

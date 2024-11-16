@@ -1,6 +1,7 @@
 package libp2p
 
 import (
+	"fmt"
 	"sort"
 
 	"github.com/libp2p/go-libp2p"
@@ -9,6 +10,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peerstore"
 	"github.com/libp2p/go-libp2p/p2p/net/connmgr"
 	"github.com/sirupsen/logrus"
+	version "github.com/unicornultrafoundation/subnet-node"
 	"github.com/unicornultrafoundation/subnet-node/config"
 	"go.uber.org/fx"
 )
@@ -77,4 +79,23 @@ func prioritizeOptions(opts []priorityOption) libp2p.Option {
 		p2pOpts[i] = opt.opt
 	}
 	return libp2p.ChainOptions(p2pOpts...)
+}
+
+func UserAgent() func() (opts Libp2pOpts, err error) {
+	return simpleOpt(libp2p.UserAgent(version.GetUserAgentVersion()))
+}
+
+func ForceReachability(cfg *config.C) func() (opts Libp2pOpts, err error) {
+	return func() (opts Libp2pOpts, err error) {
+		v := cfg.GetString("internal.libp2p_force_reachability", "unrecognized")
+		switch v {
+		case "public":
+			opts.Opts = append(opts.Opts, libp2p.ForceReachabilityPublic())
+		case "private":
+			opts.Opts = append(opts.Opts, libp2p.ForceReachabilityPrivate())
+		default:
+			return opts, fmt.Errorf("unrecognized reachability option: %s", v)
+		}
+		return
+	}
 }

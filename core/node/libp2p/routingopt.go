@@ -53,8 +53,8 @@ func constructDefaultHTTPRouters(cfg *config.C) ([]*routinghelpers.ParallelRoute
 
 		routers = append(routers, &routinghelpers.ParallelRouter{
 			Router:                  r,
-			IgnoreError:             true,             // https://github.com/ipfs/kubo/pull/9475#discussion_r1042507387
-			Timeout:                 15 * time.Second, // 5x server value from https://github.com/ipfs/kubo/pull/9475#discussion_r1042428529
+			IgnoreError:             true,
+			Timeout:                 15 * time.Second,
 			DoNotWaitForSearchValue: true,
 			ExecuteAfter:            0,
 		})

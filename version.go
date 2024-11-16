@@ -8,15 +8,13 @@ import (
 var CurrentCommit string
 
 // CurrentVersionNumber is the current application's version literal.
-const CurrentVersionNumber = "0.33.0-dev"
+const CurrentVersionNumber = "0.0.1-dev"
 
-const ApiVersion = "/kubo/" + CurrentVersionNumber + "/" //nolint
+const ApiVersion = "/subnet/" + CurrentVersionNumber + "/" //nolint
 
-// GetUserAgentVersion is the libp2p user agent used by go-ipfs.
-//
 // Note: This will end in `/` when no commit is available. This is expected.
 func GetUserAgentVersion() string {
-	userAgent := "kubo/" + CurrentVersionNumber + "/" + CurrentCommit
+	userAgent := "subnet/" + CurrentVersionNumber + "/" + CurrentCommit
 	if userAgentSuffix != "" {
 		if CurrentCommit != "" {
 			userAgent += "/"
