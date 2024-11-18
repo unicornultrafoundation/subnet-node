@@ -9,9 +9,13 @@ import (
 	"github.com/ipfs/boxo/bootstrap"
 	"github.com/ipfs/boxo/peering"
 	ddht "github.com/libp2p/go-libp2p-kad-dht/dual"
+	record "github.com/libp2p/go-libp2p-record"
 	ic "github.com/libp2p/go-libp2p/core/crypto"
 	p2phost "github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
+	pstore "github.com/libp2p/go-libp2p/core/peerstore"
+	"github.com/libp2p/go-libp2p/core/routing"
+	ma "github.com/multiformats/go-multiaddr"
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/p2p"
 	"github.com/unicornultrafoundation/subnet-node/repo"
@@ -22,26 +26,34 @@ var log = logrus.New().WithField("service", "core")
 
 // SubnetNode is Subnet Core module. It represents an Subnet instance.
 type SubnetNode struct {
+	ctx context.Context
+
 	// Self
 	Identity peer.ID // the local node's identity
 
 	PrivateKey ic.PrivKey `optional:"true"` // the local node's private Key
 
-	DHT *ddht.DHT `optional:"true"`
-
-	P2P *p2p.P2P `optional:"true"`
-	ctx context.Context
-
 	Repo repo.Repo
 
-	stop func() error
+	// Services
+	Peerstore       pstore.Peerstore `optional:"true"` // storage for other Peer instances
+	RecordValidator record.Validator
 
-	Bootstrapper io.Closer                  `optional:"true"` // the periodic bootstrapper
+	// Online
 	PeerHost     p2phost.Host               `optional:"true"` // the network host (server+client)
 	Peering      *peering.PeeringService    `optional:"true"`
 	Routing      irouting.ProvideManyRouter `optional:"true"`
+	Filters      *ma.Filters                `optional:"true"`
+	Bootstrapper io.Closer                  `optional:"true"` // the periodic bootstrapper
 
 	PubSub *pubsub.PubSub `optional:"true"`
+
+	DHT       *ddht.DHT       `optional:"true"`
+	DHTClient routing.Routing `name:"dhtc" optional:"true"`
+
+	P2P *p2p.P2P `optional:"true"`
+
+	stop func() error
 
 	// Flags
 	IsOnline bool `optional:"true"` // Online is set when networking is enabled.
