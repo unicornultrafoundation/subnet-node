@@ -5,6 +5,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/cskr/pubsub"
 	"github.com/ipfs/boxo/bootstrap"
 	"github.com/ipfs/boxo/peering"
 	ddht "github.com/libp2p/go-libp2p-kad-dht/dual"
@@ -39,6 +40,8 @@ type SubnetNode struct {
 	PeerHost     p2phost.Host               `optional:"true"` // the network host (server+client)
 	Peering      *peering.PeeringService    `optional:"true"`
 	Routing      irouting.ProvideManyRouter `optional:"true"`
+
+	PubSub *pubsub.PubSub `optional:"true"`
 
 	// Flags
 	IsOnline bool `optional:"true"` // Online is set when networking is enabled.

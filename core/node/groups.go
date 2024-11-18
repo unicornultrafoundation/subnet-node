@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	"github.com/libp2p/go-libp2p-pubsub/timecache"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/unicornultrafoundation/subnet-node/config"
 	"github.com/unicornultrafoundation/subnet-node/core/node/libp2p"
@@ -28,6 +30,40 @@ func LibP2P(bcfg *BuildCfg, cfg *config.C) fx.Option {
 	autonat := fx.Provide(libp2p.AutoNATService(cfg))
 
 	ps, disc := fx.Options(), fx.Options()
+	if bcfg.getOpt("pubsub") {
+		disc = fx.Provide(libp2p.TopicDiscovery())
+
+		var pubsubOptions []pubsub.Option
+		pubsubOptions = append(
+			pubsubOptions,
+			pubsub.WithMessageSigning(!cfg.GetBool("pubsub.disable_signing", true)),
+			pubsub.WithSeenMessagesTTL(cfg.GetDuration("pubsub.seen_messages_ttl", pubsub.TimeCacheDuration)),
+		)
+
+		var seenMessagesStrategy timecache.Strategy
+		configSeenMessagesStrategy := cfg.GetString("pubsub.seen_messages_strategy", "last-seen")
+		//configSeenMessagesStrategy := cfg.Pubsub.SeenMessagesStrategy.WithDefault(config.DefaultSeenMessagesStrategy)
+		switch configSeenMessagesStrategy {
+		case "last-seen":
+			seenMessagesStrategy = timecache.Strategy_LastSeen
+		case "first-seen":
+			seenMessagesStrategy = timecache.Strategy_FirstSeen
+		default:
+			return fx.Error(fmt.Errorf("unsupported Pubsub.SeenMessagesStrategy %q", configSeenMessagesStrategy))
+		}
+		pubsubOptions = append(pubsubOptions, pubsub.WithSeenMessagesStrategy(seenMessagesStrategy))
+
+		switch cfg.GetString("pubsub.router", "gossipsub") {
+		case "":
+			fallthrough
+		case "gossipsub":
+			ps = fx.Provide(libp2p.GossipSub(pubsubOptions...))
+		case "floodsub":
+			ps = fx.Provide(libp2p.FloodSub(pubsubOptions...))
+		default:
+			return fx.Error(fmt.Errorf("unknown pubsub router %s", cfg.GetString("pubsub.router", "gossipsub")))
+		}
+	}
 
 	enableAutoTLS := cfg.GetBool("autotls.enabled", false)
 	enableRelayTransport := cfg.GetBool("swarm.transports.network.relay", true)
