@@ -8,11 +8,15 @@ import (
 	"path/filepath"
 	"sync"
 
+	measure "github.com/ipfs/go-ds-measure"
+	lockfile "github.com/ipfs/go-fs-lock"
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/config"
 	"github.com/unicornultrafoundation/subnet-node/misc/fsutil"
 	"github.com/unicornultrafoundation/subnet-node/repo"
 )
+
+const LockFile = "repo.lock"
 
 const (
 	swarmKeyFile = "swarm.key"
@@ -55,15 +59,31 @@ func open(repoPath string, userConfigFilePath string) (repo.Repo, error) {
 	packageLock.Lock()
 	defer packageLock.Unlock()
 
-	r, err := newFSRepo(repoPath, userConfigFilePath)
+	r, err := newSNRepo(repoPath, userConfigFilePath)
 	if err != nil {
+		return nil, err
+	}
+
+	r.lockfile, err = lockfile.Lock(r.path, LockFile)
+	if err != nil {
+		return nil, err
+	}
+	keepLocked := false
+	defer func() {
+		// unlock on error, leave it locked on success
+		if !keepLocked {
+			r.lockfile.Close()
+		}
+	}()
+
+	if err := r.openDatastore(); err != nil {
 		return nil, err
 	}
 
 	return r, nil
 }
 
-func newFSRepo(rpath string, userConfigFilePath string) (*SNRepo, error) {
+func newSNRepo(rpath string, userConfigFilePath string) (*SNRepo, error) {
 	expPath, err := fsutil.ExpandHome(filepath.Clean(rpath))
 	if err != nil {
 		return nil, err
@@ -131,4 +151,38 @@ func (r *SNRepo) Close() error {
 
 	r.closed = true
 	return r.lockfile.Close()
+}
+
+// openDatastore returns an error if the config file is not present.
+func (r *SNRepo) openDatastore() error {
+	defaultCfg := map[interface{}]interface{}{
+		"type": "mount",
+		"mounts": []interface{}{
+			map[interface{}]interface{}{
+				"mountpoint": "/",
+				"type":       "measure",
+				"prefix":     "leveldb.datastore",
+				"child": map[interface{}]interface{}{
+					"type":        "levelds",
+					"path":        "datastore",
+					"compression": "none",
+				},
+			},
+		},
+	}
+	dsc, err := AnyDatastoreConfig(r.config.GetMap("datastore.spec", defaultCfg))
+	if err != nil {
+		return err
+	}
+
+	d, err := dsc.Create(r.path)
+	if err != nil {
+		return err
+	}
+	r.ds = d
+
+	// Wrap it with metrics gathering
+	prefix := "ipsn.nsrepo.datastore"
+	r.ds = measure.New(prefix, r.ds)
+	return nil
 }

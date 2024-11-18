@@ -20,7 +20,6 @@ func Main(repoPath string, configPath string) {
 }
 
 func run(repoPath string, configPath string) error {
-
 	r, err := snrepo.OpenWithUserConfig(repoPath, configPath)
 	if err != nil {
 		// TODO handle case: daemon running
@@ -51,9 +50,6 @@ func run(repoPath string, configPath string) error {
 			fmt.Println("Received interrupt signal, exiting...")
 			return nil // Dừng chương trình khi nhận tín hiệu
 		default:
-			// Xử lý công việc khác nếu không có tín hiệu
-			// Ví dụ: in ra thông báo mỗi giây
-			fmt.Println("Running...")
 			time.Sleep(1 * time.Second) // Nghỉ 1 giây để tránh lãng phí CPU
 		}
 	}
