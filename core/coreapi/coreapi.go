@@ -48,11 +48,15 @@ func NewCoreAPI(n *core.SubnetNode, opts ...options.ApiOption) (coreiface.CoreAP
 }
 
 func (api *CoreAPI) PubSub() coreiface.PubSubAPI {
-	return nil
+	return (*PubSubAPI)(api)
 }
 
 func (api *CoreAPI) Routing() coreiface.RoutingAPI {
-	return nil
+	return (*RoutingAPI)(api)
+}
+
+func (api *CoreAPI) Swarm() coreiface.SwarmAPI {
+	return (*SwarmAPI)(api)
 }
 
 func (api *CoreAPI) WithOptions(opts ...options.ApiOption) (coreiface.CoreAPI, error) {
