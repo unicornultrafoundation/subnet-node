@@ -8,6 +8,7 @@ import (
 	"github.com/cskr/pubsub"
 	"github.com/ipfs/boxo/bootstrap"
 	"github.com/ipfs/boxo/peering"
+	"github.com/jbenet/goprocess"
 	ddht "github.com/libp2p/go-libp2p-kad-dht/dual"
 	record "github.com/libp2p/go-libp2p-record"
 	ic "github.com/libp2p/go-libp2p/core/crypto"
@@ -26,7 +27,8 @@ var log = logrus.New().WithField("service", "core")
 
 // SubnetNode is Subnet Core module. It represents an Subnet instance.
 type SubnetNode struct {
-	ctx context.Context
+	ctx     context.Context
+	Process goprocess.Process
 
 	// Self
 	Identity peer.ID // the local node's identity
