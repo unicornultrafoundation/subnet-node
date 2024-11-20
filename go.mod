@@ -292,6 +292,7 @@ require (
 	github.com/libp2p/go-libp2p-http v0.5.0
 	github.com/libp2p/go-libp2p-pubsub v0.12.0
 	github.com/libp2p/go-libp2p-pubsub-router v0.6.0
+	github.com/libp2p/go-socket-activation v0.1.0
 	github.com/miekg/dns v1.1.62
 	github.com/nbrownus/go-metrics-prometheus v0.0.0-20210712211119-974a6260965f
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475

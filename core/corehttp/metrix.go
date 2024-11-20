@@ -29,7 +29,7 @@ func MetricsOpenCensusCollectionOption() ServeOption {
 
 		promRegistry := prometheus.NewRegistry()
 		pe, err := ocprom.NewExporter(ocprom.Options{
-			Namespace: "ipfs_oc",
+			Namespace: "subnet_oc",
 			Registry:  promRegistry,
 			OnError: func(err error) {
 				log.Errorln("OC ERROR", "error", err)
@@ -81,7 +81,7 @@ func MetricsCollectionOption(handlerName string) ServeOption {
 		// Adapted from github.com/prometheus/client_golang/prometheus/http.go
 		// Work around https://github.com/prometheus/client_golang/pull/311
 		opts := prometheus.SummaryOpts{
-			Namespace:   "ipfs",
+			Namespace:   "subnet",
 			Subsystem:   "http",
 			ConstLabels: prometheus.Labels{"handler": handlerName},
 			Objectives:  map[float64]float64{0.5: 0.05, 0.9: 0.01, 0.99: 0.001},
@@ -152,7 +152,7 @@ func MetricsCollectionOption(handlerName string) ServeOption {
 }
 
 var peersTotalMetric = prometheus.NewDesc(
-	prometheus.BuildFQName("ipfs", "p2p", "peers_total"),
+	prometheus.BuildFQName("subnet", "p2p", "peers_total"),
 	"Number of connected peers",
 	[]string{"transport"},
 	nil,

@@ -3,14 +3,16 @@ package subnet
 import (
 	"context"
 	"fmt"
-	"os"
-	"os/signal"
-	"syscall"
-	"time"
+	"sync"
 
+	"github.com/hashicorp/go-multierror"
+	sockets "github.com/libp2p/go-socket-activation"
+	ma "github.com/multiformats/go-multiaddr"
+	manet "github.com/multiformats/go-multiaddr/net"
 	"github.com/sirupsen/logrus"
+	"github.com/unicornultrafoundation/subnet-node/config"
 	"github.com/unicornultrafoundation/subnet-node/core"
-	"github.com/unicornultrafoundation/subnet-node/core/coreapi"
+	"github.com/unicornultrafoundation/subnet-node/core/corehttp"
 	"github.com/unicornultrafoundation/subnet-node/repo/snrepo"
 )
 
@@ -46,34 +48,106 @@ func run(repoPath string, configPath string) error {
 
 	defer node.Close()
 
-	time.AfterFunc(1*time.Minute, func() {
-		api, err := coreapi.NewCoreAPI(node)
-		if err != nil {
-			log.Errorf("failed to access CoreAPI: %v", err)
-			return
-		}
-		peers, err := api.Swarm().Peers(context.Background())
-		if err != nil {
-			log.Errorf("failed to read swarm peers: %v", err)
-			return
-		}
-		if len(peers) == 0 {
-			log.Error("failed to bootstrap (no peers found): consider updating Bootstrap or Peering section of your config")
-		}
-	})
+	// construct api endpoint - every time
+	apiErrc, err := serveHTTPApi(r.Config(), node)
+	if err != nil {
+		return err
+	}
 
-	interrupts := make(chan os.Signal, 1)
-	signal.Notify(interrupts, os.Interrupt, syscall.SIGTERM)
-
-	// Giả sử bạn có một công việc cần tiếp tục chạy
-	for {
-		select {
-		case <-interrupts:
-			// Nhận tín hiệu ngắt
-			fmt.Println("Received interrupt signal, exiting...")
-			return nil // Dừng chương trình khi nhận tín hiệu
-		default:
-			time.Sleep(1 * time.Second) // Nghỉ 1 giây để tránh lãng phí CPU
+	// collect long-running errors and block for shutdown
+	var errs error
+	for err := range merge(apiErrc) {
+		if err != nil {
+			errs = multierror.Append(errs, err)
 		}
 	}
+
+	return errs
+}
+
+func serveHTTPApi(cfg *config.C, node *core.SubnetNode) (<-chan error, error) {
+	listeners, err := sockets.TakeListeners("subnet.api")
+	if err != nil {
+		return nil, fmt.Errorf("serveHTTPApi: socket activation failed: %s", err)
+	}
+	apiAddrs := cfg.GetStringSlice("addresses.api", []string{})
+
+	listenerAddrs := make(map[string]bool, len(listeners))
+	for _, listener := range listeners {
+		listenerAddrs[string(listener.Multiaddr().Bytes())] = true
+	}
+	for _, addr := range apiAddrs {
+		apiMaddr, err := ma.NewMultiaddr(addr)
+		if err != nil {
+			return nil, fmt.Errorf("serveHTTPApi: invalid API address: %q (err: %s)", addr, err)
+		}
+		if listenerAddrs[string(apiMaddr.Bytes())] {
+			continue
+		}
+
+		apiLis, err := manet.Listen(apiMaddr)
+		if err != nil {
+			return nil, fmt.Errorf("serveHTTPApi: manet.Listen(%s) failed: %s", apiMaddr, err)
+		}
+
+		listenerAddrs[string(apiMaddr.Bytes())] = true
+		listeners = append(listeners, apiLis)
+	}
+
+	for _, listener := range listeners {
+		// we might have listened to /tcp/0 - let's see what we are listing on
+		fmt.Printf("RPC API server listening on %s\n", listener.Multiaddr())
+	}
+
+	opts := []corehttp.ServeOption{
+		corehttp.MetricsCollectionOption("api"),
+		corehttp.LogOption(),
+	}
+
+	errc := make(chan error)
+	var wg sync.WaitGroup
+	for _, apiLis := range listeners {
+		wg.Add(1)
+		go func(lis manet.Listener) {
+			defer wg.Done()
+			errc <- corehttp.Serve(node, manet.NetListener(lis), opts...)
+		}(apiLis)
+	}
+
+	go func() {
+		wg.Wait()
+		close(errc)
+	}()
+
+	return errc, nil
+}
+
+// merge does fan-in of multiple read-only error channels
+// taken from http://blog.golang.org/pipelines
+func merge(cs ...<-chan error) <-chan error {
+	var wg sync.WaitGroup
+	out := make(chan error)
+
+	// Start an output goroutine for each input channel in cs.  output
+	// copies values from c to out until c is closed, then calls wg.Done.
+	output := func(c <-chan error) {
+		for n := range c {
+			out <- n
+		}
+		wg.Done()
+	}
+	for _, c := range cs {
+		if c != nil {
+			wg.Add(1)
+			go output(c)
+		}
+	}
+
+	// Start a goroutine to close out once all the output goroutines are
+	// done.  This must start after the wg.Add call.
+	go func() {
+		wg.Wait()
+		close(out)
+	}()
+	return out
 }

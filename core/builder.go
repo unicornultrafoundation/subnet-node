@@ -45,6 +45,8 @@ func NewNode(ctx context.Context, cfg *BuildCfg) (*SubnetNode, error) {
 		fx.NopLogger,
 	}
 
+	opts = append(opts, fx.Extract(n))
+
 	app := fx.New(opts...)
 
 	var once sync.Once

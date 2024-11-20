@@ -15,9 +15,9 @@ import (
 	protocol "github.com/libp2p/go-libp2p/core/protocol"
 )
 
-// P2PProxyOption is an endpoint for proxying a HTTP request to another ipfs peer
+// P2PProxyOption is an endpoint for proxying a HTTP request to another ipsn peer
 func P2PProxyOption() ServeOption {
-	return func(ipfsNode *core.SubnetNode, _ net.Listener, mux *http.ServeMux) (*http.ServeMux, error) {
+	return func(subnetNode *core.SubnetNode, _ net.Listener, mux *http.ServeMux) (*http.ServeMux, error) {
 		mux.HandleFunc("/p2p/", func(w http.ResponseWriter, request *http.Request) {
 			// parse request
 			parsedRequest, err := parseRequest(request)
@@ -34,7 +34,7 @@ func P2PProxyOption() ServeOption {
 				return
 			}
 
-			rt := p2phttp.NewTransport(ipfsNode.PeerHost, p2phttp.ProtocolOption(parsedRequest.name))
+			rt := p2phttp.NewTransport(subnetNode.PeerHost, p2phttp.ProtocolOption(parsedRequest.name))
 			proxy := httputil.NewSingleHostReverseProxy(target)
 			proxy.Transport = rt
 			proxy.ServeHTTP(w, request)

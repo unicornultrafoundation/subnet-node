@@ -1,8 +1,6 @@
 package p2p
 
 import (
-	"fmt"
-
 	p2phost "github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	pstore "github.com/libp2p/go-libp2p/core/peerstore"
@@ -25,7 +23,6 @@ type P2P struct {
 
 // New creates new P2P struct.
 func New(identity peer.ID, peerHost p2phost.Host, peerstore pstore.Peerstore) *P2P {
-	fmt.Print(1212)
 	return &P2P{
 		identity:  identity,
 		peerHost:  peerHost,

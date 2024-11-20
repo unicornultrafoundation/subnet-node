@@ -89,6 +89,17 @@ func (n *SubnetNode) Bootstrap(cfg bootstrap.BootstrapConfig) error {
 
 	repoConf := n.Repo.Config()
 
+	if cfg.BootstrapPeers == nil {
+		cfg.BootstrapPeers = func() []peer.AddrInfo {
+			ps, err := repoConf.GetAddrsInfo("bootstrap")
+			if err != nil {
+				log.Warn("failed to parse bootstrap peers from config")
+				return nil
+			}
+			return ps
+		}
+	}
+
 	if repoConf.GetBool("backup.enable", true) {
 		cfg.BackupBootstrapInterval = repoConf.GetDuration("backup.duration", time.Hour)
 	}
