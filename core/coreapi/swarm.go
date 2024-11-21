@@ -163,7 +163,6 @@ func (api *SwarmAPI) Peers(ctx context.Context) ([]coreiface.ConnectionInfo, err
 
 		out = append(out, ci)
 	}
-
 	return out, nil
 }
 
