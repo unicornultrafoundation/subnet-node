@@ -102,6 +102,9 @@ func serveHTTPApi(cfg *config.C, node *core.SubnetNode) (<-chan error, error) {
 	opts := []corehttp.ServeOption{
 		corehttp.MetricsCollectionOption("api"),
 		corehttp.LogOption(),
+		corehttp.RoutingOption(),
+		corehttp.P2PProxyOption(),
+		corehttp.CoreAPIOption(),
 	}
 
 	errc := make(chan error)

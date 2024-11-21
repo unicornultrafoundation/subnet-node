@@ -25,7 +25,6 @@ func P2PProxyOption() ServeOption {
 				handleError(w, "failed to parse request", err, 400)
 				return
 			}
-
 			request.Host = "" // Let URL's Host take precedence.
 			request.URL.Path = parsedRequest.httpPath
 			target, err := url.Parse(fmt.Sprintf("libp2p://%s", parsedRequest.target))
