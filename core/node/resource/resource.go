@@ -1,10 +1,13 @@
 package resource
 
 import (
+	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/NVIDIA/go-nvml/pkg/nvml"
+	"github.com/hashicorp/go-multierror"
 	"github.com/ipinfo/go/v2/ipinfo"
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/mem"
@@ -21,7 +24,6 @@ type ResourceInfo struct {
 	GPU       GpuInfo       `json:"gpu"`       // GPU cores
 	Memory    MemoryInfo    `json:"memory"`    // RAM (MB)
 	Bandwidth BandwidthInfo `json:"bandwidth"` // Bandwidth (Mbps)
-	GpuInfo   string
 }
 
 type MemoryInfo struct {
@@ -46,139 +48,171 @@ type BandwidthInfo struct {
 }
 
 func getRegion() (string, error) {
-	// Tạo client
 	client := ipinfo.NewClient(nil, nil, "")
-
-	// Lấy thông tin IP
 	info, err := client.GetIPInfo(nil)
 	if err != nil {
 		return "Unknown", err
 	}
-
 	return info.Region + "-" + info.Country, nil
 }
 
 func getGpu() (GpuInfo, error) {
 	ret := nvml.Init()
 	if ret != nvml.SUCCESS {
-		return GpuInfo{}, fmt.Errorf("Unable to initialize NVML: %v", nvml.ErrorString(ret))
+		return GpuInfo{}, fmt.Errorf("unable to initialize NVML: %v", nvml.ErrorString(ret))
 	}
 	defer func() {
-		ret := nvml.Shutdown()
-		if ret != nvml.SUCCESS {
-			log.Fatalf("Unable to shutdown NVML: %v", nvml.ErrorString(ret))
+		if ret := nvml.Shutdown(); ret != nvml.SUCCESS {
+			log.Errorf("Unable to shutdown NVML: %v", nvml.ErrorString(ret))
 		}
 	}()
 
 	count, ret := nvml.DeviceGetCount()
 	if ret != nvml.SUCCESS {
-		return GpuInfo{}, fmt.Errorf("Unable to get device count: %v", nvml.ErrorString(ret))
+		return GpuInfo{}, fmt.Errorf("unable to get device count: %v", nvml.ErrorString(ret))
 	}
-	name := ""
+
+	gpuNames := make([]string, count)
 	for i := 0; i < count; i++ {
 		device, ret := nvml.DeviceGetHandleByIndex(i)
 		if ret != nvml.SUCCESS {
-			return GpuInfo{}, fmt.Errorf("Unable to get device at index %d: %v", i, nvml.ErrorString(ret))
+			return GpuInfo{}, fmt.Errorf("unable to get device at index %d: %v", i, nvml.ErrorString(ret))
 		}
-
-		deviceName, ret := device.GetName()
+		name, ret := device.GetName()
 		if ret != nvml.SUCCESS {
-			return GpuInfo{}, fmt.Errorf("Unable to get uuid of device at index %d: %v", i, nvml.ErrorString(ret))
+			return GpuInfo{}, fmt.Errorf("unable to get name of device at index %d: %v", i, nvml.ErrorString(ret))
 		}
-
-		name = deviceName
+		gpuNames[i] = name
 	}
 
 	return GpuInfo{
 		Count: count,
-		Name:  name,
+		Name:  gpuNames[0], // Simplify to the first GPU for now
 	}, nil
 }
 
 func getBandwidth() (BandwidthInfo, error) {
-	var speedtestClient = speedtest.New()
-	serverList, err := speedtestClient.FetchServers()
-
+	speedtestClient := speedtest.New()
+	servers, err := speedtestClient.FetchServers()
 	if err != nil {
 		return BandwidthInfo{}, err
 	}
 
-	targets, err := serverList.FindServer([]int{})
-
+	targets, err := servers.FindServer([]int{})
 	if err != nil {
 		return BandwidthInfo{}, err
 	}
 
-	if targets.Len() == 0 {
+	// Select the fastest server
+	if len(targets) == 0 {
+		return BandwidthInfo{}, errors.New("no speedtest servers found")
+	}
+	server := targets[0]
+
+	err = server.PingTest(nil)
+	if err != nil {
+		log.Errorf("Ping test failed: %v", err)
+		return BandwidthInfo{}, err
+	}
+	err = server.DownloadTest()
+	if err != nil {
+		log.Errorf("Download test failed: %v", err)
+		return BandwidthInfo{}, err
+	}
+	err = server.UploadTest()
+	if err != nil {
+		log.Errorf("Upload test failed: %v", err)
 		return BandwidthInfo{}, err
 	}
 
-	s := targets[0]
-
-	err = s.PingTest(nil)
-	if err != nil {
-		log.Error(err)
-		return BandwidthInfo{}, err
-	}
-	err = s.DownloadTest()
-	if err != nil {
-		log.Error(err)
-		return BandwidthInfo{}, err
-	}
-	err = s.UploadTest()
-	if err != nil {
-		log.Error(err)
-		return BandwidthInfo{}, err
-	}
 	return BandwidthInfo{
-		Latency:       s.Latency,
-		UploadSpeed:   uint64(s.ULSpeed),
-		DownloadSpeed: uint64(s.DLSpeed),
+		Latency:       server.Latency,
+		UploadSpeed:   uint64(server.ULSpeed),
+		DownloadSpeed: uint64(server.DLSpeed),
 	}, nil
 }
 
 func GetResource() (*ResourceInfo, error) {
-	res := &ResourceInfo{}
-	v, err := mem.VirtualMemory()
-	if err != nil {
-		return nil, err
-	}
+	var (
+		wg       sync.WaitGroup
+		errs     *multierror.Error
+		resource ResourceInfo
+		mutex    sync.Mutex
+	)
+
+	// Run resource fetchers in parallel
+	wg.Add(4)
+
+	go func() {
+		defer wg.Done()
+		region, err := getRegion()
+		mutex.Lock()
+		defer mutex.Unlock()
+		if err != nil {
+			errs = multierror.Append(errs, err)
+		} else {
+			resource.Region = region
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		gpu, err := getGpu()
+		mutex.Lock()
+		defer mutex.Unlock()
+		if err != nil {
+			errs = multierror.Append(errs, err)
+		} else {
+			resource.GPU = gpu
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		v, err := mem.VirtualMemory()
+		mutex.Lock()
+		defer mutex.Unlock()
+		if err != nil {
+			errs = multierror.Append(err)
+		} else {
+			resource.Memory = MemoryInfo{
+				Total: v.Total,
+				Used:  v.Used,
+			}
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		bandwidth, err := getBandwidth()
+		mutex.Lock()
+		defer mutex.Unlock()
+		if err != nil {
+			errs = multierror.Append(err)
+		} else {
+			resource.Bandwidth = bandwidth
+		}
+	}()
+
+	// Wait for all goroutines to finish
+	wg.Wait()
+
+	// Get CPU information
 	cpuCounts, err := cpu.Counts(false)
 	if err != nil {
-		return nil, err
+		errs = multierror.Append(err)
+	} else {
+		cpuInfo, err := cpu.Info()
+		if err != nil {
+			errs = multierror.Append(err)
+		} else {
+			resource.CPU = CpuInfo{
+				Count: cpuCounts,
+				Name:  cpuInfo[0].ModelName,
+			}
+		}
 	}
 
-	cpuInfo, err := cpu.Info()
-	if err != nil {
-		return nil, err
-	}
-
-	bw, err := getBandwidth()
-
-	if err != nil {
-		return nil, err
-	}
-
-	rg, err := getRegion()
-	if err != nil {
-		return nil, err
-	}
-
-	g, err := getGpu()
-	if err != nil {
-		return nil, err
-	}
-	res.Memory = MemoryInfo{
-		Total: v.Total,
-		Used:  v.Used,
-	}
-	res.CPU = CpuInfo{
-		Count: cpuCounts,
-		Name:  cpuInfo[0].ModelName,
-	}
-	res.Bandwidth = bw
-	res.Region = rg
-	res.GPU = g
-
-	return res, nil
+	// Return the result and aggregated errors
+	return &resource, errs.ErrorOrNil()
 }
