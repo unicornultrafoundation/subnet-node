@@ -18,12 +18,17 @@ import (
 var log = logrus.New().WithField("node", "resource")
 
 type ResourceInfo struct {
-	Region    string
+	Region    RegionInfo    `json:"region"`
 	PeerID    string        `json:"peer_id"`
 	CPU       CpuInfo       `json:"cpu"`       // CPU cores
 	GPU       GpuInfo       `json:"gpu"`       // GPU cores
 	Memory    MemoryInfo    `json:"memory"`    // RAM (MB)
 	Bandwidth BandwidthInfo `json:"bandwidth"` // Bandwidth (Mbps)
+}
+
+type RegionInfo struct {
+	Region  string `json:"region"`
+	Country string `json:"country"`
 }
 
 type MemoryInfo struct {
@@ -47,13 +52,20 @@ type BandwidthInfo struct {
 	DownloadSpeed uint64        `json:"download"`
 }
 
-func getRegion() (string, error) {
+func (r *ResourceInfo) Topic() string {
+	return fmt.Sprintf("topic/resources/%s/%d", r.Region.Country, r.CPU.Count)
+}
+
+func getRegion() (RegionInfo, error) {
 	client := ipinfo.NewClient(nil, nil, "")
 	info, err := client.GetIPInfo(nil)
 	if err != nil {
-		return "Unknown", err
+		return RegionInfo{}, err
 	}
-	return info.Region + "-" + info.Country, nil
+	return RegionInfo{
+		Region:  info.Region,
+		Country: info.Country,
+	}, nil
 }
 
 func getGpu() (GpuInfo, error) {

@@ -5,11 +5,11 @@ import (
 	"io"
 	"time"
 
-	"github.com/cskr/pubsub"
 	"github.com/ipfs/boxo/bootstrap"
 	"github.com/ipfs/boxo/peering"
 	"github.com/jbenet/goprocess"
 	ddht "github.com/libp2p/go-libp2p-kad-dht/dual"
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	record "github.com/libp2p/go-libp2p-record"
 	ic "github.com/libp2p/go-libp2p/core/crypto"
 	p2phost "github.com/libp2p/go-libp2p/core/host"
@@ -18,6 +18,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/routing"
 	ma "github.com/multiformats/go-multiaddr"
 	"github.com/sirupsen/logrus"
+	"github.com/unicornultrafoundation/subnet-node/core/node/resource"
 	"github.com/unicornultrafoundation/subnet-node/p2p"
 	"github.com/unicornultrafoundation/subnet-node/repo"
 	irouting "github.com/unicornultrafoundation/subnet-node/routing"
@@ -40,6 +41,7 @@ type SubnetNode struct {
 	// Services
 	Peerstore       pstore.Peerstore `optional:"true"` // storage for other Peer instances
 	RecordValidator record.Validator
+	Resource        *resource.Service
 
 	// Online
 	PeerHost     p2phost.Host               `optional:"true"` // the network host (server+client)

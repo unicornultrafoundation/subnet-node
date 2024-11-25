@@ -38,6 +38,9 @@ func run(repoPath string, configPath string) error {
 	node, err := core.NewNode(context.Background(), &core.BuildCfg{
 		Repo:   r,
 		Online: true,
+		ExtraOpts: map[string]bool{
+			"pubsub": true,
+		},
 	})
 
 	if err != nil {
