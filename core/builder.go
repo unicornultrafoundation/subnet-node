@@ -37,7 +37,8 @@ func NewNode(ctx context.Context, cfg *BuildCfg) (*SubnetNode, error) {
 	ctx = metrics.CtxScope(ctx, "subnet")
 
 	n := &SubnetNode{
-		ctx: ctx,
+		ctx:      ctx,
+		IsOnline: cfg.Online,
 	}
 
 	opts := []fx.Option{
@@ -46,9 +47,8 @@ func NewNode(ctx context.Context, cfg *BuildCfg) (*SubnetNode, error) {
 	}
 
 	opts = append(opts, fx.Extract(n))
-
 	app := fx.New(opts...)
-
+	n.IsOnline = cfg.Online
 	var once sync.Once
 	var stopErr error
 	n.stop = func() error {

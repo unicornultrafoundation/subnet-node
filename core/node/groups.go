@@ -168,9 +168,11 @@ func Storage(bcfg *BuildCfg) fx.Option {
 	)
 }
 
-var Core = fx.Options(
-	fx.Provide(ResourceService),
-)
+func Core(cfg *config.C) fx.Option {
+	return fx.Options(
+		maybeProvide(ResourceService, cfg.GetBool("provider.enable", false)),
+	)
+}
 
 // IPFS builds a group of fx Options based on the passed BuildCfg
 func Subnet(ctx context.Context, bcfg *BuildCfg) fx.Option {
@@ -186,6 +188,6 @@ func Subnet(ctx context.Context, bcfg *BuildCfg) fx.Option {
 		Storage(bcfg),
 		IPNS,
 		Online(bcfg, cfg),
-		Core,
+		Core(cfg),
 	)
 }

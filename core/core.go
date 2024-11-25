@@ -41,7 +41,7 @@ type SubnetNode struct {
 	// Services
 	Peerstore       pstore.Peerstore `optional:"true"` // storage for other Peer instances
 	RecordValidator record.Validator
-	Resource        *resource.Service
+	Resource        *resource.Service `optional:"true"`
 
 	// Online
 	PeerHost     p2phost.Host               `optional:"true"` // the network host (server+client)

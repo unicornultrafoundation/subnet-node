@@ -41,21 +41,14 @@ type SNRepo struct {
 
 var _ repo.Repo = (*SNRepo)(nil)
 
-func Open(repoPath string) (repo.Repo, error) {
-	fn := func() (repo.Repo, error) {
-		return open(repoPath, "")
-	}
-	return onlyOne.Open(repoPath, fn)
-}
-
-func OpenWithUserConfig(repoPath string, userConfigFilePath string) (repo.Repo, error) {
+func Open(repoPath string, userConfigFilePath *string) (repo.Repo, error) {
 	fn := func() (repo.Repo, error) {
 		return open(repoPath, userConfigFilePath)
 	}
 	return onlyOne.Open(repoPath, fn)
 }
 
-func open(repoPath string, userConfigFilePath string) (repo.Repo, error) {
+func open(repoPath string, userConfigFilePath *string) (repo.Repo, error) {
 	packageLock.Lock()
 	defer packageLock.Unlock()
 
@@ -83,7 +76,7 @@ func open(repoPath string, userConfigFilePath string) (repo.Repo, error) {
 	return r, nil
 }
 
-func newSNRepo(rpath string, userConfigFilePath string) (*SNRepo, error) {
+func newSNRepo(rpath string, userConfigFilePath *string) (*SNRepo, error) {
 	expPath, err := fsutil.ExpandHome(filepath.Clean(rpath))
 	if err != nil {
 		return nil, err
@@ -92,15 +85,20 @@ func newSNRepo(rpath string, userConfigFilePath string) (*SNRepo, error) {
 	l := logrus.New()
 	l.Out = os.Stdout
 
+	configPath := filepath.Join(expPath, "config.yaml")
+	if userConfigFilePath != nil {
+		configPath = *userConfigFilePath
+	}
+
 	c := config.NewC(l)
-	err = c.Load(userConfigFilePath)
+	err = c.Load(configPath)
 	if err != nil {
 		fmt.Printf("failed to load config: %s", err)
 		os.Exit(1)
 	}
 
 	return &SNRepo{
-		configFilePath: userConfigFilePath,
+		configFilePath: configPath,
 		path:           expPath,
 		config:         c,
 	}, nil

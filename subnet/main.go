@@ -3,6 +3,9 @@ package subnet
 import (
 	"context"
 	"fmt"
+	"regexp"
+	"sort"
+	"strings"
 	"sync"
 
 	"github.com/hashicorp/go-multierror"
@@ -18,17 +21,17 @@ import (
 
 var log = logrus.New().WithField("service", "subnet")
 
-func Main(repoPath string, configPath string) {
+func Main(repoPath string, configPath *string) {
 	if err := run(repoPath, configPath); err != nil {
 		log.Fatal(err)
 	}
 }
 
-func run(repoPath string, configPath string) error {
+func run(repoPath string, configPath *string) error {
 	// let the user know we're going.
 	fmt.Printf("Initializing subnetnode...\n")
 
-	r, err := snrepo.OpenWithUserConfig(repoPath, configPath)
+	r, err := snrepo.Open(repoPath, configPath)
 	if err != nil {
 		// TODO handle case: daemon running
 		// TODO handle case: repo doesn't exist or isn't initialized
@@ -51,6 +54,8 @@ func run(repoPath string, configPath string) error {
 
 	defer node.Close()
 
+	printLibp2pPorts(node)
+
 	// construct api endpoint - every time
 	apiErrc, err := serveHTTPApi(r.Config(), node)
 	if err != nil {
@@ -66,6 +71,61 @@ func run(repoPath string, configPath string) error {
 	}
 
 	return errs
+}
+
+func printLibp2pPorts(node *core.SubnetNode) {
+	if !node.IsOnline {
+		fmt.Println("Swarm not listening, running in offline mode.")
+		return
+	}
+
+	ifaceAddrs, err := node.PeerHost.Network().InterfaceListenAddresses()
+	if err != nil {
+		log.Errorf("failed to read listening addresses: %s", err)
+	}
+
+	// Multiple libp2p transports can use same port.
+	// Deduplicate all listeners and collect unique IP:port (udp|tcp) combinations
+	// which is useful information for operator deploying Kubo in TCP/IP infra.
+	addrMap := make(map[string]map[string]struct{})
+	re := regexp.MustCompile(`^/(?:ip[46]|dns(?:[46])?)/([^/]+)/(tcp|udp)/(\d+)(/.*)?$`)
+	for _, addr := range ifaceAddrs {
+		matches := re.FindStringSubmatch(addr.String())
+		if matches != nil {
+			hostname := matches[1]
+			protocol := strings.ToUpper(matches[2])
+			port := matches[3]
+			var host string
+			if matches[0][:4] == "/ip6" {
+				host = fmt.Sprintf("[%s]:%s", hostname, port)
+			} else {
+				host = fmt.Sprintf("%s:%s", hostname, port)
+			}
+			if _, ok := addrMap[host]; !ok {
+				addrMap[host] = make(map[string]struct{})
+			}
+			addrMap[host][protocol] = struct{}{}
+		}
+	}
+
+	// Produce a sorted host:port list
+	hosts := make([]string, 0, len(addrMap))
+	for host := range addrMap {
+		hosts = append(hosts, host)
+	}
+	sort.Strings(hosts)
+
+	// Print listeners
+	for _, host := range hosts {
+		protocolsSet := addrMap[host]
+		protocols := make([]string, 0, len(protocolsSet))
+		for protocol := range protocolsSet {
+			protocols = append(protocols, protocol)
+		}
+		sort.Strings(protocols)
+		fmt.Printf("Swarm listening on %s (%s)\n", host, strings.Join(protocols, "+"))
+	}
+	fmt.Printf("Run 'subnet id' to inspect announced and discovered multiaddrs of this node.\n")
 }
 
 func serveHTTPApi(cfg *config.C, node *core.SubnetNode) (<-chan error, error) {

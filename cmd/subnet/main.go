@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	ninit "github.com/unicornultrafoundation/subnet-node/cmd/init"
 	"github.com/unicornultrafoundation/subnet-node/subnet"
 )
 
@@ -18,6 +19,7 @@ var Build string
 func main() {
 	configPath := flag.String("config", "", "Path to either a file or directory to load configuration from")
 	repoPath := flag.String("repo", "", "Path to either a file or directory to load configuration from")
+	initFlag := flag.Bool("init", false, "Init")
 
 	printVersion := flag.Bool("version", false, "Print version")
 	printUsage := flag.Bool("help", false, "Print command line usage")
@@ -34,11 +36,20 @@ func main() {
 		os.Exit(0)
 	}
 
-	if *configPath == "" {
-		fmt.Println("-config flag must be set")
+	if *repoPath == "" {
+		fmt.Println("-repo flag must be set")
 		flag.Usage()
 		os.Exit(1)
 	}
 
-	subnet.Main(*repoPath, *configPath)
+	if initFlag != nil {
+		_, err := ninit.Init(*repoPath, os.Stdout)
+		if err != nil {
+			fmt.Printf("init err :%v", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+
+	subnet.Main(*repoPath, configPath)
 }
