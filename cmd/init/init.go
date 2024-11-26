@@ -56,7 +56,7 @@ func InitWithIdentity(identity Identity) (map[interface{}]interface{}, error) {
 			},
 		},
 		"bootstrap": []interface{}{
-			"/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",
+			"/ip4/47.129.250.9/tcp/4001/p2p/12D3KooWDK63y6sxFi3dNqrS8yRetgbB81Tzszvs2yLoEtWtPCDa",
 		},
 	}, nil
 }
