@@ -47,6 +47,17 @@ func InitWithIdentity(identity Identity) (map[interface{}]interface{}, error) {
 			"peer_id": identity.PeerID,
 			"privkey": identity.PrivKey,
 		},
+		"addresses": map[interface{}]interface{}{
+			"swarm": []interface{}{
+				"/ip4/0.0.0.0/tcp/4001",
+			},
+			"api": []interface{}{
+				"/ip4/0.0.0.0/tcp/8080",
+			},
+		},
+		"bootstrap": []interface{}{
+			"/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",
+		},
 	}, nil
 }
 

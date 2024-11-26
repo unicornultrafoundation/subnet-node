@@ -51,7 +51,6 @@ func Open(repoPath string, userConfigFilePath *string) (repo.Repo, error) {
 func open(repoPath string, userConfigFilePath *string) (repo.Repo, error) {
 	packageLock.Lock()
 	defer packageLock.Unlock()
-
 	r, err := newSNRepo(repoPath, userConfigFilePath)
 	if err != nil {
 		return nil, err
@@ -86,10 +85,9 @@ func newSNRepo(rpath string, userConfigFilePath *string) (*SNRepo, error) {
 	l.Out = os.Stdout
 
 	configPath := filepath.Join(expPath, "config.yaml")
-	if userConfigFilePath != nil {
+	if *userConfigFilePath != "" {
 		configPath = *userConfigFilePath
 	}
-
 	c := config.NewC(l)
 	err = c.Load(configPath)
 	if err != nil {

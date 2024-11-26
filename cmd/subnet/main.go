@@ -18,7 +18,7 @@ var Build string
 
 func main() {
 	configPath := flag.String("config", "", "Path to either a file or directory to load configuration from")
-	repoPath := flag.String("repo", "", "Path to either a file or directory to load configuration from")
+	repoPath := flag.String("repo", "~/.subnet-node", "Path to either a file or directory to load configuration from")
 	initFlag := flag.Bool("init", false, "Init")
 
 	printVersion := flag.Bool("version", false, "Print version")
@@ -42,7 +42,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if initFlag != nil {
+	if *initFlag {
 		_, err := ninit.Init(*repoPath, os.Stdout)
 		if err != nil {
 			fmt.Printf("init err :%v", err)
