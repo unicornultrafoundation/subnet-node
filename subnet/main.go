@@ -3,6 +3,7 @@ package subnet
 import (
 	"context"
 	"fmt"
+	"os"
 	"regexp"
 	"sort"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 	manet "github.com/multiformats/go-multiaddr/net"
 	"github.com/sirupsen/logrus"
+	ninit "github.com/unicornultrafoundation/subnet-node/cmd/init"
 	"github.com/unicornultrafoundation/subnet-node/config"
 	"github.com/unicornultrafoundation/subnet-node/core"
 	"github.com/unicornultrafoundation/subnet-node/core/corehttp"
@@ -30,6 +32,13 @@ func Main(repoPath string, configPath *string) {
 func run(repoPath string, configPath *string) error {
 	// let the user know we're going.
 	fmt.Printf("Initializing subnetnode...\n")
+
+	if !snrepo.IsInitialized(repoPath) {
+		_, err := ninit.Init(repoPath, os.Stdout)
+		if err != nil {
+			return err
+		}
+	}
 
 	r, err := snrepo.Open(repoPath, configPath)
 	if err != nil {

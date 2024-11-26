@@ -182,3 +182,28 @@ func (r *SNRepo) openDatastore() error {
 	r.ds = measure.New(prefix, r.ds)
 	return nil
 }
+
+// IsInitialized returns true if the repo is initialized at provided |path|.
+func IsInitialized(path string) bool {
+	// packageLock is held to ensure that another caller doesn't attempt to
+	// Init or Remove the repo while this call is in progress.
+	packageLock.Lock()
+	defer packageLock.Unlock()
+
+	return configIsInitialized(path)
+}
+
+// configIsInitialized returns true if the repo is initialized at
+// provided |path|.
+func configIsInitialized(path string) bool {
+	expPath, err := fsutil.ExpandHome(filepath.Clean(path))
+	if err != nil {
+		return false
+	}
+
+	l := logrus.New()
+	l.Out = os.Stdout
+
+	configPath := filepath.Join(expPath, "config.yaml")
+	return fsutil.FileExists(configPath)
+}
