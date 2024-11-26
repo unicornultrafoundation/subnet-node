@@ -1,0 +1,14 @@
+services:
+  subnet:
+    image: subnet:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "4001:4001"
+      - "8080:8080"
+    volumes:
+      - data:/data
+    restart: unless-stopped
+volumes:
+  data:
