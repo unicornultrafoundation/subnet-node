@@ -6,13 +6,13 @@ This document provides instructions to install and run **Subnet**, whether you a
 
 ## **Table of Contents** 
 <!-- no toc -->
-  - 1. [Using Prebuilt Binaries](#1-using-prebuilt-binaries)
-  - 2. [Building from Source](#2-building-from-source)
-  - 3. [Initializing Configuration](#3-initializing-configuration)
-  - 4. [Running the Subnet Node](#4-running-the-subnet-node)
-  - 5. [Development Status and Known Issues](#5-development-status-and-known-issues)
-  - 6. [Feedback and Contribution](#6-feedback-and-contribution)
-  - 7. [License](#license)
+  - [Using Prebuilt Binaries](#1-using-prebuilt-binaries)
+  - [Building from Source](#2-building-from-source)
+  - [Initializing Configuration](#3-initializing-configuration)
+  - [Running the Subnet Node](#4-running-the-subnet-node)
+  - [Development Status and Known Issues](#5-development-status-and-known-issues)
+  - [Feedback and Contribution](#6-feedback-and-contribution)
+  - [License](#license)
 ---
 
 ## **1. Using Prebuilt Binaries**
