@@ -11,8 +11,8 @@ import (
 	measure "github.com/ipfs/go-ds-measure"
 	lockfile "github.com/ipfs/go-fs-lock"
 	"github.com/sirupsen/logrus"
+	"github.com/unicornultrafoundation/subnet-node/common/fsutil"
 	"github.com/unicornultrafoundation/subnet-node/config"
-	"github.com/unicornultrafoundation/subnet-node/misc/fsutil"
 	"github.com/unicornultrafoundation/subnet-node/repo"
 )
 

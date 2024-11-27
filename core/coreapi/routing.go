@@ -2,12 +2,15 @@ package coreapi
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/unicornultrafoundation/subnet-node/core/coreiface"
 	caopts "github.com/unicornultrafoundation/subnet-node/core/coreiface/options"
+	"github.com/unicornultrafoundation/subnet-node/core/node/resource"
 	"github.com/unicornultrafoundation/subnet-node/tracing"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -76,4 +79,18 @@ func (api *RoutingAPI) FindPeer(ctx context.Context, p peer.ID) (peer.AddrInfo, 
 	}
 
 	return pi, nil
+}
+
+func (api *RoutingAPI) GetResource(ctx context.Context, p peer.ID) (resource.ResourceInfo, error) {
+	result, err := api.routing.GetValue(ctx, fmt.Sprintf("/resource/%s", p))
+	if err != nil {
+		return resource.ResourceInfo{}, err
+	}
+
+	// Decode the resource information
+	var res resource.ResourceInfo
+	if err := json.Unmarshal(result, &res); err != nil {
+		return resource.ResourceInfo{}, err
+	}
+	return res, nil
 }

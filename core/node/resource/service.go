@@ -34,7 +34,7 @@ func (s *Service) Start() error {
 	// Launch the periodic update loop
 	go s.updateLoop()
 
-	log.Println("Resource Service started.")
+	log.Debug("Resource Service started.")
 	return nil
 }
 
@@ -44,7 +44,7 @@ func (s *Service) Stop() error {
 	if s.pubsubTopic != nil {
 		s.pubsubTopic.Close() // Close the topic when stopping
 	}
-	log.Println("Service stopped.")
+	log.Debug("Service stopped.")
 	return nil
 }
 
@@ -59,7 +59,7 @@ func (s *Service) updateLoop() {
 			return
 		case <-ticker.C:
 			if err := s.updateDHTLoop(); err != nil {
-				log.Printf("Failed to update resource: %v\n", err)
+				log.Debugf("Failed to update resource: %v\n", err)
 			}
 		}
 	}
@@ -70,7 +70,6 @@ func (s *Service) updateDHTLoop() error {
 	ctx := context.Background()
 
 	res, err := GetResource()
-	fmt.Println(res)
 	if err != nil {
 		return fmt.Errorf("failed to get resource info: %w", err)
 	}
@@ -87,7 +86,7 @@ func (s *Service) updateDHTLoop() error {
 		return fmt.Errorf("failed to store resource in DHT: %w", err)
 	}
 
-	log.Printf("Updated resource in DHT: %s\n", key)
+	log.Debugf("Updated resource in DHT: %s\n", key)
 
 	// 2. Publish basic resource information to PubSub
 	if s.pubsubTopic == nil {
@@ -99,7 +98,7 @@ func (s *Service) updateDHTLoop() error {
 			return fmt.Errorf("failed to publish resource info to pubsub: %w", err)
 		}
 
-		log.Println("Published resource info to PubSub.")
+		log.Debug("Published resource info to PubSub.")
 	}
 	return nil
 }

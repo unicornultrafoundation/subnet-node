@@ -5,6 +5,7 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/unicornultrafoundation/subnet-node/core/coreiface/options"
+	"github.com/unicornultrafoundation/subnet-node/core/node/resource"
 )
 
 // RoutingAPI specifies the interface to the routing layer.
@@ -18,4 +19,6 @@ type RoutingAPI interface {
 	// FindPeer queries the routing system for all the multiaddresses associated
 	// with the given [peer.ID].
 	FindPeer(context.Context, peer.ID) (peer.AddrInfo, error)
+
+	GetResource(ctx context.Context, p peer.ID) (resource.ResourceInfo, error)
 }

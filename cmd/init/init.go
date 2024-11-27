@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/unicornultrafoundation/subnet-node/misc/fsutil"
+	"github.com/unicornultrafoundation/subnet-node/common/fsutil"
 	"gopkg.in/yaml.v2"
 )
 
