@@ -18,6 +18,9 @@ type Service struct {
 	DHT      *ddht.DHT
 
 	UpdateFreq time.Duration
+	IsProvider bool
+
+	resource *ResourceInfo
 
 	stopChan    chan struct{}
 	pubsubTopic *pubsub.Topic // Reuse the PubSub topic
@@ -30,6 +33,10 @@ func (s *Service) Start() error {
 		s.UpdateFreq = 30 * time.Second // Default to 30 seconds
 	}
 	s.stopChan = make(chan struct{})
+
+	if err := s.updateResourceLoop(); err != nil {
+		return err
+	}
 
 	// Launch the periodic update loop
 	go s.updateLoop()
@@ -58,24 +65,39 @@ func (s *Service) updateLoop() {
 		case <-s.stopChan:
 			return
 		case <-ticker.C:
-			if err := s.updateDHTLoop(); err != nil {
+			if err := s.updateResourceLoop(); err != nil {
 				log.Debugf("Failed to update resource: %v\n", err)
+			}
+
+			if s.IsProvider {
+				if err := s.updateDHTLoop(); err != nil {
+					log.Debugf("Failed to update dht: %v\n", err)
+				}
 			}
 		}
 	}
+}
+
+func (s *Service) updateResourceLoop() error {
+	res, err := GetResource()
+	if err != nil {
+		return fmt.Errorf("failed to get resource info: %w", err)
+	}
+
+	s.resource = res
+	return nil
+}
+
+func (s *Service) GetResource() *ResourceInfo {
+	return s.resource
 }
 
 // Updates resource information to DHT and PubSub
 func (s *Service) updateDHTLoop() error {
 	ctx := context.Background()
 
-	res, err := GetResource()
-	if err != nil {
-		return fmt.Errorf("failed to get resource info: %w", err)
-	}
-
 	// Serialize ResourceInfo into JSON
-	data, err := json.Marshal(res)
+	data, err := json.Marshal(s.resource)
 	if err != nil {
 		return fmt.Errorf("failed to marshal resource info: %w", err)
 	}
@@ -90,7 +112,7 @@ func (s *Service) updateDHTLoop() error {
 
 	// 2. Publish basic resource information to PubSub
 	if s.pubsubTopic == nil {
-		s.pubsubTopic, err = s.PubSub.Join(res.Topic())
+		s.pubsubTopic, err = s.PubSub.Join(s.resource.Topic())
 		if err != nil {
 			return err
 		}

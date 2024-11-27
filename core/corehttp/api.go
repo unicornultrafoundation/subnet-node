@@ -23,6 +23,8 @@ func OpenAPIOption() ServeOption {
 		server := rpc.NewServer()
 		server.RegisterName("swarm", api.NewSwarmAPI(capi.Swarm()))
 		server.RegisterName("routing", api.NewRoutingAPI(capi.Routing()))
+		server.RegisterName("node", api.NewNodeAPI(capi.Resource()))
+
 		smux.Handle(APIPath, server)
 		return smux, nil
 	}

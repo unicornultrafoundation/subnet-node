@@ -1,11 +1,19 @@
 package coreiface
 
-import "github.com/unicornultrafoundation/subnet-node/core/coreiface/options"
+import (
+	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/unicornultrafoundation/subnet-node/core/coreiface/options"
+	"github.com/unicornultrafoundation/subnet-node/core/node/resource"
+)
 
 type CoreAPI interface {
+	Identity() peer.ID
+
 	PubSub() PubSubAPI
 
 	Routing() RoutingAPI
+
+	Resource() *resource.Service
 
 	// Swarm returns an implementation of Swarm API
 	Swarm() SwarmAPI

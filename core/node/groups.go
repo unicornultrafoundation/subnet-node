@@ -170,7 +170,7 @@ func Storage(bcfg *BuildCfg) fx.Option {
 
 func Core(cfg *config.C) fx.Option {
 	return fx.Options(
-		maybeProvide(ResourceService, cfg.GetBool("provider.enable", false)),
+		fx.Provide(ResourceService),
 	)
 }
 

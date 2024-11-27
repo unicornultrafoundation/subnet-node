@@ -14,6 +14,7 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/core"
 	"github.com/unicornultrafoundation/subnet-node/core/coreiface"
 	"github.com/unicornultrafoundation/subnet-node/core/coreiface/options"
+	"github.com/unicornultrafoundation/subnet-node/core/node/resource"
 	"github.com/unicornultrafoundation/subnet-node/repo"
 )
 
@@ -27,9 +28,10 @@ type CoreAPI struct {
 	peerHost        p2phost.Host
 	recordValidator record.Validator
 
-	repo    repo.Repo
-	routing routing.Routing
-	pubSub  *pubsub.PubSub
+	repo     repo.Repo
+	routing  routing.Routing
+	pubSub   *pubsub.PubSub
+	resource *resource.Service
 
 	checkOnline func(allowOffline bool) error
 
@@ -49,6 +51,14 @@ func NewCoreAPI(n *core.SubnetNode, opts ...options.ApiOption) (coreiface.CoreAP
 
 func (api *CoreAPI) PubSub() coreiface.PubSubAPI {
 	return (*PubSubAPI)(api)
+}
+
+func (api *CoreAPI) Identity() peer.ID {
+	return api.identity
+}
+
+func (api *CoreAPI) Resource() *resource.Service {
+	return api.resource
 }
 
 func (api *CoreAPI) Routing() coreiface.RoutingAPI {
@@ -84,6 +94,7 @@ func (api *CoreAPI) WithOptions(opts ...options.ApiOption) (coreiface.CoreAPI, e
 		peerHost:        n.PeerHost,
 		recordValidator: n.RecordValidator,
 		routing:         n.Routing,
+		resource:        n.Resource,
 	}
 
 	return subAPI, nil
