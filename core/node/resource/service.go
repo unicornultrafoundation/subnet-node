@@ -96,6 +96,9 @@ func (s *Service) GetResource() *ResourceInfo {
 }
 
 func (s *Service) subscribe() error {
+	if !s.IsProvider {
+		return nil
+	}
 	// 2. Publish basic resource information to PubSub
 	if s.pubsubTopic == nil {
 		data, err := json.Marshal(s.resource)
