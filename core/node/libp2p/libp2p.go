@@ -3,6 +3,7 @@ package libp2p
 import (
 	"fmt"
 	"sort"
+	"time"
 
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/crypto"
@@ -26,9 +27,9 @@ type Libp2pOpts struct {
 func ConnectionManager(cfg *config.C) func() (opts Libp2pOpts, err error) {
 	return func() (opts Libp2pOpts, err error) {
 		cm, err := connmgr.NewConnManager(
-			cfg.GetInt("swarm.connmrg.low", 0),
-			cfg.GetInt("swarm.connmrg.high", 0),
-			connmgr.WithGracePeriod(cfg.GetDuration("swarm.connmrg.grace", 0)))
+			cfg.GetInt("swarm.connmrg.low", 600),
+			cfg.GetInt("swarm.connmrg.high", 900),
+			connmgr.WithGracePeriod(cfg.GetDuration("swarm.connmrg.grace", 20*time.Second)))
 		if err != nil {
 			return opts, err
 		}

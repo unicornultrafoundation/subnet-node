@@ -24,6 +24,7 @@ func OpenAPIOption() ServeOption {
 		server.RegisterName("swarm", api.NewSwarmAPI(capi.Swarm()))
 		server.RegisterName("routing", api.NewRoutingAPI(capi.Routing()))
 		server.RegisterName("node", api.NewNodeAPI(capi.Resource()))
+		server.RegisterName("pubsub", api.NewPubsubAPI(capi.PubSub()))
 
 		smux.Handle(APIPath, server)
 		return smux, nil

@@ -33,8 +33,11 @@ func (s *Service) Start() error {
 		s.UpdateFreq = 30 * time.Second // Default to 30 seconds
 	}
 	s.stopChan = make(chan struct{})
-
 	if err := s.updateResourceLoop(); err != nil {
+		return err
+	}
+
+	if err := s.subscribe(); err != nil {
 		return err
 	}
 
@@ -92,6 +95,31 @@ func (s *Service) GetResource() *ResourceInfo {
 	return s.resource
 }
 
+func (s *Service) subscribe() error {
+	// 2. Publish basic resource information to PubSub
+	if s.pubsubTopic == nil {
+		data, err := json.Marshal(s.resource)
+		if err != nil {
+			return fmt.Errorf("failed to marshal resource info: %w", err)
+		}
+		s.pubsubTopic, err = s.PubSub.Join(s.resource.Topic())
+		if err != nil {
+			return err
+		}
+		if err := s.pubsubTopic.Publish(context.Background(), data); err != nil {
+			return fmt.Errorf("failed to publish resource info to pubsub: %w", err)
+		}
+
+		log.Debug("Published resource info to PubSub.")
+		_, err = s.pubsubTopic.Subscribe(pubsub.WithBufferSize(1))
+		if err != nil {
+			return err
+		}
+
+	}
+	return nil
+}
+
 // Updates resource information to DHT and PubSub
 func (s *Service) updateDHTLoop() error {
 	ctx := context.Background()
@@ -109,18 +137,5 @@ func (s *Service) updateDHTLoop() error {
 	}
 
 	log.Debugf("Updated resource in DHT: %s\n", key)
-
-	// 2. Publish basic resource information to PubSub
-	if s.pubsubTopic == nil {
-		s.pubsubTopic, err = s.PubSub.Join(s.resource.Topic())
-		if err != nil {
-			return err
-		}
-		if err := s.pubsubTopic.Publish(ctx, data); err != nil {
-			return fmt.Errorf("failed to publish resource info to pubsub: %w", err)
-		}
-
-		log.Debug("Published resource info to PubSub.")
-	}
 	return nil
 }

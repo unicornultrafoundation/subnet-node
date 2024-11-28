@@ -2,11 +2,9 @@ package coreapi
 
 import (
 	"context"
-	"errors"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	peer "github.com/libp2p/go-libp2p/core/peer"
-	routing "github.com/libp2p/go-libp2p/core/routing"
 	"github.com/unicornultrafoundation/subnet-node/core/coreiface"
 	caopts "github.com/unicornultrafoundation/subnet-node/core/coreiface/options"
 	"github.com/unicornultrafoundation/subnet-node/tracing"
@@ -28,22 +26,12 @@ func (api *PubSubAPI) Ls(ctx context.Context) ([]string, error) {
 	_, span := tracing.Span(ctx, "CoreAPI.PubSubAPI", "Ls")
 	defer span.End()
 
-	_, err := api.checkNode()
-	if err != nil {
-		return nil, err
-	}
-
 	return api.pubSub.GetTopics(), nil
 }
 
 func (api *PubSubAPI) Peers(ctx context.Context, opts ...caopts.PubSubPeersOption) ([]peer.ID, error) {
 	_, span := tracing.Span(ctx, "CoreAPI.PubSubAPI", "Peers")
 	defer span.End()
-
-	_, err := api.checkNode()
-	if err != nil {
-		return nil, err
-	}
 
 	settings, err := caopts.PubSubPeersOptions(opts...)
 	if err != nil {
@@ -59,13 +47,11 @@ func (api *PubSubAPI) Publish(ctx context.Context, topic string, data []byte) er
 	_, span := tracing.Span(ctx, "CoreAPI.PubSubAPI", "Publish", trace.WithAttributes(attribute.String("topic", topic)))
 	defer span.End()
 
-	_, err := api.checkNode()
+	ptopic, err := api.pubSub.Join(topic)
 	if err != nil {
 		return err
 	}
-
-	//nolint deprecated
-	return api.pubSub.Publish(topic, data)
+	return ptopic.Publish(ctx, data)
 }
 
 func (api *PubSubAPI) Subscribe(ctx context.Context, topic string, opts ...caopts.PubSubSubscribeOption) (coreiface.PubSubSubscription, error) {
@@ -81,31 +67,16 @@ func (api *PubSubAPI) Subscribe(ctx context.Context, topic string, opts ...caopt
 		return nil, err
 	}
 
-	_, err = api.checkNode()
-	if err != nil {
-		return nil, err
-	}
-
 	//nolint deprecated
-	sub, err := api.pubSub.Subscribe(topic)
+	ptopic, err := api.pubSub.Join(topic)
 	if err != nil {
 		return nil, err
 	}
-
+	sub, err := ptopic.Subscribe()
+	if err != nil {
+		return nil, err
+	}
 	return &pubSubSubscription{sub}, nil
-}
-
-func (api *PubSubAPI) checkNode() (routing.Routing, error) {
-	if api.pubSub == nil {
-		return nil, errors.New("experimental pubsub feature not enabled, run daemon with --enable-pubsub-experiment to use")
-	}
-
-	err := api.checkOnline(false)
-	if err != nil {
-		return nil, err
-	}
-
-	return api.routing, nil
 }
 
 func (sub *pubSubSubscription) Close() error {

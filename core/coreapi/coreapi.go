@@ -95,6 +95,14 @@ func (api *CoreAPI) WithOptions(opts ...options.ApiOption) (coreiface.CoreAPI, e
 		recordValidator: n.RecordValidator,
 		routing:         n.Routing,
 		resource:        n.Resource,
+		pubSub:          n.PubSub,
+	}
+
+	subAPI.checkOnline = func(allowOffline bool) error {
+		if !n.IsOnline && !allowOffline {
+			return coreiface.ErrOffline
+		}
+		return nil
 	}
 
 	return subAPI, nil
