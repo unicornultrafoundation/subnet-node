@@ -15,6 +15,8 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/repo"
 )
 
+var UptimeTopic = "topic/uptime"
+
 // HeartbeatMessage defines the structure of heartbeat messages sent over PubSub
 type HeartbeatMessage struct {
 	Timestamp int64 `json:"timestamp"` // Time the heartbeat message was generated
@@ -28,8 +30,8 @@ type UptimeRecord struct {
 	Proof         *merkle.Proof `json:"proof"`          // Merkle proof for this uptime record
 }
 
-// OnlineService manages uptime tracking, PubSub communication, and proof generation
-type OnlineService struct {
+// UptimeService manages uptime tracking, PubSub communication, and proof generation
+type UptimeService struct {
 	Identity  peer.ID          // Local node's identity
 	PubSub    *pubsub.PubSub   // PubSub instance for communication
 	Topic     *pubsub.Topic    // Subscribed PubSub topic
@@ -38,12 +40,14 @@ type OnlineService struct {
 	Datastore repo.Datastore // Datastore for storing uptime records and proofs
 }
 
-// Start initializes the OnlineService and starts PubSub-related tasks
-func (s *OnlineService) Start(ctx context.Context, topicName string, interval time.Duration) error {
+// Start initializes the UptimeService and starts PubSub-related tasks
+func (s *UptimeService) Start() error {
+	ctx := context.Background()
+
 	// Join the PubSub topic
-	topic, err := s.PubSub.Join(topicName)
+	topic, err := s.PubSub.Join(UptimeTopic)
 	if err != nil {
-		return fmt.Errorf("failed to join topic %s: %w", topicName, err)
+		return fmt.Errorf("failed to join topic %s: %w", UptimeTopic, err)
 	}
 	s.Topic = topic
 	s.Peers = make(map[string]int64)
@@ -52,16 +56,16 @@ func (s *OnlineService) Start(ctx context.Context, topicName string, interval ti
 	ctx, s.cancel = context.WithCancel(ctx)
 
 	// Start publishing, listening, and updating proofs in separate goroutines
-	go s.startPublishing(ctx, interval)
+	go s.startPublishing(ctx)
 	go s.startListening(ctx)
 	go s.updateProofs(ctx)
 
-	log.Printf("OnlineService started for topic: %s", topicName)
+	log.Printf("UptimeService started for topic: %s", UptimeTopic)
 	return nil
 }
 
 // Stop halts all operations and cleans up resources
-func (s *OnlineService) Stop() error {
+func (s *UptimeService) Stop() error {
 	if s.cancel != nil {
 		s.cancel()
 	}
@@ -70,13 +74,13 @@ func (s *OnlineService) Stop() error {
 			return fmt.Errorf("failed to close topic: %w", err)
 		}
 	}
-	log.Println("OnlineService stopped")
+	log.Println("UptimeService stopped")
 	return nil
 }
 
 // startPublishing periodically sends heartbeat messages to the PubSub topic
-func (s *OnlineService) startPublishing(ctx context.Context, interval time.Duration) {
-	ticker := time.NewTicker(interval)
+func (s *UptimeService) startPublishing(ctx context.Context) {
+	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 
 	for {
@@ -104,7 +108,7 @@ func (s *OnlineService) startPublishing(ctx context.Context, interval time.Durat
 }
 
 // startListening processes incoming heartbeat messages from PubSub
-func (s *OnlineService) startListening(ctx context.Context) {
+func (s *UptimeService) startListening(ctx context.Context) {
 	sub, err := s.Topic.Subscribe()
 	if err != nil {
 		log.Fatalf("Failed to subscribe to topic: %v", err)
@@ -144,7 +148,7 @@ func (s *OnlineService) startListening(ctx context.Context) {
 	}
 }
 
-func (s *OnlineService) updatePeerUptime(ctx context.Context, peerID string, currentTimestamp int64) error {
+func (s *UptimeService) updatePeerUptime(ctx context.Context, peerID string, currentTimestamp int64) error {
 	// Retrieve existing uptime record from the datastore
 	var uptime int64
 	var lastTimestamp int64
@@ -193,8 +197,8 @@ func (s *OnlineService) updatePeerUptime(ctx context.Context, peerID string, cur
 }
 
 // updateProofs periodically generates and distributes Merkle proofs for all uptimes
-func (s *OnlineService) updateProofs(ctx context.Context) {
-	ticker := time.NewTicker(10 * time.Second)
+func (s *UptimeService) updateProofs(ctx context.Context) {
+	ticker := time.NewTicker(15 * time.Minute)
 	defer ticker.Stop()
 
 	for {
@@ -215,7 +219,7 @@ func (s *OnlineService) updateProofs(ctx context.Context) {
 }
 
 // loadUptimes retrieves all uptime records from the datastore
-func (s *OnlineService) loadUptimes(ctx context.Context) ([]*UptimeRecord, error) {
+func (s *UptimeService) loadUptimes(ctx context.Context) ([]*UptimeRecord, error) {
 	query := query.Query{
 		Prefix: "uptime:",
 	}
@@ -248,7 +252,7 @@ func (s *OnlineService) loadUptimes(ctx context.Context) ([]*UptimeRecord, error
 }
 
 // generateAndDistributeProofs creates Merkle proofs for all peers and stores them in the datastore
-func (s *OnlineService) generateAndDistributeProofs(ctx context.Context) error {
+func (s *UptimeService) generateAndDistributeProofs(ctx context.Context) error {
 	batch, err := s.Datastore.Batch(ctx)
 	if err != nil {
 		return err
@@ -292,7 +296,7 @@ func (s *OnlineService) generateAndDistributeProofs(ctx context.Context) error {
 }
 
 // GetProof retrieves a Merkle proof for a specific peer from the datastore
-func (s *OnlineService) GetProof(ctx context.Context, peerID string) (*merkle.Proof, error) {
+func (s *UptimeService) GetProof(ctx context.Context, peerID string) (*merkle.Proof, error) {
 	proofKey := datastore.NewKey("proof:" + peerID)
 
 	data, err := s.Datastore.Get(ctx, proofKey)
@@ -312,7 +316,7 @@ func (s *OnlineService) GetProof(ctx context.Context, peerID string) (*merkle.Pr
 }
 
 // GetUptime retrieves the uptime for a specific peer from the datastore
-func (s *OnlineService) GetUptime(ctx context.Context, peerID string) (int64, error) {
+func (s *UptimeService) GetUptime(ctx context.Context, peerID string) (int64, error) {
 	uptimeKey := datastore.NewKey("uptime:" + peerID)
 
 	data, err := s.Datastore.Get(ctx, uptimeKey)
