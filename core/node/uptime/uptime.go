@@ -80,7 +80,7 @@ func (s *UptimeService) Stop() error {
 
 // startPublishing periodically sends heartbeat messages to the PubSub topic
 func (s *UptimeService) startPublishing(ctx context.Context) {
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
 
 	for {
@@ -137,8 +137,15 @@ func (s *UptimeService) startListening(ctx context.Context) {
 				continue
 			}
 
+			// Validate that the heartbeat timestamp is less than or equal to the current time
+			currentTime := time.Now().Unix()
+			if heartbeat.Timestamp > currentTime {
+				log.Printf("Invalid heartbeat timestamp from %s: %d (current time: %d)", peerId.String(), heartbeat.Timestamp, currentTime)
+				continue
+			}
+
 			// Update the peer's uptime based on the received message
-			if err := s.updatePeerUptime(ctx, peerId.String(), time.Now().Unix()); err != nil {
+			if err := s.updatePeerUptime(ctx, peerId.String(), heartbeat.Timestamp); err != nil {
 				log.Printf("Error updating peer uptime: %v", err)
 				continue
 			}
