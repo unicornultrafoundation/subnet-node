@@ -18,7 +18,7 @@ var Build string
 
 func main() {
 	configPath := flag.String("config", "", "Path to either a file or directory to load configuration from")
-	repoPath := flag.String("repo", "~/.subnet-node", "Path to either a file or directory to load configuration from")
+	dataPath := flag.String("datadir", "~/.subnet-node", "Path to either a file or directory to load configuration from")
 	initFlag := flag.Bool("init", false, "Init")
 
 	printVersion := flag.Bool("version", false, "Print version")
@@ -36,14 +36,14 @@ func main() {
 		os.Exit(0)
 	}
 
-	if *repoPath == "" {
-		fmt.Println("-repo flag must be set")
+	if *dataPath == "" {
+		fmt.Println("-datadir flag must be set")
 		flag.Usage()
 		os.Exit(1)
 	}
 
 	if *initFlag {
-		_, err := ninit.Init(*repoPath, os.Stdout)
+		_, err := ninit.Init(*dataPath, os.Stdout)
 		if err != nil {
 			fmt.Printf("init err :%v", err)
 			os.Exit(1)
@@ -51,5 +51,5 @@ func main() {
 		os.Exit(0)
 	}
 
-	subnet.Main(*repoPath, configPath)
+	subnet.Main(*dataPath, configPath)
 }

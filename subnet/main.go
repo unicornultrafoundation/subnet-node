@@ -31,7 +31,7 @@ func Main(repoPath string, configPath *string) {
 
 func run(repoPath string, configPath *string) error {
 	// let the user know we're going.
-	fmt.Printf("Initializing subnetnode...\n")
+	fmt.Printf("Initializing Subnet Node...\n")
 
 	if !snrepo.IsInitialized(repoPath) {
 		_, err := ninit.Init(repoPath, os.Stdout)

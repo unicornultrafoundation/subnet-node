@@ -37,4 +37,4 @@ COPY --from=builder /app/subnet-node ./subnet
 EXPOSE 4001 8080
 
 # # Set the command to run Subnet
-CMD ["./subnet", "--repo", "/data"]
+CMD ["./subnet", "--datadir", "/data"]

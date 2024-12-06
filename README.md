@@ -73,7 +73,8 @@ If you prefer to build Subnet from source, follow these steps:
 
 3. Verify the build:
    ```bash
-   ./build/subnet --help
+   cd ./build
+   subnet --help
    ```
 
 ---
@@ -84,15 +85,22 @@ Before running the Subnet node, you must initialize its configuration.
 
 1. **Run the Initialization Command**
    ```bash
-   subnet --init --repo ~/.subnet
+   subnet --init --datadir ~/.subnet
    ```
 
 2. **Verify the Configuration**
    - Check the generated file at `~/.subnet/config.yaml`:
      ```yaml
-     identity:
-       peer_id: QmExamplePeerID
-       privkey: PrivateKeyExample
+     addresses:
+         api:
+         - /ip4/0.0.0.0/tcp/8080 # api server
+         swarm:
+         - /ip4/0.0.0.0/tcp/4001 # swarm server
+      bootstrap:
+         - /ip4/47.129.250.9/tcp/4001/p2p/12D3KooWDK63y6sxFi3dNqrS8yRetgbB81Tzszvs2yLoEtWtPCDa # subnet genesis boot node
+      identity:
+         peer_id: 12D3KooWLJCgSFv62DfQwNKTYxACMisLnCnGbYBp766p1K19PExx # DON'T USE! Example of ED25519 Public Key 
+         privkey: CAESQA0P3Td0UZ2sAoCflMNdUivxFbUdcuo+XraGbZk5EZEdm7ZnWjxFiBUG9M718wpSOzl8P4JDQe6vZ6w+F5S9VPE= # DON'T USE! Example of ED25519 Private Key 
      ```
 
 ---
@@ -103,7 +111,7 @@ Once the configuration is initialized, you can start the Subnet node.
 
 1. **Start the Node**
    ```bash
-   subnet --repo ~/.subnet
+   subnet --datadir ~/.subnet
    ```
 
 2. **Connect to Bootstrap Peers**
@@ -115,8 +123,8 @@ Once the configuration is initialized, you can start the Subnet node.
 3. **Monitor Logs**
    - Observe logs for connections and resource discovery:
      ```plaintext
-     Initializing subnetnode...
-     Node started with Peer ID: QmExamplePeerID
+     Initializing Subnet Node...
+     Node started with Peer ID: <ED25519 Public Key>
      Listening on: /ip4/127.0.0.1/tcp/4001
      ```
 
