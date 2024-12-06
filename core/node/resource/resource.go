@@ -124,7 +124,7 @@ func getGpu() (GpuInfo, error) {
 	// For non-macOS systems, try NVIDIA GPU detection
 	ret := nvml.Init()
 	if ret != nvml.SUCCESS {
-		return GpuInfo{}, fmt.Errorf("unable to initialize NVML: %v", nvml.ErrorString(ret))
+		return GpuInfo{}, nil
 	}
 	defer func() {
 		if ret := nvml.Shutdown(); ret != nvml.SUCCESS {
