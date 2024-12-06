@@ -16,8 +16,8 @@ import (
 
 	"github.com/gaissmai/bart"
 	"github.com/sirupsen/logrus"
+	util "github.com/unicornultrafoundation/subnet-node/common/error"
 	"github.com/unicornultrafoundation/subnet-node/config"
-	"github.com/unicornultrafoundation/subnet-node/util"
 	netroute "golang.org/x/net/route"
 	"golang.org/x/sys/unix"
 )

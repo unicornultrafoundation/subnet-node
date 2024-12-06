@@ -63,17 +63,17 @@ If you prefer to build Subnet from source, follow these steps:
 1. Clone the repository:
    ```bash
    git clone https://github.com/unicornultrafoundation/subnet-node.git
-   cd subnet
+   cd subnet-node
    ```
 
 2. Build the source code:
    ```bash
-   go build -o subnet ./cmd/subnet
+   go build -o ./build/subnet ./cmd/subnet
    ```
 
 3. Verify the build:
    ```bash
-   ./subnet --help
+   ./build/subnet --help
    ```
 
 ---

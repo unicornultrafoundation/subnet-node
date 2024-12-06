@@ -14,9 +14,9 @@ import (
 	"net/netip"
 
 	"github.com/sirupsen/logrus"
+	"github.com/unicornultrafoundation/subnet-node/common/header"
 	"github.com/unicornultrafoundation/subnet-node/config"
-	"github.com/unicornultrafoundation/subnet-node/firewall"
-	"github.com/unicornultrafoundation/subnet-node/header"
+	"github.com/unicornultrafoundation/subnet-node/core/firewall"
 )
 
 type GenericConn struct {
