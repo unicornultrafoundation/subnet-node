@@ -2,8 +2,9 @@ package apps
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"encoding/json"
 	"fmt"
-	"log"
 	"math/big"
 
 	"github.com/containerd/containerd"
@@ -12,14 +13,27 @@ import (
 	"github.com/containerd/containerd/oci"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
+	p2phost "github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/core/protocol"
+	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/config"
+	"github.com/unicornultrafoundation/subnet-node/p2p"
 )
 
+var log = logrus.New().WithField("service", "core")
+
 type Service struct {
+	privKey                   *ecdsa.PrivateKey
 	ethClient                 *ethclient.Client
 	subnetAppRegistryContract common.Address
 	containerdClient          *containerd.Client
+	P2P                       *p2p.P2P
+	PeerHost                  p2phost.Host `optional:"true"` // the network host (server+client)
 }
 
 // Initializes the Service with Ethereum and containerd clients.
@@ -231,4 +245,119 @@ func (s *Service) GetContainerStatus(ctx context.Context, appId big.Int) (contai
 	}
 
 	return status.Status, nil
+}
+
+func (s *Service) RegisterSignProtocol(protoID protocol.ID) error {
+	// Define the signing logic
+	signHandler := func(data network.Stream) (string, error) {
+		// Replace with your actual signing logic
+		return "dummy-signature", nil
+	}
+
+	// Create the listener for the signing protocol
+	listener := p2p.NewSignProtocolListener(protoID, signHandler)
+
+	// Register the listener in the ListenersP2P
+	err := s.P2P.ListenersP2P.Register(listener)
+	if err != nil {
+		return err
+	}
+
+	log.Printf("Registered signing protocol: %s", protoID)
+	return nil
+}
+
+func (s *Service) RequestSignature(ctx context.Context, peerID peer.ID, protoID protocol.ID, usage *ResourceUsage) (string, error) {
+	// Open a stream to the remote peer
+	stream, err := s.PeerHost.NewStream(ctx, peerID, protoID)
+	if err != nil {
+		return "", fmt.Errorf("failed to open stream to peer %s: %w", peerID, err)
+	}
+	defer stream.Close()
+
+	// Send the resource usage data
+	if err := json.NewEncoder(stream).Encode(usage); err != nil {
+		return "", fmt.Errorf("failed to send resource usage data: %w", err)
+	}
+
+	// Receive the signature response
+	var response SignatureResponse
+	if err := json.NewDecoder(stream).Decode(&response); err != nil {
+		return "", fmt.Errorf("failed to decode signature response: %w", err)
+	}
+
+	return response.Signature, nil
+}
+
+func (s *Service) ClaimReward(ctx context.Context, subnetID, appID uint64, usage *ResourceUsage, signature string) (common.Hash, error) {
+	// Pack the claimReward call
+	data, err := subnetABI.Pack("claimReward",
+		big.NewInt(int64(subnetID)),
+		big.NewInt(int64(appID)),
+		big.NewInt(int64(usage.UsedCpu)),
+		big.NewInt(int64(usage.UsedGpu)),
+		big.NewInt(int64(usage.UsedMemory)),
+		big.NewInt(int64(usage.UsedStorage)),
+		big.NewInt(int64(usage.UsedUploadBytes)),
+		big.NewInt(int64(usage.UsedDownloadBytes)),
+		big.NewInt(int64(usage.Duration)),
+		[]byte(signature), // Signature from the app owner's peer
+	)
+	if err != nil {
+		return common.Hash{}, fmt.Errorf("failed to pack transaction data: %w", err)
+	}
+
+	// Get the nonce for the account
+	fromAddress := crypto.PubkeyToAddress(s.privKey.PublicKey)
+	nonce, err := s.ethClient.PendingNonceAt(ctx, fromAddress)
+	if err != nil {
+		return common.Hash{}, fmt.Errorf("failed to get account nonce: %w", err)
+	}
+
+	// Get the suggested gas price
+	gasPrice, err := s.ethClient.SuggestGasPrice(ctx)
+	if err != nil {
+		return common.Hash{}, fmt.Errorf("failed to get suggested gas price: %w", err)
+	}
+
+	// Estimate the gas limit
+	msg := ethereum.CallMsg{
+		From: fromAddress,
+		To:   &s.subnetAppRegistryContract,
+		Data: data,
+	}
+	gasLimit, err := s.ethClient.EstimateGas(ctx, msg)
+	if err != nil {
+		return common.Hash{}, fmt.Errorf("failed to estimate gas: %w", err)
+	}
+
+	toAddress := &s.subnetAppRegistryContract // Get the pointer to the contract address
+
+	// Send the transaction
+	tx := types.NewTx(&types.LegacyTx{
+		Nonce:    nonce,
+		GasPrice: gasPrice,
+		Gas:      gasLimit,
+		To:       toAddress,
+		Value:    big.NewInt(0),
+		Data:     data,
+	})
+
+	// Sign the transaction
+	chainID, err := s.ethClient.NetworkID(ctx)
+	if err != nil {
+		return common.Hash{}, fmt.Errorf("failed to get chain ID: %w", err)
+	}
+	signedTx, err := types.SignTx(tx, types.NewEIP155Signer(chainID), s.privKey)
+	if err != nil {
+		return common.Hash{}, fmt.Errorf("failed to sign transaction: %w", err)
+	}
+
+	err = s.ethClient.SendTransaction(ctx, signedTx)
+	if err != nil {
+		return common.Hash{}, fmt.Errorf("failed to send transaction: %w", err)
+	}
+
+	log.Infof("Reward claimed successfully. Transaction hash: %s", signedTx.Hash())
+	return signedTx.Hash(), nil
 }

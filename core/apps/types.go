@@ -29,3 +29,21 @@ type App struct {
 	PaymentMethod        uint8    `json:"paymentMethod"`
 	Status               containerd.ProcessStatus
 }
+
+// ResourceUsage represents the resource usage data
+type ResourceUsage struct {
+	AppId             big.Int `json:"appId"`
+	SubnetId          big.Int `json:"subnetId"`
+	UsedCpu           uint64  `json:"usedCpu"`
+	UsedGpu           uint64  `json:"usedGpu"`
+	UsedMemory        uint64  `json:"usedMemory"`
+	UsedStorage       uint64  `json:"usedStorage"`
+	UsedUploadBytes   uint64  `json:"usedUploadBytes"`
+	UsedDownloadBytes uint64  `json:"usedDownloadBytes"`
+	Duration          uint64  `json:"duration"`
+}
+
+// SignatureResponse represents the response containing the signature
+type SignatureResponse struct {
+	Signature string `json:"signature"`
+}

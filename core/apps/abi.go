@@ -1,7 +1,6 @@
 package apps
 
 import (
-	"log"
 	"strings"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
