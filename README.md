@@ -74,7 +74,7 @@ If you prefer to build Subnet from source, follow these steps:
 3. Verify the build:
    ```bash
    cd ./build
-   subnet --help
+   ./subnet --help
    ```
 
 ---
@@ -85,7 +85,7 @@ Before running the Subnet node, you must initialize its configuration.
 
 1. **Run the Initialization Command**
    ```bash
-   subnet --init --datadir ~/.subnet
+   ./subnet --init --datadir ./.data
    ```
 
 2. **Verify the Configuration**
@@ -111,13 +111,13 @@ Once the configuration is initialized, you can start the Subnet node.
 
 1. **Start the Node**
    ```bash
-   subnet --datadir ~/.subnet
+   ./subnet --datadir ./.data
    ```
 
 2. **Connect to Bootstrap Peers**
    - If you need to connect to a bootstrap node manually:
      ```bash
-     subnet connect /ip4/<bootstrap-ip>/tcp/<port>/p2p/<peer-id>
+     ./subnet connect /ip4/<bootstrap-ip>/tcp/<port>/p2p/<peer-id>
      ```
 
 3. **Monitor Logs**
