@@ -4,13 +4,19 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
+	"time"
 
+	wstats "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/stats"
+	v1 "github.com/containerd/cgroups/v3/cgroup1/stats"
+	v2 "github.com/containerd/cgroups/v3/cgroup2/stats"
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/cio"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/oci"
+	"github.com/containerd/typeurl/v2"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -20,6 +26,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
+	"github.com/shirou/gopsutil/process"
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/config"
 	"github.com/unicornultrafoundation/subnet-node/p2p"
@@ -27,7 +34,11 @@ import (
 
 var log = logrus.New().WithField("service", "core")
 
+const NAMESPACE = "subnet-apps"
+const PROTOCOL_ID = protocol.ID("subnet-apps")
+
 type Service struct {
+	cfg                       *config.C
 	privKey                   *ecdsa.PrivateKey
 	ethClient                 *ethclient.Client
 	subnetAppRegistryContract common.Address
@@ -57,6 +68,47 @@ func New(cfg *config.C) (*Service, error) {
 		containerdClient:          containerdClient,
 		subnetAppRegistryContract: common.HexToAddress(cfg.GetString("apps.subnet_app_registry_contract", "")),
 	}, nil
+}
+
+func (s *Service) Start(ctx context.Context) error {
+	// Log that the service is starting
+	log.Info("Starting Subnet Apps Service...")
+
+	// Register the P2P protocol for signing
+	err := s.RegisterSignProtocol()
+	if err != nil {
+		return fmt.Errorf("failed to register signing protocol: %w", err)
+	}
+
+	// Connect to Ethereum RPC
+	s.ethClient, err = ethclient.Dial(s.cfg.GetString("apps.rpc", ""))
+	if err != nil {
+		return fmt.Errorf("failed to connect to Ethereum node: %v", err)
+	}
+
+	// Connect to containerd daemon
+	s.containerdClient, err = containerd.New("/run/containerd/containerd.sock")
+	if err != nil {
+		return fmt.Errorf("error connecting to containerd: %v", err)
+	}
+
+	log.Info("Subnet Apps Service started successfully.")
+	return nil
+}
+
+func (s *Service) Stop(ctx context.Context) error {
+	log.Info("Stopping Subnet Apps Service...")
+
+	// Close the containerd client
+	if s.containerdClient != nil {
+		err := s.containerdClient.Close()
+		if err != nil {
+			return fmt.Errorf("failed to close containerd client: %w", err)
+		}
+	}
+
+	log.Info("Subnet Apps Service stopped successfully.")
+	return nil
 }
 
 // Retrieves a list of apps from the Ethereum contract and checks their container status.
@@ -141,7 +193,7 @@ func (s *Service) GetApp(ctx context.Context, appId big.Int) (App, error) {
 // Starts a container for the specified app using containerd.
 func (s *Service) RunApp(ctx context.Context, appId big.Int) (App, error) {
 	// Set the namespace for the container
-	ctx = namespaces.WithNamespace(ctx, "subnet-apps")
+	ctx = namespaces.WithNamespace(ctx, NAMESPACE)
 
 	// Retrieve app details from the Ethereum contract
 	app, err := s.GetApp(ctx, appId)
@@ -160,7 +212,7 @@ func (s *Service) RunApp(ctx context.Context, appId big.Int) (App, error) {
 		ctx,
 		app.ID.String(),
 		containerd.WithImage(image),
-		containerd.WithNewSnapshot(app.Symbol+"-snapshot", image),
+		containerd.WithNewSnapshot(app.ID.String()+"-snapshot", image),
 		containerd.WithNewSpec(
 			oci.WithMemoryLimit(app.MinMemory), // Minimum RAM
 			oci.WithCPUShares(app.MinCpu),      // Minimum CPU
@@ -187,7 +239,7 @@ func (s *Service) RunApp(ctx context.Context, appId big.Int) (App, error) {
 // Stops and removes the container for the specified app.
 func (s *Service) RemoveApp(ctx context.Context, appId big.Int) (App, error) {
 	// Set the namespace for the container
-	ctx = namespaces.WithNamespace(ctx, "subnet-apps")
+	ctx = namespaces.WithNamespace(ctx, NAMESPACE)
 
 	// Retrieve app details from the Ethereum contract
 	app, err := s.GetApp(ctx, appId)
@@ -224,7 +276,7 @@ func (s *Service) RemoveApp(ctx context.Context, appId big.Int) (App, error) {
 // Retrieves the status of a container associated with a specific app.
 func (s *Service) GetContainerStatus(ctx context.Context, appId big.Int) (containerd.ProcessStatus, error) {
 	// Set the namespace for the container
-	ctx = namespaces.WithNamespace(ctx, "subnet-apps")
+	ctx = namespaces.WithNamespace(ctx, NAMESPACE)
 
 	// Load the container for the app
 	container, err := s.containerdClient.LoadContainer(ctx, appId.String())
@@ -247,7 +299,7 @@ func (s *Service) GetContainerStatus(ctx context.Context, appId big.Int) (contai
 	return status.Status, nil
 }
 
-func (s *Service) RegisterSignProtocol(protoID protocol.ID) error {
+func (s *Service) RegisterSignProtocol() error {
 	// Define the signing logic
 	signHandler := func(data network.Stream) (string, error) {
 		// Replace with your actual signing logic
@@ -255,7 +307,7 @@ func (s *Service) RegisterSignProtocol(protoID protocol.ID) error {
 	}
 
 	// Create the listener for the signing protocol
-	listener := p2p.NewSignProtocolListener(protoID, signHandler)
+	listener := p2p.NewSignProtocolListener(PROTOCOL_ID, signHandler)
 
 	// Register the listener in the ListenersP2P
 	err := s.P2P.ListenersP2P.Register(listener)
@@ -263,7 +315,7 @@ func (s *Service) RegisterSignProtocol(protoID protocol.ID) error {
 		return err
 	}
 
-	log.Printf("Registered signing protocol: %s", protoID)
+	log.Printf("Registered signing protocol: %s", PROTOCOL_ID)
 	return nil
 }
 
@@ -360,4 +412,174 @@ func (s *Service) ClaimReward(ctx context.Context, subnetID, appID uint64, usage
 
 	log.Infof("Reward claimed successfully. Transaction hash: %s", signedTx.Hash())
 	return signedTx.Hash(), nil
+}
+
+// Calculate container duration
+func (s *Service) CalculateContainerDuration(ctx context.Context, appId big.Int) (int64, error) {
+	// Load the container
+	container, err := s.containerdClient.LoadContainer(ctx, appId.String())
+	if err != nil {
+		return 0, err // Return 0 if container not found
+	}
+
+	// Get the task associated with the container
+	info, err := container.Info(ctx, nil)
+	if err != nil {
+		log.Errorf("Failed to get container task: %v", err)
+		return 0, err // Return 0 if task not found
+	}
+
+	// Calculate duration (current time - start time)
+	startTime := info.CreatedAt
+	if startTime.IsZero() {
+		return 0, nil // If no start time, duration is 0
+	}
+	duration := time.Since(startTime).Seconds()
+	return int64(duration), nil // Return duration in seconds
+}
+
+func (s *Service) GetAppResourceUsage(ctx context.Context, appId big.Int) (ResourceUsage, error) {
+	// Load the container
+	ctx = namespaces.WithNamespace(ctx, NAMESPACE)
+	container, err := s.containerdClient.LoadContainer(ctx, appId.String())
+	if err != nil {
+		return ResourceUsage{}, fmt.Errorf("failed to load container: %w", err)
+	}
+
+	// Get the task
+	task, err := container.Task(ctx, nil)
+	if err != nil {
+		return ResourceUsage{}, fmt.Errorf("failed to get task for container: %w", err)
+	}
+
+	// Get metrics
+	metric, err := task.Metrics(ctx)
+	if err != nil {
+		return ResourceUsage{}, fmt.Errorf("failed to get metrics: %w", err)
+	}
+
+	var data interface{}
+	switch {
+	case typeurl.Is(metric.Data, (*v1.Metrics)(nil)):
+		data = &v1.Metrics{}
+	case typeurl.Is(metric.Data, (*v2.Metrics)(nil)):
+		data = &v2.Metrics{}
+	case typeurl.Is(metric.Data, (*wstats.Statistics)(nil)):
+		data = &wstats.Statistics{}
+	default:
+		return ResourceUsage{}, errors.New("cannot convert metric data to cgroups.Metrics or windows.Statistics")
+	}
+	if err := typeurl.UnmarshalTo(metric.Data, data); err != nil {
+		return ResourceUsage{}, err
+	}
+
+	// Lấy thông tin Network I/O theo PID
+	proc, err := process.NewProcess(int32(task.Pid()))
+	if err != nil {
+		return ResourceUsage{}, err
+	}
+
+	var totalRxBytes uint64 = 0
+	var totalTxBytes uint64 = 0
+	netIO, err := proc.NetIOCounters(false)
+
+	if err != nil {
+		return ResourceUsage{}, err
+	}
+
+	for _, stat := range netIO {
+		totalRxBytes += stat.BytesRecv
+		totalTxBytes += stat.BytesSent
+	}
+
+	createTime, err := proc.CreateTime()
+	if err != nil {
+		return ResourceUsage{}, fmt.Errorf("failed to get process create time: %w", err)
+	}
+
+	now := time.Now().UnixMilli()
+
+	duration := now - createTime
+	durationSeconds := duration / 1000
+
+	// Extract resource usage details from the metrics
+	var usage ResourceUsage
+	switch metrics := data.(type) {
+	case *v1.Metrics:
+		// Parse cgroup v1 metrics
+		usage = ResourceUsage{
+			AppId:             appId,
+			UsedCpu:           metrics.CPU.Usage.Total,
+			UsedMemory:        metrics.Memory.Usage.Usage,
+			UsedStorage:       0,                       // Storage usage might require custom logic
+			UsedUploadBytes:   totalRxBytes,            // Set if applicable
+			UsedDownloadBytes: totalTxBytes,            // Set if applicable
+			Duration:          uint64(durationSeconds), // Calculate or set duration if available
+		}
+	case *v2.Metrics:
+		// Parse cgroup v2 metrics
+		usage = ResourceUsage{
+			AppId:             appId,
+			UsedCpu:           metrics.CPU.UsageUsec, // Convert microseconds to nanoseconds
+			UsedMemory:        metrics.Memory.Usage,
+			UsedStorage:       0,                       // Storage usage might require custom logic
+			UsedUploadBytes:   totalRxBytes,            // Set if applicable
+			UsedDownloadBytes: totalTxBytes,            // Set if applicable
+			Duration:          uint64(durationSeconds), // Calculate or set duration if available
+		}
+	case *wstats.Statistics:
+		// Parse Windows statistics
+		usage = ResourceUsage{
+			AppId:             appId,
+			UsedCpu:           metrics.GetWindows().Processor.TotalRuntimeNS, // Convert 100-nanosecond intervals to nanoseconds
+			UsedMemory:        metrics.GetWindows().Memory.MemoryUsageCommitBytes,
+			UsedStorage:       0,                       // Storage usage might require custom logic
+			UsedUploadBytes:   totalRxBytes,            // Set if applicable
+			UsedDownloadBytes: totalTxBytes,            // Set if applicable
+			Duration:          uint64(durationSeconds), // Calculate or set duration if available
+		}
+	default:
+		return ResourceUsage{}, errors.New("unsupported metrics type")
+	}
+
+	// Optionally, calculate or set the duration if metrics provide a timestamp
+	// For example:
+	// usage.Duration = calculateDurationBasedOnMetrics(metrics)
+
+	return usage, nil
+
+}
+
+// GetAppNode retrieves the details of an AppNode by its ID or similar identifier.
+func (s *Service) GetAppNode(ctx context.Context, appId big.Int, subnetId big.Int) (ResourceUsage, error) {
+	// Prepare input for the contract call to retrieve AppNode details
+	input, err := subnetABI.Pack("getAppNode", appId, subnetId)
+	if err != nil {
+		log.Errorf("Failed to pack input for getAppNode: %v", err)
+		return ResourceUsage{}, err
+	}
+
+	// Create the contract call message
+	msg := ethereum.CallMsg{
+		To:   &s.subnetAppRegistryContract,
+		Data: input,
+	}
+
+	// Execute the contract call
+	result, err := s.ethClient.CallContract(ctx, msg, nil)
+	if err != nil {
+		log.Errorf("Failed to call contract for AppNode details: %v", err)
+		return ResourceUsage{}, err
+	}
+
+	// Unpack the result into the AppNode structure
+	var usage ResourceUsage
+	err = subnetABI.UnpackIntoInterface(&usage, "getAppNode", result)
+	if err != nil {
+		log.Errorf("Failed to unpack AppNode details: %v", err)
+		return ResourceUsage{}, err
+	}
+
+	// Return the retrieved AppNode details
+	return usage, nil
 }
