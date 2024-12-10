@@ -9,8 +9,6 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-
-	"github.com/NVIDIA/go-nvml/pkg/nvml"
 )
 
 func getAppleSiliconGPU() (GpuInfo, error) {
@@ -62,37 +60,34 @@ func getGpu() (GpuInfo, error) {
 		}, nil
 	}
 
-	// For non-macOS systems, try NVIDIA GPU detection
-	ret := nvml.Init()
-	if ret != nvml.SUCCESS {
-		return GpuInfo{}, nil
-	}
-	defer func() {
-		if ret := nvml.Shutdown(); ret != nvml.SUCCESS {
-			log.Errorf("Unable to shutdown NVML: %v", nvml.ErrorString(ret))
-		}
-	}()
+	// // For non-macOS systems, try NVIDIA GPU detection
+	// ret := nvml.Init()
+	// if ret != nvml.SUCCESS {
+	// 	return GpuInfo{}, nil
+	// }
+	// defer func() {
+	// 	if ret := nvml.Shutdown(); ret != nvml.SUCCESS {
+	// 		log.Errorf("Unable to shutdown NVML: %v", nvml.ErrorString(ret))
+	// 	}
+	// }()
 
-	count, ret := nvml.DeviceGetCount()
-	if ret != nvml.SUCCESS {
-		return GpuInfo{}, fmt.Errorf("unable to get device count: %v", nvml.ErrorString(ret))
-	}
+	// count, ret := nvml.DeviceGetCount()
+	// if ret != nvml.SUCCESS {
+	// 	return GpuInfo{}, fmt.Errorf("unable to get device count: %v", nvml.ErrorString(ret))
+	// }
 
-	gpuNames := make([]string, count)
-	for i := 0; i < count; i++ {
-		device, ret := nvml.DeviceGetHandleByIndex(i)
-		if ret != nvml.SUCCESS {
-			return GpuInfo{}, fmt.Errorf("unable to get device at index %d: %v", i, nvml.ErrorString(ret))
-		}
-		name, ret := device.GetName()
-		if ret != nvml.SUCCESS {
-			return GpuInfo{}, fmt.Errorf("unable to get name of device at index %d: %v", i, nvml.ErrorString(ret))
-		}
-		gpuNames[i] = name
-	}
+	// gpuNames := make([]string, count)
+	// for i := 0; i < count; i++ {
+	// 	device, ret := nvml.DeviceGetHandleByIndex(i)
+	// 	if ret != nvml.SUCCESS {
+	// 		return GpuInfo{}, fmt.Errorf("unable to get device at index %d: %v", i, nvml.ErrorString(ret))
+	// 	}
+	// 	name, ret := device.GetName()
+	// 	if ret != nvml.SUCCESS {
+	// 		return GpuInfo{}, fmt.Errorf("unable to get name of device at index %d: %v", i, nvml.ErrorString(ret))
+	// 	}
+	// 	gpuNames[i] = name
+	// }
 
-	return GpuInfo{
-		Count: count,
-		Name:  gpuNames[0], // Simplify to the first GPU for now
-	}, nil
+	return GpuInfo{}, nil
 }

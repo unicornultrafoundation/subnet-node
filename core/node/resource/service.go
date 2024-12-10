@@ -33,13 +33,6 @@ func (s *Service) Start() error {
 		s.UpdateFreq = 30 * time.Second // Default to 30 seconds
 	}
 	s.stopChan = make(chan struct{})
-	if err := s.updateResourceLoop(); err != nil {
-		return err
-	}
-
-	if err := s.subscribe(); err != nil {
-		return err
-	}
 
 	// Launch the periodic update loop
 	go s.updateLoop()
@@ -62,6 +55,14 @@ func (s *Service) Stop() error {
 func (s *Service) updateLoop() {
 	ticker := time.NewTicker(s.UpdateFreq)
 	defer ticker.Stop()
+
+	if err := s.updateResourceLoop(); err != nil {
+		log.Debugf("Failed to update resource: %v\n", err)
+	}
+
+	if err := s.subscribe(); err != nil {
+		log.Debugf("Failed to subscribe: %v\n", err)
+	}
 
 	for {
 		select {
@@ -140,5 +141,12 @@ func (s *Service) updateDHTLoop() error {
 	}
 
 	log.Debugf("Updated resource in DHT: %s\n", key)
+
+	if err := s.pubsubTopic.Publish(context.Background(), data); err != nil {
+		return fmt.Errorf("failed to publish resource info to pubsub: %w", err)
+	}
+
+	log.Debug("Published resource info to PubSub.")
+
 	return nil
 }

@@ -18,6 +18,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/routing"
 	ma "github.com/multiformats/go-multiaddr"
 	"github.com/sirupsen/logrus"
+	"github.com/unicornultrafoundation/subnet-node/core/apps"
 	"github.com/unicornultrafoundation/subnet-node/core/node/resource"
 	"github.com/unicornultrafoundation/subnet-node/p2p"
 	"github.com/unicornultrafoundation/subnet-node/repo"
@@ -42,6 +43,7 @@ type SubnetNode struct {
 	Peerstore       pstore.Peerstore `optional:"true"` // storage for other Peer instances
 	RecordValidator record.Validator
 	Resource        *resource.Service `optional:"true"`
+	Apps            *apps.Service     `optional:"true"`
 
 	// Online
 	PeerHost     p2phost.Host               `optional:"true"` // the network host (server+client)

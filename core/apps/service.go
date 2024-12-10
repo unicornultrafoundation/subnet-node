@@ -38,6 +38,7 @@ const NAMESPACE = "subnet-apps"
 const PROTOCOL_ID = protocol.ID("subnet-apps")
 
 type Service struct {
+	IsProvider                bool
 	cfg                       *config.C
 	privKey                   *ecdsa.PrivateKey
 	ethClient                 *ethclient.Client
@@ -48,48 +49,46 @@ type Service struct {
 }
 
 // Initializes the Service with Ethereum and containerd clients.
-func New(cfg *config.C) (*Service, error) {
-	// Connect to Ethereum RPC
-	client, err := ethclient.Dial(cfg.GetString("apps.rpc", ""))
-	if err != nil {
-		log.Fatalf("Failed to connect to Ethereum node: %v", err)
-		return nil, err
-	}
-
-	// Connect to containerd daemon
-	containerdClient, err := containerd.New("/run/containerd/containerd.sock")
-	if err != nil {
-		fmt.Printf("Error connecting to containerd: %v\n", err)
-		return nil, err
-	}
-
+func New(cfg *config.C, P2P *p2p.P2P) *Service {
 	return &Service{
-		ethClient:                 client,
-		containerdClient:          containerdClient,
+		P2P:                       P2P,
+		cfg:                       cfg,
+		IsProvider:                cfg.GetBool("provider.enable", false),
 		subnetAppRegistryContract: common.HexToAddress(cfg.GetString("apps.subnet_app_registry_contract", "")),
-	}, nil
+	}
 }
 
 func (s *Service) Start(ctx context.Context) error {
 	// Log that the service is starting
-	log.Info("Starting Subnet Apps Service...")
+	// log.Info("Starting Subnet Apps Service...")
+	var err error
+
+	hexKey := s.cfg.GetString("wallet.private_key", "")
+	if hexKey != "" {
+		s.privKey, err = PrivateKeyFromHex(hexKey)
+		if err != nil {
+			return err
+		}
+	}
 
 	// Register the P2P protocol for signing
-	err := s.RegisterSignProtocol()
+	err = s.RegisterSignProtocol()
 	if err != nil {
 		return fmt.Errorf("failed to register signing protocol: %w", err)
 	}
 
 	// Connect to Ethereum RPC
-	s.ethClient, err = ethclient.Dial(s.cfg.GetString("apps.rpc", ""))
+	s.ethClient, err = ethclient.Dial(s.cfg.GetString("apps.rpc", config.DefaultRPC))
 	if err != nil {
 		return fmt.Errorf("failed to connect to Ethereum node: %v", err)
 	}
 
-	// Connect to containerd daemon
-	s.containerdClient, err = containerd.New("/run/containerd/containerd.sock")
-	if err != nil {
-		return fmt.Errorf("error connecting to containerd: %v", err)
+	if s.IsProvider {
+		// Connect to containerd daemon
+		s.containerdClient, err = containerd.New("/run/containerd/containerd.sock")
+		if err != nil {
+			return fmt.Errorf("error connecting to containerd: %v", err)
+		}
 	}
 
 	log.Info("Subnet Apps Service started successfully.")
@@ -315,7 +314,7 @@ func (s *Service) RegisterSignProtocol() error {
 		return err
 	}
 
-	log.Printf("Registered signing protocol: %s", PROTOCOL_ID)
+	log.Debugf("Registered signing protocol: %s", PROTOCOL_ID)
 	return nil
 }
 
