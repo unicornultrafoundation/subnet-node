@@ -38,6 +38,7 @@ const NAMESPACE = "subnet-apps"
 const PROTOCOL_ID = protocol.ID("subnet-apps")
 
 type Service struct {
+	peerId                    peer.ID
 	IsProvider                bool
 	cfg                       *config.C
 	privKey                   *ecdsa.PrivateKey
@@ -46,6 +47,8 @@ type Service struct {
 	containerdClient          *containerd.Client
 	P2P                       *p2p.P2P
 	PeerHost                  p2phost.Host `optional:"true"` // the network host (server+client)
+	subnetID                  big.Int
+	stopChan                  chan struct{} // Channel to stop background tasks
 }
 
 // Initializes the Service with Ethereum and containerd clients.
@@ -54,6 +57,7 @@ func New(cfg *config.C, P2P *p2p.P2P) *Service {
 		P2P:                       P2P,
 		cfg:                       cfg,
 		IsProvider:                cfg.GetBool("provider.enable", false),
+		stopChan:                  make(chan struct{}),
 		subnetAppRegistryContract: common.HexToAddress(cfg.GetString("apps.subnet_app_registry_contract", "")),
 	}
 }
@@ -84,11 +88,21 @@ func (s *Service) Start(ctx context.Context) error {
 	}
 
 	if s.IsProvider {
+		subnetID, err := s.GetSubnetIDFromPeerID(ctx)
+
+		if err != nil {
+			return fmt.Errorf("error connecting to containerd: %v", err)
+		}
+
+		s.subnetID = *subnetID
+
 		// Connect to containerd daemon
 		s.containerdClient, err = containerd.New("/run/containerd/containerd.sock")
 		if err != nil {
 			return fmt.Errorf("error connecting to containerd: %v", err)
 		}
+
+		go s.StartRewardClaimer(ctx)
 	}
 
 	log.Info("Subnet Apps Service started successfully.")
@@ -97,6 +111,9 @@ func (s *Service) Start(ctx context.Context) error {
 
 func (s *Service) Stop(ctx context.Context) error {
 	log.Info("Stopping Subnet Apps Service...")
+
+	// Close stopChan to stop all background tasks
+	close(s.stopChan)
 
 	// Close the containerd client
 	if s.containerdClient != nil {
@@ -340,11 +357,11 @@ func (s *Service) RequestSignature(ctx context.Context, peerID peer.ID, protoID 
 	return response.Signature, nil
 }
 
-func (s *Service) ClaimReward(ctx context.Context, subnetID, appID uint64, usage *ResourceUsage, signature string) (common.Hash, error) {
+func (s *Service) ClaimReward(ctx context.Context, appID big.Int, usage *ResourceUsage, signature string) (common.Hash, error) {
 	// Pack the claimReward call
 	data, err := subnetABI.Pack("claimReward",
-		big.NewInt(int64(subnetID)),
-		big.NewInt(int64(appID)),
+		s.subnetID,
+		appID,
 		big.NewInt(int64(usage.UsedCpu)),
 		big.NewInt(int64(usage.UsedGpu)),
 		big.NewInt(int64(usage.UsedMemory)),
@@ -581,4 +598,96 @@ func (s *Service) GetAppNode(ctx context.Context, appId big.Int, subnetId big.In
 
 	// Return the retrieved AppNode details
 	return usage, nil
+}
+
+func (s *Service) StartRewardClaimer(ctx context.Context) {
+	ticker := time.NewTicker(1 * time.Hour) // Đặt thời gian định kỳ là 1 giờ
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			log.Infof("Starting reward claim for all running containers...")
+			s.ClaimRewardsForAllRunningContainers(ctx)
+		case <-s.stopChan:
+			log.Infof("Stopping reward claimer for all containers")
+			return
+		case <-ctx.Done():
+			log.Infof("Context canceled, stopping reward claimer")
+			return
+		}
+	}
+}
+
+func (s *Service) ClaimRewardsForAllRunningContainers(ctx context.Context) {
+	// Fetch all running containers
+	containers, err := s.containerdClient.Containers(namespaces.WithNamespace(ctx, NAMESPACE))
+	if err != nil {
+		log.Errorf("Failed to fetch running containers: %v", err)
+		return
+	}
+
+	for _, container := range containers {
+		// Get container ID (assuming appID is same as container ID)
+		appID, ok := new(big.Int).SetString(container.ID(), 10)
+		if !ok {
+			log.Errorf("Invalid container ID: %s", container.ID())
+			continue
+		}
+
+		// Fetch resource usage
+		usage, err := s.GetAppResourceUsage(ctx, *appID)
+		if err != nil {
+			log.Errorf("Failed to get resource usage for container %s: %v", container.ID(), err)
+			continue
+		}
+
+		// Request signature
+		signature, err := s.RequestSignature(ctx, s.PeerHost.ID(), PROTOCOL_ID, &usage)
+		if err != nil {
+			log.Errorf("Failed to get signature for container %s: %v", container.ID(), err)
+			continue
+		}
+
+		// Claim reward
+		txHash, err := s.ClaimReward(ctx, *appID, &usage, signature)
+		if err != nil {
+			log.Errorf("Failed to claim reward for container %s: %v", container.ID(), err)
+		} else {
+			log.Infof("Reward claimed successfully for container %s, transaction hash: %s", container.ID(), txHash.Hex())
+		}
+	}
+}
+
+func (s *Service) GetSubnetIDFromPeerID(ctx context.Context) (*big.Int, error) {
+	// Chuẩn bị input cho hàm peerToSubnet
+	input, err := subnetRegistryABI.Pack("peerToSubnet", s.peerId)
+	if err != nil {
+		log.Errorf("Failed to pack input for peerToSubnet: %v", err)
+		return nil, err
+	}
+
+	// Tạo một message call
+	msg := ethereum.CallMsg{
+		To:   &s.subnetAppRegistryContract, // Địa chỉ contract
+		Data: input,
+	}
+
+	// Gọi contract
+	result, err := s.ethClient.CallContract(ctx, msg, nil)
+	if err != nil {
+		log.Errorf("Failed to call contract for peerToSubnet: %v", err)
+		return nil, err
+	}
+
+	// Decode kết quả trả về
+	var subnetID *big.Int
+	err = subnetRegistryABI.UnpackIntoInterface(&subnetID, "peerToSubnet", result)
+	if err != nil {
+		log.Errorf("Failed to unpack result for peerToSubnet: %v", err)
+		return nil, err
+	}
+
+	// Chuyển đổi subnetID thành uint64 và trả về
+	return subnetID, nil
 }
