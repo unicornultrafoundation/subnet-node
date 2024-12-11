@@ -47,6 +47,8 @@ func run(repoPath string, configPath *string) error {
 		return err
 	}
 
+	defer r.Close()
+
 	node, err := core.NewNode(context.Background(), &core.BuildCfg{
 		Repo:   r,
 		Online: true,

@@ -25,6 +25,7 @@ func OpenAPIOption() ServeOption {
 		server.RegisterName("routing", api.NewRoutingAPI(capi.Routing()))
 		server.RegisterName("node", api.NewNodeAPI(capi.Resource()))
 		server.RegisterName("pubsub", api.NewPubsubAPI(capi.PubSub()))
+		server.RegisterName("app", api.NewAppAPI(n.Apps))
 
 		smux.Handle(APIPath, server)
 		return smux, nil
