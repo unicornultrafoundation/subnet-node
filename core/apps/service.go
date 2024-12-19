@@ -3,6 +3,7 @@ package apps
 import (
 	"context"
 	"crypto/ecdsa"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
@@ -20,6 +21,7 @@ import (
 	"github.com/containerd/typeurl/v2"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ipfs/go-datastore"
 	p2phost "github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -48,13 +50,15 @@ type Service struct {
 	stopChan          chan struct{} // Channel to stop background tasks
 	subnetAppRegistry *SubnetAppRegistry
 	subnetRegistry    *SubnetRegistry
+	Datastore         datastore.Datastore // Datastore for storing resource usage
 }
 
 // Initializes the Service with Ethereum and containerd clients.
-func New(cfg *config.C, P2P *p2p.P2P) *Service {
+func New(cfg *config.C, P2P *p2p.P2P, dataStore datastore.Datastore) *Service {
 	return &Service{
 		P2P:        P2P,
 		cfg:        cfg,
+		Datastore:  dataStore,
 		IsProvider: cfg.GetBool("provider.enable", false),
 		stopChan:   make(chan struct{}),
 	}
@@ -482,12 +486,36 @@ func (s *Service) GetUsage(ctx context.Context, appId *big.Int) (*ResourceUsage,
 	app := App{ID: appId}
 	container, err := s.containerdClient.LoadContainer(ctx, app.ContainerId())
 	if err != nil {
+
 		return nil, fmt.Errorf("failed to load container: %w", err)
 	}
 
 	// Get the task
 	task, err := container.Task(ctx, nil)
-	if err != nil {
+	if err == nil {
+		if errdefs.IsNotFound(err) {
+			// No task found; container is likely shut down
+			// Get usage from datastore
+			resourceUsageKey := datastore.NewKey("resourceUsage:" + appId.String())
+
+			updatedJsonData, err := s.Datastore.Get(ctx, resourceUsageKey)
+			if err == nil { // If the record exists in the datastore
+				var updatedData ResourceUsage
+				if err := json.Unmarshal(updatedJsonData, &updatedData); err == nil {
+					return &updatedData, nil
+				}
+			}
+
+			// No record found from datastore
+			// Get usage from smart contract
+			usage, err := s.subnetAppRegistry.GetAppNode(nil, appId, &s.subnetID)
+
+			if err != nil {
+				return nil, fmt.Errorf("failed to get resource usage for appId %s: %v", appId.String(), err)
+			}
+
+			return convertToResourceUsage(usage, appId, &s.subnetID), nil
+		}
 		return nil, fmt.Errorf("failed to get task for container: %w", err)
 	}
 
@@ -531,6 +559,26 @@ func (s *Service) GetUsage(ctx context.Context, appId *big.Int) (*ResourceUsage,
 		totalTxBytes += stat.BytesSent
 	}
 
+	// Get used storage
+	var storageBytes int64 = 0
+
+	info, err := container.Info(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get container info: %v", err)
+	}
+
+	snapshotKey := info.SnapshotKey
+	snapshotService := s.containerdClient.SnapshotService(info.Snapshotter)
+	snapshotUsage, err := snapshotService.Usage(ctx, snapshotKey)
+	if err != nil {
+		if errdefs.IsNotFound(err) {
+			return nil, fmt.Errorf("snapshot %s not found: %v", snapshotKey, err)
+		}
+		return nil, fmt.Errorf("failed to get snapshot usage: %v", err)
+	}
+
+	storageBytes = snapshotUsage.Size
+
 	createTime, err := proc.CreateTime()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get process create time: %w", err)
@@ -547,7 +595,7 @@ func (s *Service) GetUsage(ctx context.Context, appId *big.Int) (*ResourceUsage,
 		UsedUploadBytes:   big.NewInt(int64(totalRxBytes)), // Set if applicable
 		UsedDownloadBytes: big.NewInt(int64(totalTxBytes)), // Set if applicable
 		Duration:          big.NewInt(durationSeconds),     // Calculate or set duration if available
-		UsedStorage:       big.NewInt(0),
+		UsedStorage:       big.NewInt(storageBytes),
 	}
 	switch metrics := data.(type) {
 	case *v1.Metrics:
@@ -567,8 +615,18 @@ func (s *Service) GetUsage(ctx context.Context, appId *big.Int) (*ResourceUsage,
 	// For example:
 	// usage.Duration = calculateDurationBasedOnMetrics(metrics)
 
-	return usage, nil
+	// Update usage
+	resourceUsageKey := datastore.NewKey("resourceUsage:" + appId.String())
+	resourceUsageData, err := json.Marshal(usage)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal resource usage for appId %s: %v", appId.String(), err)
+	}
 
+	if err := s.Datastore.Put(ctx, resourceUsageKey, resourceUsageData); err != nil {
+		return nil, fmt.Errorf("failed to update resource usage for appId %s: %v", appId.String(), err)
+	}
+
+	return usage, nil
 }
 
 // // GetAppNode retrieves the details of an AppNode by its ID or similar identifier.
