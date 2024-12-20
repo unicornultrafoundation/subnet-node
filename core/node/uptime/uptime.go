@@ -1,19 +1,24 @@
-package reward
+package uptime
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"io"
+	"net/http"
 	"time"
 
 	"github.com/ipfs/go-datastore"
 	"github.com/ipfs/go-datastore/query"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/unicornultrafoundation/subnet-node/crypto/merkle"
+	"github.com/sirupsen/logrus"
+	"github.com/unicornultrafoundation/subnet-node/core/apps"
 	"github.com/unicornultrafoundation/subnet-node/repo"
 )
+
+var log = logrus.New().WithField("service", "uptime")
 
 var UptimeTopic = "topic/uptime"
 
@@ -22,22 +27,32 @@ type HeartbeatMessage struct {
 	Timestamp int64 `json:"timestamp"` // Time the heartbeat message was generated
 }
 
+const MerkleAPIURL = "http://localhost:8787/generate-proofs" // Replace with the actual API URL
+
+type ProofResponse struct {
+	Root   string     `json:"root"`
+	Proofs [][]string `json:"proofs"`
+}
+
 // UptimeRecord represents a peer's uptime data and proof
 type UptimeRecord struct {
-	PeerID        peer.ID       `json:"peer_id"`        // Peer ID of the node
-	Uptime        int64         `json:"uptime"`         // Total uptime in seconds
-	LastTimestamp int64         `json:"last_timestamp"` // Last time the node was seen
-	Proof         *merkle.Proof `json:"proof"`          // Merkle proof for this uptime record
+	SubnetId      string   `json:"subnet_id"`
+	PeerID        peer.ID  `json:"peer_id"`        // Peer ID of the node
+	Uptime        int64    `json:"uptime"`         // Total uptime in seconds
+	LastTimestamp int64    `json:"last_timestamp"` // Last time the node was seen
+	Proof         []string `json:"proof"`          // Merkle proof for this uptime record
 }
 
 // UptimeService manages uptime tracking, PubSub communication, and proof generation
 type UptimeService struct {
-	Identity  peer.ID          // Local node's identity
-	PubSub    *pubsub.PubSub   // PubSub instance for communication
-	Topic     *pubsub.Topic    // Subscribed PubSub topic
-	Peers     map[string]int64 // Tracks peers' last seen timestamps
-	cancel    context.CancelFunc
-	Datastore repo.Datastore // Datastore for storing uptime records and proofs
+	IsVerifier bool
+	Identity   peer.ID        // Local node's identity
+	PubSub     *pubsub.PubSub // PubSub instance for communication
+	Topic      *pubsub.Topic  // Subscribed PubSub topic
+	cancel     context.CancelFunc
+	Datastore  repo.Datastore // Datastore for storing uptime records and proofs
+	Apps       *apps.Service
+	cache      map[string]string // Cache for peer-to-subnet mapping
 }
 
 // Start initializes the UptimeService and starts PubSub-related tasks
@@ -50,15 +65,18 @@ func (s *UptimeService) Start() error {
 		return fmt.Errorf("failed to join topic %s: %w", UptimeTopic, err)
 	}
 	s.Topic = topic
-	s.Peers = make(map[string]int64)
 
 	// Create a cancellable context
 	ctx, s.cancel = context.WithCancel(ctx)
 
 	// Start publishing, listening, and updating proofs in separate goroutines
 	go s.startPublishing(ctx)
-	go s.startListening(ctx)
-	go s.updateProofs(ctx)
+
+	if s.IsVerifier {
+		go s.startListening(ctx)
+		go s.updateProofs(ctx)
+
+	}
 
 	log.Printf("UptimeService started for topic: %s", UptimeTopic)
 	return nil
@@ -183,11 +201,18 @@ func (s *UptimeService) updatePeerUptime(ctx context.Context, peerID string, cur
 		log.Printf("Peer %s did not meet the continuous online condition: only %d seconds elapsed", peerID, duration)
 	}
 
+	subnetId, err := s.getSubnetID(peerID)
+
+	if err != nil {
+		return err
+	}
+
 	// Update the record with the latest timestamp and accumulated uptime
 	record := &UptimeRecord{
 		PeerID:        peer.ID(peerID),
 		Uptime:        uptime,
 		LastTimestamp: currentTimestamp,
+		SubnetId:      subnetId,
 	}
 
 	// Save the updated record to the datastore
@@ -257,53 +282,82 @@ func (s *UptimeService) loadUptimes(ctx context.Context) ([]*UptimeRecord, error
 	}
 	return records, nil
 }
-
-// generateAndDistributeProofs creates Merkle proofs for all peers and stores them in the datastore
 func (s *UptimeService) generateAndDistributeProofs(ctx context.Context) error {
 	batch, err := s.Datastore.Batch(ctx)
 	if err != nil {
 		return err
 	}
 
-	// Retrieve all uptime records
+	// Load uptime records from the datastore
 	uptimes, err := s.loadUptimes(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to load uptime records: %v", err)
 	}
 
-	uptimeBytes := make([][]byte, len(uptimes))
-	for i, uptime := range uptimes {
-		data, err := json.Marshal(uptime)
-		if err != nil {
-			return fmt.Errorf("failed to marshal uptime record: %v", err)
-		}
-		uptimeBytes[i] = data
+	// Prepare the payload for the API
+	payload, err := json.Marshal(map[string]interface{}{
+		"records": prepareRecordsForAPI(uptimes),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to marshal uptime records for API: %v", err)
 	}
 
-	// Generate Merkle proofs
-	rootHash, proofs := merkle.ProofsFromByteSlices(uptimeBytes)
-	for i, proof := range proofs {
+	// Call the external API
+	resp, err := http.Post(MerkleAPIURL, "application/json", bytes.NewBuffer(payload))
+	if err != nil {
+		return fmt.Errorf("failed to call Merkle API: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("merkle API error: %s", string(body))
+	}
+
+	// Parse the response from the API
+	var response ProofResponse
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read API response: %v", err)
+	}
+	if err := json.Unmarshal(body, &response); err != nil {
+		return fmt.Errorf("failed to parse API response: %v", err)
+	}
+
+	// Save updated records with proofs to the datastore
+	for i, proof := range response.Proofs {
 		uptimes[i].Proof = proof
+
+		key := datastore.NewKey("proof:" + uptimes[i].PeerID.String())
 		data, err := json.Marshal(uptimes[i])
 		if err != nil {
-			return fmt.Errorf("failed to marshal proof store: %v", err)
+			return fmt.Errorf("failed to marshal record with proof: %v", err)
 		}
-
-		proofKey := datastore.NewKey("proof:" + uptimes[i].PeerID.String())
-		batch.Put(ctx, proofKey, data)
+		batch.Put(ctx, key, data)
 	}
 
-	err = batch.Commit(ctx)
-	if err != nil {
-		return err
+	if err := batch.Commit(ctx); err != nil {
+		return fmt.Errorf("failed to commit datastore batch: %v", err)
 	}
-	log.Printf("Generated and stored Merkle Root: %s", rootHash)
 
+	log.Printf("Merkle root: %s - Proofs successfully stored", response.Root)
 	return nil
 }
 
+// prepareRecordsForAPI formats uptime records for the Merkle API
+func prepareRecordsForAPI(uptimes []*UptimeRecord) [][]string {
+	var records [][]string
+	for _, record := range uptimes {
+		records = append(records, []string{
+			record.SubnetId,
+			fmt.Sprintf("%d", record.Uptime),
+		})
+	}
+	return records
+}
+
 // GetProof retrieves a Merkle proof for a specific peer from the datastore
-func (s *UptimeService) GetProof(ctx context.Context, peerID string) (*merkle.Proof, error) {
+func (s *UptimeService) GetProof(ctx context.Context, peerID string) ([]string, error) {
 	proofKey := datastore.NewKey("proof:" + peerID)
 
 	data, err := s.Datastore.Get(ctx, proofKey)
@@ -340,4 +394,21 @@ func (s *UptimeService) GetUptime(ctx context.Context, peerID string) (int64, er
 	}
 
 	return record.Uptime, nil
+}
+
+func (s *UptimeService) getSubnetID(peerID string) (string, error) {
+	// Check the cache first
+	if subnetID, found := s.cache[peerID]; found {
+		return subnetID, nil
+	}
+
+	// If not in the cache, fetch from SubnetRegistry
+	subnetID, err := s.Apps.SubnetRegistry().PeerToSubnet(nil, peerID)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch subnet ID for peer %s: %v", peerID, err)
+	}
+
+	// Store the result in the cache
+	s.cache[peerID] = subnetID.String()
+	return subnetID.String(), nil
 }

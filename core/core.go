@@ -20,6 +20,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/core/apps"
 	"github.com/unicornultrafoundation/subnet-node/core/node/resource"
+	"github.com/unicornultrafoundation/subnet-node/core/node/uptime"
 	"github.com/unicornultrafoundation/subnet-node/p2p"
 	"github.com/unicornultrafoundation/subnet-node/repo"
 	irouting "github.com/unicornultrafoundation/subnet-node/routing"
@@ -42,8 +43,9 @@ type SubnetNode struct {
 	// Services
 	Peerstore       pstore.Peerstore `optional:"true"` // storage for other Peer instances
 	RecordValidator record.Validator
-	Resource        *resource.Service `optional:"true"`
-	Apps            *apps.Service     `optional:"true"`
+	Resource        *resource.Service     `optional:"true"`
+	Apps            *apps.Service         `optional:"true"`
+	Uptime          *uptime.UptimeService `optional:"true"`
 
 	// Online
 	PeerHost     p2phost.Host               `optional:"true"` // the network host (server+client)

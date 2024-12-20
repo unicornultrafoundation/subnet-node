@@ -60,6 +60,10 @@ func New(cfg *config.C, P2P *p2p.P2P) *Service {
 	}
 }
 
+func (s *Service) SubnetRegistry() *SubnetRegistry {
+	return s.subnetRegistry
+}
+
 func (s *Service) Start(ctx context.Context) error {
 	// Log that the service is starting
 	// log.Info("Starting Subnet Apps Service...")
