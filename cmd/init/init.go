@@ -1,11 +1,13 @@
 package init
 
 import (
+	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/unicornultrafoundation/subnet-node/common/fsutil"
 	"gopkg.in/yaml.v2"
 )
@@ -29,6 +31,16 @@ func Init(repoPath string, out io.Writer) (map[interface{}]interface{}, error) {
 	config, err := InitWithIdentity(identity)
 	if err != nil {
 		return nil, err
+	}
+
+	accountPrivateKey, err := createPrivateKey()
+
+	if err != nil {
+		return nil, err
+	}
+
+	config["account"] = map[interface{}]interface{}{
+		"private_key": accountPrivateKey,
 	}
 
 	// Save config to file
@@ -78,4 +90,19 @@ func saveConfigToFile(config map[interface{}]interface{}, path string) error {
 	}
 
 	return nil
+}
+
+// createPrivateKey generates a new private key and returns its hex representation
+func createPrivateKey() (string, error) {
+	privateKey, err := crypto.GenerateKey()
+	if err != nil {
+		return "", err
+	}
+
+	// Convert the private key to bytes
+	privateKeyBytes := crypto.FromECDSA(privateKey)
+	// Encode the bytes to a hexadecimal string
+	privateKeyHex := hex.EncodeToString(privateKeyBytes)
+
+	return privateKeyHex, nil
 }

@@ -17,6 +17,7 @@ func UptimeService(lc fx.Lifecycle, repo repo.Repo, appService *apps.Service, pu
 	srv := &uptime.UptimeService{
 		Apps:       appService,
 		IsVerifier: cfg.GetBool("uptime.is_verifier", false),
+		IsProvider: cfg.GetBool("provider.enable", false),
 		Identity:   id,
 		PubSub:     pubSub,
 		Datastore:  repo.Datastore(),
