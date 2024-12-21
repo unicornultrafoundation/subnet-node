@@ -51,6 +51,10 @@ func (s *Service) Stop() error {
 	return nil
 }
 
+func (s *Service) PeerId() peer.ID {
+	return s.Identity
+}
+
 // Periodically updates resource information
 func (s *Service) updateLoop() {
 	ticker := time.NewTicker(s.UpdateFreq)
