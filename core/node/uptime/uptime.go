@@ -364,11 +364,6 @@ func (s *UptimeService) loadUptimes(ctx context.Context) ([]*puptime.UptimeRecor
 	return records, nil
 }
 func (s *UptimeService) generateAndDistributeProofs(ctx context.Context) error {
-	batch, err := s.Datastore.Batch(ctx)
-	if err != nil {
-		return err
-	}
-
 	// Load uptime records from the datastore
 	uptimes, err := s.loadUptimes(ctx)
 	if err != nil {
@@ -409,21 +404,14 @@ func (s *UptimeService) generateAndDistributeProofs(ctx context.Context) error {
 	// Save updated records with proofs to the datastore
 	for i, proof := range response.Proofs {
 		uptime := uptimes[i]
-
 		uptime.Proof = &puptime.UptimeProof{
 			Uptime: uptime.Uptime,
 			Proof:  proof,
 		}
-		uptimeKey := datastore.NewKey(fmt.Sprintln("/uptime/peer:" + uptime.PeerId))
-		data, err := json.Marshal(uptime)
-		if err != nil {
-			return fmt.Errorf("failed to marshal record with proof: %v", err)
-		}
-		batch.Put(ctx, uptimeKey, data)
 	}
 
-	if err := batch.Commit(ctx); err != nil {
-		return fmt.Errorf("failed to commit datastore batch: %v", err)
+	if err := s.publishAllProofs(ctx, response.Root, uptimes); err != nil {
+		return err
 	}
 
 	log.Debugf("Merkle root: %s - Proofs successfully stored", response.Root)
@@ -494,4 +482,42 @@ func (s *UptimeService) GetSubnetID() (*big.Int, error) {
 
 func (s *UptimeService) GetPeerId() (peer.ID, error) {
 	return s.Identity, nil
+}
+
+func (s *UptimeService) publishAllProofs(ctx context.Context, root string, records []*puptime.UptimeRecord) error {
+	// Create the MerkleProof message
+	merkleProofMsg := &puptime.MerkleProofMsg{
+		Root:   root,
+		Proofs: make([]*puptime.Proof, len(records)),
+	}
+
+	// Map proofs from API response to protobuf format
+	for i, record := range records {
+		merkleProofMsg.Proofs[i] = &puptime.Proof{
+			Uptime:   record.Uptime, // Add uptime if needed, or keep as 0
+			Proof:    record.Proof.Proof,
+			SubnetId: record.SubnetId,
+		}
+	}
+
+	// Wrap the message
+	msg := &puptime.Msg{
+		Payload: &puptime.Msg_MerkleProof{
+			MerkleProof: merkleProofMsg,
+		},
+	}
+
+	// Serialize the message
+	data, err := proto.Marshal(msg)
+	if err != nil {
+		return fmt.Errorf("failed to marshal Merkle proof message: %v", err)
+	}
+
+	// Publish the message to the topic
+	if err := s.Topic.Publish(ctx, data); err != nil {
+		return fmt.Errorf("failed to publish Merkle proof message: %v", err)
+	}
+
+	log.Debugf("Published Merkle proof message with root: %s", root)
+	return nil
 }
