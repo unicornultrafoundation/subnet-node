@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/sirupsen/logrus"
 	ninit "github.com/unicornultrafoundation/subnet-node/cmd/init"
 	"github.com/unicornultrafoundation/subnet-node/subnet"
 )
@@ -20,11 +21,16 @@ func main() {
 	configPath := flag.String("config", "", "Path to either a file or directory to load configuration from")
 	dataPath := flag.String("datadir", "~/.subnet-node", "Path to either a file or directory to load configuration from")
 	initFlag := flag.Bool("init", false, "Init")
+	debugFlag := flag.Bool("debug", false, "Debug")
 
 	printVersion := flag.Bool("version", false, "Print version")
 	printUsage := flag.Bool("help", false, "Print command line usage")
 
 	flag.Parse()
+
+	if *debugFlag {
+		logrus.SetLevel(logrus.DebugLevel)
+	}
 
 	if *printVersion {
 		fmt.Printf("Version: %s\n", Build)

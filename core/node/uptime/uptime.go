@@ -37,21 +37,6 @@ type ProofResponse struct {
 	Proofs [][]string `json:"proofs"`
 }
 
-// UptimeRecord represents a peer's uptime data and proof
-type UptimeRecord struct {
-	SubnetId      string       `json:"subnet_id"`
-	PeerID        string       `json:"peer_id"`        // Peer ID of the node
-	Uptime        int64        `json:"uptime"`         // Total uptime in seconds
-	LastTimestamp int64        `json:"last_timestamp"` // Last time the node was seen
-	Proof         *UptimeProof `json:"proof"`          // Merkle proof for this uptime record
-	IsClaimed     bool         `json:"is_claimed"`
-}
-
-type UptimeProof struct {
-	Uptime int64    `json:"uptime"`
-	Proof  []string `json:"proof"`
-}
-
 // UptimeService manages uptime tracking, PubSub communication, and proof generation
 type UptimeService struct {
 	IsVerifier bool
@@ -81,18 +66,17 @@ func (s *UptimeService) Start() error {
 	// Create a cancellable context
 	ctx, s.cancel = context.WithCancel(ctx)
 
-	if s.IsProvider {
+	if s.IsProvider || s.IsVerifier {
 		// Start publishing, listening, and updating proofs in separate goroutines
 		go s.startPublishing(ctx)
+		go s.startListening(ctx)
 	}
 
 	if s.IsVerifier {
-		go s.startListening(ctx)
 		go s.updateProofs(ctx)
-
 	}
 
-	log.Printf("UptimeService started for topic: %s", UptimeTopic)
+	log.Debugf("UptimeService started for topic: %s", UptimeTopic)
 	return nil
 }
 
@@ -142,13 +126,13 @@ func (s *UptimeService) startPublishing(ctx context.Context) {
 
 			data, err := proto.Marshal(msg)
 			if err != nil {
-				log.Printf("Failed to marshal heartbeat message: %v", err)
+				log.Debugf("Failed to marshal heartbeat message: %v", err)
 				continue
 			}
 
 			// Update the peer's uptime based on the received message
 			if err := s.updatePeerUptime(ctx, s.Identity.String(), heartbeatMsg.Timestamp); err != nil {
-				log.Printf("Error updating peer uptime: %v", err)
+				log.Debugf("Error updating peer uptime: %v", err)
 				continue
 			}
 			if err := s.Topic.Publish(ctx, data); err != nil {
@@ -173,19 +157,18 @@ func (s *UptimeService) startListening(ctx context.Context) {
 		default:
 			msg, err := sub.Next(ctx)
 			if err != nil {
-				log.Printf("Error reading message: %v", err)
+				log.Errorf("Error reading message: %v", err)
 				continue
 			}
-
 			var msgUptime puptime.Msg
 			if err := proto.Unmarshal(msg.Data, &msgUptime); err != nil {
-				log.Printf("Failed to unmarshal heartbeat message: %v", err)
+				log.Debugf("Failed to unmarshal heartbeat message: %v", err)
 				continue
 			}
 
 			peerId, err := peer.IDFromBytes(msg.From)
 			if err != nil {
-				log.Printf("Error parsing peer ID: %v", err)
+				log.Debugf("Error parsing peer ID: %v", err)
 				continue
 			}
 
@@ -247,7 +230,7 @@ func (s *UptimeService) handleHeartbeatMsg(ctx context.Context, peerId peer.ID, 
 		return
 	}
 
-	log.Debugf("Received Heartbeat: %+v", heartbeat)
+	log.Debugf("Received Heartbeat: %+v peer: %s", heartbeat, peerId)
 }
 
 func (s *UptimeService) updatePeerUptime(ctx context.Context, peerID string, currentTimestamp int64) error {
@@ -260,7 +243,7 @@ func (s *UptimeService) updatePeerUptime(ctx context.Context, peerID string, cur
 	isClaimed := false
 	if err == nil { // If the record exists in the datastore
 		var record puptime.UptimeRecord
-		if err := json.Unmarshal(data, &record); err == nil {
+		if err := proto.Unmarshal(data, &record); err == nil {
 			uptime = record.Uptime
 			lastTimestamp = record.LastTimestamp
 			proof = record.Proof
@@ -355,7 +338,7 @@ func (s *UptimeService) loadUptimes(ctx context.Context) ([]*puptime.UptimeRecor
 			peerID := key[13:]
 			var record puptime.UptimeRecord
 			if err := proto.Unmarshal(entry.Value, &record); err != nil {
-				log.Printf("Failed to unmarshal uptime record for peer %s: %v", peerID, err)
+				log.Debugf("Failed to unmarshal uptime record for peer %s: %v", peerID, err)
 				continue
 			}
 			records = append(records, &record)
