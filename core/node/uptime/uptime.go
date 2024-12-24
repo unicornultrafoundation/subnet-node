@@ -442,6 +442,15 @@ func (s *UptimeService) GetUptimeByPeer(ctx context.Context, peerID string) (*pu
 	return &record, nil
 }
 
+func (s *UptimeService) saveUptime(ctx context.Context, data *puptime.UptimeRecord) error {
+	uptimeKey := datastore.NewKey(fmt.Sprintln("/uptime/peer:" + data.PeerId))
+	recordData, err := proto.Marshal(data)
+	if err != nil {
+		return err
+	}
+	return s.Datastore.Put(ctx, uptimeKey, recordData)
+}
+
 func (s *UptimeService) getSubnetID(peerID string) (string, error) {
 	// Check the cache first
 	if subnetID, found := s.cache[peerID]; found {
@@ -495,8 +504,14 @@ func (s *UptimeService) ClaimReward(ctx context.Context) error {
 		proofsBytes = append(proofsBytes, proofBytes)
 	}
 
+	uptime.IsClaimed = true
+
 	_, err = s.Apps.SubnetRegistry().ClaimReward(key, subnetId, big.NewInt(uptime.Proof.Uptime), proofsBytes)
-	return err
+	if err != nil {
+		return err
+	}
+
+	return s.saveUptime(ctx, uptime)
 }
 
 func (s *UptimeService) GetPeerId() (peer.ID, error) {
