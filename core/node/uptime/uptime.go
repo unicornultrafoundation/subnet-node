@@ -3,6 +3,7 @@ package uptime
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -16,6 +17,7 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/sirupsen/logrus"
+	"github.com/unicornultrafoundation/subnet-node/core/account"
 	"github.com/unicornultrafoundation/subnet-node/core/apps"
 	puptime "github.com/unicornultrafoundation/subnet-node/proto/subnet/uptime"
 	"github.com/unicornultrafoundation/subnet-node/repo"
@@ -39,15 +41,16 @@ type ProofResponse struct {
 
 // UptimeService manages uptime tracking, PubSub communication, and proof generation
 type UptimeService struct {
-	IsVerifier bool
-	IsProvider bool
-	Identity   peer.ID        // Local node's identity
-	PubSub     *pubsub.PubSub // PubSub instance for communication
-	Topic      *pubsub.Topic  // Subscribed PubSub topic
-	cancel     context.CancelFunc
-	Datastore  repo.Datastore // Datastore for storing uptime records and proofs
-	Apps       *apps.Service
-	cache      map[string]string // Cache for peer-to-subnet mapping
+	IsVerifier     bool
+	IsProvider     bool
+	Identity       peer.ID        // Local node's identity
+	PubSub         *pubsub.PubSub // PubSub instance for communication
+	Topic          *pubsub.Topic  // Subscribed PubSub topic
+	cancel         context.CancelFunc
+	Datastore      repo.Datastore // Datastore for storing uptime records and proofs
+	Apps           *apps.Service
+	cache          map[string]string // Cache for peer-to-subnet mapping
+	AccountService *account.AccountService
 }
 
 // Start initializes the UptimeService and starts PubSub-related tasks
@@ -76,7 +79,7 @@ func (s *UptimeService) Start() error {
 		go s.updateProofs(ctx)
 	}
 
-	log.Debugf("UptimeService started for topic: %s", UptimeTopic)
+	log.Infof("UptimeService started for topic: %s", UptimeTopic)
 	return nil
 }
 
@@ -160,15 +163,16 @@ func (s *UptimeService) startListening(ctx context.Context) {
 				log.Errorf("Error reading message: %v", err)
 				continue
 			}
-			var msgUptime puptime.Msg
-			if err := proto.Unmarshal(msg.Data, &msgUptime); err != nil {
-				log.Debugf("Failed to unmarshal heartbeat message: %v", err)
-				continue
-			}
 
 			peerId, err := peer.IDFromBytes(msg.From)
 			if err != nil {
 				log.Debugf("Error parsing peer ID: %v", err)
+				continue
+			}
+
+			var msgUptime puptime.Msg
+			if err := proto.Unmarshal(msg.Data, &msgUptime); err != nil {
+				log.Debugf("Failed to unmarshal heartbeat message: %v", err)
 				continue
 			}
 
@@ -295,7 +299,7 @@ func (s *UptimeService) updatePeerUptime(ctx context.Context, peerID string, cur
 
 // updateProofs periodically generates and distributes Merkle proofs for all uptimes
 func (s *UptimeService) updateProofs(ctx context.Context) {
-	ticker := time.NewTicker(10 * time.Second)
+	ticker := time.NewTicker(15 * time.Minute)
 	defer ticker.Stop()
 
 	for {
@@ -306,7 +310,7 @@ func (s *UptimeService) updateProofs(ctx context.Context) {
 		case <-ticker.C: // On every tick, generate and distribute proofs
 			go func() {
 				if err := s.generateAndDistributeProofs(ctx); err != nil {
-					log.Debugf("Error generating and distributing proofs: %v", err)
+					log.Errorf("Error generating and distributing proofs: %v", err)
 				} else {
 					log.Debugf("Proofs generated and distributed successfully.")
 				}
@@ -463,6 +467,38 @@ func (s *UptimeService) GetSubnetID() (*big.Int, error) {
 	return s.Apps.SubnetRegistry().PeerToSubnet(nil, s.Identity.String())
 }
 
+func (s *UptimeService) ClaimReward(ctx context.Context) error {
+	uptime, err := s.GetUptime(ctx)
+	if err != nil {
+		return nil
+	}
+
+	key, err := s.AccountService.NewKeyedTransactor()
+
+	if err != nil {
+		return nil
+	}
+
+	subnetId, err := s.GetSubnetID()
+
+	if err != nil {
+		return err
+	}
+
+	proofsBytes := make([][32]byte, 0)
+
+	for _, p := range uptime.Proof.Proof {
+		proofBytes, err := hexStringToByte32(p)
+		if err != nil {
+			return err
+		}
+		proofsBytes = append(proofsBytes, proofBytes)
+	}
+
+	_, err = s.Apps.SubnetRegistry().ClaimReward(key, subnetId, big.NewInt(uptime.Proof.Uptime), proofsBytes)
+	return err
+}
+
 func (s *UptimeService) GetPeerId() (peer.ID, error) {
 	return s.Identity, nil
 }
@@ -502,5 +538,48 @@ func (s *UptimeService) publishAllProofs(ctx context.Context, root string, recor
 	}
 
 	log.Debugf("Published Merkle proof message with root: %s", root)
+	rootBytes, err := hexStringToByte32(root)
+
+	if err != nil {
+		return err
+	}
+
+	key, err := s.AccountService.NewKeyedTransactor()
+
+	if err != nil {
+		return err
+	}
+
+	_, err = s.AccountService.SubnetRegistry().UpdateMerkleRoot(key, rootBytes)
+
+	if err != nil {
+		return err
+	}
+
 	return nil
+}
+
+func hexStringToByte32(hexStr string) ([32]byte, error) {
+	var result [32]byte
+
+	// Loại bỏ prefix "0x" nếu có
+	if len(hexStr) >= 2 && hexStr[:2] == "0x" {
+		hexStr = hexStr[2:]
+	}
+
+	// Decode hex string thành slice byte
+	bytes, err := hex.DecodeString(hexStr)
+	if err != nil {
+		return result, fmt.Errorf("failed to decode hex string: %v", err)
+	}
+
+	// Kiểm tra độ dài (phải chính xác 32 bytes)
+	if len(bytes) != 32 {
+		return result, fmt.Errorf("invalid length: got %d bytes, expected 32", len(bytes))
+	}
+
+	// Copy vào mảng [32]byte
+	copy(result[:], bytes)
+
+	return result, nil
 }

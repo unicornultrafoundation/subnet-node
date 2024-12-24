@@ -32,3 +32,7 @@ func (api *UptimeAPI) GetSubnetId(ctx context.Context) (*hexutil.Big, error) {
 	}
 	return (*hexutil.Big)(subnetID), nil
 }
+
+func (api *UptimeAPI) ClaimReward(ctx context.Context) error {
+	return api.s.ClaimReward(ctx)
+}

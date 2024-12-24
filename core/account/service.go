@@ -5,12 +5,14 @@ import (
 	"crypto/ecdsa"
 	"math/big"
 
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/config"
+	"github.com/unicornultrafoundation/subnet-node/core/contracts"
 	"go.uber.org/fx"
 )
 
@@ -18,13 +20,19 @@ var log = logrus.New().WithField("service", "account")
 
 // AccountService is a service to handle Ethereum transactions
 type AccountService struct {
-	privateKey *ecdsa.PrivateKey
-	client     *ethclient.Client
-	chainID    *big.Int
+	privateKey        *ecdsa.PrivateKey
+	client            *ethclient.Client
+	chainID           *big.Int
+	subnetRegistry    *contracts.SubnetRegistry
+	subnetAppRegistry *contracts.SubnetAppRegistry
 }
 
 // NewAccountService initializes a new AccountService
-func NewAccountService(privateKeyHex, rpcURL string, chainID *big.Int) (*AccountService, error) {
+func NewAccountService(cfg *config.C) (*AccountService, error) {
+	privateKeyHex := cfg.GetString("account.private_key", "")
+	rpcURL := cfg.GetString("account.rpc", config.DefaultRPC)
+	chainID := big.NewInt(int64(cfg.GetInt("account.chainid", 2484)))
+
 	privateKey, err := crypto.HexToECDSA(privateKeyHex)
 	if err != nil {
 		return nil, err
@@ -35,16 +43,44 @@ func NewAccountService(privateKeyHex, rpcURL string, chainID *big.Int) (*Account
 		return nil, err
 	}
 
+	subnetAppRegistry, err := contracts.NewSubnetAppRegistry(
+		common.HexToAddress(cfg.GetString("apps.subnet_app_registry_contract", config.DefaultSubnetAppRegistryContract)),
+		client,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	subnetRegistry, err := contracts.NewSubnetRegistry(
+		common.HexToAddress(cfg.GetString("apps.subnet_registry_contract", config.DefaultSubnetRegistryCOntract)),
+		client,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
 	return &AccountService{
-		privateKey: privateKey,
-		client:     client,
-		chainID:    chainID,
+		privateKey:        privateKey,
+		client:            client,
+		chainID:           chainID,
+		subnetRegistry:    subnetRegistry,
+		subnetAppRegistry: subnetAppRegistry,
 	}, nil
 }
 
 // GetClient retrieves the ethclient instance
 func (s *AccountService) GetClient() *ethclient.Client {
 	return s.client
+}
+
+func (s *AccountService) SubnetRegistry() *contracts.SubnetRegistry {
+	return s.subnetRegistry
+}
+
+func (s *AccountService) SubnetAppRegistry() *contracts.SubnetAppRegistry {
+	return s.subnetAppRegistry
 }
 
 // GetAddress retrieves the Ethereum address from the private key
@@ -60,6 +96,10 @@ func (s *AccountService) GetBalance(address common.Address) (*big.Int, error) {
 		return nil, err
 	}
 	return balance, nil
+}
+
+func (s *AccountService) NewKeyedTransactor() (*bind.TransactOpts, error) {
+	return bind.NewKeyedTransactorWithChainID(s.privateKey, s.chainID)
 }
 
 // SignAndSendTransaction creates, signs, and sends a transaction
@@ -93,7 +133,7 @@ func (s *AccountService) SignAndSendTransaction(toAddress string, value *big.Int
 
 // EthereumService provides a lifecycle-managed Ethereum service
 func EthereumService(lc fx.Lifecycle, cfg *config.C) (*AccountService, error) {
-	service, err := NewAccountService(cfg.GetString("account.private_key", ""), cfg.GetString("account.rpc", config.DefaultRPC), big.NewInt(int64(cfg.GetInt("account.chainid", 2484))))
+	service, err := NewAccountService(cfg)
 	if err != nil {
 		return nil, err
 	}
