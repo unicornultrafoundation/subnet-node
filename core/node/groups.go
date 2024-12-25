@@ -9,6 +9,7 @@ import (
 	"github.com/libp2p/go-libp2p-pubsub/timecache"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/unicornultrafoundation/subnet-node/config"
+	"github.com/unicornultrafoundation/subnet-node/core/account"
 	"github.com/unicornultrafoundation/subnet-node/core/node/libp2p"
 	"github.com/unicornultrafoundation/subnet-node/p2p"
 	"go.uber.org/fx"
@@ -36,7 +37,7 @@ func LibP2P(bcfg *BuildCfg, cfg *config.C) fx.Option {
 		var pubsubOptions []pubsub.Option
 		pubsubOptions = append(
 			pubsubOptions,
-			pubsub.WithMessageSigning(!cfg.GetBool("pubsub.disable_signing", true)),
+			pubsub.WithMessageSigning(!cfg.GetBool("pubsub.disable_signing", false)),
 			pubsub.WithSeenMessagesTTL(cfg.GetDuration("pubsub.seen_messages_ttl", pubsub.TimeCacheDuration)),
 		)
 
@@ -65,7 +66,7 @@ func LibP2P(bcfg *BuildCfg, cfg *config.C) fx.Option {
 		}
 	}
 
-	enableAutoTLS := cfg.GetBool("autotls.enabled", false)
+	enableAutoTLS := cfg.GetBool("autotls.enabled", true)
 	enableRelayTransport := cfg.GetBool("swarm.transports.network.relay", true)
 	enableRelayService := cfg.GetBool("swarm.relay_service.enabled", enableRelayTransport)
 	enableRelayClient := cfg.GetBool("swarm.relay_client.enabled", enableRelayService)
@@ -95,8 +96,8 @@ func LibP2P(bcfg *BuildCfg, cfg *config.C) fx.Option {
 		fx.Provide(libp2p.BaseRouting(cfg)),
 		maybeProvide(libp2p.PubsubRouter, bcfg.getOpt("ipsnps")),
 
-		maybeProvide(libp2p.BandwidthCounter, !cfg.GetBool("swarm.disable_bandwidth_metrics", true)),
-		maybeProvide(libp2p.NatPortMap, !cfg.GetBool("swarm.disable_nat_portmap", true)),
+		maybeProvide(libp2p.BandwidthCounter, !cfg.GetBool("swarm.disable_bandwidth_metrics", false)),
+		maybeProvide(libp2p.NatPortMap, !cfg.GetBool("swarm.disable_nat_portmap", false)),
 		libp2p.MaybeAutoRelay(cfg, enableRelayClient),
 		connmgr,
 		autonat,
@@ -171,7 +172,9 @@ func Storage(bcfg *BuildCfg) fx.Option {
 func Core(cfg *config.C) fx.Option {
 	return fx.Options(
 		fx.Provide(ResourceService),
+		fx.Provide(UptimeService),
 		fx.Provide(AppService),
+		fx.Provide(account.EthereumService),
 	)
 }
 

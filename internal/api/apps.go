@@ -148,3 +148,43 @@ func (api *AppAPI) GetUsage(ctx context.Context, appId hexutil.Big) (*resourceUs
 	}
 	return convertToUsageResult(usage), nil
 }
+
+func (api *AppAPI) RegisterApp(ctx context.Context, name, symbol, peerId, metadata string, budget, maxNodes, minCpu, minGpu, minMemory, minUploadBandwidth, minDownloadBandwidth, pricePerCpu, pricePerGpu, pricePerMemoryGB, pricePerStorageGB, pricePerBandwidthGB *hexutil.Big) (common.Hash, error) {
+	txHash, err := api.appService.RegisterApp(ctx, name, symbol, peerId, metadata, budget.ToInt(), maxNodes.ToInt(), minCpu.ToInt(), minGpu.ToInt(), minMemory.ToInt(), minUploadBandwidth.ToInt(), minDownloadBandwidth.ToInt(), pricePerCpu.ToInt(), pricePerGpu.ToInt(), pricePerMemoryGB.ToInt(), pricePerStorageGB.ToInt(), pricePerBandwidthGB.ToInt())
+	if err != nil {
+		return common.Hash{}, err
+	}
+	return txHash, nil
+}
+
+func (api *AppAPI) RegisterNode(ctx context.Context, appId hexutil.Big) (common.Hash, error) {
+	txHash, err := api.appService.RegisterNode(ctx, appId.ToInt())
+	if err != nil {
+		return common.Hash{}, err
+	}
+	return txHash, nil
+}
+
+func (api *AppAPI) ClaimReward(ctx context.Context, appId, usedCpu, usedGpu, usedMemory, usedStorage, usedUploadBytes, usedDownloadBytes, duration *hexutil.Big, signature []byte) (common.Hash, error) {
+	txHash, err := api.appService.ClaimReward(ctx, appId.ToInt(), usedCpu.ToInt(), usedGpu.ToInt(), usedMemory.ToInt(), usedStorage.ToInt(), usedUploadBytes.ToInt(), usedDownloadBytes.ToInt(), duration.ToInt(), signature)
+	if err != nil {
+		return common.Hash{}, err
+	}
+	return txHash, nil
+}
+
+func (api *AppAPI) UpdateApp(ctx context.Context, appId hexutil.Big, name, peerId, metadata string, maxNodes, minCpu, minGpu, minMemory, minUploadBandwidth, minDownloadBandwidth, pricePerCpu, pricePerGpu, pricePerMemoryGB, pricePerStorageGB, pricePerBandwidthGB *hexutil.Big) (common.Hash, error) {
+	txHash, err := api.appService.UpdateApp(ctx, appId.ToInt(), name, peerId, metadata, maxNodes.ToInt(), minCpu.ToInt(), minGpu.ToInt(), minMemory.ToInt(), minUploadBandwidth.ToInt(), minDownloadBandwidth.ToInt(), pricePerCpu.ToInt(), pricePerGpu.ToInt(), pricePerMemoryGB.ToInt(), pricePerStorageGB.ToInt(), pricePerBandwidthGB.ToInt())
+	if err != nil {
+		return common.Hash{}, err
+	}
+	return txHash, nil
+}
+
+func (api *AppAPI) GetAllUsage(ctx context.Context) (*resourceUsageResult, error) {
+	usage, err := api.appService.GetAllRunningContainersUsage(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return convertToUsageResult(usage), nil
+}

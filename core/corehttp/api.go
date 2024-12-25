@@ -26,6 +26,8 @@ func OpenAPIOption() ServeOption {
 		server.RegisterName("node", api.NewNodeAPI(capi.Resource()))
 		server.RegisterName("pubsub", api.NewPubsubAPI(capi.PubSub()))
 		server.RegisterName("app", api.NewAppAPI(n.Apps))
+		server.RegisterName("uptime", api.NewUptimeAPI(n.Uptime))
+		server.RegisterName("account", api.NewAccountAPI(n.Account))
 
 		smux.Handle(APIPath, server)
 		return smux, nil

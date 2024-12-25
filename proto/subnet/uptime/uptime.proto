@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+package uptime;
+
+// Heartbeat defines the structure of the message sent via PubSub
+message HeartbeatMsg {
+  int64 timestamp = 1; // Time the heartbeat message was generated (UNIX timestamp)
+}
+
+// Proof represents an individual uptime proof
+message Proof {
+  string subnet_id = 1;      // ID of the subnet the peer belongs to
+  int64 uptime = 2;          // Total uptime in seconds
+  repeated string proof = 3; // Merkle proof for this uptime record
+}
+
+// MerkleProofs contains a collection of uptime proofs with a root hash
+message MerkleProofMsg {
+  string root = 1;               // Merkle root hash
+  repeated Proof proofs = 2;     // List of proofs
+}
+
+// UptimeProof represents the Merkle proof for a specific uptime record
+message UptimeProof {
+    int64 uptime = 1;              // Uptime in seconds
+    repeated string proof = 2;     // Merkle proof
+}
+  
+// UptimeRecord represents a peer's uptime data and proof
+message UptimeRecord {
+    string subnet_id = 1;          // Subnet ID of the peer
+    string peer_id = 2;            // Peer ID of the node
+    int64 uptime = 3;              // Total uptime in seconds
+    int64 last_timestamp = 4;      // Last time the node was seen (UNIX timestamp)
+    UptimeProof proof = 5;         // Merkle proof for this uptime record
+    bool is_claimed = 6;           // Whether the uptime has been claimed
+}
+
+// Msg represents the data used for publishing uptime info
+message Msg {
+  oneof payload {
+    HeartbeatMsg heartbeat = 1;     // Heartbeat message
+    MerkleProofMsg merkleProof = 2; // Collection of uptime proofs
+  }
+}
