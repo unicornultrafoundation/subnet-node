@@ -157,3 +157,17 @@ func convertToApp(subnetApp SubnetAppRegistryApp, id *big.Int, status ProcessSta
 		Metadata:             metadata,
 	}
 }
+
+func convertToResourceUsage(usage SubnetAppRegistryAppNode, appId *big.Int, subnetId *big.Int) *ResourceUsage {
+	return &ResourceUsage{
+		AppId:             appId,
+		SubnetId:          subnetId,
+		UsedCpu:           usage.UsedCpu,
+		UsedGpu:           usage.UsedGpu,
+		UsedMemory:        usage.UsedMemory,
+		UsedStorage:       usage.UsedStorage,
+		UsedUploadBytes:   usage.UsedUploadBytes,
+		UsedDownloadBytes: usage.UsedDownloadBytes,
+		Duration:          usage.Duration,
+	}
+}
