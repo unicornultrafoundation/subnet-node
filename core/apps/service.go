@@ -27,6 +27,7 @@ import (
 	"github.com/shirou/gopsutil/process"
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/config"
+	"github.com/unicornultrafoundation/subnet-node/core/account"
 	"github.com/unicornultrafoundation/subnet-node/p2p"
 )
 
@@ -48,6 +49,7 @@ type Service struct {
 	stopChan          chan struct{} // Channel to stop background tasks
 	subnetAppRegistry *SubnetAppRegistry
 	subnetRegistry    *SubnetRegistry
+	accountService    *account.AccountService
 }
 
 // Initializes the Service with Ethereum and containerd clients.
