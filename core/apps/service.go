@@ -140,6 +140,10 @@ func (s *Service) Start(ctx context.Context) error {
 		}
 
 		//go s.StartRewardClaimer(ctx)
+
+		// Update latest resource usage into datastore
+		s.updateAllRunningContainersUsage(ctx)
+		go s.startMonitoringUsage(ctx)
 	}
 
 	log.Info("Subnet Apps Service started successfully.")
@@ -162,6 +166,20 @@ func (s *Service) Stop(ctx context.Context) error {
 
 	log.Info("Subnet Apps Service stopped successfully.")
 	return nil
+}
+
+func (s *Service) startMonitoringUsage(ctx context.Context) {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done(): // Exit if the context is cancelled
+			return
+		case <-ticker.C: // On every tick, update all latest running containers's resource usages
+			s.updateAllRunningContainersUsage(ctx)
+		}
+	}
 }
 
 func (s *Service) GetAppCount() (*big.Int, error) {
@@ -497,54 +515,11 @@ func (s *Service) RegisterSignProtocol() error {
 // 	return int64(duration), nil // Return duration in seconds
 // }
 
-// func (s *Service) RegisterNode(ctx context.Context, appId *big.Int) (common.Hash, error) {
-// 	// Get the nonce for the account
-// 	fromAddress := crypto.PubkeyToAddress(s.privKey.PublicKey)
-// 	nonce, err := s.ethClient.PendingNonceAt(ctx, fromAddress)
-// 	if err != nil {
-// 		return common.Hash{}, fmt.Errorf("failed to get account nonce: %w", err)
-// 	}
-// 	// Get the suggested gas price
-// 	gasPrice, err := s.ethClient.SuggestGasPrice(ctx)
-// 	if err != nil {
-// 		return common.Hash{}, fmt.Errorf("failed to get suggested gas price: %w", err)
-// 	}
-// 	toAddress := common.HexToAddress(s.cfg.GetString("apps.subnet_app_registry_contract", config.DefaultSubnetAppRegistryContract))
-// 	// Estimate the gas limit
-// 	msg := ethereum.CallMsg{
-// 		From: fromAddress,
-// 		To:   &toAddress,
-// 	}
-// 	gasLimit, err := s.ethClient.EstimateGas(ctx, msg)
-// 	if err != nil {
-// 		return common.Hash{}, fmt.Errorf("failed to estimate gas: %w", err)
-// 	}
-// 	// Sign the transaction
-// 	chainID, err := s.ethClient.NetworkID(ctx)
-// 	if err != nil {
-// 		return common.Hash{}, fmt.Errorf("failed to get chain ID: %w", err)
-// 	}
-// 	signFn := func(from common.Address, rawTx *types.Transaction) (*types.Transaction, error) {
-// 		signedTx, err := types.SignTx(rawTx, types.NewEIP155Signer(chainID), s.privKey)
-// 		return signedTx, err
-// 	}
-// 	opt := bind.TransactOpts{
-// 		From:     fromAddress,
-// 		Nonce:    big.NewInt(int64(nonce)),
-// 		Value:    big.NewInt(0),
-// 		GasPrice: gasPrice,
-// 		GasLimit: gasLimit,
-// 		Context:  ctx,
-// 		Signer:   signFn,
-// 	}
-// 	tx, err := s.subnetAppRegistry.RegisterNode(&opt, &s.subnetID, appId)
-// 	if err != nil {
-// 		return common.Hash{}, err
-// 	}
-// 	return tx.Hash(), nil
-// }
-
 func (s *Service) GetUsage(ctx context.Context, appId *big.Int) (*ResourceUsage, error) {
+	return s.getUsageFromExternal(ctx, appId)
+}
+
+func (s *Service) getUsage(ctx context.Context, appId *big.Int) (*ResourceUsage, error) {
 	// Load the container
 	ctx = namespaces.WithNamespace(ctx, NAMESPACE)
 	app := App{ID: appId}
@@ -556,21 +531,7 @@ func (s *Service) GetUsage(ctx context.Context, appId *big.Int) (*ResourceUsage,
 	// Get the task
 	task, err := container.Task(ctx, nil)
 	if err != nil {
-		if errdefs.IsNotFound(err) {
-			// No task found; container is likely shut down
-			return s.getUsageFromExternal(ctx, appId)
-		}
 		return nil, fmt.Errorf("failed to get task for container: %w", err)
-	}
-
-	status, err := s.GetContainerStatus(ctx, appId)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get container status: %w", err)
-	}
-	if status != Running {
-		// Unable to get current container's metrics
-		// Get usage from external instead
-		s.getUsageFromExternal(ctx, appId)
 	}
 
 	// Get metrics
@@ -684,23 +645,59 @@ func (s *Service) getUsageFromExternal(ctx context.Context, appId *big.Int) (*Re
 	// Get usage from smart contract
 	usage, err := s.subnetAppRegistry.GetAppNode(nil, appId, &s.subnetID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get resource usage from smart contract for appId %s: %v", appId.String(), err)
+		return nil, fmt.Errorf("failed to get resource usage from datastore & smart contract for appId %s: %v", appId.String(), err)
 	}
 
 	return convertToResourceUsage(usage, appId, &s.subnetID), nil
 }
 
-// func (s *Service) updateUsage(ctx context.Context, appId *big.Int, usage *ResourceUsage) error {
-// 	resourceUsageData, err := json.Marshal(usage)
-// 	if err != nil {
-// 		return fmt.Errorf("failed to marshal resource usage for appId %s: %v", appId.String(), err)
-// 	}
-// 	resourceUsageKey := datastore.NewKey(fmt.Sprintf("%s-%s", RESOURCE_USAGE_KEY, appId.String()))
-// 	if err := s.Datastore.Put(ctx, resourceUsageKey, resourceUsageData); err != nil {
-// 		return fmt.Errorf("failed to update resource usage for appId %s: %v", appId.String(), err)
-// 	}
-// 	return nil
-// }
+func (s *Service) updateUsage(ctx context.Context, appId *big.Int, usage *ResourceUsage) error {
+	resourceUsageData, err := json.Marshal(usage)
+	if err != nil {
+		return fmt.Errorf("failed to marshal resource usage for appId %s: %v", appId.String(), err)
+	}
+	resourceUsageKey := datastore.NewKey(fmt.Sprintf("%s-%s", RESOURCE_USAGE_KEY, appId.String()))
+	if err := s.Datastore.Put(ctx, resourceUsageKey, resourceUsageData); err != nil {
+		return fmt.Errorf("failed to update resource usage for appId %s: %v", appId.String(), err)
+	}
+	return nil
+}
+
+func (s *Service) updateAllRunningContainersUsage(ctx context.Context) error {
+	// Set the namespace for the containers
+	ctx = namespaces.WithNamespace(ctx, NAMESPACE)
+
+	// Fetch all running containers
+	containers, err := s.containerdClient.Containers(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to fetch running containers: %w", err)
+	}
+
+	// Iterate over each container and update its latest resource usage
+	for _, container := range containers {
+		// Extract appId from container ID
+		containerID := container.ID()
+		appIDStr := strings.TrimPrefix(containerID, "subnet-app-")
+		appID, ok := new(big.Int).SetString(appIDStr, 10)
+		if !ok {
+			return fmt.Errorf("invalid container ID: %s", containerID)
+		}
+
+		usage, err := s.getUsage(ctx, appID)
+
+		if err != nil {
+			return fmt.Errorf("failed to get latest resource usage for appId %s: %v", appID.String(), err)
+		}
+
+		err = s.updateUsage(ctx, appID, usage)
+
+		if err != nil {
+			return fmt.Errorf("failed to update resource usage for container %s: %w", containerID, err)
+		}
+	}
+
+	return nil
+}
 
 // // GetAppNode retrieves the details of an AppNode by its ID or similar identifier.
 // func (s *Service) GetAppNode(ctx context.Context, appId big.Int, subnetId big.Int) (ResourceUsage, error) {
