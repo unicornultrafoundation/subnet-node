@@ -64,7 +64,7 @@ func InitWithIdentity(identity Identity) (map[interface{}]interface{}, error) {
 				"/ip4/0.0.0.0/tcp/4001",
 			},
 			"api": []interface{}{
-				"/ip4/0.0.0.0/tcp/8080",
+				"/ip4/127.0.0.1/tcp/8080",
 			},
 		},
 		"bootstrap": []interface{}{
