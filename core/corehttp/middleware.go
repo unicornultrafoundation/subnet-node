@@ -1,9 +1,12 @@
 package corehttp
 
 import (
-	"encoding/json"
+	"encoding/base64"
+	"fmt"
 	"net/http"
 	"strings"
+
+	"github.com/unicornultrafoundation/subnet-node/config"
 )
 
 // ...existing code...
@@ -15,6 +18,15 @@ type CORSOptions struct {
 	AllowedHeaders []string
 }
 
+// convertToStringSlice converts a slice of interface{} to a slice of string.
+func convertToStringSlice(slice []interface{}) []string {
+	strSlice := make([]string, len(slice))
+	for i, v := range slice {
+		strSlice[i] = v.(string)
+	}
+	return strSlice
+}
+
 // Authorization holds the configuration for authorization.
 type Authorization struct {
 	AuthSecret     string
@@ -22,7 +34,7 @@ type Authorization struct {
 }
 
 // WithCORS adds CORS headers to the response.
-func WithCORS(corsOptions CORSOptions, next http.Handler) http.Handler {
+func WithCORSHeaders(corsOptions CORSOptions, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
 		if origin != "" {
@@ -47,8 +59,9 @@ func WithCORS(corsOptions CORSOptions, next http.Handler) http.Handler {
 }
 
 // WithAuthorization adds authorization based on the provided config.
-func WithAuthorization(authConfig map[string]Authorization, next http.Handler) http.Handler {
+func WithAuth(authConfig map[string]Authorization, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" {
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
@@ -56,41 +69,38 @@ func WithAuthorization(authConfig map[string]Authorization, next http.Handler) h
 		}
 
 		authParts := strings.SplitN(authHeader, " ", 2)
-		if len(authParts) != 2 || authParts[0] != "Bearer" {
+
+		if len(authParts) != 2 || (authParts[0] != "Bearer" && authParts[0] != "Basic") {
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
 
 		token := authParts[1]
-		for _, auth := range authConfig {
-			if auth.AuthSecret == token {
-				var body struct {
-					Method string `json:"method"`
-				}
-				if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-					http.Error(w, "Bad request", http.StatusBadRequest)
-					return
-				}
-
-				if contains(auth.AllowedMethods, "*") || contains(auth.AllowedMethods, body.Method) {
-					next.ServeHTTP(w, r)
-					return
-				}
-				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-				return
-			}
+		_, exists := authConfig[token]
+		if !exists {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
 		}
 
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		next.ServeHTTP(w, r)
 	})
 }
 
-// contains checks if a slice contains a specific string.
-func contains(slice []string, item string) bool {
-	for _, s := range slice {
-		if s == item {
-			return true
+func parseAuthorizationsFromConfig(cfg *config.C) map[string]Authorization {
+	// authorizations is a map where we can just check for the header value to match.
+	authorizations := map[string]Authorization{}
+	authScopes := cfg.GetMap("api.authorizations", map[interface{}]interface{}{})
+
+	for user, authScope := range authScopes {
+		if scopeMap, ok := authScope.(map[interface{}]interface{}); ok {
+			expectedHeader := base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", user, scopeMap["auth_secret"])))
+			// Encode the auth secret to base64
+			authorizations[expectedHeader] = Authorization{
+				AuthSecret:     scopeMap["auth_secret"].(string),
+				AllowedMethods: convertToStringSlice(scopeMap["allowed_methods"].([]interface{})),
+			}
 		}
 	}
-	return false
+
+	return authorizations
 }
