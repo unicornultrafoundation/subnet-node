@@ -544,25 +544,25 @@ func (s *Service) GetUsage(ctx context.Context, appId *big.Int) (*ResourceUsage,
 	return s.getUsageFromExternal(ctx, appId)
 }
 
-func (s *Service) getUsage(ctx context.Context, appId *big.Int) (*ResourceUsage, error) {
+func (s *Service) getUsage(ctx context.Context, appId *big.Int) (*ResourceUsage, int32, error) {
 	// Load the container
 	ctx = namespaces.WithNamespace(ctx, NAMESPACE)
 	app := App{ID: appId}
 	container, err := s.containerdClient.LoadContainer(ctx, app.ContainerId())
 	if err != nil {
-		return nil, fmt.Errorf("failed to load container: %w", err)
+		return nil, 0, fmt.Errorf("failed to load container: %w", err)
 	}
 
 	// Get the task
 	task, err := container.Task(ctx, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get task for container: %w", err)
+		return nil, 0, fmt.Errorf("failed to get task for container: %w", err)
 	}
 
 	// Get metrics
 	metric, err := task.Metrics(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get metrics: %w", err)
+		return nil, 0, fmt.Errorf("failed to get metrics: %w", err)
 	}
 
 	var data interface{}
@@ -574,16 +574,17 @@ func (s *Service) getUsage(ctx context.Context, appId *big.Int) (*ResourceUsage,
 	case typeurl.Is(metric.Data, (*wstats.Statistics)(nil)):
 		data = &wstats.Statistics{}
 	default:
-		return nil, errors.New("cannot convert metric data to cgroups.Metrics or windows.Statistics")
+		return nil, 0, errors.New("cannot convert metric data to cgroups.Metrics or windows.Statistics")
 	}
 	if err := typeurl.UnmarshalTo(metric.Data, data); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	// Lấy thông tin Network I/O theo PID
-	proc, err := process.NewProcess(int32(task.Pid()))
+	pid := int32(task.Pid())
+	proc, err := process.NewProcess(pid)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	var totalRxBytes uint64 = 0
@@ -591,7 +592,7 @@ func (s *Service) getUsage(ctx context.Context, appId *big.Int) (*ResourceUsage,
 	netIO, err := proc.NetIOCounters(false)
 
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	for _, stat := range netIO {
@@ -603,22 +604,22 @@ func (s *Service) getUsage(ctx context.Context, appId *big.Int) (*ResourceUsage,
 	var storageBytes int64 = 0
 	info, err := container.Info(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get container info: %v", err)
+		return nil, 0, fmt.Errorf("failed to get container info: %v", err)
 	}
 	snapshotKey := info.SnapshotKey
 	snapshotService := s.containerdClient.SnapshotService(info.Snapshotter)
 	snapshotUsage, err := snapshotService.Usage(ctx, snapshotKey)
 	if err != nil {
 		if errdefs.IsNotFound(err) {
-			return nil, fmt.Errorf("snapshot %s not found: %v", snapshotKey, err)
+			return nil, 0, fmt.Errorf("snapshot %s not found: %v", snapshotKey, err)
 		}
-		return nil, fmt.Errorf("failed to get snapshot usage: %v", err)
+		return nil, 0, fmt.Errorf("failed to get snapshot usage: %v", err)
 	}
 	storageBytes = snapshotUsage.Size
 
 	createTime, err := proc.CreateTime()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get process create time: %w", err)
+		return nil, 0, fmt.Errorf("failed to get process create time: %w", err)
 	}
 
 	now := time.Now().UnixMilli()
@@ -645,25 +646,62 @@ func (s *Service) getUsage(ctx context.Context, appId *big.Int) (*ResourceUsage,
 		usage.UsedCpu = big.NewInt(int64(metrics.GetWindows().Processor.TotalRuntimeNS))
 		usage.UsedMemory = big.NewInt(int64(metrics.GetWindows().Memory.MemoryUsageCommitBytes))
 	default:
-		return nil, errors.New("unsupported metrics type")
+		return nil, 0, errors.New("unsupported metrics type")
 	}
 
 	// Optionally, calculate or set the duration if metrics provide a timestamp
 	// For example:
 	// usage.Duration = calculateDurationBasedOnMetrics(metrics)
 
-	return usage, nil
+	return usage, pid, nil
 }
 
 func (s *Service) getUsageFromExternal(ctx context.Context, appId *big.Int) (*ResourceUsage, error) {
-	// Get usage from datastore
-	resourceUsageKey := datastore.NewKey(fmt.Sprintf("%s-%s", RESOURCE_USAGE_KEY, appId.String()))
-	updatedJsonData, err := s.Datastore.Get(ctx, resourceUsageKey)
-	if err == nil { // If the record exists in the datastore
-		var updatedData ResourceUsage
-		if err := json.Unmarshal(updatedJsonData, &updatedData); err == nil {
-			return &updatedData, nil
+	// Get usage from datastore first
+	// Get all pids had run the appId
+	pidList, err := s.getPidList(ctx, appId)
+	if err == nil {
+		// Some records exist in the datastore
+		// Get all usages of the appId
+		totalUsage := &ResourceUsage{
+			UsedCpu:           big.NewInt(0),
+			UsedGpu:           big.NewInt(0),
+			UsedMemory:        big.NewInt(0),
+			UsedStorage:       big.NewInt(0),
+			UsedUploadBytes:   big.NewInt(0),
+			UsedDownloadBytes: big.NewInt(0),
+			Duration:          big.NewInt(0),
 		}
+
+		totalStorageRecord := big.NewInt(0)
+		for index, pid := range *pidList {
+			usage, err := s.getUsageFromStorage(ctx, appId, pid)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get resource usage from datastore for appId %s - pid %d: %v", appId.String(), pid, err)
+			}
+			usage = fillDefaultResourceUsage(usage)
+
+			// Aggregate the usage
+			totalUsage.UsedCpu.Add(totalUsage.UsedCpu, usage.UsedCpu)
+			totalUsage.UsedGpu.Add(totalUsage.UsedGpu, usage.UsedGpu)
+			totalUsage.UsedUploadBytes.Add(totalUsage.UsedUploadBytes, usage.UsedUploadBytes)
+			totalUsage.UsedDownloadBytes.Add(totalUsage.UsedDownloadBytes, usage.UsedDownloadBytes)
+			totalUsage.Duration.Add(totalUsage.Duration, usage.Duration)
+
+			if index < 5 {
+				// Only retrieve used memory/storage from <= 5 latest pid
+				totalUsage.UsedMemory.Add(totalUsage.UsedMemory, usage.UsedMemory)
+				totalUsage.UsedStorage.Add(totalUsage.UsedStorage, usage.UsedStorage)
+
+				totalStorageRecord.Add(totalStorageRecord, big.NewInt(1))
+			}
+		}
+
+		// Get average used memory/storage from <= 5 latest pid
+		totalUsage.UsedMemory.Div(totalUsage.UsedMemory, totalStorageRecord)
+		totalUsage.UsedStorage.Div(totalUsage.UsedStorage, totalStorageRecord)
+
+		return totalUsage, nil
 	}
 
 	// No record found from datastore
@@ -676,12 +714,29 @@ func (s *Service) getUsageFromExternal(ctx context.Context, appId *big.Int) (*Re
 	return convertToResourceUsage(usage, appId, &s.subnetID), nil
 }
 
-func (s *Service) updateUsage(ctx context.Context, appId *big.Int, usage *ResourceUsage) error {
+// Get resource usage created by a specific pid for appId from datastore
+func (s *Service) getUsageFromStorage(ctx context.Context, appId *big.Int, pid int32) (*ResourceUsage, error) {
+	resourceUsageKey := getUsageKey(appId, pid)
+	usageData, err := s.Datastore.Get(ctx, resourceUsageKey)
+
+	if err == nil { // If the record exists in the datastore
+		var usage ResourceUsage
+		if err := json.Unmarshal(usageData, &usage); err == nil {
+			return &usage, nil
+		}
+	}
+
+	return nil, fmt.Errorf("failed to get resource usage from datastore for appId %s: %v", appId.String(), err)
+}
+
+// Update resource usage created by a specific pid for appId to datastore
+func (s *Service) updateUsage(ctx context.Context, appId *big.Int, pid int32, usage *ResourceUsage) error {
 	resourceUsageData, err := json.Marshal(usage)
 	if err != nil {
 		return fmt.Errorf("failed to marshal resource usage for appId %s: %v", appId.String(), err)
 	}
-	resourceUsageKey := datastore.NewKey(fmt.Sprintf("%s-%s", RESOURCE_USAGE_KEY, appId.String()))
+
+	resourceUsageKey := getUsageKey(appId, pid)
 	if err := s.Datastore.Put(ctx, resourceUsageKey, resourceUsageData); err != nil {
 		return fmt.Errorf("failed to update resource usage for appId %s: %v", appId.String(), err)
 	}
@@ -701,27 +756,127 @@ func (s *Service) updateAllRunningContainersUsage(ctx context.Context) error {
 	// Iterate over each container and update its latest resource usage
 	for _, container := range containers {
 		// Extract appId from container ID
-		containerID := container.ID()
-		appIDStr := strings.TrimPrefix(containerID, "subnet-app-")
-		appID, ok := new(big.Int).SetString(appIDStr, 10)
+		containerId := container.ID()
+		appIdStr := strings.TrimPrefix(containerId, "subnet-app-")
+		appId, ok := new(big.Int).SetString(appIdStr, 10)
 		if !ok {
-			return fmt.Errorf("invalid container ID: %s", containerID)
+			return fmt.Errorf("invalid container ID: %s", containerId)
 		}
 
-		usage, err := s.getUsage(ctx, appID)
+		usage, pid, err := s.getUsage(ctx, appId)
 
 		if err != nil {
-			return fmt.Errorf("failed to get latest resource usage for appId %s: %v", appID.String(), err)
+			return fmt.Errorf("failed to get latest resource usage for appId %s: %v", appId.String(), err)
 		}
 
-		err = s.updateUsage(ctx, appID, usage)
+		// Update pid list if pid is new for appId
+		err = s.syncPidList(ctx, appId, pid)
+		if err != nil {
+			return fmt.Errorf("failed to sync pid %d for appId %s: %v", pid, appId.String(), err)
+		}
+
+		err = s.updateUsage(ctx, appId, pid, usage)
 
 		if err != nil {
-			return fmt.Errorf("failed to update resource usage for container %s: %w", containerID, err)
+			return fmt.Errorf("failed to update resource usage for container %s: %w", containerId, err)
 		}
 	}
 
 	return nil
+}
+
+func (s *Service) getPidList(ctx context.Context, appId *big.Int) (*[]int32, error) {
+	pidListKey := getPidListKey(appId)
+	pidListData, err := s.Datastore.Get(ctx, pidListKey)
+	if err != nil {
+		return nil, err
+	}
+
+	var pidList []int32
+	err = json.Unmarshal(pidListData, &pidList)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal pidList for appId %s: %w", appId.String(), err)
+	}
+
+	return &pidList, nil
+}
+
+func (s *Service) updatePidList(ctx context.Context, appId *big.Int, pidList *[]int32) error {
+	pidListData, err := json.Marshal(pidList)
+	if err != nil {
+		return fmt.Errorf("failed to marshal pid list for appId %s: %v", appId.String(), err)
+	}
+
+	pidListKey := getPidListKey(appId)
+	if err := s.Datastore.Put(ctx, pidListKey, pidListData); err != nil {
+		return fmt.Errorf("failed to update pid list for appId %s: %v", appId.String(), err)
+	}
+
+	return nil
+}
+
+// Check if an `appId` already has a pid list or not
+func (s *Service) hasPidList(ctx context.Context, appId *big.Int) (bool, error) {
+	pidListKey := getPidListKey(appId)
+	hasPidListKey, err := s.Datastore.Has(ctx, pidListKey)
+
+	if err != nil {
+		return false, fmt.Errorf("failed to check pid list key for appId %s: %w", appId.String(), err)
+	}
+
+	return hasPidListKey, nil
+}
+
+// Check if a pid of an `appId` has existed or not
+func (s *Service) hasUsageKey(ctx context.Context, appId *big.Int, pid int32) (bool, error) {
+	resourceUsageKey := getUsageKey(appId, pid)
+	hasUsageKey, err := s.Datastore.Has(ctx, resourceUsageKey)
+
+	if err != nil {
+		return false, fmt.Errorf("failed to check resource usage for appId %s: %w", appId.String(), err)
+	}
+
+	return hasUsageKey, nil
+}
+
+// Add new pid if it hadn't run appId before
+func (s *Service) syncPidList(ctx context.Context, appId *big.Int, pid int32) error {
+	hasPid, err := s.hasUsageKey(ctx, appId, pid)
+	if err != nil {
+		return fmt.Errorf("failed to check pid for appId %s: %w", appId.String(), err)
+	}
+
+	if hasPid {
+		return nil
+	}
+
+	hasPidList, err := s.hasPidList(ctx, appId)
+	if err != nil {
+		return fmt.Errorf("failed to check pid list for appId %s: %w", appId.String(), err)
+	}
+
+	pidList := new([]int32)
+	if hasPidList {
+		pidList, err = s.getPidList(ctx, appId)
+		if err != nil {
+			return fmt.Errorf("failed to get pidList for appId %s: %w", appId.String(), err)
+		}
+	}
+
+	// Append new pid to the top of pidList
+	*pidList = append([]int32{pid}, *pidList...)
+
+	return s.updatePidList(ctx, appId, pidList)
+}
+
+// Get key to retrieve resource usage from datastore created by a pid which had run appId
+func getUsageKey(appId *big.Int, pid int32) datastore.Key {
+	return datastore.NewKey(fmt.Sprintf("%s-%s-%d", RESOURCE_USAGE_KEY, appId.String(), pid))
+}
+
+// Get key to retrieve pid list which had run appId from datastore
+func getPidListKey(appId *big.Int) datastore.Key {
+	return datastore.NewKey(fmt.Sprintf("%s-%s", RESOURCE_USAGE_KEY, appId.String()))
 }
 
 // // GetAppNode retrieves the details of an AppNode by its ID or similar identifier.

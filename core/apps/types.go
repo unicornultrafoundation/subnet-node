@@ -172,3 +172,34 @@ func convertToResourceUsage(usage SubnetAppRegistryAppNode, appId *big.Int, subn
 		Duration:          usage.Duration,
 	}
 }
+
+func fillDefaultResourceUsage(usage *ResourceUsage) *ResourceUsage {
+	if usage.AppId == nil {
+		usage.AppId = big.NewInt(0)
+	}
+	if usage.SubnetId == nil {
+		usage.SubnetId = big.NewInt(0)
+	}
+	if usage.UsedCpu == nil {
+		usage.UsedCpu = big.NewInt(0)
+	}
+	if usage.UsedGpu == nil {
+		usage.UsedGpu = big.NewInt(0)
+	}
+	if usage.UsedMemory == nil {
+		usage.UsedMemory = big.NewInt(0)
+	}
+	if usage.UsedStorage == nil {
+		usage.UsedStorage = big.NewInt(0)
+	}
+	if usage.UsedUploadBytes == nil {
+		usage.UsedUploadBytes = big.NewInt(0)
+	}
+	if usage.UsedDownloadBytes == nil {
+		usage.UsedDownloadBytes = big.NewInt(0)
+	}
+	if usage.Duration == nil {
+		usage.Duration = big.NewInt(0)
+	}
+	return usage
+}
