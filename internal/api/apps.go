@@ -32,6 +32,7 @@ type appResult struct {
 	Status               apps.ProcessStatus   `json:"status,omitempty"`
 	Metadata             *apps.AppMetadata    `json:"metadata,omitempty"`
 	Usage                *resourceUsageResult `json:"usage,omitempty"`
+	IP                   string               `json:"ip"`
 }
 
 type resourceUsageResult struct {
@@ -83,6 +84,7 @@ func convertToAppResult(app *apps.App) *appResult {
 		Status:               app.Status,
 		Metadata:             app.Metadata,
 		Usage:                convertToUsageResult(app.Usage),
+		IP:                   app.IP,
 	}
 }
 
@@ -125,8 +127,8 @@ func (api *AppAPI) GetApp(ctx context.Context, appId hexutil.Big) (*appResult, e
 	return convertToAppResult(subnetApp), nil
 }
 
-func (api *AppAPI) RunApp(ctx context.Context, appId hexutil.Big) (*appResult, error) {
-	subnetApp, err := api.appService.RunApp(ctx, appId.ToInt())
+func (api *AppAPI) RunApp(ctx context.Context, appId hexutil.Big, envVars map[string]string) (*appResult, error) {
+	subnetApp, err := api.appService.RunApp(ctx, appId.ToInt(), envVars)
 	if err != nil {
 		return nil, err
 	}
