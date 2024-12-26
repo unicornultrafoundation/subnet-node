@@ -199,11 +199,21 @@ func (s *Service) GetApp(ctx context.Context, appId *big.Int) (*App, error) {
 		return nil, err
 	}
 
-	return convertToApp(subnetApp, appId, appStatus), nil
+	app := convertToApp(subnetApp, appId, appStatus)
+
+	if appStatus == Running {
+		ip, err := s.GetContainerIP(ctx, appId)
+		if err != nil {
+			return nil, err
+		}
+		app.IP = ip
+	}
+
+	return app, nil
 }
 
 // Starts a container for the specified app using containerd.
-func (s *Service) RunApp(ctx context.Context, appId *big.Int) (*App, error) {
+func (s *Service) RunApp(ctx context.Context, appId *big.Int, envVars map[string]string) (*App, error) {
 	// Set the namespace for the container
 	ctx = namespaces.WithNamespace(ctx, NAMESPACE)
 
@@ -229,15 +239,30 @@ func (s *Service) RunApp(ctx context.Context, appId *big.Int) (*App, error) {
 	}
 
 	// Create a new container for the app
+	specOpts := []oci.SpecOpts{
+		oci.WithImageConfig(image),
+	}
+
+	// Add environment variables to the container spec
+	for key, value := range envVars {
+		specOpts = append(specOpts, oci.WithEnv([]string{fmt.Sprintf("%s=%s", key, value)}))
+	}
+
+	// Add volume to the container spec
+	// specOpts = append(specOpts, oci.WithMounts([]specs.Mount{
+	// 	{
+	// 		Source:      "/host/path",
+	// 		Destination: "/container/path",
+	// 		Type:        "bind",
+	// 		Options:     []string{"rbind", "rw"},
+	// 	},
+	// }))
+
 	container, err := s.containerdClient.NewContainer(
 		ctx,
 		app.ContainerId(),
 		containerd.WithNewSnapshot(app.ContainerId()+"-snapshot", image),
-		containerd.WithNewSpec(oci.WithImageConfig(image)),
-		// containerd.WithNewSpec(
-		// 	oci.WithMemoryLimit(app.MinMemory.Uint64()), // Minimum RAM
-		// 	oci.WithCPUShares(app.MinCpu.Uint64()),      // Minimum CPU
-		// ),
+		containerd.WithNewSpec(specOpts...),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create container: %w", err)
@@ -797,4 +822,13 @@ func (s *Service) getUsageFromExternal(ctx context.Context, appId *big.Int) (*Re
 
 func (s *Service) GetSubnetIDFromPeerID(ctx context.Context) (*big.Int, error) {
 	return s.subnetRegistry.PeerToSubnet(nil, string(s.peerId))
+}
+
+// Retrieves the IP address of a running container.
+func (s *Service) GetContainerIP(ctx context.Context, appId *big.Int) (string, error) {
+	// Use the netns package to enter the network namespace and get the IP address
+	// This is a placeholder for the actual implementation
+	ip := "127.0.0.1" // Replace with actual logic to retrieve the IP address
+
+	return ip, nil
 }

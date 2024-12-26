@@ -53,6 +53,7 @@ type App struct {
 	Status               ProcessStatus
 	Usage                *ResourceUsage
 	Metadata             *AppMetadata
+	IP                   string
 }
 
 func (app *App) ContainerId() string {
