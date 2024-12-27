@@ -197,7 +197,8 @@ func (s *Service) GetApps(ctx context.Context, start *big.Int, end *big.Int) ([]
 
 	apps := make([]*App, len(subnetApps))
 	for i, subnetApp := range subnetApps {
-		appId := start.Add(start, big.NewInt(int64(i)))
+		appId := big.NewInt(0)
+		appId.Add(start, big.NewInt(int64(i)))
 		appStatus, err := s.GetContainerStatus(ctx, appId)
 		if err != nil {
 			return nil, err
