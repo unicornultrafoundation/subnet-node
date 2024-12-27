@@ -84,6 +84,7 @@ type AppMetadata struct {
 		Name        string `json:"name"`
 		Description string `json:"description"`
 		Logo        string `json:"logo"`
+		Banner      string `json:"banner"`
 		Website     string `json:"website"`
 	} `json:"appInfo"`
 	ContainerConfig struct {
