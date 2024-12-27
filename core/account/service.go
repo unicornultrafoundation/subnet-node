@@ -32,7 +32,6 @@ func NewAccountService(cfg *config.C) (*AccountService, error) {
 	privateKeyHex := cfg.GetString("account.private_key", "")
 	rpcURL := cfg.GetString("account.rpc", config.DefaultRPC)
 	chainID := big.NewInt(int64(cfg.GetInt("account.chainid", 2484)))
-
 	privateKey, err := crypto.HexToECDSA(privateKeyHex)
 	if err != nil {
 		return nil, err

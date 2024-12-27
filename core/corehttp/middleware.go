@@ -36,9 +36,9 @@ type Authorization struct {
 // parseCORSFromConfig parses CORS options from the provided config.
 func parseCORSFromConfig(cfg *config.C) CORSOptions {
 	return CORSOptions{
-		AllowedOrigins: cfg.GetStringSlice("cors.allowed_origins", []string{"*"}),
-		AllowedMethods: cfg.GetStringSlice("cors.allowed_methods", []string{"*"}),
-		AllowedHeaders: cfg.GetStringSlice("cors.allowed_headers", []string{"*"}),
+		AllowedOrigins: cfg.GetStringSlice("api.cors.allowed_origins", []string{"*"}),
+		AllowedMethods: cfg.GetStringSlice("api.cors.allowed_methods", []string{"*"}),
+		AllowedHeaders: cfg.GetStringSlice("api.cors.allowed_headers", []string{"*"}),
 	}
 }
 

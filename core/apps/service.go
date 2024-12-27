@@ -9,13 +9,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
+
 	wstats "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/stats"
 	v1 "github.com/containerd/cgroups/v3/cgroup1/stats"
 	v2 "github.com/containerd/cgroups/v3/cgroup2/stats"
 	"github.com/containerd/containerd"
-	"github.com/containerd/containerd/cio"
 	"github.com/containerd/containerd/namespaces"
-	"github.com/containerd/containerd/oci"
 	"github.com/containerd/errdefs"
 	"github.com/containerd/typeurl/v2"
 	"github.com/ethereum/go-ethereum/common"
@@ -32,6 +32,7 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/core/account"
 	"github.com/unicornultrafoundation/subnet-node/p2p"
 	pusage "github.com/unicornultrafoundation/subnet-node/proto/subnet/usage"
+	pbapp "github.com/unicornultrafoundation/subnet-node/proto/subnet/app"
 )
 
 var log = logrus.New().WithField("service", "apps")
@@ -58,13 +59,14 @@ type Service struct {
 }
 
 // Initializes the Service with Ethereum and containerd clients.
-func New(cfg *config.C, P2P *p2p.P2P, dataStore datastore.Datastore) *Service {
+func New(cfg *config.C, P2P *p2p.P2P, dataStore datastore.Datastore, accountService *account.AccountService) *Service {
 	return &Service{
-		P2P:        P2P,
-		cfg:        cfg,
-		Datastore:  dataStore,
-		IsProvider: cfg.GetBool("provider.enable", false),
-		stopChan:   make(chan struct{}),
+		P2P:            P2P,
+		cfg:            cfg,
+		Datastore:      dataStore,
+		IsProvider:     cfg.GetBool("provider.enable", false),
+		stopChan:       make(chan struct{}),
+		accountService: accountService,
 	}
 }
 
@@ -220,6 +222,12 @@ func (s *Service) GetApp(ctx context.Context, appId *big.Int) (*App, error) {
 
 	app := convertToApp(subnetApp, appId, appStatus)
 
+	// Retrieve metadata from datastore if available
+	metadata, err := s.GetContainerConfigProto(ctx, appId)
+	if err == nil {
+		app.Metadata.ContainerConfig = metadata.ContainerConfig
+	}
+
 	if appStatus == Running {
 		ip, err := s.GetContainerIP(ctx, appId)
 		if err != nil {
@@ -231,86 +239,19 @@ func (s *Service) GetApp(ctx context.Context, appId *big.Int) (*App, error) {
 	return app, nil
 }
 
-// Starts a container for the specified app using containerd.
-func (s *Service) RunApp(ctx context.Context, appId *big.Int, envVars map[string]string) (*App, error) {
-	// Set the namespace for the container
-	ctx = namespaces.WithNamespace(ctx, NAMESPACE)
-
-	// Retrieve app details from the Ethereum contract
-	app, err := s.GetApp(ctx, appId)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch app details: %w", err)
-	}
-
-	if app.Status != NotFound {
-		return app, nil
-	}
-
-	imageName := app.Metadata.ContainerConfig.Image
-	if !strings.Contains(imageName, "/") {
-		imageName = "docker.io/library/" + imageName
-	}
-
-	// Pull the image for the app
-	image, err := s.containerdClient.Pull(ctx, imageName, containerd.WithPullUnpack)
-	if err != nil {
-		return nil, fmt.Errorf("failed to pull image: %w", err)
-	}
-
-	// Create a new container for the app
-	specOpts := []oci.SpecOpts{
-		oci.WithImageConfig(image),
-	}
-
-	// Add environment variables to the container spec
-	for key, value := range envVars {
-		specOpts = append(specOpts, oci.WithEnv([]string{fmt.Sprintf("%s=%s", key, value)}))
-	}
-
-	// Add volume to the container spec
-	// specOpts = append(specOpts, oci.WithMounts([]specs.Mount{
-	// 	{
-	// 		Source:      "/host/path",
-	// 		Destination: "/container/path",
-	// 		Type:        "bind",
-	// 		Options:     []string{"rbind", "rw"},
-	// 	},
-	// }))
-
-	container, err := s.containerdClient.NewContainer(
-		ctx,
-		app.ContainerId(),
-		containerd.WithNewSnapshot(app.ContainerId()+"-snapshot", image),
-		containerd.WithNewSpec(specOpts...),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create container: %w", err)
-	}
-
-	// Start the container
-	task, err := container.NewTask(ctx, cio.NewCreator(cio.WithStdio))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create task: %w", err)
-	}
-
-	_, err = task.Wait(ctx)
+func (s *Service) GetContainerConfigProto(ctx context.Context, appId *big.Int) (*AppMetadata, error) {
+	configKey := datastore.NewKey(fmt.Sprintf("container-config-%s", appId.String()))
+	configData, err := s.Datastore.Get(ctx, configKey)
 	if err != nil {
 		return nil, err
 	}
 
-	err = task.Start(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to start task: %w", err)
+	var protoConfig pbapp.AppMetadata
+	if err := proto.Unmarshal(configData, &protoConfig); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal container config: %w", err)
 	}
 
-	log.Printf("App %s started successfully: Container ID: %s", app.Name, container.ID())
-
-	app.Status, err = s.GetContainerStatus(ctx, appId)
-	if err != nil {
-		return nil, err
-	}
-
-	return app, nil
+	return ProtoToAppMetadata(&protoConfig), nil
 }
 
 // Stops and removes the container for the specified app.
@@ -425,7 +366,7 @@ func (s *Service) RegisterSignProtocol() error {
 // func (s *Service) RequestSignature(ctx context.Context, peerID peer.ID, protoID protocol.ID, usage *ResourceUsage) (string, error) {
 // 	// Open a stream to the remote peer
 // 	stream, err := s.PeerHost.NewStream(ctx, peerID, protoID)
-// 	if err != nil {
+// 	if (err != nil) {
 // 		return "", fmt.Errorf("failed to open stream to peer %s: %w", peerID, err)
 // 	}
 // 	defer stream.Close()
@@ -990,4 +931,33 @@ func (s *Service) GetContainerIP(ctx context.Context, appId *big.Int) (string, e
 	ip := "127.0.0.1" // Replace with actual logic to retrieve the IP address
 
 	return ip, nil
+}
+
+func (s *Service) SaveContainerConfig(ctx context.Context, appId *big.Int, config ContainerConfig) error {
+	configData, err := json.Marshal(config)
+	if err != nil {
+		return fmt.Errorf("failed to marshal container config: %w", err)
+	}
+
+	configKey := datastore.NewKey(fmt.Sprintf("container-config-%s", appId.String()))
+	if err := s.Datastore.Put(ctx, configKey, configData); err != nil {
+		return fmt.Errorf("failed to save container config: %w", err)
+	}
+
+	return nil
+}
+
+func (s *Service) SaveContainerConfigProto(ctx context.Context, appId *big.Int, config ContainerConfig) error {
+	protoConfig := AppMetadataToProto(&AppMetadata{ContainerConfig: config})
+	configData, err := proto.Marshal(protoConfig)
+	if err != nil {
+		return fmt.Errorf("failed to marshal container config: %w", err)
+	}
+
+	configKey := datastore.NewKey(fmt.Sprintf("container-config-%s", appId.String()))
+	if err := s.Datastore.Put(ctx, configKey, configData); err != nil {
+		return fmt.Errorf("failed to save container config: %w", err)
+	}
+
+	return nil
 }

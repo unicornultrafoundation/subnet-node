@@ -151,7 +151,7 @@ func (api *AppAPI) GetUsage(ctx context.Context, appId hexutil.Big) (*resourceUs
 	return convertToUsageResult(usage), nil
 }
 
-func (api *AppAPI) RegisterApp(ctx context.Context, name, symbol, peerId, metadata string, budget, maxNodes, minCpu, minGpu, minMemory, minUploadBandwidth, minDownloadBandwidth, pricePerCpu, pricePerGpu, pricePerMemoryGB, pricePerStorageGB, pricePerBandwidthGB *hexutil.Big) (common.Hash, error) {
+func (api *AppAPI) RegisterApp(ctx context.Context, name, symbol, peerId string, metadata apps.AppMetadata, budget, maxNodes, minCpu, minGpu, minMemory, minUploadBandwidth, minDownloadBandwidth, pricePerCpu, pricePerGpu, pricePerMemoryGB, pricePerStorageGB, pricePerBandwidthGB *hexutil.Big) (common.Hash, error) {
 	txHash, err := api.appService.RegisterApp(ctx, name, symbol, peerId, metadata, budget.ToInt(), maxNodes.ToInt(), minCpu.ToInt(), minGpu.ToInt(), minMemory.ToInt(), minUploadBandwidth.ToInt(), minDownloadBandwidth.ToInt(), pricePerCpu.ToInt(), pricePerGpu.ToInt(), pricePerMemoryGB.ToInt(), pricePerStorageGB.ToInt(), pricePerBandwidthGB.ToInt())
 	if err != nil {
 		return common.Hash{}, err
