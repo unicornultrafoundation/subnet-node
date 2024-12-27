@@ -146,7 +146,15 @@ func (api *AppAPI) RemoveApp(ctx context.Context, appId hexutil.Big) (*appResult
 func (api *AppAPI) GetUsage(ctx context.Context, appId hexutil.Big) (*resourceUsageResult, error) {
 	usage, err := api.appService.GetUsage(ctx, appId.ToInt())
 	if err != nil {
-		return nil, err
+		return &resourceUsageResult{
+			UsedCpu:           &hexutil.Big{},
+			UsedGpu:           &hexutil.Big{},
+			UsedMemory:        &hexutil.Big{},
+			UsedStorage:       &hexutil.Big{},
+			UsedUploadBytes:   &hexutil.Big{},
+			UsedDownloadBytes: &hexutil.Big{},
+			Duration:          &hexutil.Big{},
+		}, nil
 	}
 	return convertToUsageResult(usage), nil
 }
