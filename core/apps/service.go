@@ -20,7 +20,6 @@ import (
 	"github.com/containerd/typeurl/v2"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/gogo/protobuf/proto"
 	"github.com/ipfs/go-datastore"
 	p2phost "github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
@@ -31,8 +30,8 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/config"
 	"github.com/unicornultrafoundation/subnet-node/core/account"
 	"github.com/unicornultrafoundation/subnet-node/p2p"
-	pusage "github.com/unicornultrafoundation/subnet-node/proto/subnet/usage"
 	pbapp "github.com/unicornultrafoundation/subnet-node/proto/subnet/app"
+	pusage "github.com/unicornultrafoundation/subnet-node/proto/subnet/usage"
 )
 
 var log = logrus.New().WithField("service", "apps")
@@ -932,20 +931,6 @@ func (s *Service) GetContainerIP(ctx context.Context, appId *big.Int) (string, e
 	ip := "127.0.0.1" // Replace with actual logic to retrieve the IP address
 
 	return ip, nil
-}
-
-func (s *Service) SaveContainerConfig(ctx context.Context, appId *big.Int, config ContainerConfig) error {
-	configData, err := json.Marshal(config)
-	if err != nil {
-		return fmt.Errorf("failed to marshal container config: %w", err)
-	}
-
-	configKey := datastore.NewKey(fmt.Sprintf("container-config-%s", appId.String()))
-	if err := s.Datastore.Put(ctx, configKey, configData); err != nil {
-		return fmt.Errorf("failed to save container config: %w", err)
-	}
-
-	return nil
 }
 
 func (s *Service) SaveContainerConfigProto(ctx context.Context, appId *big.Int, config ContainerConfig) error {
