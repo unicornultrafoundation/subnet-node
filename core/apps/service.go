@@ -57,13 +57,14 @@ type Service struct {
 }
 
 // Initializes the Service with Ethereum and containerd clients.
-func New(cfg *config.C, P2P *p2p.P2P, dataStore datastore.Datastore) *Service {
+func New(cfg *config.C, P2P *p2p.P2P, dataStore datastore.Datastore, accountService *account.AccountService) *Service {
 	return &Service{
-		P2P:        P2P,
-		cfg:        cfg,
-		Datastore:  dataStore,
-		IsProvider: cfg.GetBool("provider.enable", false),
-		stopChan:   make(chan struct{}),
+		P2P:            P2P,
+		cfg:            cfg,
+		Datastore:      dataStore,
+		IsProvider:     cfg.GetBool("provider.enable", false),
+		stopChan:       make(chan struct{}),
+		accountService: accountService,
 	}
 }
 
