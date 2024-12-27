@@ -59,8 +59,19 @@ func WithCORSHeaders(corsOptions CORSOptions, next http.Handler) http.Handler {
 }
 
 // WithAuthorization adds authorization based on the provided config.
-func WithAuth(authConfig map[string]Authorization, next http.Handler) http.Handler {
+func WithAuth(cfg *config.C, next http.Handler) http.Handler {
+	authConfig := parseAuthorizationsFromConfig(cfg)
+	cfg.RegisterReloadCallback(func(cfg *config.C) {
+		if cfg.HasChanged("api.authorizations") {
+			authConfig = parseAuthorizationsFromConfig(cfg)
+		}
+	})
+
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if len(authConfig) == 0 {
+			next.ServeHTTP(w, r)
+			return
+		}
 
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" {

@@ -34,7 +34,14 @@ func (api *ConfigAPI) Update(ctx context.Context, newConfig map[string]interface
 	}
 	defer file.Close()
 
-	return yaml.NewEncoder(file).Encode(cfg.Settings)
+	err = yaml.NewEncoder(file).Encode(cfg.Settings)
+
+	if err != nil {
+		return err
+	}
+
+	cfg.ReloadConfig()
+	return nil
 }
 
 // Get retrieves the current configuration.

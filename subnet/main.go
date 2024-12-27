@@ -73,6 +73,10 @@ func run(repoPath string, configPath *string) error {
 		return err
 	}
 
+	// node.Repo.Config().RegisterReloadCallback(func(c *config.C) {
+	// 	node.Close()
+	// })
+
 	// collect long-running errors and block for shutdown
 	var errs error
 	for err := range merge(apiErrc) {
@@ -179,6 +183,7 @@ func serveHTTPApi(cfg *config.C, node *core.SubnetNode) (<-chan error, error) {
 		corehttp.RoutingOption(),
 		corehttp.P2PProxyOption(),
 		corehttp.APIOption(),
+		corehttp.StatusOption(), // Add the StatusOption here
 	}
 
 	errc := make(chan error)

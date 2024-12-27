@@ -4,6 +4,7 @@ import (
 	"net"
 	"net/http"
 
+	"github.com/unicornultrafoundation/subnet-node/config"
 	"github.com/unicornultrafoundation/subnet-node/core"
 	"github.com/unicornultrafoundation/subnet-node/core/coreapi"
 	"github.com/unicornultrafoundation/subnet-node/internal/api"
@@ -12,6 +13,10 @@ import (
 
 // APIPath is the path at which the API is mounted.
 const APIPath = "/"
+
+func handleAPIAuth(cfg *config.C, smux *http.ServeMux, server *rpc.Server) {
+	smux.Handle(APIPath, WithAuth(cfg, server))
+}
 
 func APIOption() ServeOption {
 	return func(n *core.SubnetNode, _ net.Listener, smux *http.ServeMux) (*http.ServeMux, error) {
@@ -25,20 +30,13 @@ func APIOption() ServeOption {
 		server := rpc.NewServer()
 		server.RegisterName("swarm", api.NewSwarmAPI(capi.Swarm()))
 		server.RegisterName("routing", api.NewRoutingAPI(capi.Routing()))
-		server.RegisterName("node", api.NewNodeAPI(capi.Resource()))
+		server.RegisterName("node", api.NewNodeAPI(capi.Resource(), n))
 		server.RegisterName("pubsub", api.NewPubsubAPI(capi.PubSub()))
 		server.RegisterName("app", api.NewAppAPI(n.Apps))
 		server.RegisterName("uptime", api.NewUptimeAPI(n.Uptime))
 		server.RegisterName("account", api.NewAccountAPI(n.Account))
 		server.RegisterName("config", api.NewConfigAPI(n.Repo))
-
-		if cfg.GetString("api.authorizations", "") != "" {
-			authorizations := parseAuthorizationsFromConfig(cfg)
-			smux.Handle(APIPath, WithAuth(authorizations, server))
-		} else {
-			smux.Handle(APIPath, server)
-		}
-
+		handleAPIAuth(cfg, smux, server)
 		return smux, nil
 	}
 }
