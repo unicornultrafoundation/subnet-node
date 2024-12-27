@@ -7,6 +7,7 @@ import (
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
+	pusage "github.com/unicornultrafoundation/subnet-node/proto/subnet/usage"
 	pbapp "github.com/unicornultrafoundation/subnet-node/proto/subnet/app"
 )
 
@@ -216,6 +217,50 @@ func fillDefaultResourceUsage(usage *ResourceUsage) *ResourceUsage {
 		usage.Duration = big.NewInt(0)
 	}
 	return usage
+}
+
+// Helper function to convert []byte to *big.Int
+func bytesToBigInt(data []byte) *big.Int {
+	if data == nil {
+		return nil // Handle nil bytes
+	}
+	return new(big.Int).SetBytes(data)
+}
+
+func convertUsageFromProto(usage pusage.ResourceUsage) *ResourceUsage {
+	return &ResourceUsage{
+		AppId:             bytesToBigInt(usage.AppId),
+		SubnetId:          bytesToBigInt(usage.SubnetId),
+		UsedCpu:           bytesToBigInt(usage.UsedCpu),
+		UsedGpu:           bytesToBigInt(usage.UsedGpu),
+		UsedMemory:        bytesToBigInt(usage.UsedMemory),
+		UsedStorage:       bytesToBigInt(usage.UsedStorage),
+		UsedUploadBytes:   bytesToBigInt(usage.UsedUploadBytes),
+		UsedDownloadBytes: bytesToBigInt(usage.UsedDownloadBytes),
+		Duration:          bytesToBigInt(usage.Duration),
+	}
+}
+
+// Helper function to convert *big.Int to []byte
+func bigIntToBytes(value *big.Int) []byte {
+	if value == nil {
+		return nil // Handle nil big.Int
+	}
+	return value.Bytes()
+}
+
+func convertUsageToProto(usage ResourceUsage) *pusage.ResourceUsage {
+	return &pusage.ResourceUsage{
+		AppId:             bigIntToBytes(usage.AppId),
+		SubnetId:          bigIntToBytes(usage.SubnetId),
+		UsedCpu:           bigIntToBytes(usage.UsedCpu),
+		UsedGpu:           bigIntToBytes(usage.UsedGpu),
+		UsedMemory:        bigIntToBytes(usage.UsedMemory),
+		UsedStorage:       bigIntToBytes(usage.UsedStorage),
+		UsedUploadBytes:   bigIntToBytes(usage.UsedUploadBytes),
+		UsedDownloadBytes: bigIntToBytes(usage.UsedDownloadBytes),
+		Duration:          bigIntToBytes(usage.Duration),
+	}
 }
 
 func ProtoToApp(protoApp *pbapp.App) (*App, error) {
