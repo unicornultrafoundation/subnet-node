@@ -34,7 +34,14 @@ func (api *ConfigAPI) Update(ctx context.Context, newConfig map[string]interface
 	}
 	defer file.Close()
 
-	return yaml.NewEncoder(file).Encode(cfg.Settings)
+	err = yaml.NewEncoder(file).Encode(cfg.Settings)
+
+	if err != nil {
+		return err
+	}
+
+	cfg.ReloadConfig()
+	return nil
 }
 
 // Get retrieves the current configuration.
@@ -76,7 +83,9 @@ func convertToMapStringInterface(input map[interface{}]interface{}) map[string]i
 
 func hideSensitiveKeys(settings map[string]interface{}) {
 	for key, value := range settings {
-		if strings.Contains(strings.ToLower(key), "privkey") || strings.Contains(strings.ToLower(key), "private_key") {
+		if strings.Contains(strings.ToLower(key), "privkey") ||
+			strings.Contains(strings.ToLower(key), "private_key") ||
+			strings.Contains(strings.ToLower(key), "auth_secret") {
 			settings[key] = "HIDDEN"
 		} else if nestedMap, ok := value.(map[string]interface{}); ok {
 			hideSensitiveKeys(nestedMap)

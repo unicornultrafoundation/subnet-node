@@ -32,7 +32,6 @@ func NewAccountService(cfg *config.C) (*AccountService, error) {
 	privateKeyHex := cfg.GetString("account.private_key", "")
 	rpcURL := cfg.GetString("account.rpc", config.DefaultRPC)
 	chainID := big.NewInt(int64(cfg.GetInt("account.chainid", 2484)))
-
 	privateKey, err := crypto.HexToECDSA(privateKeyHex)
 	if err != nil {
 		return nil, err
@@ -61,13 +60,29 @@ func NewAccountService(cfg *config.C) (*AccountService, error) {
 		return nil, err
 	}
 
-	return &AccountService{
+	s := &AccountService{
 		privateKey:        privateKey,
 		client:            client,
 		chainID:           chainID,
 		subnetRegistry:    subnetRegistry,
 		subnetAppRegistry: subnetAppRegistry,
-	}, nil
+	}
+	s.registerReloadCallback(cfg)
+	return s, nil
+}
+
+func (s *AccountService) registerReloadCallback(cfg *config.C) {
+	cfg.RegisterReloadCallback(func(cfg *config.C) {
+		if cfg.HasChanged("account.private_key") {
+			privateKeyHex := cfg.GetString("account.private_key", "")
+			privateKey, err := crypto.HexToECDSA(privateKeyHex)
+			if err != nil {
+				log.WithError(err).Error("failed to reload private key")
+				return
+			}
+			s.privateKey = privateKey
+		}
+	})
 }
 
 // GetClient retrieves the ethclient instance

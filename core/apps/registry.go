@@ -2,6 +2,8 @@ package apps
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"math/big"
 
@@ -9,15 +11,24 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 )
 
-func (s *Service) RegisterApp(ctx context.Context, name, symbol, peerId, metadata string, budget, maxNodes, minCpu, minGpu, minMemory, minUploadBandwidth, minDownloadBandwidth, pricePerCpu, pricePerGpu, pricePerMemoryGB, pricePerStorageGB, pricePerBandwidthGB *big.Int) (common.Hash, error) {
+func (s *Service) RegisterApp(ctx context.Context, name, symbol, peerId string, metadata AppMetadata, budget, maxNodes, minCpu, minGpu, minMemory, minUploadBandwidth, minDownloadBandwidth, pricePerCpu, pricePerGpu, pricePerMemoryGB, pricePerStorageGB, pricePerBandwidthGB *big.Int) (common.Hash, error) {
 	// Create a new transactor
 	key, err := s.accountService.NewKeyedTransactor()
 	if err != nil {
 		return common.Hash{}, err
 	}
 
+	key.Value = budget
+
+	metadataBytes, err := json.Marshal(metadata)
+
+	if err != nil {
+		return common.Hash{}, err
+	}
+
+	metadataBase64 := base64.StdEncoding.EncodeToString(metadataBytes)
 	// Call the CreateApp function from the ABI
-	tx, err := s.subnetAppRegistry.CreateApp(key, name, symbol, peerId, budget, maxNodes, minCpu, minGpu, minMemory, minUploadBandwidth, minDownloadBandwidth, pricePerCpu, pricePerGpu, pricePerMemoryGB, pricePerStorageGB, pricePerBandwidthGB, metadata)
+	tx, err := s.subnetAppRegistry.CreateApp(key, name, symbol, peerId, budget, maxNodes, minCpu, minGpu, minMemory, minUploadBandwidth, minDownloadBandwidth, pricePerCpu, pricePerGpu, pricePerMemoryGB, pricePerStorageGB, pricePerBandwidthGB, metadataBase64)
 	if err != nil {
 		return common.Hash{}, err
 	}

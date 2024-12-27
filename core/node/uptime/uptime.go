@@ -88,11 +88,6 @@ func (s *UptimeService) Stop() error {
 	if s.cancel != nil {
 		s.cancel()
 	}
-	if s.Topic != nil {
-		if err := s.Topic.Close(); err != nil {
-			return fmt.Errorf("failed to close topic: %w", err)
-		}
-	}
 	log.Println("UptimeService stopped")
 	return nil
 }
@@ -156,11 +151,12 @@ func (s *UptimeService) startListening(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done(): // Exit if the context is cancelled
+			sub.Cancel()
 			return
 		default:
 			msg, err := sub.Next(ctx)
 			if err != nil {
-				log.Errorf("Error reading message: %v", err)
+				log.Debugf("Error reading message: %v", err)
 				continue
 			}
 

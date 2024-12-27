@@ -3,20 +3,19 @@ package apps
 import (
 	"context"
 	"crypto/ecdsa"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
 	"strings"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
+
 	wstats "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/stats"
 	v1 "github.com/containerd/cgroups/v3/cgroup1/stats"
 	v2 "github.com/containerd/cgroups/v3/cgroup2/stats"
 	"github.com/containerd/containerd"
-	"github.com/containerd/containerd/cio"
 	"github.com/containerd/containerd/namespaces"
-	"github.com/containerd/containerd/oci"
 	"github.com/containerd/errdefs"
 	"github.com/containerd/typeurl/v2"
 	"github.com/ethereum/go-ethereum/common"
@@ -31,6 +30,8 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/config"
 	"github.com/unicornultrafoundation/subnet-node/core/account"
 	"github.com/unicornultrafoundation/subnet-node/p2p"
+	pbapp "github.com/unicornultrafoundation/subnet-node/proto/subnet/app"
+	pusage "github.com/unicornultrafoundation/subnet-node/proto/subnet/usage"
 )
 
 var log = logrus.New().WithField("service", "apps")
@@ -57,13 +58,14 @@ type Service struct {
 }
 
 // Initializes the Service with Ethereum and containerd clients.
-func New(cfg *config.C, P2P *p2p.P2P, dataStore datastore.Datastore) *Service {
+func New(cfg *config.C, P2P *p2p.P2P, dataStore datastore.Datastore, accountService *account.AccountService) *Service {
 	return &Service{
-		P2P:        P2P,
-		cfg:        cfg,
-		Datastore:  dataStore,
-		IsProvider: cfg.GetBool("provider.enable", false),
-		stopChan:   make(chan struct{}),
+		P2P:            P2P,
+		cfg:            cfg,
+		Datastore:      dataStore,
+		IsProvider:     cfg.GetBool("provider.enable", false),
+		stopChan:       make(chan struct{}),
+		accountService: accountService,
 	}
 }
 
@@ -140,6 +142,10 @@ func (s *Service) Start(ctx context.Context) error {
 		}
 
 		//go s.StartRewardClaimer(ctx)
+
+		// Update latest resource usage into datastore
+		s.updateAllRunningContainersUsage(ctx)
+		go s.startMonitoringUsage(ctx)
 	}
 
 	log.Info("Subnet Apps Service started successfully.")
@@ -164,6 +170,20 @@ func (s *Service) Stop(ctx context.Context) error {
 	return nil
 }
 
+func (s *Service) startMonitoringUsage(ctx context.Context) {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done(): // Exit if the context is cancelled
+			return
+		case <-ticker.C: // On every tick, update all latest running containers's resource usages
+			s.updateAllRunningContainersUsage(ctx)
+		}
+	}
+}
+
 func (s *Service) GetAppCount() (*big.Int, error) {
 	return s.subnetAppRegistry.AppCount(nil)
 }
@@ -177,7 +197,8 @@ func (s *Service) GetApps(ctx context.Context, start *big.Int, end *big.Int) ([]
 
 	apps := make([]*App, len(subnetApps))
 	for i, subnetApp := range subnetApps {
-		appId := start.Add(start, big.NewInt(int64(i)))
+		appId := big.NewInt(0)
+		appId.Add(start, big.NewInt(int64(i)))
 		appStatus, err := s.GetContainerStatus(ctx, appId)
 		if err != nil {
 			return nil, err
@@ -201,6 +222,12 @@ func (s *Service) GetApp(ctx context.Context, appId *big.Int) (*App, error) {
 
 	app := convertToApp(subnetApp, appId, appStatus)
 
+	// Retrieve metadata from datastore if available
+	metadata, err := s.GetContainerConfigProto(ctx, appId)
+	if err == nil {
+		app.Metadata.ContainerConfig = metadata.ContainerConfig
+	}
+
 	if appStatus == Running {
 		ip, err := s.GetContainerIP(ctx, appId)
 		if err != nil {
@@ -212,86 +239,19 @@ func (s *Service) GetApp(ctx context.Context, appId *big.Int) (*App, error) {
 	return app, nil
 }
 
-// Starts a container for the specified app using containerd.
-func (s *Service) RunApp(ctx context.Context, appId *big.Int, envVars map[string]string) (*App, error) {
-	// Set the namespace for the container
-	ctx = namespaces.WithNamespace(ctx, NAMESPACE)
-
-	// Retrieve app details from the Ethereum contract
-	app, err := s.GetApp(ctx, appId)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch app details: %w", err)
-	}
-
-	if app.Status != NotFound {
-		return app, nil
-	}
-
-	imageName := app.Metadata.ContainerConfig.Image
-	if !strings.Contains(imageName, "/") {
-		imageName = "docker.io/library/" + imageName
-	}
-
-	// Pull the image for the app
-	image, err := s.containerdClient.Pull(ctx, imageName, containerd.WithPullUnpack)
-	if err != nil {
-		return nil, fmt.Errorf("failed to pull image: %w", err)
-	}
-
-	// Create a new container for the app
-	specOpts := []oci.SpecOpts{
-		oci.WithImageConfig(image),
-	}
-
-	// Add environment variables to the container spec
-	for key, value := range envVars {
-		specOpts = append(specOpts, oci.WithEnv([]string{fmt.Sprintf("%s=%s", key, value)}))
-	}
-
-	// Add volume to the container spec
-	// specOpts = append(specOpts, oci.WithMounts([]specs.Mount{
-	// 	{
-	// 		Source:      "/host/path",
-	// 		Destination: "/container/path",
-	// 		Type:        "bind",
-	// 		Options:     []string{"rbind", "rw"},
-	// 	},
-	// }))
-
-	container, err := s.containerdClient.NewContainer(
-		ctx,
-		app.ContainerId(),
-		containerd.WithNewSnapshot(app.ContainerId()+"-snapshot", image),
-		containerd.WithNewSpec(specOpts...),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create container: %w", err)
-	}
-
-	// Start the container
-	task, err := container.NewTask(ctx, cio.NewCreator(cio.WithStdio))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create task: %w", err)
-	}
-
-	_, err = task.Wait(ctx)
+func (s *Service) GetContainerConfigProto(ctx context.Context, appId *big.Int) (*AppMetadata, error) {
+	configKey := datastore.NewKey(fmt.Sprintf("container-config-%s", appId.String()))
+	configData, err := s.Datastore.Get(ctx, configKey)
 	if err != nil {
 		return nil, err
 	}
 
-	err = task.Start(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to start task: %w", err)
+	var protoConfig pbapp.AppMetadata
+	if err := proto.Unmarshal(configData, &protoConfig); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal container config: %w", err)
 	}
 
-	log.Printf("App %s started successfully: Container ID: %s", app.Name, container.ID())
-
-	app.Status, err = s.GetContainerStatus(ctx, appId)
-	if err != nil {
-		return nil, err
-	}
-
-	return app, nil
+	return ProtoToAppMetadata(&protoConfig), nil
 }
 
 // Stops and removes the container for the specified app.
@@ -406,7 +366,7 @@ func (s *Service) RegisterSignProtocol() error {
 // func (s *Service) RequestSignature(ctx context.Context, peerID peer.ID, protoID protocol.ID, usage *ResourceUsage) (string, error) {
 // 	// Open a stream to the remote peer
 // 	stream, err := s.PeerHost.NewStream(ctx, peerID, protoID)
-// 	if err != nil {
+// 	if (err != nil) {
 // 		return "", fmt.Errorf("failed to open stream to peer %s: %w", peerID, err)
 // 	}
 // 	defer stream.Close()
@@ -522,86 +482,29 @@ func (s *Service) RegisterSignProtocol() error {
 // 	return int64(duration), nil // Return duration in seconds
 // }
 
-// func (s *Service) RegisterNode(ctx context.Context, appId *big.Int) (common.Hash, error) {
-// 	// Get the nonce for the account
-// 	fromAddress := crypto.PubkeyToAddress(s.privKey.PublicKey)
-// 	nonce, err := s.ethClient.PendingNonceAt(ctx, fromAddress)
-// 	if err != nil {
-// 		return common.Hash{}, fmt.Errorf("failed to get account nonce: %w", err)
-// 	}
-// 	// Get the suggested gas price
-// 	gasPrice, err := s.ethClient.SuggestGasPrice(ctx)
-// 	if err != nil {
-// 		return common.Hash{}, fmt.Errorf("failed to get suggested gas price: %w", err)
-// 	}
-// 	toAddress := common.HexToAddress(s.cfg.GetString("apps.subnet_app_registry_contract", config.DefaultSubnetAppRegistryContract))
-// 	// Estimate the gas limit
-// 	msg := ethereum.CallMsg{
-// 		From: fromAddress,
-// 		To:   &toAddress,
-// 	}
-// 	gasLimit, err := s.ethClient.EstimateGas(ctx, msg)
-// 	if err != nil {
-// 		return common.Hash{}, fmt.Errorf("failed to estimate gas: %w", err)
-// 	}
-// 	// Sign the transaction
-// 	chainID, err := s.ethClient.NetworkID(ctx)
-// 	if err != nil {
-// 		return common.Hash{}, fmt.Errorf("failed to get chain ID: %w", err)
-// 	}
-// 	signFn := func(from common.Address, rawTx *types.Transaction) (*types.Transaction, error) {
-// 		signedTx, err := types.SignTx(rawTx, types.NewEIP155Signer(chainID), s.privKey)
-// 		return signedTx, err
-// 	}
-// 	opt := bind.TransactOpts{
-// 		From:     fromAddress,
-// 		Nonce:    big.NewInt(int64(nonce)),
-// 		Value:    big.NewInt(0),
-// 		GasPrice: gasPrice,
-// 		GasLimit: gasLimit,
-// 		Context:  ctx,
-// 		Signer:   signFn,
-// 	}
-// 	tx, err := s.subnetAppRegistry.RegisterNode(&opt, &s.subnetID, appId)
-// 	if err != nil {
-// 		return common.Hash{}, err
-// 	}
-// 	return tx.Hash(), nil
-// }
-
 func (s *Service) GetUsage(ctx context.Context, appId *big.Int) (*ResourceUsage, error) {
+	return s.getUsageFromExternal(ctx, appId)
+}
+
+func (s *Service) getUsage(ctx context.Context, appId *big.Int) (*ResourceUsage, *uint32, error) {
 	// Load the container
 	ctx = namespaces.WithNamespace(ctx, NAMESPACE)
 	app := App{ID: appId}
 	container, err := s.containerdClient.LoadContainer(ctx, app.ContainerId())
 	if err != nil {
-		return nil, fmt.Errorf("failed to load container: %w", err)
+		return nil, nil, fmt.Errorf("failed to load container: %w", err)
 	}
 
 	// Get the task
 	task, err := container.Task(ctx, nil)
 	if err != nil {
-		if errdefs.IsNotFound(err) {
-			// No task found; container is likely shut down
-			return s.getUsageFromExternal(ctx, appId)
-		}
-		return nil, fmt.Errorf("failed to get task for container: %w", err)
-	}
-
-	status, err := s.GetContainerStatus(ctx, appId)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get container status: %w", err)
-	}
-	if status != Running {
-		// Unable to get current container's metrics
-		// Get usage from external instead
-		s.getUsageFromExternal(ctx, appId)
+		return nil, nil, fmt.Errorf("failed to get task for container: %w", err)
 	}
 
 	// Get metrics
 	metric, err := task.Metrics(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get metrics: %w", err)
+		return nil, nil, fmt.Errorf("failed to get metrics: %w", err)
 	}
 
 	var data interface{}
@@ -613,16 +516,17 @@ func (s *Service) GetUsage(ctx context.Context, appId *big.Int) (*ResourceUsage,
 	case typeurl.Is(metric.Data, (*wstats.Statistics)(nil)):
 		data = &wstats.Statistics{}
 	default:
-		return nil, errors.New("cannot convert metric data to cgroups.Metrics or windows.Statistics")
+		return nil, nil, errors.New("cannot convert metric data to cgroups.Metrics or windows.Statistics")
 	}
 	if err := typeurl.UnmarshalTo(metric.Data, data); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// Lấy thông tin Network I/O theo PID
-	proc, err := process.NewProcess(int32(task.Pid()))
+	pid := task.Pid()
+	proc, err := process.NewProcess(int32(pid))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	var totalRxBytes uint64 = 0
@@ -630,7 +534,7 @@ func (s *Service) GetUsage(ctx context.Context, appId *big.Int) (*ResourceUsage,
 	netIO, err := proc.NetIOCounters(false)
 
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	for _, stat := range netIO {
@@ -642,22 +546,22 @@ func (s *Service) GetUsage(ctx context.Context, appId *big.Int) (*ResourceUsage,
 	var storageBytes int64 = 0
 	info, err := container.Info(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get container info: %v", err)
+		return nil, nil, fmt.Errorf("failed to get container info: %v", err)
 	}
 	snapshotKey := info.SnapshotKey
 	snapshotService := s.containerdClient.SnapshotService(info.Snapshotter)
 	snapshotUsage, err := snapshotService.Usage(ctx, snapshotKey)
 	if err != nil {
 		if errdefs.IsNotFound(err) {
-			return nil, fmt.Errorf("snapshot %s not found: %v", snapshotKey, err)
+			return nil, nil, fmt.Errorf("snapshot %s not found: %v", snapshotKey, err)
 		}
-		return nil, fmt.Errorf("failed to get snapshot usage: %v", err)
+		return nil, nil, fmt.Errorf("failed to get snapshot usage: %v", err)
 	}
 	storageBytes = snapshotUsage.Size
 
 	createTime, err := proc.CreateTime()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get process create time: %w", err)
+		return nil, nil, fmt.Errorf("failed to get process create time: %w", err)
 	}
 
 	now := time.Now().UnixMilli()
@@ -684,48 +588,244 @@ func (s *Service) GetUsage(ctx context.Context, appId *big.Int) (*ResourceUsage,
 		usage.UsedCpu = big.NewInt(int64(metrics.GetWindows().Processor.TotalRuntimeNS))
 		usage.UsedMemory = big.NewInt(int64(metrics.GetWindows().Memory.MemoryUsageCommitBytes))
 	default:
-		return nil, errors.New("unsupported metrics type")
+		return nil, nil, errors.New("unsupported metrics type")
 	}
 
 	// Optionally, calculate or set the duration if metrics provide a timestamp
 	// For example:
 	// usage.Duration = calculateDurationBasedOnMetrics(metrics)
 
-	return usage, nil
+	return usage, &pid, nil
 }
 
 func (s *Service) getUsageFromExternal(ctx context.Context, appId *big.Int) (*ResourceUsage, error) {
-	// Get usage from datastore
-	resourceUsageKey := datastore.NewKey(fmt.Sprintf("%s-%s", RESOURCE_USAGE_KEY, appId.String()))
-	updatedJsonData, err := s.Datastore.Get(ctx, resourceUsageKey)
-	if err == nil { // If the record exists in the datastore
-		var updatedData ResourceUsage
-		if err := json.Unmarshal(updatedJsonData, &updatedData); err == nil {
-			return &updatedData, nil
+	// Get usage from datastore first
+	// Get all pids had run the appId from usage metadata
+	usageMetadata, err := s.getUsageMetadata(ctx, appId)
+	if err == nil {
+		// Some records exist in the datastore
+		// Get all usages of the appId
+		totalUsage := &ResourceUsage{
+			UsedCpu:           big.NewInt(0),
+			UsedGpu:           big.NewInt(0),
+			UsedMemory:        big.NewInt(0),
+			UsedStorage:       big.NewInt(0),
+			UsedUploadBytes:   big.NewInt(0),
+			UsedDownloadBytes: big.NewInt(0),
+			Duration:          big.NewInt(0),
 		}
+
+		totalStorageRecord := big.NewInt(0)
+		for index, pid := range usageMetadata.Pids {
+			usage, err := s.getUsageFromStorage(ctx, appId, pid)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get resource usage from datastore for appId %s - pid %d: %v", appId.String(), pid, err)
+			}
+			usage = fillDefaultResourceUsage(usage)
+
+			// Aggregate the usage
+			totalUsage.UsedCpu.Add(totalUsage.UsedCpu, usage.UsedCpu)
+			totalUsage.UsedGpu.Add(totalUsage.UsedGpu, usage.UsedGpu)
+			totalUsage.UsedUploadBytes.Add(totalUsage.UsedUploadBytes, usage.UsedUploadBytes)
+			totalUsage.UsedDownloadBytes.Add(totalUsage.UsedDownloadBytes, usage.UsedDownloadBytes)
+			totalUsage.Duration.Add(totalUsage.Duration, usage.Duration)
+
+			if index < 5 {
+				// Only retrieve used memory/storage from <= 5 latest pid
+				totalUsage.UsedMemory.Add(totalUsage.UsedMemory, usage.UsedMemory)
+				totalUsage.UsedStorage.Add(totalUsage.UsedStorage, usage.UsedStorage)
+
+				totalStorageRecord.Add(totalStorageRecord, big.NewInt(1))
+			}
+		}
+
+		// Get average used memory/storage from <= 5 latest pid
+		totalUsage.UsedMemory.Div(totalUsage.UsedMemory, totalStorageRecord)
+		totalUsage.UsedStorage.Div(totalUsage.UsedStorage, totalStorageRecord)
+
+		return totalUsage, nil
 	}
 
 	// No record found from datastore
 	// Get usage from smart contract
 	usage, err := s.subnetAppRegistry.GetAppNode(nil, appId, &s.subnetID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get resource usage from smart contract for appId %s: %v", appId.String(), err)
+		return nil, fmt.Errorf("failed to get resource usage from datastore & smart contract for appId %s: %v", appId.String(), err)
 	}
 
 	return convertToResourceUsage(usage, appId, &s.subnetID), nil
 }
 
-// func (s *Service) updateUsage(ctx context.Context, appId *big.Int, usage *ResourceUsage) error {
-// 	resourceUsageData, err := json.Marshal(usage)
-// 	if err != nil {
-// 		return fmt.Errorf("failed to marshal resource usage for appId %s: %v", appId.String(), err)
-// 	}
-// 	resourceUsageKey := datastore.NewKey(fmt.Sprintf("%s-%s", RESOURCE_USAGE_KEY, appId.String()))
-// 	if err := s.Datastore.Put(ctx, resourceUsageKey, resourceUsageData); err != nil {
-// 		return fmt.Errorf("failed to update resource usage for appId %s: %v", appId.String(), err)
-// 	}
-// 	return nil
-// }
+// Get resource usage created by a specific pid for appId from datastore
+func (s *Service) getUsageFromStorage(ctx context.Context, appId *big.Int, pid uint32) (*ResourceUsage, error) {
+	resourceUsageKey := getUsageKey(appId, pid)
+	usageData, err := s.Datastore.Get(ctx, resourceUsageKey)
+
+	if err == nil { // If the record exists in the datastore
+		var usage pusage.ResourceUsage
+		if err := proto.Unmarshal(usageData, &usage); err == nil {
+			return convertUsageFromProto(usage), nil
+		}
+	}
+
+	return nil, fmt.Errorf("failed to get resource usage from datastore for appId %s: %v", appId.String(), err)
+}
+
+// Update resource usage created by a specific pid for appId to datastore
+func (s *Service) updateUsage(ctx context.Context, appId *big.Int, pid uint32, usage *ResourceUsage) error {
+	resourceUsageData, err := proto.Marshal(convertUsageToProto(*usage))
+	if err != nil {
+		return fmt.Errorf("failed to marshal resource usage for appId %s: %v", appId.String(), err)
+	}
+
+	resourceUsageKey := getUsageKey(appId, pid)
+	if err := s.Datastore.Put(ctx, resourceUsageKey, resourceUsageData); err != nil {
+		return fmt.Errorf("failed to update resource usage for appId %s: %v", appId.String(), err)
+	}
+	return nil
+}
+
+func (s *Service) updateAllRunningContainersUsage(ctx context.Context) error {
+	// Set the namespace for the containers
+	ctx = namespaces.WithNamespace(ctx, NAMESPACE)
+
+	// Fetch all running containers
+	containers, err := s.containerdClient.Containers(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to fetch running containers: %w", err)
+	}
+
+	// Iterate over each container and update its latest resource usage
+	for _, container := range containers {
+		// Extract appId from container ID
+		containerId := container.ID()
+		appIdStr := strings.TrimPrefix(containerId, "subnet-app-")
+		appId, ok := new(big.Int).SetString(appIdStr, 10)
+		if !ok {
+			return fmt.Errorf("invalid container ID: %s", containerId)
+		}
+
+		usage, pid, err := s.getUsage(ctx, appId)
+
+		if err != nil {
+			return fmt.Errorf("failed to get latest resource usage for appId %s: %v", appId.String(), err)
+		}
+
+		if pid == nil {
+			return fmt.Errorf("failed to get pid of appId %s: %v", appId.String(), err)
+		}
+
+		// Update usage metadata if the pid is new for appId
+		err = s.syncUsageMetadata(ctx, appId, *pid)
+		if err != nil {
+			return fmt.Errorf("failed to sync pid %d for appId %s: %v", *pid, appId.String(), err)
+		}
+
+		err = s.updateUsage(ctx, appId, *pid, usage)
+
+		if err != nil {
+			return fmt.Errorf("failed to update resource usage for container %s: %w", containerId, err)
+		}
+	}
+
+	return nil
+}
+
+func (s *Service) getUsageMetadata(ctx context.Context, appId *big.Int) (*pusage.ResourceUsageMetadata, error) {
+	usageMetadataKey := getUsageMetadataKey(appId)
+	usageMetadataBytes, err := s.Datastore.Get(ctx, usageMetadataKey)
+	if err != nil {
+		return nil, err
+	}
+
+	var usageMetadata pusage.ResourceUsageMetadata
+	err = proto.Unmarshal(usageMetadataBytes, &usageMetadata)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal usage metadata for appId %s: %w", appId.String(), err)
+	}
+
+	return &usageMetadata, nil
+}
+
+func (s *Service) updateUsageMetadata(ctx context.Context, appId *big.Int, usageMetadata *pusage.ResourceUsageMetadata) error {
+	usageMetadataBytes, err := proto.Marshal(usageMetadata)
+	if err != nil {
+		return fmt.Errorf("failed to marshal usage metadata for appId %s: %v", appId.String(), err)
+	}
+
+	usageMetadataKey := getUsageMetadataKey(appId)
+	if err := s.Datastore.Put(ctx, usageMetadataKey, usageMetadataBytes); err != nil {
+		return fmt.Errorf("failed to update usage metadata for appId %s: %v", appId.String(), err)
+	}
+
+	return nil
+}
+
+// Check if an `appId` already has an usage metadata or not
+func (s *Service) hasUsageMetadata(ctx context.Context, appId *big.Int) (bool, error) {
+	usageMetadataKey := getUsageMetadataKey(appId)
+	hasUsageMetadata, err := s.Datastore.Has(ctx, usageMetadataKey)
+
+	if err != nil {
+		return false, fmt.Errorf("failed to check usage metadata for appId %s: %w", appId.String(), err)
+	}
+
+	return hasUsageMetadata, nil
+}
+
+// Check if a pid creating resource usage of an `appId` has existed or not
+func (s *Service) hasUsageKey(ctx context.Context, appId *big.Int, pid uint32) (bool, error) {
+	resourceUsageKey := getUsageKey(appId, pid)
+	hasUsage, err := s.Datastore.Has(ctx, resourceUsageKey)
+
+	if err != nil {
+		return false, fmt.Errorf("failed to check resource usage for appId %s: %w", appId.String(), err)
+	}
+
+	return hasUsage, nil
+}
+
+// Add new pid into usage metadata if it hadn't run appId before
+func (s *Service) syncUsageMetadata(ctx context.Context, appId *big.Int, pid uint32) error {
+	hasPid, err := s.hasUsageKey(ctx, appId, pid)
+	if err != nil {
+		return fmt.Errorf("failed to check pid for appId %s: %w", appId.String(), err)
+	}
+
+	if hasPid {
+		return nil
+	}
+
+	hasUsageMetadata, err := s.hasUsageMetadata(ctx, appId)
+	if err != nil {
+		return fmt.Errorf("failed to check usage metadata for appId %s: %w", appId.String(), err)
+	}
+
+	usageMetadata := &pusage.ResourceUsageMetadata{
+		Pids: *new([]uint32),
+	}
+	if hasUsageMetadata {
+		usageMetadata, err = s.getUsageMetadata(ctx, appId)
+		if err != nil {
+			return fmt.Errorf("failed to get pidList for appId %s: %w", appId.String(), err)
+		}
+	}
+
+	// Append new pid on the top of `Pids` list
+	usageMetadata.Pids = append([]uint32{pid}, usageMetadata.Pids...)
+
+	return s.updateUsageMetadata(ctx, appId, usageMetadata)
+}
+
+// Get key to retrieve resource usage from datastore created by a pid which had run appId
+func getUsageKey(appId *big.Int, pid uint32) datastore.Key {
+	return datastore.NewKey(fmt.Sprintf("%s-%s-%d", RESOURCE_USAGE_KEY, appId.String(), pid))
+}
+
+// Get key to retrieve resource usage metadata of an appId
+func getUsageMetadataKey(appId *big.Int) datastore.Key {
+	return datastore.NewKey(fmt.Sprintf("%s-%s", RESOURCE_USAGE_KEY, appId.String()))
+}
 
 // // GetAppNode retrieves the details of an AppNode by its ID or similar identifier.
 // func (s *Service) GetAppNode(ctx context.Context, appId big.Int, subnetId big.Int) (ResourceUsage, error) {
@@ -831,4 +931,19 @@ func (s *Service) GetContainerIP(ctx context.Context, appId *big.Int) (string, e
 	ip := "127.0.0.1" // Replace with actual logic to retrieve the IP address
 
 	return ip, nil
+}
+
+func (s *Service) SaveContainerConfigProto(ctx context.Context, appId *big.Int, config ContainerConfig) error {
+	protoConfig := AppMetadataToProto(&AppMetadata{ContainerConfig: config})
+	configData, err := proto.Marshal(protoConfig)
+	if err != nil {
+		return fmt.Errorf("failed to marshal container config: %w", err)
+	}
+
+	configKey := datastore.NewKey(fmt.Sprintf("container-config-%s", appId.String()))
+	if err := s.Datastore.Put(ctx, configKey, configData); err != nil {
+		return fmt.Errorf("failed to save container config: %w", err)
+	}
+
+	return nil
 }

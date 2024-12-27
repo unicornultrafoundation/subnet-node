@@ -33,8 +33,21 @@ type Authorization struct {
 	AllowedMethods []string
 }
 
+// parseCORSFromConfig parses CORS options from the provided config.
+func parseCORSFromConfig(cfg *config.C) CORSOptions {
+	return CORSOptions{
+		AllowedOrigins: cfg.GetStringSlice("api.cors.allowed_origins", []string{"*"}),
+		AllowedMethods: cfg.GetStringSlice("api.cors.allowed_methods", []string{"*"}),
+		AllowedHeaders: cfg.GetStringSlice("api.cors.allowed_headers", []string{"*"}),
+	}
+}
+
 // WithCORS adds CORS headers to the response.
-func WithCORSHeaders(corsOptions CORSOptions, next http.Handler) http.Handler {
+func WithCORSHeaders(cfg *config.C, next http.Handler) http.Handler {
+	corsOptions := parseCORSFromConfig(cfg)
+	cfg.RegisterReloadCallback(func(cfg *config.C) {
+		corsOptions = parseCORSFromConfig(cfg)
+	})
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
 		if origin != "" {
@@ -59,8 +72,17 @@ func WithCORSHeaders(corsOptions CORSOptions, next http.Handler) http.Handler {
 }
 
 // WithAuthorization adds authorization based on the provided config.
-func WithAuth(authConfig map[string]Authorization, next http.Handler) http.Handler {
+func WithAuth(cfg *config.C, next http.Handler) http.Handler {
+	authConfig := parseAuthorizationsFromConfig(cfg)
+	cfg.RegisterReloadCallback(func(cfg *config.C) {
+		authConfig = parseAuthorizationsFromConfig(cfg)
+	})
+
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if len(authConfig) == 0 {
+			next.ServeHTTP(w, r)
+			return
+		}
 
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" {

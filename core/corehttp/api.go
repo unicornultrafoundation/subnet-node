@@ -25,20 +25,13 @@ func APIOption() ServeOption {
 		server := rpc.NewServer()
 		server.RegisterName("swarm", api.NewSwarmAPI(capi.Swarm()))
 		server.RegisterName("routing", api.NewRoutingAPI(capi.Routing()))
-		server.RegisterName("node", api.NewNodeAPI(capi.Resource()))
+		server.RegisterName("node", api.NewNodeAPI(capi.Resource(), n))
 		server.RegisterName("pubsub", api.NewPubsubAPI(capi.PubSub()))
 		server.RegisterName("app", api.NewAppAPI(n.Apps))
 		server.RegisterName("uptime", api.NewUptimeAPI(n.Uptime))
 		server.RegisterName("account", api.NewAccountAPI(n.Account))
 		server.RegisterName("config", api.NewConfigAPI(n.Repo))
-
-		if cfg.GetString("api.authorizations", "") != "" {
-			authorizations := parseAuthorizationsFromConfig(cfg)
-			smux.Handle(APIPath, WithAuth(authorizations, server))
-		} else {
-			smux.Handle(APIPath, server)
-		}
-
+		smux.Handle(APIPath, WithCORSHeaders(cfg, WithAuth(cfg, server)))
 		return smux, nil
 	}
 }
