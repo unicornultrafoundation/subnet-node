@@ -14,9 +14,7 @@ import (
 	v1 "github.com/containerd/cgroups/v3/cgroup1/stats"
 	v2 "github.com/containerd/cgroups/v3/cgroup2/stats"
 	"github.com/containerd/containerd"
-	"github.com/containerd/containerd/cio"
 	"github.com/containerd/containerd/namespaces"
-	"github.com/containerd/containerd/oci"
 	"github.com/containerd/errdefs"
 	"github.com/containerd/typeurl/v2"
 	"github.com/ethereum/go-ethereum/common"
@@ -226,88 +224,6 @@ func (s *Service) GetApp(ctx context.Context, appId *big.Int) (*App, error) {
 			return nil, err
 		}
 		app.IP = ip
-	}
-
-	return app, nil
-}
-
-// Starts a container for the specified app using containerd.
-func (s *Service) RunApp(ctx context.Context, appId *big.Int, envVars map[string]string) (*App, error) {
-	// Set the namespace for the container
-	ctx = namespaces.WithNamespace(ctx, NAMESPACE)
-
-	// Retrieve app details from the Ethereum contract
-	app, err := s.GetApp(ctx, appId)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch app details: %w", err)
-	}
-
-	if app.Status != NotFound {
-		return app, nil
-	}
-
-	imageName := app.Metadata.ContainerConfig.Image
-	if !strings.Contains(imageName, "/") {
-		imageName = "docker.io/library/" + imageName
-	}
-
-	// Pull the image for the app
-	image, err := s.containerdClient.Pull(ctx, imageName, containerd.WithPullUnpack)
-	if err != nil {
-		return nil, fmt.Errorf("failed to pull image: %w", err)
-	}
-
-	// Create a new container for the app
-	specOpts := []oci.SpecOpts{
-		oci.WithImageConfig(image),
-	}
-
-	// Add environment variables to the container spec
-	for key, value := range envVars {
-		specOpts = append(specOpts, oci.WithEnv([]string{fmt.Sprintf("%s=%s", key, value)}))
-	}
-
-	// Add volume to the container spec
-	// specOpts = append(specOpts, oci.WithMounts([]specs.Mount{
-	// 	{
-	// 		Source:      "/host/path",
-	// 		Destination: "/container/path",
-	// 		Type:        "bind",
-	// 		Options:     []string{"rbind", "rw"},
-	// 	},
-	// }))
-
-	container, err := s.containerdClient.NewContainer(
-		ctx,
-		app.ContainerId(),
-		containerd.WithNewSnapshot(app.ContainerId()+"-snapshot", image),
-		containerd.WithNewSpec(specOpts...),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create container: %w", err)
-	}
-
-	// Start the container
-	task, err := container.NewTask(ctx, cio.NewCreator(cio.WithStdio))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create task: %w", err)
-	}
-
-	_, err = task.Wait(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	err = task.Start(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to start task: %w", err)
-	}
-
-	log.Printf("App %s started successfully: Container ID: %s", app.Name, container.ID())
-
-	app.Status, err = s.GetContainerStatus(ctx, appId)
-	if err != nil {
-		return nil, err
 	}
 
 	return app, nil
