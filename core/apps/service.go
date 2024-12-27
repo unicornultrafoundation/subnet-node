@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
+
 	wstats "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/stats"
 	v1 "github.com/containerd/cgroups/v3/cgroup1/stats"
 	v2 "github.com/containerd/cgroups/v3/cgroup2/stats"
@@ -29,6 +31,7 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/config"
 	"github.com/unicornultrafoundation/subnet-node/core/account"
 	"github.com/unicornultrafoundation/subnet-node/p2p"
+	pbapp "github.com/unicornultrafoundation/subnet-node/proto/subnet/app"
 )
 
 var log = logrus.New().WithField("service", "apps")
@@ -218,6 +221,12 @@ func (s *Service) GetApp(ctx context.Context, appId *big.Int) (*App, error) {
 
 	app := convertToApp(subnetApp, appId, appStatus)
 
+	// Retrieve metadata from datastore if available
+	metadata, err := s.GetContainerConfigProto(ctx, appId)
+	if err == nil {
+		app.Metadata.ContainerConfig = metadata.ContainerConfig
+	}
+
 	if appStatus == Running {
 		ip, err := s.GetContainerIP(ctx, appId)
 		if err != nil {
@@ -227,6 +236,21 @@ func (s *Service) GetApp(ctx context.Context, appId *big.Int) (*App, error) {
 	}
 
 	return app, nil
+}
+
+func (s *Service) GetContainerConfigProto(ctx context.Context, appId *big.Int) (*AppMetadata, error) {
+	configKey := datastore.NewKey(fmt.Sprintf("container-config-%s", appId.String()))
+	configData, err := s.Datastore.Get(ctx, configKey)
+	if err != nil {
+		return nil, err
+	}
+
+	var protoConfig pbapp.AppMetadata
+	if err := proto.Unmarshal(configData, &protoConfig); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal container config: %w", err)
+	}
+
+	return ProtoToAppMetadata(&protoConfig), nil
 }
 
 // Stops and removes the container for the specified app.
@@ -341,7 +365,7 @@ func (s *Service) RegisterSignProtocol() error {
 // func (s *Service) RequestSignature(ctx context.Context, peerID peer.ID, protoID protocol.ID, usage *ResourceUsage) (string, error) {
 // 	// Open a stream to the remote peer
 // 	stream, err := s.PeerHost.NewStream(ctx, peerID, protoID)
-// 	if err != nil {
+// 	if (err != nil) {
 // 		return "", fmt.Errorf("failed to open stream to peer %s: %w", peerID, err)
 // 	}
 // 	defer stream.Close()
@@ -900,4 +924,33 @@ func (s *Service) GetContainerIP(ctx context.Context, appId *big.Int) (string, e
 	ip := "127.0.0.1" // Replace with actual logic to retrieve the IP address
 
 	return ip, nil
+}
+
+func (s *Service) SaveContainerConfig(ctx context.Context, appId *big.Int, config ContainerConfig) error {
+	configData, err := json.Marshal(config)
+	if err != nil {
+		return fmt.Errorf("failed to marshal container config: %w", err)
+	}
+
+	configKey := datastore.NewKey(fmt.Sprintf("container-config-%s", appId.String()))
+	if err := s.Datastore.Put(ctx, configKey, configData); err != nil {
+		return fmt.Errorf("failed to save container config: %w", err)
+	}
+
+	return nil
+}
+
+func (s *Service) SaveContainerConfigProto(ctx context.Context, appId *big.Int, config ContainerConfig) error {
+	protoConfig := AppMetadataToProto(&AppMetadata{ContainerConfig: config})
+	configData, err := proto.Marshal(protoConfig)
+	if err != nil {
+		return fmt.Errorf("failed to marshal container config: %w", err)
+	}
+
+	configKey := datastore.NewKey(fmt.Sprintf("container-config-%s", appId.String()))
+	if err := s.Datastore.Put(ctx, configKey, configData); err != nil {
+		return fmt.Errorf("failed to save container config: %w", err)
+	}
+
+	return nil
 }

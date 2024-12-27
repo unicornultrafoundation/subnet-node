@@ -10,7 +10,6 @@ import (
 	"github.com/containerd/containerd/cio"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/oci"
-	"github.com/opencontainers/runtime-spec/specs-go"
 )
 
 // Starts a container for the specified app using containerd.
@@ -28,6 +27,8 @@ func (s *Service) RunApp(ctx context.Context, appId *big.Int, envVars map[string
 		return app, nil
 	}
 
+	app.Metadata.ContainerConfig.Env = envVars
+
 	imageName := app.Metadata.ContainerConfig.Image
 	if !strings.Contains(imageName, "/") {
 		imageName = "docker.io/library/" + imageName
@@ -42,9 +43,8 @@ func (s *Service) RunApp(ctx context.Context, appId *big.Int, envVars map[string
 	// Create a new container for the app
 	specOpts := []oci.SpecOpts{
 		oci.WithImageConfig(image),
-		oci.WithHostNamespace(specs.NetworkNamespace), // Use host network namespace
-		oci.WithHostHostsFile,                         // Use host's /etc/hosts
-		oci.WithHostResolvconf,                        // Use host's /etc/resolv.conf
+		//oci.WithHostHostsFile,  // Use host's /etc/hosts
+		//oci.WithHostResolvconf, // Use host's /etc/resolv.conf
 	}
 
 	// Add environment variables to the container spec
@@ -88,11 +88,23 @@ func (s *Service) RunApp(ctx context.Context, appId *big.Int, envVars map[string
 		return nil, fmt.Errorf("failed to start task: %w", err)
 	}
 
-	log.Printf("App %s started successfully: Container ID: %s", app.Name, container.ID())
+	// Ensure the container has an IP address assigned using CNI
+	ip, err := s.GetContainerIP(ctx, appId)
+	if err != nil || ip == "" {
+		return nil, fmt.Errorf("failed to get container IP: %w", err)
+	}
+
+	log.Printf("App %s started successfully: Container ID: %s, IP: %s", app.Name, container.ID(), ip)
 
 	app.Status, err = s.GetContainerStatus(ctx, appId)
 	if err != nil {
 		return nil, err
+	}
+
+	// Save container configuration to datastore using proto
+	err = s.SaveContainerConfigProto(ctx, appId, app.Metadata.ContainerConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to save container config: %w", err)
 	}
 
 	return app, nil

@@ -1,0 +1,87 @@
+syntax = "proto3";
+
+package subnet.app;
+
+import "google/protobuf/wrappers.proto";
+
+message App {
+  string id = 1;
+  string peer_id = 2;
+  string owner = 3;
+  string name = 4;
+  string symbol = 5;
+  string budget = 6;
+  string spent_budget = 7;
+  string max_nodes = 8;
+  string min_cpu = 9;
+  string min_gpu = 10;
+  string min_memory = 11;
+  string min_upload_bandwidth = 12;
+  string min_download_bandwidth = 13;
+  string node_count = 14;
+  string price_per_cpu = 15;
+  string price_per_gpu = 16;
+  string price_per_memory_gb = 17;
+  string price_per_storage_gb = 18;
+  string price_per_bandwidth_gb = 19;
+  string status = 20;
+  ResourceUsage usage = 21;
+  AppMetadata metadata = 22;
+  string ip = 23;
+}
+
+message ResourceUsage {
+  string app_id = 1;
+  string subnet_id = 2;
+  string used_cpu = 3;
+  string used_gpu = 4;
+  string used_memory = 5;
+  string used_storage = 6;
+  string used_upload_bytes = 7;
+  string used_download_bytes = 8;
+  string duration = 9;
+}
+
+message AppMetadata {
+  AppInfo app_info = 1;
+  ContainerConfig container_config = 2;
+  ContactInfo contact_info = 3;
+}
+
+message AppInfo {
+  string name = 1;
+  string description = 2;
+  string logo = 3;
+  string banner = 4;
+  string website = 5;
+}
+
+message ContainerConfig {
+  string image = 1;
+  repeated string command = 2;
+  map<string, string> env = 3;
+  Resources resources = 4;
+  repeated Port ports = 5;
+  repeated Volume volumes = 6;
+}
+
+message Resources {
+  string cpu = 1;
+  string memory = 2;
+  string storage = 3;
+}
+
+message Port {
+  int32 container_port = 1;
+  string protocol = 2;
+}
+
+message Volume {
+  string name = 1;
+  string mount_path = 2;
+}
+
+message ContactInfo {
+  string email = 1;
+  string github = 2;
+}
