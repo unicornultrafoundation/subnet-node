@@ -4,7 +4,6 @@ import (
 	"net"
 	"net/http"
 
-	"github.com/unicornultrafoundation/subnet-node/config"
 	"github.com/unicornultrafoundation/subnet-node/core"
 	"github.com/unicornultrafoundation/subnet-node/core/coreapi"
 	"github.com/unicornultrafoundation/subnet-node/internal/api"
@@ -13,10 +12,6 @@ import (
 
 // APIPath is the path at which the API is mounted.
 const APIPath = "/"
-
-func handleAPIAuth(cfg *config.C, smux *http.ServeMux, server *rpc.Server) {
-	smux.Handle(APIPath, WithAuth(cfg, server))
-}
 
 func APIOption() ServeOption {
 	return func(n *core.SubnetNode, _ net.Listener, smux *http.ServeMux) (*http.ServeMux, error) {
@@ -36,7 +31,7 @@ func APIOption() ServeOption {
 		server.RegisterName("uptime", api.NewUptimeAPI(n.Uptime))
 		server.RegisterName("account", api.NewAccountAPI(n.Account))
 		server.RegisterName("config", api.NewConfigAPI(n.Repo))
-		handleAPIAuth(cfg, smux, server)
+		smux.Handle(APIPath, WithCORSHeaders(cfg, WithAuth(cfg, server)))
 		return smux, nil
 	}
 }
