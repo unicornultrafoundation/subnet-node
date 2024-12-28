@@ -145,27 +145,6 @@ func (s *Service) GetAppCount() (*big.Int, error) {
 	return s.subnetAppRegistry.AppCount(nil)
 }
 
-// Retrieves a list of apps from the Ethereum contract and checks their container status.
-func (s *Service) GetApps(ctx context.Context, start *big.Int, end *big.Int) ([]*App, error) {
-	subnetApps, err := s.subnetAppRegistry.ListApps(nil, start, end)
-	if err != nil {
-		return nil, err
-	}
-
-	apps := make([]*App, len(subnetApps))
-	for i, subnetApp := range subnetApps {
-		appId := big.NewInt(0)
-		appId.Add(start, big.NewInt(int64(i)))
-		appStatus, err := s.GetContainerStatus(ctx, appId)
-		if err != nil {
-			return nil, err
-		}
-
-		apps[i] = convertToApp(subnetApp, appId, appStatus)
-	}
-	return apps, nil
-}
-
 func (s *Service) GetApp(ctx context.Context, appId *big.Int) (*App, error) {
 	subnetApp, err := s.subnetAppRegistry.Apps(nil, appId)
 	if err != nil {
