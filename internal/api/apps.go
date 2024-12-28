@@ -216,3 +216,11 @@ func (api *AppAPI) GetAllUsage(ctx context.Context) (*resourceUsageResult, error
 	}
 	return convertToUsageResult(usage), nil
 }
+
+func (api *AppAPI) CreateNode(ctx context.Context, name string, nftId hexutil.Big, metadata string) (common.Hash, error) {
+	txHash, err := api.appService.CreateNode(ctx, name, metadata, nftId.ToInt())
+	if err != nil {
+		return common.Hash{}, err
+	}
+	return txHash, nil
+}
