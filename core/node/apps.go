@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/ipfs/go-datastore"
+	p2phost "github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/unicornultrafoundation/subnet-node/config"
 	"github.com/unicornultrafoundation/subnet-node/core/account"
@@ -12,8 +13,8 @@ import (
 	"go.uber.org/fx"
 )
 
-func AppService(lc fx.Lifecycle, cfg *config.C, P2P *p2p.P2P, dataStore datastore.Datastore, acc *account.AccountService, peerId peer.ID) *apps.Service {
-	srv := apps.New(peerId, cfg, P2P, dataStore, acc)
+func AppService(lc fx.Lifecycle, cfg *config.C, P2P *p2p.P2P, dataStore datastore.Datastore, acc *account.AccountService, peerId peer.ID, peerHost p2phost.Host) *apps.Service {
+	srv := apps.New(peerHost, peerId, cfg, P2P, dataStore, acc)
 	lc.Append(fx.Hook{
 		OnStop: func(ctx context.Context) error {
 			return srv.Stop(ctx)
