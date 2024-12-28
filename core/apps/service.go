@@ -2,7 +2,6 @@ package apps
 
 import (
 	"context"
-	"crypto/ecdsa"
 	"errors"
 	"fmt"
 	"math/big"
@@ -18,7 +17,6 @@ import (
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/errdefs"
 	"github.com/containerd/typeurl/v2"
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ipfs/go-datastore"
 	p2phost "github.com/libp2p/go-libp2p/core/host"
@@ -29,6 +27,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/config"
 	"github.com/unicornultrafoundation/subnet-node/core/account"
+	"github.com/unicornultrafoundation/subnet-node/core/contracts"
 	"github.com/unicornultrafoundation/subnet-node/p2p"
 	pbapp "github.com/unicornultrafoundation/subnet-node/proto/subnet/app"
 	pusage "github.com/unicornultrafoundation/subnet-node/proto/subnet/usage"
@@ -38,92 +37,48 @@ var log = logrus.New().WithField("service", "apps")
 
 const NAMESPACE = "subnet-apps"
 const PROTOCOL_ID = protocol.ID("subnet-apps")
-const RESOURCE_USAGE_KEY = "resource-usage"
+const RESOURCE_USAGE_KEY = "resource-usage-v2"
 
 type Service struct {
 	peerId            peer.ID
 	IsProvider        bool
 	cfg               *config.C
-	privKey           *ecdsa.PrivateKey
 	ethClient         *ethclient.Client
 	containerdClient  *containerd.Client
 	P2P               *p2p.P2P
 	PeerHost          p2phost.Host `optional:"true"` // the network host (server+client)
 	subnetID          big.Int
 	stopChan          chan struct{} // Channel to stop background tasks
-	subnetAppRegistry *SubnetAppRegistry
-	subnetRegistry    *SubnetRegistry
+	subnetAppRegistry *contracts.SubnetAppRegistry
+	subnetRegistry    *contracts.SubnetRegistry
 	accountService    *account.AccountService
 	Datastore         datastore.Datastore // Datastore for storing resource usage
 }
 
 // Initializes the Service with Ethereum and containerd clients.
-func New(cfg *config.C, P2P *p2p.P2P, dataStore datastore.Datastore, accountService *account.AccountService) *Service {
+func New(peerId peer.ID, cfg *config.C, P2P *p2p.P2P, dataStore datastore.Datastore, accountService *account.AccountService) *Service {
 	return &Service{
-		P2P:            P2P,
-		cfg:            cfg,
-		Datastore:      dataStore,
-		IsProvider:     cfg.GetBool("provider.enable", false),
-		stopChan:       make(chan struct{}),
-		accountService: accountService,
+		peerId:            peerId,
+		P2P:               P2P,
+		cfg:               cfg,
+		Datastore:         dataStore,
+		IsProvider:        cfg.GetBool("provider.enable", false),
+		stopChan:          make(chan struct{}),
+		accountService:    accountService,
+		ethClient:         accountService.GetClient(),
+		subnetAppRegistry: accountService.SubnetAppRegistry(),
+		subnetRegistry:    accountService.SubnetRegistry(),
 	}
-}
-
-func (s *Service) SubnetRegistry() *SubnetRegistry {
-	return s.subnetRegistry
 }
 
 func (s *Service) Start(ctx context.Context) error {
-	// Log that the service is starting
-	// log.Info("Starting Subnet Apps Service...")
-	var err error
-
-	hexKey := s.cfg.GetString("wallet.private_key", "")
-	if hexKey != "" {
-		s.privKey, err = PrivateKeyFromHex(hexKey)
-		if err != nil {
-			return err
-		}
-	}
-
-	peerId := s.cfg.GetString("identity.peer_id", "")
-	if peerId != "" {
-		s.peerId = peer.ID(peerId)
-	}
-
 	// Register the P2P protocol for signing
-	err = s.RegisterSignProtocol()
-	if err != nil {
+	if err := s.RegisterSignProtocol(); err != nil {
 		return fmt.Errorf("failed to register signing protocol: %w", err)
-	}
-
-	// Connect to Ethereum RPC
-	s.ethClient, err = ethclient.Dial(s.cfg.GetString("apps.rpc", config.DefaultRPC))
-	if err != nil {
-		return fmt.Errorf("failed to connect to Ethereum node: %v", err)
-	}
-
-	s.subnetAppRegistry, err = NewSubnetAppRegistry(
-		common.HexToAddress(s.cfg.GetString("apps.subnet_app_registry_contract", config.DefaultSubnetAppRegistryContract)),
-		s.ethClient,
-	)
-
-	if err != nil {
-		return err
-	}
-
-	s.subnetRegistry, err = NewSubnetRegistry(
-		common.HexToAddress(s.cfg.GetString("apps.subnet_registry_contract", config.DefaultSubnetRegistryCOntract)),
-		s.ethClient,
-	)
-
-	if err != nil {
-		return err
 	}
 
 	if s.IsProvider {
 		subnetID, err := s.GetSubnetIDFromPeerID(ctx)
-
 		if err != nil {
 			return fmt.Errorf("error connecting to containerd: %v", err)
 		}
@@ -144,7 +99,9 @@ func (s *Service) Start(ctx context.Context) error {
 		//go s.StartRewardClaimer(ctx)
 
 		// Update latest resource usage into datastore
-		s.updateAllRunningContainersUsage(ctx)
+		if err := s.updateAllRunningContainersUsage(ctx); err != nil {
+			return err
+		}
 		go s.startMonitoringUsage(ctx)
 	}
 
@@ -186,27 +143,6 @@ func (s *Service) startMonitoringUsage(ctx context.Context) {
 
 func (s *Service) GetAppCount() (*big.Int, error) {
 	return s.subnetAppRegistry.AppCount(nil)
-}
-
-// Retrieves a list of apps from the Ethereum contract and checks their container status.
-func (s *Service) GetApps(ctx context.Context, start *big.Int, end *big.Int) ([]*App, error) {
-	subnetApps, err := s.subnetAppRegistry.ListApps(nil, start, end)
-	if err != nil {
-		return nil, err
-	}
-
-	apps := make([]*App, len(subnetApps))
-	for i, subnetApp := range subnetApps {
-		appId := big.NewInt(0)
-		appId.Add(start, big.NewInt(int64(i)))
-		appStatus, err := s.GetContainerStatus(ctx, appId)
-		if err != nil {
-			return nil, err
-		}
-
-		apps[i] = convertToApp(subnetApp, appId, appStatus)
-	}
-	return apps, nil
 }
 
 func (s *Service) GetApp(ctx context.Context, appId *big.Int) (*App, error) {
@@ -650,7 +586,7 @@ func (s *Service) getUsageFromExternal(ctx context.Context, appId *big.Int) (*Re
 	// Get usage from smart contract
 	usage, err := s.subnetAppRegistry.GetAppNode(nil, appId, &s.subnetID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get resource usage from datastore & smart contract for appId %s: %v", appId.String(), err)
+		return nil, fmt.Errorf("failed to get resource usage from datastore & smart contract for appId %s:%s %v", appId.String(), s.subnetID.String(), err)
 	}
 
 	return convertToResourceUsage(usage, appId, &s.subnetID), nil
@@ -706,7 +642,6 @@ func (s *Service) updateAllRunningContainersUsage(ctx context.Context) error {
 		}
 
 		usage, pid, err := s.getUsage(ctx, appId)
-
 		if err != nil {
 			return fmt.Errorf("failed to get latest resource usage for appId %s: %v", appId.String(), err)
 		}
@@ -720,7 +655,6 @@ func (s *Service) updateAllRunningContainersUsage(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("failed to sync pid %d for appId %s: %v", *pid, appId.String(), err)
 		}
-
 		err = s.updateUsage(ctx, appId, *pid, usage)
 
 		if err != nil {
@@ -921,7 +855,7 @@ func getUsageMetadataKey(appId *big.Int) datastore.Key {
 // }
 
 func (s *Service) GetSubnetIDFromPeerID(ctx context.Context) (*big.Int, error) {
-	return s.subnetRegistry.PeerToSubnet(nil, string(s.peerId))
+	return s.subnetRegistry.PeerToSubnet(nil, s.peerId.String())
 }
 
 // Retrieves the IP address of a running container.

@@ -97,16 +97,34 @@ func NewAppAPI(appService *apps.Service) *AppAPI {
 	return &AppAPI{appService: appService}
 }
 
-func (api *AppAPI) GetAppCount(ctx context.Context) (*hexutil.Big, error) {
-	appCount, err := api.appService.GetAppCount()
-	if err != nil {
-		return nil, err
+func (api *AppAPI) GetAppCount(ctx context.Context, appFilter *apps.AppFilter) (*hexutil.Big, error) {
+	var appCount *big.Int
+	if appFilter == nil {
+		total, err := api.appService.GetAppCount()
+		if err != nil {
+			return nil, err
+		}
+		appCount = total
+	} else {
+		_, total, err := api.appService.GetApps(ctx, big.NewInt(0), big.NewInt(0), *appFilter)
+		if err != nil {
+			return nil, err
+		}
+		appCount = big.NewInt(int64(total))
 	}
+
 	return (*hexutil.Big)(appCount), nil
 }
 
-func (api *AppAPI) GetApps(ctx context.Context, start int64, end int64) ([]appResult, error) {
-	apps, err := api.appService.GetApps(ctx, big.NewInt(start+1), big.NewInt(end))
+func (api *AppAPI) GetApps(ctx context.Context, start int64, end int64, appFilter *apps.AppFilter) ([]appResult, error) {
+	if appFilter == nil {
+		appFilter = &apps.AppFilter{
+			Status: "",
+			Query:  "",
+		}
+	}
+
+	apps, _, err := api.appService.GetApps(ctx, big.NewInt(start), big.NewInt(end), *appFilter)
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +164,15 @@ func (api *AppAPI) RemoveApp(ctx context.Context, appId hexutil.Big) (*appResult
 func (api *AppAPI) GetUsage(ctx context.Context, appId hexutil.Big) (*resourceUsageResult, error) {
 	usage, err := api.appService.GetUsage(ctx, appId.ToInt())
 	if err != nil {
-		return nil, err
+		return &resourceUsageResult{
+			UsedCpu:           &hexutil.Big{},
+			UsedGpu:           &hexutil.Big{},
+			UsedMemory:        &hexutil.Big{},
+			UsedStorage:       &hexutil.Big{},
+			UsedUploadBytes:   &hexutil.Big{},
+			UsedDownloadBytes: &hexutil.Big{},
+			Duration:          &hexutil.Big{},
+		}, nil
 	}
 	return convertToUsageResult(usage), nil
 }

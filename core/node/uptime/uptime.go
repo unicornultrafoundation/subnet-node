@@ -18,7 +18,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/core/account"
-	"github.com/unicornultrafoundation/subnet-node/core/apps"
 	puptime "github.com/unicornultrafoundation/subnet-node/proto/subnet/uptime"
 	"github.com/unicornultrafoundation/subnet-node/repo"
 )
@@ -47,8 +46,7 @@ type UptimeService struct {
 	PubSub         *pubsub.PubSub // PubSub instance for communication
 	Topic          *pubsub.Topic  // Subscribed PubSub topic
 	cancel         context.CancelFunc
-	Datastore      repo.Datastore // Datastore for storing uptime records and proofs
-	Apps           *apps.Service
+	Datastore      repo.Datastore    // Datastore for storing uptime records and proofs
 	cache          map[string]string // Cache for peer-to-subnet mapping
 	AccountService *account.AccountService
 }
@@ -102,7 +100,7 @@ func (s *UptimeService) startPublishing(ctx context.Context) {
 		case <-ctx.Done(): // Exit if the context is cancelled
 			return
 		case <-ticker.C: // On every tick, send a heartbeat message
-			subnetID, err := s.Apps.SubnetRegistry().PeerToSubnet(nil, s.Identity.String())
+			subnetID, err := s.AccountService.SubnetRegistry().PeerToSubnet(nil, s.Identity.String())
 			if err != nil {
 				log.Errorf("failed to fetch subnet ID for peer %s: %v", s.Identity.String(), err)
 				continue
@@ -454,7 +452,7 @@ func (s *UptimeService) getSubnetID(peerID string) (string, error) {
 	}
 
 	// If not in the cache, fetch from SubnetRegistry
-	subnetID, err := s.Apps.SubnetRegistry().PeerToSubnet(nil, peerID)
+	subnetID, err := s.AccountService.SubnetRegistry().PeerToSubnet(nil, peerID)
 	if err != nil {
 		return "", fmt.Errorf("failed to fetch subnet ID for peer %s: %v", peerID, err)
 	}
@@ -469,7 +467,7 @@ func (s *UptimeService) getSubnetID(peerID string) (string, error) {
 }
 
 func (s *UptimeService) GetSubnetID() (*big.Int, error) {
-	return s.Apps.SubnetRegistry().PeerToSubnet(nil, s.Identity.String())
+	return s.AccountService.SubnetRegistry().PeerToSubnet(nil, s.Identity.String())
 }
 
 func (s *UptimeService) ClaimReward(ctx context.Context) error {
@@ -502,7 +500,7 @@ func (s *UptimeService) ClaimReward(ctx context.Context) error {
 
 	uptime.IsClaimed = true
 
-	_, err = s.Apps.SubnetRegistry().ClaimReward(key, subnetId, big.NewInt(uptime.Proof.Uptime), proofsBytes)
+	_, err = s.AccountService.SubnetRegistry().ClaimReward(key, subnetId, big.NewInt(uptime.Proof.Uptime), proofsBytes)
 	if err != nil {
 		return err
 	}

@@ -17,6 +17,10 @@ func (s *Service) RunApp(ctx context.Context, appId *big.Int, envVars map[string
 	// Set the namespace for the container
 	ctx = namespaces.WithNamespace(ctx, NAMESPACE)
 
+	if _, err := s.RegisterNode(ctx, appId); err != nil {
+		return nil, err
+	}
+
 	// Retrieve app details from the Ethereum contract
 	app, err := s.GetApp(ctx, appId)
 	if err != nil {

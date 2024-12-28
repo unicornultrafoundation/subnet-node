@@ -44,7 +44,15 @@ func (s *Service) GetAllRunningContainersUsage(ctx context.Context) (*ResourceUs
 
 		usage, err := s.GetUsage(ctx, appID)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get resource usage for container %s: %w", containerID, err)
+			usage = &ResourceUsage{
+				UsedCpu:           big.NewInt(0),
+				UsedGpu:           big.NewInt(0),
+				UsedMemory:        big.NewInt(0),
+				UsedStorage:       big.NewInt(0),
+				UsedUploadBytes:   big.NewInt(0),
+				UsedDownloadBytes: big.NewInt(0),
+				Duration:          big.NewInt(0),
+			}
 		}
 
 		// Aggregate the usage
