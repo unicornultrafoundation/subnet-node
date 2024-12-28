@@ -7,8 +7,9 @@ import (
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
-	pusage "github.com/unicornultrafoundation/subnet-node/proto/subnet/usage"
+	"github.com/unicornultrafoundation/subnet-node/core/contracts"
 	pbapp "github.com/unicornultrafoundation/subnet-node/proto/subnet/app"
+	pusage "github.com/unicornultrafoundation/subnet-node/proto/subnet/usage"
 )
 
 // ProcessStatus returns a human readable status for the Process representing its current status
@@ -142,7 +143,7 @@ func decodeAndParseMetadata(encodedMetadata string) (*AppMetadata, error) {
 	return &metadata, nil
 }
 
-func convertToApp(subnetApp SubnetAppRegistryApp, id *big.Int, status ProcessStatus) *App {
+func convertToApp(subnetApp contracts.SubnetAppRegistryApp, id *big.Int, status ProcessStatus) *App {
 	metadata, err := decodeAndParseMetadata(subnetApp.Metadata)
 	if err != nil {
 		fmt.Printf("Warning: Failed to parse metadata for app %s: %v\n", subnetApp.Name, err)
@@ -174,7 +175,7 @@ func convertToApp(subnetApp SubnetAppRegistryApp, id *big.Int, status ProcessSta
 	}
 }
 
-func convertToResourceUsage(usage SubnetAppRegistryAppNode, appId *big.Int, subnetId *big.Int) *ResourceUsage {
+func convertToResourceUsage(usage contracts.SubnetAppRegistryAppNode, appId *big.Int, subnetId *big.Int) *ResourceUsage {
 	return &ResourceUsage{
 		AppId:             appId,
 		SubnetId:          subnetId,

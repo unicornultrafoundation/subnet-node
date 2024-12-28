@@ -47,6 +47,10 @@ func (s *Service) RegisterApp(ctx context.Context, name, symbol, peerId string, 
 }
 
 func (s *Service) RegisterNode(ctx context.Context, appId *big.Int) (common.Hash, error) {
+	_, err := s.subnetAppRegistry.GetAppNode(nil, appId, &s.subnetID)
+	if err == nil {
+		return common.Hash{}, nil
+	}
 	// Get subnetId from peerId
 	subnetId, err := s.subnetRegistry.PeerToSubnet(nil, s.peerId.String())
 	if err != nil {
