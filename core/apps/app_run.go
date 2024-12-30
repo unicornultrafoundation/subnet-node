@@ -103,11 +103,5 @@ func (s *Service) RunApp(ctx context.Context, appId *big.Int) (*App, error) {
 		return nil, err
 	}
 
-	// Save container configuration to datastore using proto
-	err = s.SaveContainerConfigProto(ctx, appId, app.Metadata.ContainerConfig)
-	if err != nil {
-		return nil, fmt.Errorf("failed to save container config: %w", err)
-	}
-
 	return app, nil
 }
