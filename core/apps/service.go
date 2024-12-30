@@ -158,6 +158,11 @@ func (s *Service) GetApp(ctx context.Context, appId *big.Int) (*App, error) {
 
 	app := convertToApp(subnetApp, appId, appStatus)
 
+	appConfig, err := s.GetContainerConfigProto(ctx, appId)
+	if err == nil {
+		app.Metadata.ContainerConfig.Env = appConfig.ContainerConfig.Env
+	}
+
 	// Retrieve metadata from datastore if available
 	metadata, err := s.GetContainerConfigProto(ctx, appId)
 	if err == nil {

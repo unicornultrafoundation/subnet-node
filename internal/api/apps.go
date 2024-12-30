@@ -145,8 +145,8 @@ func (api *AppAPI) GetApp(ctx context.Context, appId hexutil.Big) (*appResult, e
 	return convertToAppResult(subnetApp), nil
 }
 
-func (api *AppAPI) RunApp(ctx context.Context, appId hexutil.Big, envVars map[string]string) (*appResult, error) {
-	subnetApp, err := api.appService.RunApp(ctx, appId.ToInt(), envVars)
+func (api *AppAPI) RunApp(ctx context.Context, appId hexutil.Big) (*appResult, error) {
+	subnetApp, err := api.appService.RunApp(ctx, appId.ToInt())
 	if err != nil {
 		return nil, err
 	}
@@ -223,4 +223,8 @@ func (api *AppAPI) CreateNode(ctx context.Context, name string, nftId hexutil.Bi
 		return common.Hash{}, err
 	}
 	return txHash, nil
+}
+
+func (api *AppAPI) UpdateAppConfig(ctx context.Context, appId hexutil.Big, cfg apps.ContainerConfig) error {
+	return api.appService.UpdateAppConfig(ctx, appId.ToInt(), cfg)
 }
