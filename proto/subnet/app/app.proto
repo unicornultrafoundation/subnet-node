@@ -85,3 +85,7 @@ message ContactInfo {
   string email = 1;
   string github = 2;
 }
+
+message SignatureResponse {
+  string signature = 1;
+}
