@@ -3,7 +3,6 @@ package account
 import (
 	"context"
 	"crypto/ecdsa"
-	"crypto/rand"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -204,12 +203,6 @@ func EthereumService(lc fx.Lifecycle, cfg *config.C) (*AccountService, error) {
 	return service, nil
 }
 
-func (s *AccountService) SignProtoData(data []byte) (string, error) {
-	signature, err := s.privateKey.Sign(rand.Reader, data, nil)
-
-	if err != nil {
-		return "", err
-	}
-
-	return string(signature), nil
+func (s *AccountService) Sign(data []byte) ([]byte, error) {
+	return crypto.Sign(data, s.privateKey)
 }

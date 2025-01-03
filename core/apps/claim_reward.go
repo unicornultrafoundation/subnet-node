@@ -2,23 +2,19 @@ package apps
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-	"io"
 	"time"
 
 	"github.com/containerd/containerd/namespaces"
 	"github.com/ethereum/go-ethereum/common/math"
-	ggio "github.com/gogo/protobuf/io"
-	"github.com/gogo/protobuf/proto"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
-	papp "github.com/unicornultrafoundation/subnet-node/proto/subnet/app"
-	pusage "github.com/unicornultrafoundation/subnet-node/proto/subnet/usage"
 )
 
 func (s *Service) startRewardClaimer(ctx context.Context) {
-	ticker := time.NewTicker(10 * time.Second) // Đặt thời gian định kỳ là 1 giờ
+	ticker := time.NewTicker(1 * time.Hour) // Đặt thời gian định kỳ là 1 giờ
 	defer ticker.Stop()
 
 	for {
@@ -73,7 +69,7 @@ func (s *Service) ClaimRewardsForAllRunningContainers(ctx context.Context) {
 		}
 
 		if len(signature) == 0 {
-			log.Errorf("Failed to get signature for container %s: %v", containerId, err)
+			log.Errorf("Failed to get signature for container %s. Peers num: %d", containerId, len(s.PeerHost.Network().Peers()))
 			continue
 		}
 
@@ -87,18 +83,19 @@ func (s *Service) ClaimRewardsForAllRunningContainers(ctx context.Context) {
 	}
 }
 
-func (s *Service) SignResourceUsage(usage *pusage.ResourceUsage) (string, error) {
-	typedData, err := s.ConvertUsageToTypedData(usage)
+func (s *Service) SignResourceUsage(usage *ResourceUsage) ([]byte, error) {
+	filledUsage := fillDefaultResourceUsage(usage)
+	typedData, err := s.ConvertUsageToTypedData(filledUsage)
 	if err != nil {
-		return "", fmt.Errorf("failed to get usage typed data: %v", err)
+		return []byte{}, fmt.Errorf("failed to get usage typed data: %v", err)
 	}
 
 	typedDataHash, _, err := TypedDataAndHash(*typedData)
 	if err != nil {
-		return "", fmt.Errorf("failed to hash typed data: %v", err)
+		return []byte{}, fmt.Errorf("failed to hash typed data: %v", err)
 	}
 
-	return s.accountService.SignProtoData(typedDataHash)
+	return s.accountService.Sign(typedDataHash)
 }
 
 func (s *Service) RequestSignature(ctx context.Context, peerID peer.ID, protoID protocol.ID, usage *ResourceUsage) (string, error) {
@@ -110,12 +107,12 @@ func (s *Service) RequestSignature(ctx context.Context, peerID peer.ID, protoID 
 	defer stream.Close()
 
 	// Send the resource usage data
-	if err := SendUsageProto(stream, convertUsageToProto(*usage)); err != nil {
+	if err := SendUsage(stream, usage); err != nil {
 		return "", fmt.Errorf("failed to send resource usage data: %w", err)
 	}
 
 	// Receive the signature response
-	response, err := ReceiveSignatureProto(stream)
+	response, err := ReceiveSignature(stream)
 	if err != nil {
 		return "", fmt.Errorf("failed to decode signature response: %w", err)
 	}
@@ -123,97 +120,77 @@ func (s *Service) RequestSignature(ctx context.Context, peerID peer.ID, protoID 
 	return response.Signature, nil
 }
 
-func SendUsageProto(s network.Stream, usage *pusage.ResourceUsage) error {
-	writer := ggio.NewFullWriter(s)
-	err := writer.WriteMsg(usage)
-
-	if err != nil {
+func SendUsage(s network.Stream, usage *ResourceUsage) error {
+	if err := json.NewEncoder(s).Encode(usage); err != nil {
 		s.Reset()
-		return err
+		return fmt.Errorf("failed to send resource usage data: %w", err)
 	}
+
 	return nil
 }
 
-func ReceiveUsageProto(s network.Stream) (*pusage.ResourceUsage, error) {
-	data := &pusage.ResourceUsage{}
-	buf, err := io.ReadAll(s)
-	if err != nil {
+func ReceiveUsage(s network.Stream) (*ResourceUsage, error) {
+	response := &ResourceUsage{}
+	if err := json.NewDecoder(s).Decode(&response); err != nil {
 		s.Reset()
-		return nil, fmt.Errorf("failed to receive usage proto: %v", err)
+		return nil, fmt.Errorf("failed to decode resource usage response: %w", err)
 	}
 
-	// unmarshal signature
-	err = proto.Unmarshal(buf, data)
-	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal usage proto: %v", err)
-	}
-
-	return data, nil
+	return response, nil
 }
 
-func ReceiveSignatureProto(s network.Stream) (*papp.SignatureResponse, error) {
-	data := &papp.SignatureResponse{}
-	buf, err := io.ReadAll(s)
-	if err != nil {
+func ReceiveSignature(s network.Stream) (*SignatureResponse, error) {
+	response := &SignatureResponse{}
+	if err := json.NewDecoder(s).Decode(&response); err != nil {
 		s.Reset()
-		return nil, fmt.Errorf("failed to receive signature proto: %v", err)
+		return nil, fmt.Errorf("failed to decode signature response: %w", err)
 	}
 
-	// unmarshal signature
-	err = proto.Unmarshal(buf, data)
-	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal signature proto: %v", err)
-	}
-
-	return data, nil
+	return response, nil
 }
 
-func (s *Service) ConvertUsageToTypedData(protoUsage *pusage.ResourceUsage) (*TypedData, error) {
+func (s *Service) ConvertUsageToTypedData(usage *ResourceUsage) (*TypedData, error) {
 	var domainType = []Type{
-		{Name: "verifyingContract", Type: "address"},
-		{Name: "version", Type: "string"},
 		{Name: "name", Type: "string"},
-		{Name: "chainId", Type: "unit256"},
+		{Name: "version", Type: "string"},
+		{Name: "chainId", Type: "uint256"},
+		{Name: "verifyingContract", Type: "address"},
 	}
 
-	version, err := s.subnetAppRegistry.Version(nil)
-	if err != nil {
-		return nil, err
-	}
 	chainID := math.HexOrDecimal256(*s.accountService.GetChainID())
 
 	usageTypedData := TypedData{
 		Types: Types{
 			"EIP712Domain": domainType,
 			"Usage": []Type{
-				{Name: "subnetId", Type: "bytes"},
-				{Name: "appId", Type: "bytes"},
-				{Name: "usedCpu", Type: "bytes"},
-				{Name: "usedGpu", Type: "bytes"},
-				{Name: "usedMemory", Type: "bytes"},
-				{Name: "usedStorage", Type: "bytes"},
-				{Name: "usedUploadBytes", Type: "bytes"},
-				{Name: "usedDownloadBytes", Type: "bytes"},
-				{Name: "duration", Type: "bytes"},
+				{Name: "subnetId", Type: "uint256"},
+				{Name: "appId", Type: "uint256"},
+				{Name: "usedCpu", Type: "uint256"},
+				{Name: "usedGpu", Type: "uint256"},
+				{Name: "usedMemory", Type: "uint256"},
+				{Name: "usedStorage", Type: "uint256"},
+				{Name: "usedUploadBytes", Type: "uint256"},
+				{Name: "usedDownloadBytes", Type: "uint256"},
+				{Name: "duration", Type: "uint256"},
 			},
 		},
 		Domain: TypedDataDomain{
 			Name:              "SubnetAppRegistry",
-			VerifyingContract: s.accountService.GetSubnetAppRegistryAddress(),
+			Version:           "1",
 			ChainId:           &chainID,
-			Version:           version,
+			VerifyingContract: s.accountService.GetSubnetAppRegistryAddress(),
 		},
-		PrimaryType: "ResourceUsage",
+		PrimaryType: "Usage",
 		Message: TypedDataMessage{
-			"AppId":             protoUsage.AppId,
-			"SubnetId":          protoUsage.SubnetId,
-			"UsedCpu":           protoUsage.UsedCpu,
-			"UsedGpu":           protoUsage.UsedGpu,
-			"UsedMemory":        protoUsage.UsedMemory,
-			"UsedStorage":       protoUsage.UsedStorage,
-			"UsedUploadBytes":   protoUsage.UsedUploadBytes,
-			"UsedDownloadBytes": protoUsage.UsedDownloadBytes,
-			"Duration":          protoUsage.Duration,
+			"subnetId":          usage.SubnetId,
+			"appId":             usage.AppId,
+			"usedCpu":           usage.UsedCpu,
+			"usedGpu":           usage.UsedGpu,
+			"usedMemory":        usage.UsedMemory,
+			"usedStorage":       usage.UsedStorage,
+			"usedUploadBytes":   usage.UsedUploadBytes,
+			"usedDownloadBytes": usage.UsedDownloadBytes,
+			"duration":          usage.Duration,
 		},
 	}
 	return &usageTypedData, nil

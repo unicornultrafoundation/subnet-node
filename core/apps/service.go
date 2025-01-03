@@ -268,19 +268,19 @@ func (s *Service) GetContainerStatus(ctx context.Context, appId *big.Int) (Proce
 func (s *Service) RegisterSignProtocol() error {
 	// Define the signing logic
 	signHandler := func(stream network.Stream) (string, error) {
-		usage, err := ReceiveUsageProto(stream)
+		usage, err := ReceiveUsage(stream)
 
 		if err != nil {
-			return "", fmt.Errorf("failed to receive usage proto: %w", err)
+			return "", fmt.Errorf("failed to receive resource usage: %w", err)
 		}
 
 		signature, err := s.SignResourceUsage(usage)
 
 		if err != nil {
-			return "", fmt.Errorf("failed to sign usage proto: %w", err)
+			return "", fmt.Errorf("failed to sign resource usage: %w", err)
 		}
 
-		return signature, nil
+		return string(signature), nil
 	}
 
 	// Create the listener for the signing protocol
