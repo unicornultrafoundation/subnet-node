@@ -20,12 +20,14 @@ var log = logrus.New().WithField("service", "account")
 
 // AccountService is a service to handle Ethereum transactions
 type AccountService struct {
-	privateKey        *ecdsa.PrivateKey
-	client            *ethclient.Client
-	chainID           *big.Int
-	subnetRegistry    *contracts.SubnetRegistry
-	subnetAppRegistry *contracts.SubnetAppRegistry
-	nftLicense        *contracts.ERC721
+	privateKey               *ecdsa.PrivateKey
+	client                   *ethclient.Client
+	chainID                  *big.Int
+	subnetRegistry           *contracts.SubnetRegistry
+	subnetRegistryAddress    string
+	subnetAppRegistry        *contracts.SubnetAppRegistry
+	subnetAppRegistryAddress string
+	nftLicense               *contracts.ERC721
 }
 
 // NewAccountService initializes a new AccountService
@@ -43,8 +45,9 @@ func NewAccountService(cfg *config.C) (*AccountService, error) {
 		return nil, err
 	}
 
+	subnetAppRegistryAddress := cfg.GetString("apps.subnet_app_registry_contract", config.DefaultSubnetAppRegistryContract)
 	subnetAppRegistry, err := contracts.NewSubnetAppRegistry(
-		common.HexToAddress(cfg.GetString("apps.subnet_app_registry_contract", config.DefaultSubnetAppRegistryContract)),
+		common.HexToAddress(subnetAppRegistryAddress),
 		client,
 	)
 
@@ -52,8 +55,9 @@ func NewAccountService(cfg *config.C) (*AccountService, error) {
 		return nil, err
 	}
 
+	subnetRegistryAddress := cfg.GetString("apps.subnet_registry_contract", config.DefaultSubnetRegistryCOntract)
 	subnetRegistry, err := contracts.NewSubnetRegistry(
-		common.HexToAddress(cfg.GetString("apps.subnet_registry_contract", config.DefaultSubnetRegistryCOntract)),
+		common.HexToAddress(subnetRegistryAddress),
 		client,
 	)
 
@@ -74,12 +78,14 @@ func NewAccountService(cfg *config.C) (*AccountService, error) {
 	}
 
 	s := &AccountService{
-		privateKey:        privateKey,
-		client:            client,
-		chainID:           chainID,
-		subnetRegistry:    subnetRegistry,
-		subnetAppRegistry: subnetAppRegistry,
-		nftLicense:        nftLicense,
+		privateKey:               privateKey,
+		client:                   client,
+		chainID:                  chainID,
+		subnetRegistry:           subnetRegistry,
+		subnetRegistryAddress:    subnetRegistryAddress,
+		subnetAppRegistry:        subnetAppRegistry,
+		subnetAppRegistryAddress: subnetAppRegistryAddress,
+		nftLicense:               nftLicense,
 	}
 	s.registerReloadCallback(cfg)
 	return s, nil
@@ -114,6 +120,18 @@ func (s *AccountService) SubnetAppRegistry() *contracts.SubnetAppRegistry {
 
 func (s *AccountService) NftLicense() *contracts.ERC721 {
 	return s.nftLicense
+}
+
+func (s *AccountService) GetChainID() *big.Int {
+	return s.chainID
+}
+
+func (s *AccountService) GetSubnetRegistryAddress() string {
+	return s.subnetRegistryAddress
+}
+
+func (s *AccountService) GetSubnetAppRegistryAddress() string {
+	return s.subnetAppRegistryAddress
 }
 
 // GetAddress retrieves the Ethereum address from the private key
@@ -183,4 +201,8 @@ func EthereumService(lc fx.Lifecycle, cfg *config.C) (*AccountService, error) {
 	})
 
 	return service, nil
+}
+
+func (s *AccountService) Sign(data []byte) ([]byte, error) {
+	return crypto.Sign(data, s.privateKey)
 }
