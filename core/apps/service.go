@@ -78,25 +78,14 @@ func (s *Service) Start(ctx context.Context) error {
 	}
 
 	if s.IsProvider {
-		subnetID, err := s.GetSubnetIDFromPeerID(ctx)
-		if err != nil {
-			return fmt.Errorf("error connecting to containerd: %v", err)
-		}
-
-		var defaultSubnetID = big.NewInt(0)
-		if defaultSubnetID.Cmp(subnetID) == 0 {
-			return fmt.Errorf("PeerID is not registered for any SubnetID. Please register first")
-		}
-
-		s.subnetID = *subnetID
+		go s.checkAndRegisterSubnetID(ctx)
 
 		// Connect to containerd daemon
+		var err error
 		s.containerdClient, err = containerd.New("/run/containerd/containerd.sock")
 		if err != nil {
 			return fmt.Errorf("error connecting to containerd: %v", err)
 		}
-
-		//go s.StartRewardClaimer(ctx)
 
 		// Update latest resource usage into datastore
 		if err := s.updateAllRunningContainersUsage(ctx); err != nil {
@@ -107,6 +96,22 @@ func (s *Service) Start(ctx context.Context) error {
 
 	log.Info("Subnet Apps Service started successfully.")
 	return nil
+}
+
+func (s *Service) checkAndRegisterSubnetID(ctx context.Context) {
+	for {
+		subnetID, err := s.GetSubnetIDFromPeerID(ctx)
+		if err != nil {
+			log.Errorf("error getting subnet ID: %v", err)
+		} else if subnetID.Cmp(big.NewInt(0)) != 0 {
+			s.subnetID = *subnetID
+			log.Infof("Successfully registered SubnetID: %s", subnetID.String())
+			return
+		}
+
+		log.Warn("PeerID is not registered for any SubnetID. Retrying in 5 seconds...")
+		time.Sleep(5 * time.Second)
+	}
 }
 
 func (s *Service) Stop(ctx context.Context) error {
@@ -157,6 +162,11 @@ func (s *Service) GetApp(ctx context.Context, appId *big.Int) (*App, error) {
 	}
 
 	app := convertToApp(subnetApp, appId, appStatus)
+
+	appConfig, err := s.GetContainerConfigProto(ctx, appId)
+	if err == nil {
+		app.Metadata.ContainerConfig.Env = appConfig.ContainerConfig.Env
+	}
 
 	// Retrieve metadata from datastore if available
 	metadata, err := s.GetContainerConfigProto(ctx, appId)
@@ -880,4 +890,12 @@ func (s *Service) SaveContainerConfigProto(ctx context.Context, appId *big.Int, 
 	}
 
 	return nil
+}
+
+func (s *Service) GetSubnetID(ctx context.Context) (*big.Int, error) {
+	subnetID, err := s.GetSubnetIDFromPeerID(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get subnet ID from peer ID: %w", err)
+	}
+	return subnetID, nil
 }

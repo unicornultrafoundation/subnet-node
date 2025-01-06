@@ -25,6 +25,7 @@ type AccountService struct {
 	chainID           *big.Int
 	subnetRegistry    *contracts.SubnetRegistry
 	subnetAppRegistry *contracts.SubnetAppRegistry
+	nftLicense        *contracts.ERC721
 }
 
 // NewAccountService initializes a new AccountService
@@ -60,12 +61,25 @@ func NewAccountService(cfg *config.C) (*AccountService, error) {
 		return nil, err
 	}
 
+	nftAddr, err := subnetRegistry.NftContract(nil)
+
+	if err != nil {
+		return nil, err
+	}
+
+	nftLicense, err := contracts.NewERC721(nftAddr, client)
+
+	if err != nil {
+		return nil, err
+	}
+
 	s := &AccountService{
 		privateKey:        privateKey,
 		client:            client,
 		chainID:           chainID,
 		subnetRegistry:    subnetRegistry,
 		subnetAppRegistry: subnetAppRegistry,
+		nftLicense:        nftLicense,
 	}
 	s.registerReloadCallback(cfg)
 	return s, nil
@@ -96,6 +110,10 @@ func (s *AccountService) SubnetRegistry() *contracts.SubnetRegistry {
 
 func (s *AccountService) SubnetAppRegistry() *contracts.SubnetAppRegistry {
 	return s.subnetAppRegistry
+}
+
+func (s *AccountService) NftLicense() *contracts.ERC721 {
+	return s.nftLicense
 }
 
 // GetAddress retrieves the Ethereum address from the private key

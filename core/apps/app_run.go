@@ -13,7 +13,7 @@ import (
 )
 
 // Starts a container for the specified app using containerd.
-func (s *Service) RunApp(ctx context.Context, appId *big.Int, envVars map[string]string) (*App, error) {
+func (s *Service) RunApp(ctx context.Context, appId *big.Int) (*App, error) {
 	// Set the namespace for the container
 	ctx = namespaces.WithNamespace(ctx, NAMESPACE)
 
@@ -30,8 +30,6 @@ func (s *Service) RunApp(ctx context.Context, appId *big.Int, envVars map[string
 	if app.Status != NotFound {
 		return app, nil
 	}
-
-	app.Metadata.ContainerConfig.Env = envVars
 
 	imageName := app.Metadata.ContainerConfig.Image
 	if !strings.Contains(imageName, "/") {
@@ -52,7 +50,7 @@ func (s *Service) RunApp(ctx context.Context, appId *big.Int, envVars map[string
 	}
 
 	// Add environment variables to the container spec
-	for key, value := range envVars {
+	for key, value := range app.Metadata.ContainerConfig.Env {
 		specOpts = append(specOpts, oci.WithEnv([]string{fmt.Sprintf("%s=%s", key, value)}))
 	}
 
@@ -103,12 +101,6 @@ func (s *Service) RunApp(ctx context.Context, appId *big.Int, envVars map[string
 	app.Status, err = s.GetContainerStatus(ctx, appId)
 	if err != nil {
 		return nil, err
-	}
-
-	// Save container configuration to datastore using proto
-	err = s.SaveContainerConfigProto(ctx, appId, app.Metadata.ContainerConfig)
-	if err != nil {
-		return nil, fmt.Errorf("failed to save container config: %w", err)
 	}
 
 	return app, nil

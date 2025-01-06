@@ -25,7 +25,7 @@ func APIOption() ServeOption {
 		server := rpc.NewServer()
 		server.RegisterName("swarm", api.NewSwarmAPI(capi.Swarm()))
 		server.RegisterName("routing", api.NewRoutingAPI(capi.Routing()))
-		server.RegisterName("node", api.NewNodeAPI(capi.Resource(), n))
+		server.RegisterName("node", api.NewNodeAPI(capi.Resource(), n.Apps, n))
 		server.RegisterName("pubsub", api.NewPubsubAPI(capi.PubSub()))
 		server.RegisterName("app", api.NewAppAPI(n.Apps))
 		server.RegisterName("uptime", api.NewUptimeAPI(n.Uptime))

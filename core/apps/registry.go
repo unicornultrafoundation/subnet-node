@@ -9,6 +9,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/unicornultrafoundation/subnet-node/config"
 )
 
 func (s *Service) RegisterApp(ctx context.Context, name, symbol, peerId string, metadata AppMetadata, budget, maxNodes, minCpu, minGpu, minMemory, minUploadBandwidth, minDownloadBandwidth, pricePerCpu, pricePerGpu, pricePerMemoryGB, pricePerStorageGB, pricePerBandwidthGB *big.Int) (common.Hash, error) {
@@ -35,6 +36,49 @@ func (s *Service) RegisterApp(ctx context.Context, name, symbol, peerId string, 
 
 	// Wait for the transaction to be mined
 	receipt, err := bind.WaitMined(ctx, s.ethClient, tx)
+	if err != nil {
+		return common.Hash{}, err
+	}
+
+	if receipt.Status != 1 {
+		return common.Hash{}, fmt.Errorf("transaction failed: %s", tx.Hash().Hex())
+	}
+
+	return tx.Hash(), nil
+}
+
+func (s *Service) CreateNode(ctx context.Context, name string, metadata string, nftId *big.Int) (common.Hash, error) {
+	// Create a new transactor
+	key, err := s.accountService.NewKeyedTransactor()
+	if err != nil {
+		return common.Hash{}, err
+	}
+
+	subnetRegistryAddr := s.cfg.GetString("apps.subnet_registry_contract", config.DefaultSubnetRegistryCOntract)
+
+	tx, err := s.accountService.NftLicense().Approve(key, common.HexToAddress(subnetRegistryAddr), nftId)
+	if err != nil {
+		return common.Hash{}, err
+	}
+
+	// Wait for the transaction to be mined
+	receipt, err := bind.WaitMined(ctx, s.ethClient, tx)
+	if err != nil {
+		return common.Hash{}, err
+	}
+
+	if receipt.Status != 1 {
+		return common.Hash{}, fmt.Errorf("transaction failed: %s", tx.Hash().Hex())
+	}
+
+	// Call the CreateNode function from the ABI
+	tx, err = s.subnetRegistry.RegisterSubnet(key, nftId, s.peerId.String(), name, metadata)
+	if err != nil {
+		return common.Hash{}, err
+	}
+
+	// Wait for the transaction to be mined
+	receipt, err = bind.WaitMined(ctx, s.ethClient, tx)
 	if err != nil {
 		return common.Hash{}, err
 	}
