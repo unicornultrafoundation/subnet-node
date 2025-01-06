@@ -70,6 +70,8 @@ func (s *Service) GetAllRunningContainersUsage(ctx context.Context) (*ResourceUs
 		usage, err := s.GetUsage(ctx, appId)
 		if err != nil {
 			usage = &ResourceUsage{
+				AppId:             appId,
+				SubnetId:          &s.subnetID,
 				UsedCpu:           big.NewInt(0),
 				UsedGpu:           big.NewInt(0),
 				UsedMemory:        big.NewInt(0),
