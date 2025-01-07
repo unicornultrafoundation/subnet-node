@@ -234,7 +234,7 @@ func fillDefaultResourceUsage(usage *ResourceUsage) *ResourceUsage {
 // Helper function to convert []byte to *big.Int
 func bytesToBigInt(data []byte) *big.Int {
 	if data == nil {
-		return nil // Handle nil bytes
+		return big.NewInt(0)
 	}
 	return new(big.Int).SetBytes(data)
 }
@@ -256,7 +256,7 @@ func convertUsageFromProto(usage pusage.ResourceUsage) *ResourceUsage {
 // Helper function to convert *big.Int to []byte
 func bigIntToBytes(value *big.Int) []byte {
 	if value == nil {
-		return nil // Handle nil big.Int
+		return []byte{}
 	}
 	return value.Bytes()
 }

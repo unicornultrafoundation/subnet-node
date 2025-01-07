@@ -1,12 +1,13 @@
 package p2p
 
 import (
-	"encoding/json"
 	"sync"
 
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/protocol"
 	ma "github.com/multiformats/go-multiaddr"
+	pstream "github.com/unicornultrafoundation/subnet-node/common/io"
+	papp "github.com/unicornultrafoundation/subnet-node/proto/subnet/app"
 )
 
 // SignProtocolListener handles requests for signing resource usage data
@@ -77,8 +78,8 @@ func (l *SignProtocolListener) handleStream(stream network.Stream) {
 	}
 
 	// Send back the signature as a response
-	response := SignatureResponse{Signature: signature}
-	if err := json.NewEncoder(stream).Encode(response); err != nil {
+	response := papp.SignatureResponse{Signature: signature}
+	if err := pstream.WriteProtoBuffered(stream, &response); err != nil {
 		log.Printf("Failed to send signature response: %v", err)
 	}
 }
