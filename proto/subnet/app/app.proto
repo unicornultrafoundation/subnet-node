@@ -42,6 +42,24 @@ message ResourceUsage {
   string duration = 9;
 }
 
+// ResourceUsageV2 represents the resource usage data
+message ResourceUsageV2 {
+	bytes app_id = 1;
+	bytes subnet_id = 2;
+	bytes used_cpu = 3;
+	bytes used_gpu = 4;
+	bytes used_memory = 5;
+	bytes used_storage = 6;
+	bytes used_upload_bytes = 7;
+  bytes used_download_bytes = 8; 
+  bytes duration = 9;
+}
+
+// ResourceUsageMetadata represents the resource usage info of an application
+message ResourceUsageMetadata {
+	repeated uint32 pids = 1;
+}
+
 message AppMetadata {
   AppInfo app_info = 1;
   ContainerConfig container_config = 2;
@@ -84,6 +102,12 @@ message Volume {
 message ContactInfo {
   string email = 1;
   string github = 2;
+}
+
+message SignatureRequest {
+  oneof data {
+    ResourceUsageV2 usage = 1;
+  }
 }
 
 message SignatureResponse {

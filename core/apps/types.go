@@ -20,7 +20,6 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/unicornultrafoundation/subnet-node/core/contracts"
 	pbapp "github.com/unicornultrafoundation/subnet-node/proto/subnet/app"
-	pusage "github.com/unicornultrafoundation/subnet-node/proto/subnet/usage"
 )
 
 // ProcessStatus returns a human readable status for the Process representing its current status
@@ -239,7 +238,7 @@ func bytesToBigInt(data []byte) *big.Int {
 	return new(big.Int).SetBytes(data)
 }
 
-func convertUsageFromProto(usage pusage.ResourceUsage) *ResourceUsage {
+func convertUsageFromProto(usage pbapp.ResourceUsageV2) *ResourceUsage {
 	return &ResourceUsage{
 		AppId:             bytesToBigInt(usage.AppId),
 		SubnetId:          bytesToBigInt(usage.SubnetId),
@@ -261,8 +260,8 @@ func bigIntToBytes(value *big.Int) []byte {
 	return value.Bytes()
 }
 
-func convertUsageToProto(usage ResourceUsage) *pusage.ResourceUsage {
-	return &pusage.ResourceUsage{
+func convertUsageToProto(usage ResourceUsage) *pbapp.ResourceUsageV2 {
+	return &pbapp.ResourceUsageV2{
 		AppId:             bigIntToBytes(usage.AppId),
 		SubnetId:          bigIntToBytes(usage.SubnetId),
 		UsedCpu:           bigIntToBytes(usage.UsedCpu),

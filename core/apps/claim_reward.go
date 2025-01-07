@@ -10,9 +10,8 @@ import (
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
-	pstream "github.com/unicornultrafoundation/subnet-node/common/io"
-	papp "github.com/unicornultrafoundation/subnet-node/proto/subnet/app"
-	pusage "github.com/unicornultrafoundation/subnet-node/proto/subnet/usage"
+	pbstream "github.com/unicornultrafoundation/subnet-node/common/io"
+	pbapp "github.com/unicornultrafoundation/subnet-node/proto/subnet/app"
 )
 
 func (s *Service) startRewardClaimer(ctx context.Context) {
@@ -101,7 +100,7 @@ func (s *Service) SignResourceUsage(usage *ResourceUsage) ([]byte, error) {
 	return s.accountService.Sign(typedDataHash)
 }
 
-func (s *Service) RequestSignature(ctx context.Context, peerID peer.ID, protoID protocol.ID, usage *pusage.ResourceUsage) (string, error) {
+func (s *Service) RequestSignature(ctx context.Context, peerID peer.ID, protoID protocol.ID, usage *pbapp.ResourceUsageV2) (string, error) {
 	// Open a stream to the remote peer
 	stream, err := s.PeerHost.NewStream(ctx, peerID, protoID)
 	if err != nil {
@@ -110,48 +109,54 @@ func (s *Service) RequestSignature(ctx context.Context, peerID peer.ID, protoID 
 	defer stream.Close()
 
 	// Send the resource usage data
-	if err := SendUsage(stream, usage); err != nil {
-		return "", fmt.Errorf("failed to send resource usage data: %w", err)
+	if err := SendSignUsageRequest(stream, usage); err != nil {
+		return "", fmt.Errorf("failed to send sign resource usage request: %w", err)
 	}
 
 	// Receive the signature response
-	response, err := ReceiveSignature(stream)
+	response, err := ReceiveSignatureResponse(stream)
 	if err != nil {
-		return "", fmt.Errorf("failed to decode signature response: %w", err)
+		return "", fmt.Errorf("failed to receive signature response: %w", err)
 	}
 
 	return response.Signature, nil
 }
 
-func SendUsage(s network.Stream, usage *pusage.ResourceUsage) error {
-	err := pstream.WriteProtoBuffered(s, usage)
+func SendSignUsageRequest(s network.Stream, usage *pbapp.ResourceUsageV2) error {
+	signatureRequest := pbapp.SignatureRequest{
+		Data: &pbapp.SignatureRequest_Usage{
+			Usage: usage,
+		},
+	}
+
+	err := pbstream.WriteProtoBuffered(s, &signatureRequest)
 	if err != nil {
 		s.Reset()
-		return fmt.Errorf("failed to send resource usage proto: %v", err)
+		return fmt.Errorf("failed to send resource usage sign request: %v", err)
 	}
 
 	return nil
 }
 
-func ReceiveUsage(s network.Stream) (*pusage.ResourceUsage, error) {
-	response := &pusage.ResourceUsage{}
+func ReceiveSignRequest(s network.Stream) (*pbapp.SignatureRequest, error) {
+	response := &pbapp.SignatureRequest{}
 
-	err := pstream.ReadProtoBuffered(s, response)
+	err := pbstream.ReadProtoBuffered(s, response)
 	if err != nil {
 		s.Reset()
-		return nil, fmt.Errorf("failed to receive usage proto: %v", err)
+		return nil, fmt.Errorf("failed to receive signature request: %v", err)
 	}
 
 	return response, nil
 }
 
-func ReceiveSignature(s network.Stream) (*papp.SignatureResponse, error) {
-	response := &papp.SignatureResponse{}
+func ReceiveSignatureResponse(s network.Stream) (*pbapp.SignatureResponse, error) {
+	response := &pbapp.SignatureResponse{}
 
-	err := pstream.ReadProtoBuffered(s, response)
+	err := pbstream.ReadProtoBuffered(s, response)
 	if err != nil {
 		s.Reset()
-		return nil, fmt.Errorf("failed to receive signature proto: %v", err)
+		return nil, fmt.Errorf("failed to receive signature response: %v", err)
 	}
 
 	return response, nil

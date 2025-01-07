@@ -16,7 +16,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/ipfs/go-datastore"
 	"github.com/shirou/gopsutil/process"
-	pusage "github.com/unicornultrafoundation/subnet-node/proto/subnet/usage"
+	pbapp "github.com/unicornultrafoundation/subnet-node/proto/subnet/app"
 )
 
 func (s *Service) startMonitoringUsage(ctx context.Context) {
@@ -318,7 +318,7 @@ func (s *Service) getUsageFromStorage(ctx context.Context, appId *big.Int, pid u
 	usageData, err := s.Datastore.Get(ctx, resourceUsageKey)
 
 	if err == nil { // If the record exists in the datastore
-		var usage pusage.ResourceUsage
+		var usage pbapp.ResourceUsageV2
 		if err := proto.Unmarshal(usageData, &usage); err == nil {
 			return convertUsageFromProto(usage), nil
 		}
@@ -342,14 +342,14 @@ func (s *Service) updateUsage(ctx context.Context, appId *big.Int, pid uint32, u
 }
 
 // Get resource usage info of an appId
-func (s *Service) getUsageMetadata(ctx context.Context, appId *big.Int) (*pusage.ResourceUsageMetadata, error) {
+func (s *Service) getUsageMetadata(ctx context.Context, appId *big.Int) (*pbapp.ResourceUsageMetadata, error) {
 	usageMetadataKey := getUsageMetadataKey(appId)
 	usageMetadataBytes, err := s.Datastore.Get(ctx, usageMetadataKey)
 	if err != nil {
 		return nil, err
 	}
 
-	var usageMetadata pusage.ResourceUsageMetadata
+	var usageMetadata pbapp.ResourceUsageMetadata
 	err = proto.Unmarshal(usageMetadataBytes, &usageMetadata)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal usage metadata for appId %s: %w", appId.String(), err)
@@ -359,7 +359,7 @@ func (s *Service) getUsageMetadata(ctx context.Context, appId *big.Int) (*pusage
 }
 
 // Update resource usage info of an appId
-func (s *Service) updateUsageMetadata(ctx context.Context, appId *big.Int, usageMetadata *pusage.ResourceUsageMetadata) error {
+func (s *Service) updateUsageMetadata(ctx context.Context, appId *big.Int, usageMetadata *pbapp.ResourceUsageMetadata) error {
 	usageMetadataBytes, err := proto.Marshal(usageMetadata)
 	if err != nil {
 		return fmt.Errorf("failed to marshal usage metadata for appId %s: %v", appId.String(), err)
@@ -389,7 +389,7 @@ func (s *Service) syncUsageMetadata(ctx context.Context, appId *big.Int, pid uin
 		return fmt.Errorf("failed to check usage metadata for appId %s: %w", appId.String(), err)
 	}
 
-	usageMetadata := &pusage.ResourceUsageMetadata{
+	usageMetadata := &pbapp.ResourceUsageMetadata{
 		Pids: *new([]uint32),
 	}
 	if hasUsageMetadata {
