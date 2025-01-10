@@ -15,7 +15,7 @@ type SignProtocolListener struct {
 	protoID       protocol.ID
 	listenAddr    ma.Multiaddr
 	targetAddr    ma.Multiaddr
-	signHandler   func(stream network.Stream) (string, error)
+	signHandler   func(stream network.Stream) ([]byte, error)
 	activeStreams sync.Map // Tracks active streams
 }
 
@@ -25,7 +25,7 @@ type SignatureResponse struct {
 }
 
 // NewSignProtocolListener creates a new listener for the signing protocol
-func NewSignProtocolListener(protoID protocol.ID, signHandler func(stream network.Stream) (string, error)) *SignProtocolListener {
+func NewSignProtocolListener(protoID protocol.ID, signHandler func(stream network.Stream) ([]byte, error)) *SignProtocolListener {
 	return &SignProtocolListener{
 		protoID:     protoID,
 		signHandler: signHandler,

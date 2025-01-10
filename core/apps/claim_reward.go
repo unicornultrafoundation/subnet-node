@@ -60,7 +60,7 @@ func (s *Service) ClaimRewardsForAllRunningContainers(ctx context.Context) {
 		usageProto := convertUsageToProto(*usage)
 
 		// Request signature
-		var signature string
+		var signature []byte
 		for _, peerId := range s.PeerHost.Network().Peers() {
 			signature, err = s.RequestSignature(ctx, peerId, PROTOCOL_ID, usageProto)
 			if err != nil {
@@ -76,7 +76,7 @@ func (s *Service) ClaimRewardsForAllRunningContainers(ctx context.Context) {
 		}
 
 		// Claim reward
-		txHash, err := s.ClaimReward(ctx, appId, usage.UsedCpu, usage.UsedGpu, usage.UsedMemory, usage.UsedStorage, usage.UsedUploadBytes, usage.UsedDownloadBytes, usage.Duration, []byte(signature))
+		txHash, err := s.ClaimReward(ctx, appId, usage.UsedCpu, usage.UsedGpu, usage.UsedMemory, usage.UsedStorage, usage.UsedUploadBytes, usage.UsedDownloadBytes, usage.Duration, signature)
 		if err != nil {
 			log.Errorf("Failed to claim reward for container %s: %v", containerId, err)
 		} else {
@@ -100,23 +100,23 @@ func (s *Service) SignResourceUsage(usage *ResourceUsage) ([]byte, error) {
 	return s.accountService.Sign(typedDataHash)
 }
 
-func (s *Service) RequestSignature(ctx context.Context, peerID peer.ID, protoID protocol.ID, usage *pbapp.ResourceUsageV2) (string, error) {
+func (s *Service) RequestSignature(ctx context.Context, peerID peer.ID, protoID protocol.ID, usage *pbapp.ResourceUsageV2) ([]byte, error) {
 	// Open a stream to the remote peer
 	stream, err := s.PeerHost.NewStream(ctx, peerID, protoID)
 	if err != nil {
-		return "", fmt.Errorf("failed to open stream to peer %s: %w", peerID, err)
+		return []byte{}, fmt.Errorf("failed to open stream to peer %s: %w", peerID, err)
 	}
 	defer stream.Close()
 
 	// Send the resource usage data
 	if err := SendSignUsageRequest(stream, usage); err != nil {
-		return "", fmt.Errorf("failed to send sign resource usage request: %w", err)
+		return []byte{}, fmt.Errorf("failed to send sign resource usage request: %w", err)
 	}
 
 	// Receive the signature response
 	response, err := ReceiveSignatureResponse(stream)
 	if err != nil {
-		return "", fmt.Errorf("failed to receive signature response: %w", err)
+		return []byte{}, fmt.Errorf("failed to receive signature response: %w", err)
 	}
 
 	return response.Signature, nil

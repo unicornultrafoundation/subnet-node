@@ -111,5 +111,5 @@ message SignatureRequest {
 }
 
 message SignatureResponse {
-  string signature = 1;
+  bytes signature = 1;
 }

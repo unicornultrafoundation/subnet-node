@@ -275,11 +275,11 @@ func (s *Service) GetContainerStatus(ctx context.Context, appId *big.Int) (Proce
 
 func (s *Service) RegisterSignProtocol() error {
 	// Define the signing logic
-	signHandler := func(stream network.Stream) (string, error) {
+	signHandler := func(stream network.Stream) ([]byte, error) {
 		signRequest, err := ReceiveSignRequest(stream)
 
 		if err != nil {
-			return "", fmt.Errorf("failed to receive sign request: %w", err)
+			return []byte{}, fmt.Errorf("failed to receive sign request: %w", err)
 		}
 
 		var signature []byte
@@ -289,13 +289,13 @@ func (s *Service) RegisterSignProtocol() error {
 			signature, err = s.SignResourceUsage(usage)
 
 			if err != nil {
-				return "", fmt.Errorf("failed to sign resource usage: %w", err)
+				return []byte{}, fmt.Errorf("failed to sign resource usage: %w", err)
 			}
 		default:
-			return "", fmt.Errorf("unsupport this signature request type: %w", err)
+			return []byte{}, fmt.Errorf("unsupport this signature request type: %w", err)
 		}
 
-		return string(signature), nil
+		return signature, nil
 	}
 
 	// Create the listener for the signing protocol
