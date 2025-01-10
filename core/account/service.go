@@ -3,6 +3,8 @@ package account
 import (
 	"context"
 	"crypto/ecdsa"
+	"crypto/rand"
+	"fmt"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -20,12 +22,14 @@ var log = logrus.New().WithField("service", "account")
 
 // AccountService is a service to handle Ethereum transactions
 type AccountService struct {
-	privateKey        *ecdsa.PrivateKey
-	client            *ethclient.Client
-	chainID           *big.Int
-	subnetRegistry    *contracts.SubnetRegistry
-	subnetAppRegistry *contracts.SubnetAppRegistry
-	nftLicense        *contracts.ERC721
+	privateKey               *ecdsa.PrivateKey
+	client                   *ethclient.Client
+	chainID                  *big.Int
+	subnetRegistry           *contracts.SubnetRegistry
+	subnetRegistryAddress    string
+	subnetAppRegistry        *contracts.SubnetAppRegistry
+	subnetAppRegistryAddress string
+	nftLicense               *contracts.ERC721
 }
 
 // NewAccountService initializes a new AccountService
@@ -43,8 +47,9 @@ func NewAccountService(cfg *config.C) (*AccountService, error) {
 		return nil, err
 	}
 
+	subnetAppRegistryAddress := cfg.GetString("apps.subnet_app_registry_contract", config.DefaultSubnetAppRegistryContract)
 	subnetAppRegistry, err := contracts.NewSubnetAppRegistry(
-		common.HexToAddress(cfg.GetString("apps.subnet_app_registry_contract", config.DefaultSubnetAppRegistryContract)),
+		common.HexToAddress(subnetAppRegistryAddress),
 		client,
 	)
 
@@ -52,8 +57,9 @@ func NewAccountService(cfg *config.C) (*AccountService, error) {
 		return nil, err
 	}
 
+	subnetRegistryAddress := cfg.GetString("apps.subnet_registry_contract", config.DefaultSubnetRegistryCOntract)
 	subnetRegistry, err := contracts.NewSubnetRegistry(
-		common.HexToAddress(cfg.GetString("apps.subnet_registry_contract", config.DefaultSubnetRegistryCOntract)),
+		common.HexToAddress(subnetRegistryAddress),
 		client,
 	)
 
@@ -74,12 +80,14 @@ func NewAccountService(cfg *config.C) (*AccountService, error) {
 	}
 
 	s := &AccountService{
-		privateKey:        privateKey,
-		client:            client,
-		chainID:           chainID,
-		subnetRegistry:    subnetRegistry,
-		subnetAppRegistry: subnetAppRegistry,
-		nftLicense:        nftLicense,
+		privateKey:               privateKey,
+		client:                   client,
+		chainID:                  chainID,
+		subnetRegistry:           subnetRegistry,
+		subnetRegistryAddress:    subnetRegistryAddress,
+		subnetAppRegistry:        subnetAppRegistry,
+		subnetAppRegistryAddress: subnetAppRegistryAddress,
+		nftLicense:               nftLicense,
 	}
 	s.registerReloadCallback(cfg)
 	return s, nil
@@ -114,6 +122,18 @@ func (s *AccountService) SubnetAppRegistry() *contracts.SubnetAppRegistry {
 
 func (s *AccountService) NftLicense() *contracts.ERC721 {
 	return s.nftLicense
+}
+
+func (s *AccountService) GetChainID() *big.Int {
+	return s.chainID
+}
+
+func (s *AccountService) GetSubnetRegistryAddress() string {
+	return s.subnetRegistryAddress
+}
+
+func (s *AccountService) GetSubnetAppRegistryAddress() string {
+	return s.subnetAppRegistryAddress
 }
 
 // GetAddress retrieves the Ethereum address from the private key
@@ -183,4 +203,25 @@ func EthereumService(lc fx.Lifecycle, cfg *config.C) (*AccountService, error) {
 	})
 
 	return service, nil
+}
+
+// Sign the hash using ECDSA
+func (account *AccountService) Sign(hash []byte) ([]byte, error) {
+	r, s, err := ecdsa.Sign(rand.Reader, account.privateKey, hash)
+	if err != nil {
+		return nil, fmt.Errorf("failed to sign: %v", err)
+	}
+
+	// Ensure `s` is in the lower half-order
+	halfOrder := new(big.Int).Rsh(crypto.S256().Params().N, 1)
+	v := byte(27)
+	if s.Cmp(halfOrder) > 0 {
+		s.Sub(crypto.S256().Params().N, s)
+		v = 28
+	}
+
+	// Format signature: r (32 bytes) || s (32 bytes) || v (1 byte)
+	signature := append(r.Bytes(), append(s.Bytes(), v)...)
+
+	return signature, nil
 }
