@@ -59,15 +59,22 @@ func (s *Service) ClaimRewardsForAllRunningContainers(ctx context.Context) {
 		}
 		usageProto := convertUsageToProto(*usage)
 
-		// Request signature
-		var signature []byte
-		for _, peerId := range s.PeerHost.Network().Peers() {
-			signature, err = s.RequestSignature(ctx, peerId, PROTOCOL_ID, usageProto)
-			if err != nil {
-				log.Errorf("Failed to get signature from peerId %s for container %s: %v", string(peerId), containerId, err)
-				continue
-			}
-			break
+		// Get App owner's PeerID
+		app, err := s.GetApp(ctx, appId)
+		if err != nil {
+			log.Errorf("Failed to get app info from appId %s: %v", appId, err)
+			continue
+		}
+		ownerPeerID, err := peer.Decode(app.PeerId)
+		if err != nil {
+			log.Errorf("Failed to decode peerID %s: %v", app.PeerId, err)
+			continue
+		}
+
+		signature, err := s.RequestSignature(ctx, ownerPeerID, PROTOCOL_ID, usageProto)
+		if err != nil {
+			log.Errorf("Failed to get signature from peerId %s for container %s: %v", string(app.PeerId), containerId, err)
+			continue
 		}
 
 		if len(signature) == 0 {
@@ -101,6 +108,12 @@ func (s *Service) SignResourceUsage(usage *ResourceUsage) ([]byte, error) {
 }
 
 func (s *Service) RequestSignature(ctx context.Context, peerID peer.ID, protoID protocol.ID, usage *pbapp.ResourceUsageV2) ([]byte, error) {
+	if peerID == s.peerId {
+		// You are the app owner. Self-sign signature
+		return s.SignResourceUsage(convertUsageFromProto(*usage))
+	}
+
+	// Request signature from app owner's peer
 	// Open a stream to the remote peer
 	stream, err := s.PeerHost.NewStream(ctx, peerID, protoID)
 	if err != nil {
