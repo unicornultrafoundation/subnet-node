@@ -31,7 +31,10 @@ type HeartbeatMessage struct {
 	Timestamp int64 `json:"timestamp"` // Time the heartbeat message was generated
 }
 
-const MerkleAPIURL = "http://localhost:8787/generate-proofs" // Replace with the actual API URL
+const (
+	MerkleAPIURL   = "http://localhost:8787/generate-proofs"                // Replace with the actual API URL
+	VerifierPeerID = "12D3KooWGNQYBFWmKgiAgEsQ4u2WznEgR2NmrBbYcfq33yQo4D8a" // Verifier Peer ID
+)
 
 type ProofResponse struct {
 	Root   string     `json:"root"`
@@ -177,8 +180,13 @@ func (s *UptimeService) startListening(ctx context.Context) {
 	}
 }
 
+// createUptimeKey generates the datastore key for a given provider ID.
+func createUptimeKey(providerId int64) datastore.Key {
+	return datastore.NewKey(fmt.Sprintf("/uptime/peer:%d", providerId))
+}
+
 func (s *UptimeService) handleMerkeProofMsg(ctx context.Context, peerId peer.ID, merkeProof *puptime.MerkleProofMsg) {
-	if peerId.String() == "12D3KooWGNQYBFWmKgiAgEsQ4u2WznEgR2NmrBbYcfq33yQo4D8a" {
+	if peerId.String() == VerifierPeerID {
 		log.Debugf("Received MerkleProofs: %+v", merkeProof)
 		uptime, err := s.GetUptime(ctx)
 		if err != nil {
@@ -192,7 +200,7 @@ func (s *UptimeService) handleMerkeProofMsg(ctx context.Context, peerId peer.ID,
 					Uptime: proof.Uptime,
 					Proof:  proof.Proof,
 				}
-				peerKey := datastore.NewKey(fmt.Sprintf("/uptime/peer:%d", uptime.ProviderId))
+				peerKey := createUptimeKey(uptime.ProviderId)
 
 				recordData, err := proto.Marshal(uptime)
 				if err != nil {
@@ -230,7 +238,7 @@ func (s *UptimeService) updatePeerUptime(ctx context.Context, providerId int64, 
 	// Retrieve existing uptime record from the datastore
 	var uptime int64
 	var lastTimestamp int64
-	peerKey := datastore.NewKey(fmt.Sprintf("/uptime/peer:%d", providerId))
+	peerKey := createUptimeKey(providerId)
 	data, err := s.Datastore.Get(ctx, peerKey)
 	var proof *puptime.UptimeProof
 	isClaimed := false
@@ -401,31 +409,31 @@ func prepareRecordsForAPI(uptimes []*puptime.UptimeRecord) [][]string {
 
 // GetUptime retrieves the uptime for a specific peer from the datastore
 func (s *UptimeService) GetUptime(ctx context.Context) (*puptime.UptimeRecord, error) {
-	return s.GetUptimeByPeer(ctx, s.Identity.String())
+	return s.GetUptimeByProvider(ctx, s.AccountService.ProviderID())
 }
 
-// GetUptime retrieves the uptime for a specific peer from the datastore
-func (s *UptimeService) GetUptimeByPeer(ctx context.Context, peerID string) (*puptime.UptimeRecord, error) {
-	uptimeKey := datastore.NewKey(fmt.Sprintln("/uptime/peer:" + peerID))
+// GetUptimeByProvider retrieves the uptime for a specific provider from the datastore
+func (s *UptimeService) GetUptimeByProvider(ctx context.Context, providerID int64) (*puptime.UptimeRecord, error) {
+	uptimeKey := createUptimeKey(providerID)
 
 	data, err := s.Datastore.Get(ctx, uptimeKey)
 	if err != nil {
 		if err == datastore.ErrNotFound {
-			return nil, fmt.Errorf("uptime not found for PeerID: %s", peerID)
+			return nil, fmt.Errorf("uptime not found for ProviderID: %d", providerID)
 		}
-		return nil, fmt.Errorf("failed to get uptime for PeerID %s: %v", peerID, err)
+		return nil, fmt.Errorf("failed to get uptime for ProviderID %d: %v", providerID, err)
 	}
 
 	var record puptime.UptimeRecord
 	if err := proto.Unmarshal(data, &record); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal uptime for PeerID %s: %v", peerID, err)
+		return nil, fmt.Errorf("failed to unmarshal uptime for ProviderID %d: %v", providerID, err)
 	}
 
 	return &record, nil
 }
 
 func (s *UptimeService) saveUptime(ctx context.Context, data *puptime.UptimeRecord) error {
-	uptimeKey := datastore.NewKey(fmt.Sprintln("/uptime/peer:%d", data.ProviderId))
+	uptimeKey := createUptimeKey(data.ProviderId)
 	recordData, err := proto.Marshal(data)
 	if err != nil {
 		return err
