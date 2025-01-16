@@ -31,27 +31,21 @@ var (
 
 // SubnetAppStoreApp is an auto generated low-level Go binding around an user-defined struct.
 type SubnetAppStoreApp struct {
-	PeerId               string
-	Owner                common.Address
-	Operator             common.Address
-	Name                 string
-	Symbol               string
-	Budget               *big.Int
-	SpentBudget          *big.Int
-	MaxNodes             *big.Int
-	MinCpu               *big.Int
-	MinGpu               *big.Int
-	MinMemory            *big.Int
-	MinUploadBandwidth   *big.Int
-	MinDownloadBandwidth *big.Int
-	NodeCount            *big.Int
-	PricePerCpu          *big.Int
-	PricePerGpu          *big.Int
-	PricePerMemoryGB     *big.Int
-	PricePerStorageGB    *big.Int
-	PricePerBandwidthGB  *big.Int
-	Metadata             string
-	PaymentToken         common.Address
+	PeerId              string
+	Owner               common.Address
+	Operator            common.Address
+	Name                string
+	Symbol              string
+	Budget              *big.Int
+	SpentBudget         *big.Int
+	NodeCount           *big.Int
+	PricePerCpu         *big.Int
+	PricePerGpu         *big.Int
+	PricePerMemoryGB    *big.Int
+	PricePerStorageGB   *big.Int
+	PricePerBandwidthGB *big.Int
+	Metadata            string
+	PaymentToken        common.Address
 }
 
 // SubnetAppStoreDeployment is an auto generated low-level Go binding around an user-defined struct.
@@ -70,7 +64,7 @@ type SubnetAppStoreDeployment struct {
 
 // SubnetAppStoreMetaData contains all meta data concerning the SubnetAppStore contract.
 var SubnetAppStoreMetaData = &bind.MetaData{
-	ABI: "[{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_subnetProvider\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"initialOwner\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"_treasury\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"_feeRate\",\"type\":\"uint256\"}],\"stateMutability\":\"nonpayable\",\"type\":\"constructor\"},{\"inputs\":[],\"name\":\"ECDSAInvalidSignature\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"length\",\"type\":\"uint256\"}],\"name\":\"ECDSAInvalidSignatureLength\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"s\",\"type\":\"bytes32\"}],\"name\":\"ECDSAInvalidSignatureS\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"InvalidShortString\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"}],\"name\":\"OwnableInvalidOwner\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"account\",\"type\":\"address\"}],\"name\":\"OwnableUnauthorizedAccount\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"token\",\"type\":\"address\"}],\"name\":\"SafeERC20FailedOperation\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"string\",\"name\":\"str\",\"type\":\"string\"}],\"name\":\"StringTooLong\",\"type\":\"error\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"symbol\",\"type\":\"string\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"budget\",\"type\":\"uint256\"}],\"name\":\"AppCreated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"}],\"name\":\"AppUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"BudgetDeposited\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"}],\"name\":\"DeploymentClosed\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"}],\"name\":\"DeploymentCreated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[],\"name\":\"EIP712DomainChanged\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"previousOwner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"OwnershipTransferred\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"reward\",\"type\":\"uint256\"}],\"name\":\"RewardClaimed\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"reward\",\"type\":\"uint256\"}],\"name\":\"UsageReported\",\"type\":\"event\"},{\"inputs\":[],\"name\":\"appCount\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"name\":\"apps\",\"outputs\":[{\"internalType\":\"string\",\"name\":\"peerId\",\"type\":\"string\"},{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"},{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"symbol\",\"type\":\"string\"},{\"internalType\":\"uint256\",\"name\":\"budget\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"spentBudget\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"maxNodes\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"minCpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"minGpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"minMemory\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"minUploadBandwidth\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"minDownloadBandwidth\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"nodeCount\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerCpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerGpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerMemoryGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerStorageGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerBandwidthGB\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"metadata\",\"type\":\"string\"},{\"internalType\":\"address\",\"name\":\"paymentToken\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"}],\"name\":\"claimReward\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"symbol\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"peerId\",\"type\":\"string\"},{\"internalType\":\"uint256\",\"name\":\"budget\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"maxNodes\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"minCpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"minGpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"minMemory\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"minUploadBandwidth\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"minDownloadBandwidth\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerCpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerGpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerMemoryGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerStorageGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerBandwidthGB\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"metadata\",\"type\":\"string\"},{\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"paymentToken\",\"type\":\"address\"}],\"name\":\"createApp\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"name\":\"deployments\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"duration\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedCpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedGpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedMemory\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedStorage\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedDownloadBytes\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedUploadBytes\",\"type\":\"uint256\"},{\"internalType\":\"bool\",\"name\":\"isRegistered\",\"type\":\"bool\"},{\"internalType\":\"uint256\",\"name\":\"lastClaimTime\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pendingReward\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"deposit\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"eip712Domain\",\"outputs\":[{\"internalType\":\"bytes1\",\"name\":\"fields\",\"type\":\"bytes1\"},{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"version\",\"type\":\"string\"},{\"internalType\":\"uint256\",\"name\":\"chainId\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"verifyingContract\",\"type\":\"address\"},{\"internalType\":\"bytes32\",\"name\":\"salt\",\"type\":\"bytes32\"},{\"internalType\":\"uint256[]\",\"name\":\"extensions\",\"type\":\"uint256[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"feeRate\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"}],\"name\":\"getApp\",\"outputs\":[{\"components\":[{\"internalType\":\"string\",\"name\":\"peerId\",\"type\":\"string\"},{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"},{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"symbol\",\"type\":\"string\"},{\"internalType\":\"uint256\",\"name\":\"budget\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"spentBudget\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"maxNodes\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"minCpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"minGpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"minMemory\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"minUploadBandwidth\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"minDownloadBandwidth\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"nodeCount\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerCpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerGpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerMemoryGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerStorageGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerBandwidthGB\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"metadata\",\"type\":\"string\"},{\"internalType\":\"address\",\"name\":\"paymentToken\",\"type\":\"address\"}],\"internalType\":\"structSubnetAppStore.App\",\"name\":\"app\",\"type\":\"tuple\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"}],\"name\":\"getDeployment\",\"outputs\":[{\"components\":[{\"internalType\":\"uint256\",\"name\":\"duration\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedCpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedGpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedMemory\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedStorage\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedDownloadBytes\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedUploadBytes\",\"type\":\"uint256\"},{\"internalType\":\"bool\",\"name\":\"isRegistered\",\"type\":\"bool\"},{\"internalType\":\"uint256\",\"name\":\"lastClaimTime\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pendingReward\",\"type\":\"uint256\"}],\"internalType\":\"structSubnetAppStore.Deployment\",\"name\":\"deployment\",\"type\":\"tuple\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"start\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"end\",\"type\":\"uint256\"}],\"name\":\"listApps\",\"outputs\":[{\"components\":[{\"internalType\":\"string\",\"name\":\"peerId\",\"type\":\"string\"},{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"},{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"symbol\",\"type\":\"string\"},{\"internalType\":\"uint256\",\"name\":\"budget\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"spentBudget\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"maxNodes\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"minCpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"minGpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"minMemory\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"minUploadBandwidth\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"minDownloadBandwidth\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"nodeCount\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerCpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerGpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerMemoryGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerStorageGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerBandwidthGB\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"metadata\",\"type\":\"string\"},{\"internalType\":\"address\",\"name\":\"paymentToken\",\"type\":\"address\"}],\"internalType\":\"structSubnetAppStore.App[]\",\"name\":\"\",\"type\":\"tuple[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"owner\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"renounceOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedCpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedGpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedMemory\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedStorage\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedUploadBytes\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedDownloadBytes\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"duration\",\"type\":\"uint256\"},{\"internalType\":\"bytes\",\"name\":\"signature\",\"type\":\"bytes\"}],\"name\":\"reportUsage\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"_feeRate\",\"type\":\"uint256\"}],\"name\":\"setFeeRate\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_treasury\",\"type\":\"address\"}],\"name\":\"setTreasury\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"subnetProvider\",\"outputs\":[{\"internalType\":\"contractSubnetProvider\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"string\",\"name\":\"\",\"type\":\"string\"}],\"name\":\"symbolToAppId\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"transferOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"treasury\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"peerId\",\"type\":\"string\"},{\"internalType\":\"uint256\",\"name\":\"maxNodes\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"minCpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"minGpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"minMemory\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"minUploadBandwidth\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"minDownloadBandwidth\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerCpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerGpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerMemoryGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerStorageGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerBandwidthGB\",\"type\":\"uint256\"}],\"name\":\"updateApp\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"metadata\",\"type\":\"string\"}],\"name\":\"updateMetadata\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"}],\"name\":\"updateName\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"}],\"name\":\"updateOperator\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"name\":\"usedMessageHashes\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"version\",\"outputs\":[{\"internalType\":\"string\",\"name\":\"\",\"type\":\"string\"}],\"stateMutability\":\"pure\",\"type\":\"function\"}]",
+	ABI: "[{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_subnetProvider\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"initialOwner\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"_treasury\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"_feeRate\",\"type\":\"uint256\"}],\"stateMutability\":\"nonpayable\",\"type\":\"constructor\"},{\"inputs\":[],\"name\":\"ECDSAInvalidSignature\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"length\",\"type\":\"uint256\"}],\"name\":\"ECDSAInvalidSignatureLength\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"s\",\"type\":\"bytes32\"}],\"name\":\"ECDSAInvalidSignatureS\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"InvalidShortString\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"}],\"name\":\"OwnableInvalidOwner\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"account\",\"type\":\"address\"}],\"name\":\"OwnableUnauthorizedAccount\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"token\",\"type\":\"address\"}],\"name\":\"SafeERC20FailedOperation\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"string\",\"name\":\"str\",\"type\":\"string\"}],\"name\":\"StringTooLong\",\"type\":\"error\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"symbol\",\"type\":\"string\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"budget\",\"type\":\"uint256\"}],\"name\":\"AppCreated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"}],\"name\":\"AppUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"BudgetDeposited\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"}],\"name\":\"DeploymentClosed\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"}],\"name\":\"DeploymentCreated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[],\"name\":\"EIP712DomainChanged\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"previousOwner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"OwnershipTransferred\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"reward\",\"type\":\"uint256\"}],\"name\":\"RewardClaimed\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"reward\",\"type\":\"uint256\"}],\"name\":\"UsageReported\",\"type\":\"event\"},{\"inputs\":[],\"name\":\"appCount\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"name\":\"apps\",\"outputs\":[{\"internalType\":\"string\",\"name\":\"peerId\",\"type\":\"string\"},{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"},{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"symbol\",\"type\":\"string\"},{\"internalType\":\"uint256\",\"name\":\"budget\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"spentBudget\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"nodeCount\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerCpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerGpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerMemoryGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerStorageGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerBandwidthGB\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"metadata\",\"type\":\"string\"},{\"internalType\":\"address\",\"name\":\"paymentToken\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"}],\"name\":\"claimReward\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"symbol\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"peerId\",\"type\":\"string\"},{\"internalType\":\"uint256\",\"name\":\"budget\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerCpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerGpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerMemoryGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerStorageGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerBandwidthGB\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"metadata\",\"type\":\"string\"},{\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"paymentToken\",\"type\":\"address\"}],\"name\":\"createApp\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"name\":\"deployments\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"duration\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedCpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedGpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedMemory\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedStorage\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedDownloadBytes\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedUploadBytes\",\"type\":\"uint256\"},{\"internalType\":\"bool\",\"name\":\"isRegistered\",\"type\":\"bool\"},{\"internalType\":\"uint256\",\"name\":\"lastClaimTime\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pendingReward\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"deposit\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"eip712Domain\",\"outputs\":[{\"internalType\":\"bytes1\",\"name\":\"fields\",\"type\":\"bytes1\"},{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"version\",\"type\":\"string\"},{\"internalType\":\"uint256\",\"name\":\"chainId\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"verifyingContract\",\"type\":\"address\"},{\"internalType\":\"bytes32\",\"name\":\"salt\",\"type\":\"bytes32\"},{\"internalType\":\"uint256[]\",\"name\":\"extensions\",\"type\":\"uint256[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"feeRate\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"}],\"name\":\"getApp\",\"outputs\":[{\"components\":[{\"internalType\":\"string\",\"name\":\"peerId\",\"type\":\"string\"},{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"},{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"symbol\",\"type\":\"string\"},{\"internalType\":\"uint256\",\"name\":\"budget\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"spentBudget\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"nodeCount\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerCpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerGpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerMemoryGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerStorageGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerBandwidthGB\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"metadata\",\"type\":\"string\"},{\"internalType\":\"address\",\"name\":\"paymentToken\",\"type\":\"address\"}],\"internalType\":\"structSubnetAppStore.App\",\"name\":\"app\",\"type\":\"tuple\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"}],\"name\":\"getDeployment\",\"outputs\":[{\"components\":[{\"internalType\":\"uint256\",\"name\":\"duration\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedCpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedGpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedMemory\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedStorage\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedDownloadBytes\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedUploadBytes\",\"type\":\"uint256\"},{\"internalType\":\"bool\",\"name\":\"isRegistered\",\"type\":\"bool\"},{\"internalType\":\"uint256\",\"name\":\"lastClaimTime\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pendingReward\",\"type\":\"uint256\"}],\"internalType\":\"structSubnetAppStore.Deployment\",\"name\":\"deployment\",\"type\":\"tuple\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"start\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"end\",\"type\":\"uint256\"}],\"name\":\"listApps\",\"outputs\":[{\"components\":[{\"internalType\":\"string\",\"name\":\"peerId\",\"type\":\"string\"},{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"},{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"symbol\",\"type\":\"string\"},{\"internalType\":\"uint256\",\"name\":\"budget\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"spentBudget\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"nodeCount\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerCpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerGpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerMemoryGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerStorageGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerBandwidthGB\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"metadata\",\"type\":\"string\"},{\"internalType\":\"address\",\"name\":\"paymentToken\",\"type\":\"address\"}],\"internalType\":\"structSubnetAppStore.App[]\",\"name\":\"\",\"type\":\"tuple[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"owner\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"renounceOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedCpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedGpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedMemory\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedStorage\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedUploadBytes\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedDownloadBytes\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"duration\",\"type\":\"uint256\"},{\"internalType\":\"bytes\",\"name\":\"signature\",\"type\":\"bytes\"}],\"name\":\"reportUsage\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"_feeRate\",\"type\":\"uint256\"}],\"name\":\"setFeeRate\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_treasury\",\"type\":\"address\"}],\"name\":\"setTreasury\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"subnetProvider\",\"outputs\":[{\"internalType\":\"contractSubnetProvider\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"string\",\"name\":\"\",\"type\":\"string\"}],\"name\":\"symbolToAppId\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"transferOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"treasury\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerCpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerGpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerMemoryGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerStorageGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerBandwidthGB\",\"type\":\"uint256\"}],\"name\":\"updateApp\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"metadata\",\"type\":\"string\"}],\"name\":\"updateMetadata\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"}],\"name\":\"updateName\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"}],\"name\":\"updateOperator\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"peerId\",\"type\":\"string\"}],\"name\":\"updatePeerId\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"name\":\"usedMessageHashes\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"version\",\"outputs\":[{\"internalType\":\"string\",\"name\":\"\",\"type\":\"string\"}],\"stateMutability\":\"pure\",\"type\":\"function\"}]",
 }
 
 // SubnetAppStoreABI is the input ABI used to generate the binding from.
@@ -252,55 +246,43 @@ func (_SubnetAppStore *SubnetAppStoreCallerSession) AppCount() (*big.Int, error)
 
 // Apps is a free data retrieval call binding the contract method 0x61acc37e.
 //
-// Solidity: function apps(uint256 ) view returns(string peerId, address owner, address operator, string name, string symbol, uint256 budget, uint256 spentBudget, uint256 maxNodes, uint256 minCpu, uint256 minGpu, uint256 minMemory, uint256 minUploadBandwidth, uint256 minDownloadBandwidth, uint256 nodeCount, uint256 pricePerCpu, uint256 pricePerGpu, uint256 pricePerMemoryGB, uint256 pricePerStorageGB, uint256 pricePerBandwidthGB, string metadata, address paymentToken)
+// Solidity: function apps(uint256 ) view returns(string peerId, address owner, address operator, string name, string symbol, uint256 budget, uint256 spentBudget, uint256 nodeCount, uint256 pricePerCpu, uint256 pricePerGpu, uint256 pricePerMemoryGB, uint256 pricePerStorageGB, uint256 pricePerBandwidthGB, string metadata, address paymentToken)
 func (_SubnetAppStore *SubnetAppStoreCaller) Apps(opts *bind.CallOpts, arg0 *big.Int) (struct {
-	PeerId               string
-	Owner                common.Address
-	Operator             common.Address
-	Name                 string
-	Symbol               string
-	Budget               *big.Int
-	SpentBudget          *big.Int
-	MaxNodes             *big.Int
-	MinCpu               *big.Int
-	MinGpu               *big.Int
-	MinMemory            *big.Int
-	MinUploadBandwidth   *big.Int
-	MinDownloadBandwidth *big.Int
-	NodeCount            *big.Int
-	PricePerCpu          *big.Int
-	PricePerGpu          *big.Int
-	PricePerMemoryGB     *big.Int
-	PricePerStorageGB    *big.Int
-	PricePerBandwidthGB  *big.Int
-	Metadata             string
-	PaymentToken         common.Address
+	PeerId              string
+	Owner               common.Address
+	Operator            common.Address
+	Name                string
+	Symbol              string
+	Budget              *big.Int
+	SpentBudget         *big.Int
+	NodeCount           *big.Int
+	PricePerCpu         *big.Int
+	PricePerGpu         *big.Int
+	PricePerMemoryGB    *big.Int
+	PricePerStorageGB   *big.Int
+	PricePerBandwidthGB *big.Int
+	Metadata            string
+	PaymentToken        common.Address
 }, error) {
 	var out []interface{}
 	err := _SubnetAppStore.contract.Call(opts, &out, "apps", arg0)
 
 	outstruct := new(struct {
-		PeerId               string
-		Owner                common.Address
-		Operator             common.Address
-		Name                 string
-		Symbol               string
-		Budget               *big.Int
-		SpentBudget          *big.Int
-		MaxNodes             *big.Int
-		MinCpu               *big.Int
-		MinGpu               *big.Int
-		MinMemory            *big.Int
-		MinUploadBandwidth   *big.Int
-		MinDownloadBandwidth *big.Int
-		NodeCount            *big.Int
-		PricePerCpu          *big.Int
-		PricePerGpu          *big.Int
-		PricePerMemoryGB     *big.Int
-		PricePerStorageGB    *big.Int
-		PricePerBandwidthGB  *big.Int
-		Metadata             string
-		PaymentToken         common.Address
+		PeerId              string
+		Owner               common.Address
+		Operator            common.Address
+		Name                string
+		Symbol              string
+		Budget              *big.Int
+		SpentBudget         *big.Int
+		NodeCount           *big.Int
+		PricePerCpu         *big.Int
+		PricePerGpu         *big.Int
+		PricePerMemoryGB    *big.Int
+		PricePerStorageGB   *big.Int
+		PricePerBandwidthGB *big.Int
+		Metadata            string
+		PaymentToken        common.Address
 	})
 	if err != nil {
 		return *outstruct, err
@@ -313,20 +295,14 @@ func (_SubnetAppStore *SubnetAppStoreCaller) Apps(opts *bind.CallOpts, arg0 *big
 	outstruct.Symbol = *abi.ConvertType(out[4], new(string)).(*string)
 	outstruct.Budget = *abi.ConvertType(out[5], new(*big.Int)).(**big.Int)
 	outstruct.SpentBudget = *abi.ConvertType(out[6], new(*big.Int)).(**big.Int)
-	outstruct.MaxNodes = *abi.ConvertType(out[7], new(*big.Int)).(**big.Int)
-	outstruct.MinCpu = *abi.ConvertType(out[8], new(*big.Int)).(**big.Int)
-	outstruct.MinGpu = *abi.ConvertType(out[9], new(*big.Int)).(**big.Int)
-	outstruct.MinMemory = *abi.ConvertType(out[10], new(*big.Int)).(**big.Int)
-	outstruct.MinUploadBandwidth = *abi.ConvertType(out[11], new(*big.Int)).(**big.Int)
-	outstruct.MinDownloadBandwidth = *abi.ConvertType(out[12], new(*big.Int)).(**big.Int)
-	outstruct.NodeCount = *abi.ConvertType(out[13], new(*big.Int)).(**big.Int)
-	outstruct.PricePerCpu = *abi.ConvertType(out[14], new(*big.Int)).(**big.Int)
-	outstruct.PricePerGpu = *abi.ConvertType(out[15], new(*big.Int)).(**big.Int)
-	outstruct.PricePerMemoryGB = *abi.ConvertType(out[16], new(*big.Int)).(**big.Int)
-	outstruct.PricePerStorageGB = *abi.ConvertType(out[17], new(*big.Int)).(**big.Int)
-	outstruct.PricePerBandwidthGB = *abi.ConvertType(out[18], new(*big.Int)).(**big.Int)
-	outstruct.Metadata = *abi.ConvertType(out[19], new(string)).(*string)
-	outstruct.PaymentToken = *abi.ConvertType(out[20], new(common.Address)).(*common.Address)
+	outstruct.NodeCount = *abi.ConvertType(out[7], new(*big.Int)).(**big.Int)
+	outstruct.PricePerCpu = *abi.ConvertType(out[8], new(*big.Int)).(**big.Int)
+	outstruct.PricePerGpu = *abi.ConvertType(out[9], new(*big.Int)).(**big.Int)
+	outstruct.PricePerMemoryGB = *abi.ConvertType(out[10], new(*big.Int)).(**big.Int)
+	outstruct.PricePerStorageGB = *abi.ConvertType(out[11], new(*big.Int)).(**big.Int)
+	outstruct.PricePerBandwidthGB = *abi.ConvertType(out[12], new(*big.Int)).(**big.Int)
+	outstruct.Metadata = *abi.ConvertType(out[13], new(string)).(*string)
+	outstruct.PaymentToken = *abi.ConvertType(out[14], new(common.Address)).(*common.Address)
 
 	return *outstruct, err
 
@@ -334,58 +310,46 @@ func (_SubnetAppStore *SubnetAppStoreCaller) Apps(opts *bind.CallOpts, arg0 *big
 
 // Apps is a free data retrieval call binding the contract method 0x61acc37e.
 //
-// Solidity: function apps(uint256 ) view returns(string peerId, address owner, address operator, string name, string symbol, uint256 budget, uint256 spentBudget, uint256 maxNodes, uint256 minCpu, uint256 minGpu, uint256 minMemory, uint256 minUploadBandwidth, uint256 minDownloadBandwidth, uint256 nodeCount, uint256 pricePerCpu, uint256 pricePerGpu, uint256 pricePerMemoryGB, uint256 pricePerStorageGB, uint256 pricePerBandwidthGB, string metadata, address paymentToken)
+// Solidity: function apps(uint256 ) view returns(string peerId, address owner, address operator, string name, string symbol, uint256 budget, uint256 spentBudget, uint256 nodeCount, uint256 pricePerCpu, uint256 pricePerGpu, uint256 pricePerMemoryGB, uint256 pricePerStorageGB, uint256 pricePerBandwidthGB, string metadata, address paymentToken)
 func (_SubnetAppStore *SubnetAppStoreSession) Apps(arg0 *big.Int) (struct {
-	PeerId               string
-	Owner                common.Address
-	Operator             common.Address
-	Name                 string
-	Symbol               string
-	Budget               *big.Int
-	SpentBudget          *big.Int
-	MaxNodes             *big.Int
-	MinCpu               *big.Int
-	MinGpu               *big.Int
-	MinMemory            *big.Int
-	MinUploadBandwidth   *big.Int
-	MinDownloadBandwidth *big.Int
-	NodeCount            *big.Int
-	PricePerCpu          *big.Int
-	PricePerGpu          *big.Int
-	PricePerMemoryGB     *big.Int
-	PricePerStorageGB    *big.Int
-	PricePerBandwidthGB  *big.Int
-	Metadata             string
-	PaymentToken         common.Address
+	PeerId              string
+	Owner               common.Address
+	Operator            common.Address
+	Name                string
+	Symbol              string
+	Budget              *big.Int
+	SpentBudget         *big.Int
+	NodeCount           *big.Int
+	PricePerCpu         *big.Int
+	PricePerGpu         *big.Int
+	PricePerMemoryGB    *big.Int
+	PricePerStorageGB   *big.Int
+	PricePerBandwidthGB *big.Int
+	Metadata            string
+	PaymentToken        common.Address
 }, error) {
 	return _SubnetAppStore.Contract.Apps(&_SubnetAppStore.CallOpts, arg0)
 }
 
 // Apps is a free data retrieval call binding the contract method 0x61acc37e.
 //
-// Solidity: function apps(uint256 ) view returns(string peerId, address owner, address operator, string name, string symbol, uint256 budget, uint256 spentBudget, uint256 maxNodes, uint256 minCpu, uint256 minGpu, uint256 minMemory, uint256 minUploadBandwidth, uint256 minDownloadBandwidth, uint256 nodeCount, uint256 pricePerCpu, uint256 pricePerGpu, uint256 pricePerMemoryGB, uint256 pricePerStorageGB, uint256 pricePerBandwidthGB, string metadata, address paymentToken)
+// Solidity: function apps(uint256 ) view returns(string peerId, address owner, address operator, string name, string symbol, uint256 budget, uint256 spentBudget, uint256 nodeCount, uint256 pricePerCpu, uint256 pricePerGpu, uint256 pricePerMemoryGB, uint256 pricePerStorageGB, uint256 pricePerBandwidthGB, string metadata, address paymentToken)
 func (_SubnetAppStore *SubnetAppStoreCallerSession) Apps(arg0 *big.Int) (struct {
-	PeerId               string
-	Owner                common.Address
-	Operator             common.Address
-	Name                 string
-	Symbol               string
-	Budget               *big.Int
-	SpentBudget          *big.Int
-	MaxNodes             *big.Int
-	MinCpu               *big.Int
-	MinGpu               *big.Int
-	MinMemory            *big.Int
-	MinUploadBandwidth   *big.Int
-	MinDownloadBandwidth *big.Int
-	NodeCount            *big.Int
-	PricePerCpu          *big.Int
-	PricePerGpu          *big.Int
-	PricePerMemoryGB     *big.Int
-	PricePerStorageGB    *big.Int
-	PricePerBandwidthGB  *big.Int
-	Metadata             string
-	PaymentToken         common.Address
+	PeerId              string
+	Owner               common.Address
+	Operator            common.Address
+	Name                string
+	Symbol              string
+	Budget              *big.Int
+	SpentBudget         *big.Int
+	NodeCount           *big.Int
+	PricePerCpu         *big.Int
+	PricePerGpu         *big.Int
+	PricePerMemoryGB    *big.Int
+	PricePerStorageGB   *big.Int
+	PricePerBandwidthGB *big.Int
+	Metadata            string
+	PaymentToken        common.Address
 }, error) {
 	return _SubnetAppStore.Contract.Apps(&_SubnetAppStore.CallOpts, arg0)
 }
@@ -578,7 +542,7 @@ func (_SubnetAppStore *SubnetAppStoreCallerSession) FeeRate() (*big.Int, error) 
 
 // GetApp is a free data retrieval call binding the contract method 0x24f3a51b.
 //
-// Solidity: function getApp(uint256 appId) view returns((string,address,address,string,string,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,string,address) app)
+// Solidity: function getApp(uint256 appId) view returns((string,address,address,string,string,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,string,address) app)
 func (_SubnetAppStore *SubnetAppStoreCaller) GetApp(opts *bind.CallOpts, appId *big.Int) (SubnetAppStoreApp, error) {
 	var out []interface{}
 	err := _SubnetAppStore.contract.Call(opts, &out, "getApp", appId)
@@ -595,14 +559,14 @@ func (_SubnetAppStore *SubnetAppStoreCaller) GetApp(opts *bind.CallOpts, appId *
 
 // GetApp is a free data retrieval call binding the contract method 0x24f3a51b.
 //
-// Solidity: function getApp(uint256 appId) view returns((string,address,address,string,string,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,string,address) app)
+// Solidity: function getApp(uint256 appId) view returns((string,address,address,string,string,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,string,address) app)
 func (_SubnetAppStore *SubnetAppStoreSession) GetApp(appId *big.Int) (SubnetAppStoreApp, error) {
 	return _SubnetAppStore.Contract.GetApp(&_SubnetAppStore.CallOpts, appId)
 }
 
 // GetApp is a free data retrieval call binding the contract method 0x24f3a51b.
 //
-// Solidity: function getApp(uint256 appId) view returns((string,address,address,string,string,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,string,address) app)
+// Solidity: function getApp(uint256 appId) view returns((string,address,address,string,string,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,string,address) app)
 func (_SubnetAppStore *SubnetAppStoreCallerSession) GetApp(appId *big.Int) (SubnetAppStoreApp, error) {
 	return _SubnetAppStore.Contract.GetApp(&_SubnetAppStore.CallOpts, appId)
 }
@@ -640,7 +604,7 @@ func (_SubnetAppStore *SubnetAppStoreCallerSession) GetDeployment(appId *big.Int
 
 // ListApps is a free data retrieval call binding the contract method 0x3d205559.
 //
-// Solidity: function listApps(uint256 start, uint256 end) view returns((string,address,address,string,string,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,string,address)[])
+// Solidity: function listApps(uint256 start, uint256 end) view returns((string,address,address,string,string,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,string,address)[])
 func (_SubnetAppStore *SubnetAppStoreCaller) ListApps(opts *bind.CallOpts, start *big.Int, end *big.Int) ([]SubnetAppStoreApp, error) {
 	var out []interface{}
 	err := _SubnetAppStore.contract.Call(opts, &out, "listApps", start, end)
@@ -657,14 +621,14 @@ func (_SubnetAppStore *SubnetAppStoreCaller) ListApps(opts *bind.CallOpts, start
 
 // ListApps is a free data retrieval call binding the contract method 0x3d205559.
 //
-// Solidity: function listApps(uint256 start, uint256 end) view returns((string,address,address,string,string,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,string,address)[])
+// Solidity: function listApps(uint256 start, uint256 end) view returns((string,address,address,string,string,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,string,address)[])
 func (_SubnetAppStore *SubnetAppStoreSession) ListApps(start *big.Int, end *big.Int) ([]SubnetAppStoreApp, error) {
 	return _SubnetAppStore.Contract.ListApps(&_SubnetAppStore.CallOpts, start, end)
 }
 
 // ListApps is a free data retrieval call binding the contract method 0x3d205559.
 //
-// Solidity: function listApps(uint256 start, uint256 end) view returns((string,address,address,string,string,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,string,address)[])
+// Solidity: function listApps(uint256 start, uint256 end) view returns((string,address,address,string,string,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,string,address)[])
 func (_SubnetAppStore *SubnetAppStoreCallerSession) ListApps(start *big.Int, end *big.Int) ([]SubnetAppStoreApp, error) {
 	return _SubnetAppStore.Contract.ListApps(&_SubnetAppStore.CallOpts, start, end)
 }
@@ -876,25 +840,25 @@ func (_SubnetAppStore *SubnetAppStoreTransactorSession) ClaimReward(providerId *
 	return _SubnetAppStore.Contract.ClaimReward(&_SubnetAppStore.TransactOpts, providerId, appId)
 }
 
-// CreateApp is a paid mutator transaction binding the contract method 0x18acd9f5.
+// CreateApp is a paid mutator transaction binding the contract method 0x4f2d62a4.
 //
-// Solidity: function createApp(string name, string symbol, string peerId, uint256 budget, uint256 maxNodes, uint256 minCpu, uint256 minGpu, uint256 minMemory, uint256 minUploadBandwidth, uint256 minDownloadBandwidth, uint256 pricePerCpu, uint256 pricePerGpu, uint256 pricePerMemoryGB, uint256 pricePerStorageGB, uint256 pricePerBandwidthGB, string metadata, address operator, address paymentToken) returns(uint256)
-func (_SubnetAppStore *SubnetAppStoreTransactor) CreateApp(opts *bind.TransactOpts, name string, symbol string, peerId string, budget *big.Int, maxNodes *big.Int, minCpu *big.Int, minGpu *big.Int, minMemory *big.Int, minUploadBandwidth *big.Int, minDownloadBandwidth *big.Int, pricePerCpu *big.Int, pricePerGpu *big.Int, pricePerMemoryGB *big.Int, pricePerStorageGB *big.Int, pricePerBandwidthGB *big.Int, metadata string, operator common.Address, paymentToken common.Address) (*types.Transaction, error) {
-	return _SubnetAppStore.contract.Transact(opts, "createApp", name, symbol, peerId, budget, maxNodes, minCpu, minGpu, minMemory, minUploadBandwidth, minDownloadBandwidth, pricePerCpu, pricePerGpu, pricePerMemoryGB, pricePerStorageGB, pricePerBandwidthGB, metadata, operator, paymentToken)
+// Solidity: function createApp(string name, string symbol, string peerId, uint256 budget, uint256 pricePerCpu, uint256 pricePerGpu, uint256 pricePerMemoryGB, uint256 pricePerStorageGB, uint256 pricePerBandwidthGB, string metadata, address operator, address paymentToken) returns(uint256)
+func (_SubnetAppStore *SubnetAppStoreTransactor) CreateApp(opts *bind.TransactOpts, name string, symbol string, peerId string, budget *big.Int, pricePerCpu *big.Int, pricePerGpu *big.Int, pricePerMemoryGB *big.Int, pricePerStorageGB *big.Int, pricePerBandwidthGB *big.Int, metadata string, operator common.Address, paymentToken common.Address) (*types.Transaction, error) {
+	return _SubnetAppStore.contract.Transact(opts, "createApp", name, symbol, peerId, budget, pricePerCpu, pricePerGpu, pricePerMemoryGB, pricePerStorageGB, pricePerBandwidthGB, metadata, operator, paymentToken)
 }
 
-// CreateApp is a paid mutator transaction binding the contract method 0x18acd9f5.
+// CreateApp is a paid mutator transaction binding the contract method 0x4f2d62a4.
 //
-// Solidity: function createApp(string name, string symbol, string peerId, uint256 budget, uint256 maxNodes, uint256 minCpu, uint256 minGpu, uint256 minMemory, uint256 minUploadBandwidth, uint256 minDownloadBandwidth, uint256 pricePerCpu, uint256 pricePerGpu, uint256 pricePerMemoryGB, uint256 pricePerStorageGB, uint256 pricePerBandwidthGB, string metadata, address operator, address paymentToken) returns(uint256)
-func (_SubnetAppStore *SubnetAppStoreSession) CreateApp(name string, symbol string, peerId string, budget *big.Int, maxNodes *big.Int, minCpu *big.Int, minGpu *big.Int, minMemory *big.Int, minUploadBandwidth *big.Int, minDownloadBandwidth *big.Int, pricePerCpu *big.Int, pricePerGpu *big.Int, pricePerMemoryGB *big.Int, pricePerStorageGB *big.Int, pricePerBandwidthGB *big.Int, metadata string, operator common.Address, paymentToken common.Address) (*types.Transaction, error) {
-	return _SubnetAppStore.Contract.CreateApp(&_SubnetAppStore.TransactOpts, name, symbol, peerId, budget, maxNodes, minCpu, minGpu, minMemory, minUploadBandwidth, minDownloadBandwidth, pricePerCpu, pricePerGpu, pricePerMemoryGB, pricePerStorageGB, pricePerBandwidthGB, metadata, operator, paymentToken)
+// Solidity: function createApp(string name, string symbol, string peerId, uint256 budget, uint256 pricePerCpu, uint256 pricePerGpu, uint256 pricePerMemoryGB, uint256 pricePerStorageGB, uint256 pricePerBandwidthGB, string metadata, address operator, address paymentToken) returns(uint256)
+func (_SubnetAppStore *SubnetAppStoreSession) CreateApp(name string, symbol string, peerId string, budget *big.Int, pricePerCpu *big.Int, pricePerGpu *big.Int, pricePerMemoryGB *big.Int, pricePerStorageGB *big.Int, pricePerBandwidthGB *big.Int, metadata string, operator common.Address, paymentToken common.Address) (*types.Transaction, error) {
+	return _SubnetAppStore.Contract.CreateApp(&_SubnetAppStore.TransactOpts, name, symbol, peerId, budget, pricePerCpu, pricePerGpu, pricePerMemoryGB, pricePerStorageGB, pricePerBandwidthGB, metadata, operator, paymentToken)
 }
 
-// CreateApp is a paid mutator transaction binding the contract method 0x18acd9f5.
+// CreateApp is a paid mutator transaction binding the contract method 0x4f2d62a4.
 //
-// Solidity: function createApp(string name, string symbol, string peerId, uint256 budget, uint256 maxNodes, uint256 minCpu, uint256 minGpu, uint256 minMemory, uint256 minUploadBandwidth, uint256 minDownloadBandwidth, uint256 pricePerCpu, uint256 pricePerGpu, uint256 pricePerMemoryGB, uint256 pricePerStorageGB, uint256 pricePerBandwidthGB, string metadata, address operator, address paymentToken) returns(uint256)
-func (_SubnetAppStore *SubnetAppStoreTransactorSession) CreateApp(name string, symbol string, peerId string, budget *big.Int, maxNodes *big.Int, minCpu *big.Int, minGpu *big.Int, minMemory *big.Int, minUploadBandwidth *big.Int, minDownloadBandwidth *big.Int, pricePerCpu *big.Int, pricePerGpu *big.Int, pricePerMemoryGB *big.Int, pricePerStorageGB *big.Int, pricePerBandwidthGB *big.Int, metadata string, operator common.Address, paymentToken common.Address) (*types.Transaction, error) {
-	return _SubnetAppStore.Contract.CreateApp(&_SubnetAppStore.TransactOpts, name, symbol, peerId, budget, maxNodes, minCpu, minGpu, minMemory, minUploadBandwidth, minDownloadBandwidth, pricePerCpu, pricePerGpu, pricePerMemoryGB, pricePerStorageGB, pricePerBandwidthGB, metadata, operator, paymentToken)
+// Solidity: function createApp(string name, string symbol, string peerId, uint256 budget, uint256 pricePerCpu, uint256 pricePerGpu, uint256 pricePerMemoryGB, uint256 pricePerStorageGB, uint256 pricePerBandwidthGB, string metadata, address operator, address paymentToken) returns(uint256)
+func (_SubnetAppStore *SubnetAppStoreTransactorSession) CreateApp(name string, symbol string, peerId string, budget *big.Int, pricePerCpu *big.Int, pricePerGpu *big.Int, pricePerMemoryGB *big.Int, pricePerStorageGB *big.Int, pricePerBandwidthGB *big.Int, metadata string, operator common.Address, paymentToken common.Address) (*types.Transaction, error) {
+	return _SubnetAppStore.Contract.CreateApp(&_SubnetAppStore.TransactOpts, name, symbol, peerId, budget, pricePerCpu, pricePerGpu, pricePerMemoryGB, pricePerStorageGB, pricePerBandwidthGB, metadata, operator, paymentToken)
 }
 
 // Deposit is a paid mutator transaction binding the contract method 0xe2bbb158.
@@ -941,23 +905,23 @@ func (_SubnetAppStore *SubnetAppStoreTransactorSession) RenounceOwnership() (*ty
 
 // ReportUsage is a paid mutator transaction binding the contract method 0x13eaf5ca.
 //
-// Solidity: function reportUsage(uint256 providerId, uint256 appId, uint256 usedCpu, uint256 usedGpu, uint256 usedMemory, uint256 usedStorage, uint256 usedUploadBytes, uint256 usedDownloadBytes, uint256 duration, bytes signature) returns()
-func (_SubnetAppStore *SubnetAppStoreTransactor) ReportUsage(opts *bind.TransactOpts, providerId *big.Int, appId *big.Int, usedCpu *big.Int, usedGpu *big.Int, usedMemory *big.Int, usedStorage *big.Int, usedUploadBytes *big.Int, usedDownloadBytes *big.Int, duration *big.Int, signature []byte) (*types.Transaction, error) {
-	return _SubnetAppStore.contract.Transact(opts, "reportUsage", providerId, appId, usedCpu, usedGpu, usedMemory, usedStorage, usedUploadBytes, usedDownloadBytes, duration, signature)
+// Solidity: function reportUsage(uint256 appId, uint256 providerId, uint256 usedCpu, uint256 usedGpu, uint256 usedMemory, uint256 usedStorage, uint256 usedUploadBytes, uint256 usedDownloadBytes, uint256 duration, bytes signature) returns()
+func (_SubnetAppStore *SubnetAppStoreTransactor) ReportUsage(opts *bind.TransactOpts, appId *big.Int, providerId *big.Int, usedCpu *big.Int, usedGpu *big.Int, usedMemory *big.Int, usedStorage *big.Int, usedUploadBytes *big.Int, usedDownloadBytes *big.Int, duration *big.Int, signature []byte) (*types.Transaction, error) {
+	return _SubnetAppStore.contract.Transact(opts, "reportUsage", appId, providerId, usedCpu, usedGpu, usedMemory, usedStorage, usedUploadBytes, usedDownloadBytes, duration, signature)
 }
 
 // ReportUsage is a paid mutator transaction binding the contract method 0x13eaf5ca.
 //
-// Solidity: function reportUsage(uint256 providerId, uint256 appId, uint256 usedCpu, uint256 usedGpu, uint256 usedMemory, uint256 usedStorage, uint256 usedUploadBytes, uint256 usedDownloadBytes, uint256 duration, bytes signature) returns()
-func (_SubnetAppStore *SubnetAppStoreSession) ReportUsage(providerId *big.Int, appId *big.Int, usedCpu *big.Int, usedGpu *big.Int, usedMemory *big.Int, usedStorage *big.Int, usedUploadBytes *big.Int, usedDownloadBytes *big.Int, duration *big.Int, signature []byte) (*types.Transaction, error) {
-	return _SubnetAppStore.Contract.ReportUsage(&_SubnetAppStore.TransactOpts, providerId, appId, usedCpu, usedGpu, usedMemory, usedStorage, usedUploadBytes, usedDownloadBytes, duration, signature)
+// Solidity: function reportUsage(uint256 appId, uint256 providerId, uint256 usedCpu, uint256 usedGpu, uint256 usedMemory, uint256 usedStorage, uint256 usedUploadBytes, uint256 usedDownloadBytes, uint256 duration, bytes signature) returns()
+func (_SubnetAppStore *SubnetAppStoreSession) ReportUsage(appId *big.Int, providerId *big.Int, usedCpu *big.Int, usedGpu *big.Int, usedMemory *big.Int, usedStorage *big.Int, usedUploadBytes *big.Int, usedDownloadBytes *big.Int, duration *big.Int, signature []byte) (*types.Transaction, error) {
+	return _SubnetAppStore.Contract.ReportUsage(&_SubnetAppStore.TransactOpts, appId, providerId, usedCpu, usedGpu, usedMemory, usedStorage, usedUploadBytes, usedDownloadBytes, duration, signature)
 }
 
 // ReportUsage is a paid mutator transaction binding the contract method 0x13eaf5ca.
 //
-// Solidity: function reportUsage(uint256 providerId, uint256 appId, uint256 usedCpu, uint256 usedGpu, uint256 usedMemory, uint256 usedStorage, uint256 usedUploadBytes, uint256 usedDownloadBytes, uint256 duration, bytes signature) returns()
-func (_SubnetAppStore *SubnetAppStoreTransactorSession) ReportUsage(providerId *big.Int, appId *big.Int, usedCpu *big.Int, usedGpu *big.Int, usedMemory *big.Int, usedStorage *big.Int, usedUploadBytes *big.Int, usedDownloadBytes *big.Int, duration *big.Int, signature []byte) (*types.Transaction, error) {
-	return _SubnetAppStore.Contract.ReportUsage(&_SubnetAppStore.TransactOpts, providerId, appId, usedCpu, usedGpu, usedMemory, usedStorage, usedUploadBytes, usedDownloadBytes, duration, signature)
+// Solidity: function reportUsage(uint256 appId, uint256 providerId, uint256 usedCpu, uint256 usedGpu, uint256 usedMemory, uint256 usedStorage, uint256 usedUploadBytes, uint256 usedDownloadBytes, uint256 duration, bytes signature) returns()
+func (_SubnetAppStore *SubnetAppStoreTransactorSession) ReportUsage(appId *big.Int, providerId *big.Int, usedCpu *big.Int, usedGpu *big.Int, usedMemory *big.Int, usedStorage *big.Int, usedUploadBytes *big.Int, usedDownloadBytes *big.Int, duration *big.Int, signature []byte) (*types.Transaction, error) {
+	return _SubnetAppStore.Contract.ReportUsage(&_SubnetAppStore.TransactOpts, appId, providerId, usedCpu, usedGpu, usedMemory, usedStorage, usedUploadBytes, usedDownloadBytes, duration, signature)
 }
 
 // SetFeeRate is a paid mutator transaction binding the contract method 0x45596e2e.
@@ -1023,25 +987,25 @@ func (_SubnetAppStore *SubnetAppStoreTransactorSession) TransferOwnership(newOwn
 	return _SubnetAppStore.Contract.TransferOwnership(&_SubnetAppStore.TransactOpts, newOwner)
 }
 
-// UpdateApp is a paid mutator transaction binding the contract method 0x2c111205.
+// UpdateApp is a paid mutator transaction binding the contract method 0xf28ef0e8.
 //
-// Solidity: function updateApp(uint256 appId, string peerId, uint256 maxNodes, uint256 minCpu, uint256 minGpu, uint256 minMemory, uint256 minUploadBandwidth, uint256 minDownloadBandwidth, uint256 pricePerCpu, uint256 pricePerGpu, uint256 pricePerMemoryGB, uint256 pricePerStorageGB, uint256 pricePerBandwidthGB) returns()
-func (_SubnetAppStore *SubnetAppStoreTransactor) UpdateApp(opts *bind.TransactOpts, appId *big.Int, peerId string, maxNodes *big.Int, minCpu *big.Int, minGpu *big.Int, minMemory *big.Int, minUploadBandwidth *big.Int, minDownloadBandwidth *big.Int, pricePerCpu *big.Int, pricePerGpu *big.Int, pricePerMemoryGB *big.Int, pricePerStorageGB *big.Int, pricePerBandwidthGB *big.Int) (*types.Transaction, error) {
-	return _SubnetAppStore.contract.Transact(opts, "updateApp", appId, peerId, maxNodes, minCpu, minGpu, minMemory, minUploadBandwidth, minDownloadBandwidth, pricePerCpu, pricePerGpu, pricePerMemoryGB, pricePerStorageGB, pricePerBandwidthGB)
+// Solidity: function updateApp(uint256 appId, uint256 pricePerCpu, uint256 pricePerGpu, uint256 pricePerMemoryGB, uint256 pricePerStorageGB, uint256 pricePerBandwidthGB) returns()
+func (_SubnetAppStore *SubnetAppStoreTransactor) UpdateApp(opts *bind.TransactOpts, appId *big.Int, pricePerCpu *big.Int, pricePerGpu *big.Int, pricePerMemoryGB *big.Int, pricePerStorageGB *big.Int, pricePerBandwidthGB *big.Int) (*types.Transaction, error) {
+	return _SubnetAppStore.contract.Transact(opts, "updateApp", appId, pricePerCpu, pricePerGpu, pricePerMemoryGB, pricePerStorageGB, pricePerBandwidthGB)
 }
 
-// UpdateApp is a paid mutator transaction binding the contract method 0x2c111205.
+// UpdateApp is a paid mutator transaction binding the contract method 0xf28ef0e8.
 //
-// Solidity: function updateApp(uint256 appId, string peerId, uint256 maxNodes, uint256 minCpu, uint256 minGpu, uint256 minMemory, uint256 minUploadBandwidth, uint256 minDownloadBandwidth, uint256 pricePerCpu, uint256 pricePerGpu, uint256 pricePerMemoryGB, uint256 pricePerStorageGB, uint256 pricePerBandwidthGB) returns()
-func (_SubnetAppStore *SubnetAppStoreSession) UpdateApp(appId *big.Int, peerId string, maxNodes *big.Int, minCpu *big.Int, minGpu *big.Int, minMemory *big.Int, minUploadBandwidth *big.Int, minDownloadBandwidth *big.Int, pricePerCpu *big.Int, pricePerGpu *big.Int, pricePerMemoryGB *big.Int, pricePerStorageGB *big.Int, pricePerBandwidthGB *big.Int) (*types.Transaction, error) {
-	return _SubnetAppStore.Contract.UpdateApp(&_SubnetAppStore.TransactOpts, appId, peerId, maxNodes, minCpu, minGpu, minMemory, minUploadBandwidth, minDownloadBandwidth, pricePerCpu, pricePerGpu, pricePerMemoryGB, pricePerStorageGB, pricePerBandwidthGB)
+// Solidity: function updateApp(uint256 appId, uint256 pricePerCpu, uint256 pricePerGpu, uint256 pricePerMemoryGB, uint256 pricePerStorageGB, uint256 pricePerBandwidthGB) returns()
+func (_SubnetAppStore *SubnetAppStoreSession) UpdateApp(appId *big.Int, pricePerCpu *big.Int, pricePerGpu *big.Int, pricePerMemoryGB *big.Int, pricePerStorageGB *big.Int, pricePerBandwidthGB *big.Int) (*types.Transaction, error) {
+	return _SubnetAppStore.Contract.UpdateApp(&_SubnetAppStore.TransactOpts, appId, pricePerCpu, pricePerGpu, pricePerMemoryGB, pricePerStorageGB, pricePerBandwidthGB)
 }
 
-// UpdateApp is a paid mutator transaction binding the contract method 0x2c111205.
+// UpdateApp is a paid mutator transaction binding the contract method 0xf28ef0e8.
 //
-// Solidity: function updateApp(uint256 appId, string peerId, uint256 maxNodes, uint256 minCpu, uint256 minGpu, uint256 minMemory, uint256 minUploadBandwidth, uint256 minDownloadBandwidth, uint256 pricePerCpu, uint256 pricePerGpu, uint256 pricePerMemoryGB, uint256 pricePerStorageGB, uint256 pricePerBandwidthGB) returns()
-func (_SubnetAppStore *SubnetAppStoreTransactorSession) UpdateApp(appId *big.Int, peerId string, maxNodes *big.Int, minCpu *big.Int, minGpu *big.Int, minMemory *big.Int, minUploadBandwidth *big.Int, minDownloadBandwidth *big.Int, pricePerCpu *big.Int, pricePerGpu *big.Int, pricePerMemoryGB *big.Int, pricePerStorageGB *big.Int, pricePerBandwidthGB *big.Int) (*types.Transaction, error) {
-	return _SubnetAppStore.Contract.UpdateApp(&_SubnetAppStore.TransactOpts, appId, peerId, maxNodes, minCpu, minGpu, minMemory, minUploadBandwidth, minDownloadBandwidth, pricePerCpu, pricePerGpu, pricePerMemoryGB, pricePerStorageGB, pricePerBandwidthGB)
+// Solidity: function updateApp(uint256 appId, uint256 pricePerCpu, uint256 pricePerGpu, uint256 pricePerMemoryGB, uint256 pricePerStorageGB, uint256 pricePerBandwidthGB) returns()
+func (_SubnetAppStore *SubnetAppStoreTransactorSession) UpdateApp(appId *big.Int, pricePerCpu *big.Int, pricePerGpu *big.Int, pricePerMemoryGB *big.Int, pricePerStorageGB *big.Int, pricePerBandwidthGB *big.Int) (*types.Transaction, error) {
+	return _SubnetAppStore.Contract.UpdateApp(&_SubnetAppStore.TransactOpts, appId, pricePerCpu, pricePerGpu, pricePerMemoryGB, pricePerStorageGB, pricePerBandwidthGB)
 }
 
 // UpdateMetadata is a paid mutator transaction binding the contract method 0x53c8388e.
@@ -1105,6 +1069,27 @@ func (_SubnetAppStore *SubnetAppStoreSession) UpdateOperator(appId *big.Int, ope
 // Solidity: function updateOperator(uint256 appId, address operator) returns()
 func (_SubnetAppStore *SubnetAppStoreTransactorSession) UpdateOperator(appId *big.Int, operator common.Address) (*types.Transaction, error) {
 	return _SubnetAppStore.Contract.UpdateOperator(&_SubnetAppStore.TransactOpts, appId, operator)
+}
+
+// UpdatePeerId is a paid mutator transaction binding the contract method 0xe89c7408.
+//
+// Solidity: function updatePeerId(uint256 appId, string peerId) returns()
+func (_SubnetAppStore *SubnetAppStoreTransactor) UpdatePeerId(opts *bind.TransactOpts, appId *big.Int, peerId string) (*types.Transaction, error) {
+	return _SubnetAppStore.contract.Transact(opts, "updatePeerId", appId, peerId)
+}
+
+// UpdatePeerId is a paid mutator transaction binding the contract method 0xe89c7408.
+//
+// Solidity: function updatePeerId(uint256 appId, string peerId) returns()
+func (_SubnetAppStore *SubnetAppStoreSession) UpdatePeerId(appId *big.Int, peerId string) (*types.Transaction, error) {
+	return _SubnetAppStore.Contract.UpdatePeerId(&_SubnetAppStore.TransactOpts, appId, peerId)
+}
+
+// UpdatePeerId is a paid mutator transaction binding the contract method 0xe89c7408.
+//
+// Solidity: function updatePeerId(uint256 appId, string peerId) returns()
+func (_SubnetAppStore *SubnetAppStoreTransactorSession) UpdatePeerId(appId *big.Int, peerId string) (*types.Transaction, error) {
+	return _SubnetAppStore.Contract.UpdatePeerId(&_SubnetAppStore.TransactOpts, appId, peerId)
 }
 
 // SubnetAppStoreAppCreatedIterator is returned from FilterAppCreated and is used to iterate over the raw logs and unpacked data for AppCreated events raised by the SubnetAppStore contract.

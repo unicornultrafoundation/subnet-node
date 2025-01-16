@@ -71,7 +71,7 @@ func (s *Service) RunApp(ctx context.Context, appId *big.Int) (*App, error) {
 	}
 
 	// Start the container
-	task, err := container.NewTask(ctx, cio.NewCreator(cio.WithStdio))
+	task, err := container.NewTask(ctx, cio.NewCreator())
 	if err != nil {
 		return nil, fmt.Errorf("failed to create task: %w", err)
 	}

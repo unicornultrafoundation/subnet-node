@@ -25,7 +25,7 @@ import (
 	pbapp "github.com/unicornultrafoundation/subnet-node/proto/subnet/app"
 )
 
-var log = logrus.New().WithField("service", "apps")
+var log = logrus.WithField("service", "apps")
 
 const NAMESPACE = "subnet-apps"
 const PROTOCOL_ID = protocol.ID("subnet-apps")
@@ -125,15 +125,10 @@ func (s *Service) GetApp(ctx context.Context, appId *big.Int) (*App, error) {
 
 	app := convertToApp(subnetApp, appId, appStatus)
 
-	appConfig, err := s.GetContainerConfigProto(ctx, appId)
-	if err == nil {
-		app.Metadata.ContainerConfig.Env = appConfig.ContainerConfig.Env
-	}
-
 	// Retrieve metadata from datastore if available
 	metadata, err := s.GetContainerConfigProto(ctx, appId)
 	if err == nil {
-		app.Metadata.ContainerConfig = metadata.ContainerConfig
+		app.Metadata.ContainerConfig.Env = metadata.ContainerConfig.Env
 	}
 
 	if appStatus == Running {

@@ -104,11 +104,12 @@ type ContactInfo struct {
 }
 
 type AppInfo struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Logo        string `json:"logo"`
-	Banner      string `json:"banner"`
-	Website     string `json:"website"`
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	Logo        string   `json:"logo"`
+	Banner      string   `json:"banner"`
+	Website     string   `json:"website"`
+	Preview     []string `json:"preview"`
 }
 
 type ContainerConfig struct {
@@ -161,27 +162,21 @@ func convertToApp(subnetApp contracts.SubnetAppStoreApp, id *big.Int, status Pro
 	}
 
 	return &App{
-		ID:                   id,
-		PeerId:               subnetApp.PeerId,
-		Owner:                subnetApp.Owner,
-		Name:                 subnetApp.Name,
-		Symbol:               subnetApp.Symbol,
-		Budget:               subnetApp.Budget,
-		SpentBudget:          subnetApp.SpentBudget,
-		MaxNodes:             subnetApp.MaxNodes,
-		MinCpu:               subnetApp.MinCpu,
-		MinGpu:               subnetApp.MinGpu,
-		MinMemory:            subnetApp.MinMemory,
-		MinUploadBandwidth:   subnetApp.MinUploadBandwidth,
-		MinDownloadBandwidth: subnetApp.MinDownloadBandwidth,
-		NodeCount:            subnetApp.NodeCount,
-		PricePerCpu:          subnetApp.PricePerCpu,
-		PricePerGpu:          subnetApp.PricePerGpu,
-		PricePerMemoryGB:     subnetApp.PricePerMemoryGB,
-		PricePerStorageGB:    subnetApp.PricePerStorageGB,
-		PricePerBandwidthGB:  subnetApp.PricePerBandwidthGB,
-		Status:               status,
-		Metadata:             metadata,
+		ID:                  id,
+		PeerId:              subnetApp.PeerId,
+		Owner:               subnetApp.Owner,
+		Name:                subnetApp.Name,
+		Symbol:              subnetApp.Symbol,
+		Budget:              subnetApp.Budget,
+		SpentBudget:         subnetApp.SpentBudget,
+		NodeCount:           subnetApp.NodeCount,
+		PricePerCpu:         subnetApp.PricePerCpu,
+		PricePerGpu:         subnetApp.PricePerGpu,
+		PricePerMemoryGB:    subnetApp.PricePerMemoryGB,
+		PricePerStorageGB:   subnetApp.PricePerStorageGB,
+		PricePerBandwidthGB: subnetApp.PricePerBandwidthGB,
+		Status:              status,
+		Metadata:            metadata,
 	}
 }
 
@@ -495,6 +490,7 @@ func AppMetadataToProto(metadata *AppMetadata) *pbapp.AppMetadata {
 			Logo:        metadata.AppInfo.Logo,
 			Banner:      metadata.AppInfo.Banner,
 			Website:     metadata.AppInfo.Website,
+			Preview:     metadata.AppInfo.Preview,
 		},
 		ContainerConfig: &pbapp.ContainerConfig{
 			Image:   metadata.ContainerConfig.Image,

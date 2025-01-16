@@ -72,6 +72,7 @@ message AppInfo {
   string logo = 3;
   string banner = 4;
   string website = 5;
+  repeated string preview = 6;
 }
 
 message ContainerConfig {
