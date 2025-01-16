@@ -110,7 +110,8 @@ func (s *UptimeService) startPublishing(ctx context.Context) {
 			}
 
 			heartbeatMsg := &puptime.HeartbeatMsg{
-				Timestamp: time.Now().Unix(),
+				Timestamp:  time.Now().Unix(),
+				ProviderId: providerId,
 			}
 			msg := &puptime.Msg{
 				Payload: &puptime.Msg_Heartbeat{
@@ -182,7 +183,7 @@ func (s *UptimeService) startListening(ctx context.Context) {
 
 // createUptimeKey generates the datastore key for a given provider ID.
 func createUptimeKey(providerId int64) datastore.Key {
-	return datastore.NewKey(fmt.Sprintf("/uptime/peer:%d", providerId))
+	return datastore.NewKey(fmt.Sprintf("/uptime/provider:%d", providerId))
 }
 
 func (s *UptimeService) handleMerkeProofMsg(ctx context.Context, peerId peer.ID, merkeProof *puptime.MerkleProofMsg) {
@@ -312,7 +313,7 @@ func (s *UptimeService) updateProofs(ctx context.Context) {
 // loadUptimes retrieves all uptime records from the datastore
 func (s *UptimeService) loadUptimes(ctx context.Context) ([]*puptime.UptimeRecord, error) {
 	query := query.Query{
-		Prefix: "/uptime",
+		Prefix: "/uptime/provider:",
 	}
 
 	iter, err := s.Datastore.Query(ctx, query)
@@ -327,19 +328,16 @@ func (s *UptimeService) loadUptimes(ctx context.Context) ([]*puptime.UptimeRecor
 	}
 	var records []*puptime.UptimeRecord
 	for _, entry := range entities {
-		key := string(entry.Key)
-		if len(key) > 13 && key[:13] == "/uptime/peer:" {
-			peerID := key[13:]
-			var record puptime.UptimeRecord
-			if err := proto.Unmarshal(entry.Value, &record); err != nil {
-				log.Debugf("Failed to unmarshal uptime record for peer %s: %v", peerID, err)
-				continue
-			}
-			records = append(records, &record)
+		var record puptime.UptimeRecord
+		if err := proto.Unmarshal(entry.Value, &record); err != nil {
+			log.Debugf("Failed to unmarshal uptime record for key %s: %v", entry.Key, err)
+			continue
 		}
+		records = append(records, &record)
 	}
 	return records, nil
 }
+
 func (s *UptimeService) generateAndDistributeProofs(ctx context.Context) error {
 	// Load uptime records from the datastore
 	uptimes, err := s.loadUptimes(ctx)
