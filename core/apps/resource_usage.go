@@ -58,6 +58,8 @@ func (s *Service) GetAllRunningContainersUsage(ctx context.Context) (*ResourceUs
 		Duration:          big.NewInt(0),
 	}
 
+	providerId := big.NewInt(s.accountService.ProviderID())
+
 	// Iterate over each container and aggregate its resource usage
 	for _, container := range containers {
 		containerId := container.ID()
@@ -71,7 +73,7 @@ func (s *Service) GetAllRunningContainersUsage(ctx context.Context) (*ResourceUs
 		if err != nil {
 			usage = &ResourceUsage{
 				AppId:             appId,
-				SubnetId:          &s.subnetID,
+				ProviderId:        providerId,
 				UsedCpu:           big.NewInt(0),
 				UsedGpu:           big.NewInt(0),
 				UsedMemory:        big.NewInt(0),
@@ -253,6 +255,7 @@ func (s *Service) getUsage(ctx context.Context, appId *big.Int) (*ResourceUsage,
 }
 
 func (s *Service) getUsageFromExternal(ctx context.Context, appId *big.Int) (*ResourceUsage, error) {
+	providerId := big.NewInt(s.accountService.ProviderID())
 	// Get usage from datastore first
 	// Get all pids had run the appId from usage metadata
 	usageMetadata, err := s.getUsageMetadata(ctx, appId)
@@ -261,7 +264,7 @@ func (s *Service) getUsageFromExternal(ctx context.Context, appId *big.Int) (*Re
 		// Get all usages of the appId
 		totalUsage := &ResourceUsage{
 			AppId:             appId,
-			SubnetId:          &s.subnetID,
+			ProviderId:        providerId,
 			UsedCpu:           big.NewInt(0),
 			UsedGpu:           big.NewInt(0),
 			UsedMemory:        big.NewInt(0),
@@ -304,7 +307,7 @@ func (s *Service) getUsageFromExternal(ctx context.Context, appId *big.Int) (*Re
 
 	// No record found from datastore
 	// Get usage from smart contract
-	usage, err := s.subnetAppRegistry.GetAppNode(nil, appId, &s.subnetID)
+	usage, err := s.accountService.AppStore().GetDeployment(nil, appId, &s.subnetID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get resource usage from datastore & smart contract for appId %s:%s %v", appId.String(), s.subnetID.String(), err)
 	}

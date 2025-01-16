@@ -17,7 +17,7 @@ func (s *Service) GetApps(ctx context.Context, start *big.Int, end *big.Int, fil
 	if err != nil {
 		return nil, 0, err
 	}
-	subnetApps, err := s.subnetAppRegistry.ListApps(nil, big.NewInt(1), appCount)
+	subnetApps, err := s.accountService.AppStore().ListApps(nil, big.NewInt(1), appCount)
 	if err != nil {
 		return nil, 0, err
 	}

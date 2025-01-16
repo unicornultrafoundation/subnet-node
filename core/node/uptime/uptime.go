@@ -100,14 +100,9 @@ func (s *UptimeService) startPublishing(ctx context.Context) {
 		case <-ctx.Done(): // Exit if the context is cancelled
 			return
 		case <-ticker.C: // On every tick, send a heartbeat message
-			subnetID, err := s.AccountService.SubnetRegistry().PeerToSubnet(nil, s.Identity.String())
-			if err != nil {
-				log.Errorf("failed to fetch subnet ID for peer %s: %v", s.Identity.String(), err)
-				continue
-			}
-
-			if subnetID == nil {
-				log.Infof("subnet ID for peer %s is not registered", s.Identity.String())
+			providerId := s.AccountService.ProviderID()
+			if providerId == 0 {
+				log.Debugf("subnet ID for peer %s is not registered", s.Identity.String())
 				continue
 			}
 
@@ -127,7 +122,7 @@ func (s *UptimeService) startPublishing(ctx context.Context) {
 			}
 
 			// Update the peer's uptime based on the received message
-			if err := s.updatePeerUptime(ctx, s.Identity.String(), heartbeatMsg.Timestamp); err != nil {
+			if err := s.updatePeerUptime(ctx, providerId, heartbeatMsg.Timestamp); err != nil {
 				log.Debugf("Error updating peer uptime: %v", err)
 				continue
 			}
@@ -172,7 +167,7 @@ func (s *UptimeService) startListening(ctx context.Context) {
 
 			switch payload := msgUptime.Payload.(type) {
 			case *puptime.Msg_Heartbeat:
-				s.handleHeartbeatMsg(ctx, peerId, payload.Heartbeat)
+				s.handleHeartbeatMsg(ctx, payload.Heartbeat)
 			case *puptime.Msg_MerkleProof:
 				s.handleMerkeProofMsg(ctx, peerId, payload.MerkleProof)
 			default:
@@ -191,13 +186,13 @@ func (s *UptimeService) handleMerkeProofMsg(ctx context.Context, peerId peer.ID,
 		}
 
 		for _, proof := range merkeProof.Proofs {
-			if proof.SubnetId == uptime.SubnetId {
+			if proof.ProviderId == uptime.ProviderId {
 				uptime.IsClaimed = false
 				uptime.Proof = &puptime.UptimeProof{
 					Uptime: proof.Uptime,
 					Proof:  proof.Proof,
 				}
-				peerKey := datastore.NewKey(fmt.Sprintln("/uptime/peer:" + uptime.PeerId))
+				peerKey := datastore.NewKey(fmt.Sprintf("/uptime/peer:%d", uptime.ProviderId))
 
 				recordData, err := proto.Marshal(uptime)
 				if err != nil {
@@ -214,28 +209,28 @@ func (s *UptimeService) handleMerkeProofMsg(ctx context.Context, peerId peer.ID,
 	}
 }
 
-func (s *UptimeService) handleHeartbeatMsg(ctx context.Context, peerId peer.ID, heartbeat *puptime.HeartbeatMsg) {
+func (s *UptimeService) handleHeartbeatMsg(ctx context.Context, heartbeat *puptime.HeartbeatMsg) {
 	// Validate that the heartbeat timestamp is less than or equal to the current time
 	currentTime := time.Now().Unix()
 	if heartbeat.Timestamp > currentTime+5 {
-		log.Errorf("Invalid heartbeat timestamp from %s: %d (current time: %d)", peerId.String(), heartbeat.Timestamp, currentTime)
+		log.Errorf("Invalid heartbeat timestamp from provider %d: %d (current time: %d)", heartbeat.ProviderId, heartbeat.Timestamp, currentTime)
 		return
 	}
 
 	// Update the peer's uptime based on the received message
-	if err := s.updatePeerUptime(ctx, peerId.String(), heartbeat.Timestamp); err != nil {
+	if err := s.updatePeerUptime(ctx, heartbeat.ProviderId, heartbeat.Timestamp); err != nil {
 		log.Errorf("Error updating peer uptime: %v", err)
 		return
 	}
 
-	log.Debugf("Received Heartbeat: %+v peer: %s", heartbeat, peerId)
+	log.Debugf("Received Heartbeat: %+v peer: %d", heartbeat, heartbeat.ProviderId)
 }
 
-func (s *UptimeService) updatePeerUptime(ctx context.Context, peerID string, currentTimestamp int64) error {
+func (s *UptimeService) updatePeerUptime(ctx context.Context, providerId int64, currentTimestamp int64) error {
 	// Retrieve existing uptime record from the datastore
 	var uptime int64
 	var lastTimestamp int64
-	peerKey := datastore.NewKey(fmt.Sprintln("/uptime/peer:" + peerID))
+	peerKey := datastore.NewKey(fmt.Sprintf("/uptime/peer:%d", providerId))
 	data, err := s.Datastore.Get(ctx, peerKey)
 	var proof *puptime.UptimeProof
 	isClaimed := false
@@ -259,21 +254,14 @@ func (s *UptimeService) updatePeerUptime(ctx context.Context, peerID string, cur
 	if duration <= 1200 {
 		uptime += duration
 	} else if lastTimestamp > 0 && duration > 0 {
-		log.Debugf("Peer %s did not meet the continuous online condition: only %d seconds elapsed", peerID, duration)
-	}
-
-	subnetId, err := s.getSubnetID(peerID)
-
-	if err != nil {
-		return err
+		log.Debugf("Provider %d did not meet the continuous online condition: only %d seconds elapsed", providerId, duration)
 	}
 
 	// Update the record with the latest timestamp and accumulated uptime
 	record := &puptime.UptimeRecord{
-		PeerId:        peerID,
+		ProviderId:    providerId,
 		Uptime:        uptime,
 		LastTimestamp: currentTimestamp,
-		SubnetId:      subnetId,
 		Proof:         proof,
 		IsClaimed:     isClaimed,
 	}
@@ -281,13 +269,13 @@ func (s *UptimeService) updatePeerUptime(ctx context.Context, peerID string, cur
 	// Save the updated record to the datastore
 	recordData, err := proto.Marshal(record)
 	if err != nil {
-		return fmt.Errorf("failed to marshal uptime record for peer %s: %v", peerID, err)
+		return fmt.Errorf("failed to marshal uptime record for provider %d: %v", providerId, err)
 	}
 	if err := s.Datastore.Put(ctx, peerKey, recordData); err != nil {
-		return fmt.Errorf("failed to update uptime record for peer %s: %v", peerID, err)
+		return fmt.Errorf("failed to update uptime record for provider %d: %v", providerId, err)
 	}
 
-	log.Debugf("Updated uptime for PeerID %s: %d seconds, LastTimestamp: %d", peerID, uptime, currentTimestamp)
+	log.Debugf("Updated uptime for ProviderID %d: %d seconds, LastTimestamp: %d", providerId, uptime, currentTimestamp)
 	return nil
 }
 
@@ -404,7 +392,7 @@ func prepareRecordsForAPI(uptimes []*puptime.UptimeRecord) [][]string {
 	var records [][]string
 	for _, record := range uptimes {
 		records = append(records, []string{
-			record.SubnetId,
+			fmt.Sprintf("%d", record.ProviderId),
 			fmt.Sprintf("%d", record.Uptime),
 		})
 	}
@@ -437,7 +425,7 @@ func (s *UptimeService) GetUptimeByPeer(ctx context.Context, peerID string) (*pu
 }
 
 func (s *UptimeService) saveUptime(ctx context.Context, data *puptime.UptimeRecord) error {
-	uptimeKey := datastore.NewKey(fmt.Sprintln("/uptime/peer:" + data.PeerId))
+	uptimeKey := datastore.NewKey(fmt.Sprintln("/uptime/peer:%d", data.ProviderId))
 	recordData, err := proto.Marshal(data)
 	if err != nil {
 		return err
@@ -445,32 +433,7 @@ func (s *UptimeService) saveUptime(ctx context.Context, data *puptime.UptimeReco
 	return s.Datastore.Put(ctx, uptimeKey, recordData)
 }
 
-func (s *UptimeService) getSubnetID(peerID string) (string, error) {
-	// Check the cache first
-	if subnetID, found := s.cache[peerID]; found {
-		return subnetID, nil
-	}
-
-	// If not in the cache, fetch from SubnetRegistry
-	subnetID, err := s.AccountService.SubnetRegistry().PeerToSubnet(nil, peerID)
-	if err != nil {
-		return "", fmt.Errorf("failed to fetch subnet ID for peer %s: %v", peerID, err)
-	}
-
-	// Store the result in the cache
-	if subnetID != nil {
-		s.cache[peerID] = subnetID.String()
-	} else {
-		s.cache[peerID] = ""
-	}
-	return subnetID.String(), nil
-}
-
-func (s *UptimeService) GetSubnetID() (*big.Int, error) {
-	return s.AccountService.SubnetRegistry().PeerToSubnet(nil, s.Identity.String())
-}
-
-func (s *UptimeService) ClaimReward(ctx context.Context) error {
+func (s *UptimeService) ReportUptime(ctx context.Context) error {
 	uptime, err := s.GetUptime(ctx)
 	if err != nil {
 		return nil
@@ -480,12 +443,6 @@ func (s *UptimeService) ClaimReward(ctx context.Context) error {
 
 	if err != nil {
 		return nil
-	}
-
-	subnetId, err := s.GetSubnetID()
-
-	if err != nil {
-		return err
 	}
 
 	proofsBytes := make([][32]byte, 0)
@@ -500,7 +457,9 @@ func (s *UptimeService) ClaimReward(ctx context.Context) error {
 
 	uptime.IsClaimed = true
 
-	_, err = s.AccountService.SubnetRegistry().ClaimReward(key, subnetId, big.NewInt(uptime.Proof.Uptime), proofsBytes)
+	providerId := big.NewInt(s.AccountService.ProviderID())
+
+	_, err = s.AccountService.Uptime().ReportUptime(key, providerId, big.NewInt(uptime.Proof.Uptime), proofsBytes)
 	if err != nil {
 		return err
 	}
@@ -522,9 +481,9 @@ func (s *UptimeService) publishAllProofs(ctx context.Context, root string, recor
 	// Map proofs from API response to protobuf format
 	for i, record := range records {
 		merkleProofMsg.Proofs[i] = &puptime.Proof{
-			Uptime:   record.Uptime, // Add uptime if needed, or keep as 0
-			Proof:    record.Proof.Proof,
-			SubnetId: record.SubnetId,
+			Uptime:     record.Uptime, // Add uptime if needed, or keep as 0
+			Proof:      record.Proof.Proof,
+			ProviderId: record.ProviderId,
 		}
 	}
 
@@ -559,7 +518,7 @@ func (s *UptimeService) publishAllProofs(ctx context.Context, root string, recor
 		return err
 	}
 
-	_, err = s.AccountService.SubnetRegistry().UpdateMerkleRoot(key, rootBytes)
+	_, err = s.AccountService.Uptime().UpdateMerkleRoot(key, rootBytes)
 
 	if err != nil {
 		return err

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math/big"
 	"strings"
-	"time"
 
 	"github.com/gogo/protobuf/proto"
 
@@ -22,7 +21,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/config"
 	"github.com/unicornultrafoundation/subnet-node/core/account"
-	"github.com/unicornultrafoundation/subnet-node/core/contracts"
 	"github.com/unicornultrafoundation/subnet-node/p2p"
 	pbapp "github.com/unicornultrafoundation/subnet-node/proto/subnet/app"
 )
@@ -34,35 +32,31 @@ const PROTOCOL_ID = protocol.ID("subnet-apps")
 const RESOURCE_USAGE_KEY = "resource-usage-v2"
 
 type Service struct {
-	peerId            peer.ID
-	IsProvider        bool
-	cfg               *config.C
-	ethClient         *ethclient.Client
-	containerdClient  *containerd.Client
-	P2P               *p2p.P2P
-	PeerHost          p2phost.Host `optional:"true"` // the network host (server+client)
-	subnetID          big.Int
-	stopChan          chan struct{} // Channel to stop background tasks
-	subnetAppRegistry *contracts.SubnetAppRegistry
-	subnetRegistry    *contracts.SubnetRegistry
-	accountService    *account.AccountService
-	Datastore         datastore.Datastore // Datastore for storing resource usage
+	peerId           peer.ID
+	IsProvider       bool
+	cfg              *config.C
+	ethClient        *ethclient.Client
+	containerdClient *containerd.Client
+	P2P              *p2p.P2P
+	PeerHost         p2phost.Host `optional:"true"` // the network host (server+client)
+	subnetID         big.Int
+	stopChan         chan struct{} // Channel to stop background tasks
+	accountService   *account.AccountService
+	Datastore        datastore.Datastore // Datastore for storing resource usage
 }
 
 // Initializes the Service with Ethereum and containerd clients.
 func New(peerHost p2phost.Host, peerId peer.ID, cfg *config.C, P2P *p2p.P2P, dataStore datastore.Datastore, accountService *account.AccountService) *Service {
 	return &Service{
-		peerId:            peerId,
-		PeerHost:          peerHost,
-		P2P:               P2P,
-		cfg:               cfg,
-		Datastore:         dataStore,
-		IsProvider:        cfg.GetBool("provider.enable", false),
-		stopChan:          make(chan struct{}),
-		accountService:    accountService,
-		ethClient:         accountService.GetClient(),
-		subnetAppRegistry: accountService.SubnetAppRegistry(),
-		subnetRegistry:    accountService.SubnetRegistry(),
+		peerId:         peerId,
+		PeerHost:       peerHost,
+		P2P:            P2P,
+		cfg:            cfg,
+		Datastore:      dataStore,
+		IsProvider:     cfg.GetBool("provider.enable", false),
+		stopChan:       make(chan struct{}),
+		accountService: accountService,
+		ethClient:      accountService.GetClient(),
 	}
 }
 
@@ -73,8 +67,6 @@ func (s *Service) Start(ctx context.Context) error {
 	}
 
 	if s.IsProvider {
-		go s.checkAndRegisterSubnetID(ctx)
-
 		// Connect to containerd daemon
 		var err error
 		s.containerdClient, err = containerd.New("/run/containerd/containerd.sock")
@@ -98,22 +90,6 @@ func (s *Service) Start(ctx context.Context) error {
 	return nil
 }
 
-func (s *Service) checkAndRegisterSubnetID(ctx context.Context) {
-	for {
-		subnetID, err := s.GetSubnetIDFromPeerID(ctx)
-		if err != nil {
-			log.Errorf("error getting subnet ID: %v", err)
-		} else if subnetID.Cmp(big.NewInt(0)) != 0 {
-			s.subnetID = *subnetID
-			log.Infof("Successfully registered SubnetID: %s", subnetID.String())
-			return
-		}
-
-		log.Warn("PeerID is not registered for any SubnetID. Retrying in 5 seconds...")
-		time.Sleep(5 * time.Second)
-	}
-}
-
 func (s *Service) Stop(ctx context.Context) error {
 	log.Info("Stopping Subnet Apps Service...")
 
@@ -133,11 +109,11 @@ func (s *Service) Stop(ctx context.Context) error {
 }
 
 func (s *Service) GetAppCount() (*big.Int, error) {
-	return s.subnetAppRegistry.AppCount(nil)
+	return s.accountService.AppStore().AppCount(nil)
 }
 
 func (s *Service) GetApp(ctx context.Context, appId *big.Int) (*App, error) {
-	subnetApp, err := s.subnetAppRegistry.Apps(nil, appId)
+	subnetApp, err := s.accountService.AppStore().Apps(nil, appId)
 	if err != nil {
 		return nil, err
 	}
@@ -426,10 +402,6 @@ func (s *Service) RestartContainer(ctx context.Context, appId *big.Int) error {
 // 	return usage, nil
 // }
 
-func (s *Service) GetSubnetIDFromPeerID(ctx context.Context) (*big.Int, error) {
-	return s.subnetRegistry.PeerToSubnet(nil, s.peerId.String())
-}
-
 // Retrieves the IP address of a running container.
 func (s *Service) GetContainerIP(ctx context.Context, appId *big.Int) (string, error) {
 	// Use the netns package to enter the network namespace and get the IP address
@@ -452,14 +424,6 @@ func (s *Service) SaveContainerConfigProto(ctx context.Context, appId *big.Int, 
 	}
 
 	return nil
-}
-
-func (s *Service) GetSubnetID(ctx context.Context) (*big.Int, error) {
-	subnetID, err := s.GetSubnetIDFromPeerID(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get subnet ID from peer ID: %w", err)
-	}
-	return subnetID, nil
 }
 
 // Extract appId from container ID

@@ -83,7 +83,7 @@ func (s *Service) ClaimRewardsForAllRunningContainers(ctx context.Context) {
 		}
 
 		// Claim reward
-		txHash, err := s.ClaimReward(ctx, appId, usage.UsedCpu, usage.UsedGpu, usage.UsedMemory, usage.UsedStorage, usage.UsedUploadBytes, usage.UsedDownloadBytes, usage.Duration, signature)
+		txHash, err := s.ReportUsage(ctx, appId, usage.UsedCpu, usage.UsedGpu, usage.UsedMemory, usage.UsedStorage, usage.UsedUploadBytes, usage.UsedDownloadBytes, usage.Duration, signature)
 		if err != nil {
 			log.Errorf("Failed to claim reward for container %s: %v", containerId, err)
 		} else {
@@ -189,7 +189,7 @@ func (s *Service) ConvertUsageToTypedData(usage *ResourceUsage) (*TypedData, err
 		Types: Types{
 			"EIP712Domain": domainType,
 			"Usage": []Type{
-				{Name: "subnetId", Type: "uint256"},
+				{Name: "providerId", Type: "uint256"},
 				{Name: "appId", Type: "uint256"},
 				{Name: "usedCpu", Type: "uint256"},
 				{Name: "usedGpu", Type: "uint256"},
@@ -201,14 +201,14 @@ func (s *Service) ConvertUsageToTypedData(usage *ResourceUsage) (*TypedData, err
 			},
 		},
 		Domain: TypedDataDomain{
-			Name:              "SubnetAppRegistry",
+			Name:              "SubnetAppStore",
 			Version:           "1",
 			ChainId:           &chainID,
-			VerifyingContract: s.accountService.GetSubnetAppRegistryAddress(),
+			VerifyingContract: s.accountService.AppStoreAddr(),
 		},
 		PrimaryType: "Usage",
 		Message: TypedDataMessage{
-			"subnetId":          usage.SubnetId,
+			"providerId":        usage.ProviderId,
 			"appId":             usage.AppId,
 			"usedCpu":           usage.UsedCpu,
 			"usedGpu":           usage.UsedGpu,

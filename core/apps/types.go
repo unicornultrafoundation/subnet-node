@@ -76,7 +76,7 @@ func (app *App) ContainerId() string {
 // ResourceUsage represents the resource usage data
 type ResourceUsage struct {
 	AppId             *big.Int `json:"appId"`
-	SubnetId          *big.Int `json:"subnetId"`
+	ProviderId        *big.Int `json:"providerId"`
 	UsedCpu           *big.Int `json:"usedCpu"`
 	UsedGpu           *big.Int `json:"usedGpu"`
 	UsedMemory        *big.Int `json:"usedMemory"`
@@ -153,7 +153,7 @@ func decodeAndParseMetadata(encodedMetadata string) (*AppMetadata, error) {
 	return &metadata, nil
 }
 
-func convertToApp(subnetApp contracts.SubnetAppRegistryApp, id *big.Int, status ProcessStatus) *App {
+func convertToApp(subnetApp contracts.SubnetAppStoreApp, id *big.Int, status ProcessStatus) *App {
 	metadata, err := decodeAndParseMetadata(subnetApp.Metadata)
 	if err != nil {
 		fmt.Printf("Warning: Failed to parse metadata for app %s: %v\n", subnetApp.Name, err)
@@ -185,10 +185,10 @@ func convertToApp(subnetApp contracts.SubnetAppRegistryApp, id *big.Int, status 
 	}
 }
 
-func convertToResourceUsage(usage contracts.SubnetAppRegistryAppNode, appId *big.Int, subnetId *big.Int) *ResourceUsage {
+func convertToResourceUsage(usage contracts.SubnetAppStoreDeployment, appId *big.Int, providerId *big.Int) *ResourceUsage {
 	return &ResourceUsage{
 		AppId:             appId,
-		SubnetId:          subnetId,
+		ProviderId:        providerId,
 		UsedCpu:           usage.UsedCpu,
 		UsedGpu:           usage.UsedGpu,
 		UsedMemory:        usage.UsedMemory,
@@ -203,8 +203,8 @@ func fillDefaultResourceUsage(usage *ResourceUsage) *ResourceUsage {
 	if usage.AppId == nil {
 		usage.AppId = big.NewInt(0)
 	}
-	if usage.SubnetId == nil {
-		usage.SubnetId = big.NewInt(0)
+	if usage.ProviderId == nil {
+		usage.ProviderId = big.NewInt(0)
 	}
 	if usage.UsedCpu == nil {
 		usage.UsedCpu = big.NewInt(0)
@@ -241,7 +241,7 @@ func bytesToBigInt(data []byte) *big.Int {
 func convertUsageFromProto(usage pbapp.ResourceUsageV2) *ResourceUsage {
 	return &ResourceUsage{
 		AppId:             bytesToBigInt(usage.AppId),
-		SubnetId:          bytesToBigInt(usage.SubnetId),
+		ProviderId:        bytesToBigInt(usage.ProviderId),
 		UsedCpu:           bytesToBigInt(usage.UsedCpu),
 		UsedGpu:           bytesToBigInt(usage.UsedGpu),
 		UsedMemory:        bytesToBigInt(usage.UsedMemory),
@@ -263,7 +263,7 @@ func bigIntToBytes(value *big.Int) []byte {
 func convertUsageToProto(usage ResourceUsage) *pbapp.ResourceUsageV2 {
 	return &pbapp.ResourceUsageV2{
 		AppId:             bigIntToBytes(usage.AppId),
-		SubnetId:          bigIntToBytes(usage.SubnetId),
+		ProviderId:        bigIntToBytes(usage.ProviderId),
 		UsedCpu:           bigIntToBytes(usage.UsedCpu),
 		UsedGpu:           bigIntToBytes(usage.UsedGpu),
 		UsedMemory:        bigIntToBytes(usage.UsedMemory),
@@ -401,10 +401,8 @@ func ProtoToResourceUsage(protoUsage *pbapp.ResourceUsage) (*ResourceUsage, erro
 	if !ok {
 		return nil, fmt.Errorf("invalid app id: %s", protoUsage.AppId)
 	}
-	subnetId, ok := new(big.Int).SetString(protoUsage.SubnetId, 10)
-	if !ok {
-		return nil, fmt.Errorf("invalid subnet id: %s", protoUsage.SubnetId)
-	}
+	providerId := big.NewInt(protoUsage.ProviderId)
+
 	usedCpu, ok := new(big.Int).SetString(protoUsage.UsedCpu, 10)
 	if !ok {
 		return nil, fmt.Errorf("invalid used cpu: %s", protoUsage.UsedCpu)
@@ -436,7 +434,7 @@ func ProtoToResourceUsage(protoUsage *pbapp.ResourceUsage) (*ResourceUsage, erro
 
 	return &ResourceUsage{
 		AppId:             appId,
-		SubnetId:          subnetId,
+		ProviderId:        providerId,
 		UsedCpu:           usedCpu,
 		UsedGpu:           usedGpu,
 		UsedMemory:        usedMemory,
@@ -450,7 +448,7 @@ func ProtoToResourceUsage(protoUsage *pbapp.ResourceUsage) (*ResourceUsage, erro
 func ResourceUsageToProto(usage *ResourceUsage) *pbapp.ResourceUsage {
 	return &pbapp.ResourceUsage{
 		AppId:             usage.AppId.String(),
-		SubnetId:          usage.SubnetId.String(),
+		ProviderId:        usage.ProviderId.Int64(),
 		UsedCpu:           usage.UsedCpu.String(),
 		UsedGpu:           usage.UsedGpu.String(),
 		UsedMemory:        usage.UsedMemory.String(),
