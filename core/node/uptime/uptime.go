@@ -564,7 +564,7 @@ func hexStringToByte32(hexStr string) ([32]byte, error) {
 
 // startReportingUptime periodically calls ReportUptime every 12 hours
 func (s *UptimeService) startReportingUptime(ctx context.Context) {
-	ticker := time.NewTicker(12 * time.Hour)
+	ticker := time.NewTicker(30 * time.Minute)
 	defer ticker.Stop()
 
 	for {

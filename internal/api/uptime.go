@@ -19,7 +19,3 @@ func NewUptimeAPI(s *uptime.UptimeService) *UptimeAPI {
 func (api *UptimeAPI) GetUptime(ctx context.Context) (*puptime.UptimeRecord, error) {
 	return api.s.GetUptime(ctx)
 }
-
-func (api *UptimeAPI) GetUptimeByPeerId(ctx context.Context, peerId string) (*puptime.UptimeRecord, error) {
-	return api.s.GetUptimeByPeer(ctx, peerId)
-}
