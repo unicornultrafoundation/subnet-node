@@ -31,7 +31,7 @@ var (
 
 // SubnetProviderUptimeMetaData contains all meta data concerning the SubnetProviderUptime contract.
 var SubnetProviderUptimeMetaData = &bind.MetaData{
-	ABI: "[{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_owner\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"_subnetProvider\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"_rewardToken\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"_rewardPerSecond\",\"type\":\"uint256\"}],\"stateMutability\":\"nonpayable\",\"type\":\"constructor\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"}],\"name\":\"OwnableInvalidOwner\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"account\",\"type\":\"address\"}],\"name\":\"OwnableUnauthorizedAccount\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"token\",\"type\":\"address\"}],\"name\":\"SafeERC20FailedOperation\",\"type\":\"error\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"bytes32\",\"name\":\"oldMerkleRoot\",\"type\":\"bytes32\"},{\"indexed\":false,\"internalType\":\"bytes32\",\"name\":\"newMerkleRoot\",\"type\":\"bytes32\"}],\"name\":\"MerkleRootUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"previousOwner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"OwnershipTransferred\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"RewardClaimed\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"oldRewardPerSecond\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"newRewardPerSecond\",\"type\":\"uint256\"}],\"name\":\"RewardPerSecondUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"pendingReward\",\"type\":\"uint256\"}],\"name\":\"RewardReported\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"totalUptime\",\"type\":\"uint256\"}],\"name\":\"UptimeUpdated\",\"type\":\"event\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"claimReward\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"depositRewards\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"getTotalUptime\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"merkleRoot\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"owner\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"renounceOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"totalUptime\",\"type\":\"uint256\"},{\"internalType\":\"bytes32[]\",\"name\":\"proof\",\"type\":\"bytes32[]\"}],\"name\":\"reportUptime\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"rewardPerSecond\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"rewardToken\",\"outputs\":[{\"internalType\":\"contractIERC20\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"subnetProvider\",\"outputs\":[{\"internalType\":\"contractSubnetProvider\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"transferOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"_merkleRoot\",\"type\":\"bytes32\"}],\"name\":\"updateMerkleRoot\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"_rewardPerSecond\",\"type\":\"uint256\"}],\"name\":\"updateRewardPerSecond\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"name\":\"uptimes\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"totalUptime\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"lastUpdate\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"claimedUptime\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pendingReward\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"lastClaimTime\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"}]",
+	ABI: "[{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_owner\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"_subnetProvider\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"_rewardToken\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"_rewardPerSecond\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"_verifierPeerId\",\"type\":\"string\"},{\"internalType\":\"address\",\"name\":\"_operator\",\"type\":\"address\"}],\"stateMutability\":\"nonpayable\",\"type\":\"constructor\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"}],\"name\":\"OwnableInvalidOwner\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"account\",\"type\":\"address\"}],\"name\":\"OwnableUnauthorizedAccount\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"token\",\"type\":\"address\"}],\"name\":\"SafeERC20FailedOperation\",\"type\":\"error\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"bytes32\",\"name\":\"oldMerkleRoot\",\"type\":\"bytes32\"},{\"indexed\":false,\"internalType\":\"bytes32\",\"name\":\"newMerkleRoot\",\"type\":\"bytes32\"}],\"name\":\"MerkleRootUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"address\",\"name\":\"oldOperator\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"address\",\"name\":\"newOperator\",\"type\":\"address\"}],\"name\":\"OperatorUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"previousOwner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"OwnershipTransferred\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"RewardClaimed\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"oldRewardPerSecond\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"newRewardPerSecond\",\"type\":\"uint256\"}],\"name\":\"RewardPerSecondUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"pendingReward\",\"type\":\"uint256\"}],\"name\":\"RewardReported\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"totalUptime\",\"type\":\"uint256\"}],\"name\":\"UptimeUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"string\",\"name\":\"oldVerifierPeerId\",\"type\":\"string\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"newVerifierPeerId\",\"type\":\"string\"}],\"name\":\"VerifierPeerIdUpdated\",\"type\":\"event\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"claimReward\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"depositRewards\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"getTotalUptime\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"merkleRoot\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"operator\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"owner\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"renounceOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"totalUptime\",\"type\":\"uint256\"},{\"internalType\":\"bytes32[]\",\"name\":\"proof\",\"type\":\"bytes32[]\"}],\"name\":\"reportUptime\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"rewardPerSecond\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"rewardToken\",\"outputs\":[{\"internalType\":\"contractIERC20\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"subnetProvider\",\"outputs\":[{\"internalType\":\"contractSubnetProvider\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"transferOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"_merkleRoot\",\"type\":\"bytes32\"}],\"name\":\"updateMerkleRoot\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_operator\",\"type\":\"address\"}],\"name\":\"updateOperator\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"_rewardPerSecond\",\"type\":\"uint256\"}],\"name\":\"updateRewardPerSecond\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"string\",\"name\":\"_verifierPeerId\",\"type\":\"string\"}],\"name\":\"updateVerifierPeerId\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"name\":\"uptimes\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"totalUptime\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"lastUpdate\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"claimedUptime\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pendingReward\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"lastClaimTime\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"verifierPeerId\",\"outputs\":[{\"internalType\":\"string\",\"name\":\"\",\"type\":\"string\"}],\"stateMutability\":\"view\",\"type\":\"function\"}]",
 }
 
 // SubnetProviderUptimeABI is the input ABI used to generate the binding from.
@@ -242,6 +242,37 @@ func (_SubnetProviderUptime *SubnetProviderUptimeCallerSession) MerkleRoot() ([3
 	return _SubnetProviderUptime.Contract.MerkleRoot(&_SubnetProviderUptime.CallOpts)
 }
 
+// Operator is a free data retrieval call binding the contract method 0x570ca735.
+//
+// Solidity: function operator() view returns(address)
+func (_SubnetProviderUptime *SubnetProviderUptimeCaller) Operator(opts *bind.CallOpts) (common.Address, error) {
+	var out []interface{}
+	err := _SubnetProviderUptime.contract.Call(opts, &out, "operator")
+
+	if err != nil {
+		return *new(common.Address), err
+	}
+
+	out0 := *abi.ConvertType(out[0], new(common.Address)).(*common.Address)
+
+	return out0, err
+
+}
+
+// Operator is a free data retrieval call binding the contract method 0x570ca735.
+//
+// Solidity: function operator() view returns(address)
+func (_SubnetProviderUptime *SubnetProviderUptimeSession) Operator() (common.Address, error) {
+	return _SubnetProviderUptime.Contract.Operator(&_SubnetProviderUptime.CallOpts)
+}
+
+// Operator is a free data retrieval call binding the contract method 0x570ca735.
+//
+// Solidity: function operator() view returns(address)
+func (_SubnetProviderUptime *SubnetProviderUptimeCallerSession) Operator() (common.Address, error) {
+	return _SubnetProviderUptime.Contract.Operator(&_SubnetProviderUptime.CallOpts)
+}
+
 // Owner is a free data retrieval call binding the contract method 0x8da5cb5b.
 //
 // Solidity: function owner() view returns(address)
@@ -426,6 +457,37 @@ func (_SubnetProviderUptime *SubnetProviderUptimeCallerSession) Uptimes(arg0 *bi
 	return _SubnetProviderUptime.Contract.Uptimes(&_SubnetProviderUptime.CallOpts, arg0)
 }
 
+// VerifierPeerId is a free data retrieval call binding the contract method 0x58f81e3a.
+//
+// Solidity: function verifierPeerId() view returns(string)
+func (_SubnetProviderUptime *SubnetProviderUptimeCaller) VerifierPeerId(opts *bind.CallOpts) (string, error) {
+	var out []interface{}
+	err := _SubnetProviderUptime.contract.Call(opts, &out, "verifierPeerId")
+
+	if err != nil {
+		return *new(string), err
+	}
+
+	out0 := *abi.ConvertType(out[0], new(string)).(*string)
+
+	return out0, err
+
+}
+
+// VerifierPeerId is a free data retrieval call binding the contract method 0x58f81e3a.
+//
+// Solidity: function verifierPeerId() view returns(string)
+func (_SubnetProviderUptime *SubnetProviderUptimeSession) VerifierPeerId() (string, error) {
+	return _SubnetProviderUptime.Contract.VerifierPeerId(&_SubnetProviderUptime.CallOpts)
+}
+
+// VerifierPeerId is a free data retrieval call binding the contract method 0x58f81e3a.
+//
+// Solidity: function verifierPeerId() view returns(string)
+func (_SubnetProviderUptime *SubnetProviderUptimeCallerSession) VerifierPeerId() (string, error) {
+	return _SubnetProviderUptime.Contract.VerifierPeerId(&_SubnetProviderUptime.CallOpts)
+}
+
 // ClaimReward is a paid mutator transaction binding the contract method 0xae169a50.
 //
 // Solidity: function claimReward(uint256 tokenId) returns()
@@ -552,6 +614,27 @@ func (_SubnetProviderUptime *SubnetProviderUptimeTransactorSession) UpdateMerkle
 	return _SubnetProviderUptime.Contract.UpdateMerkleRoot(&_SubnetProviderUptime.TransactOpts, _merkleRoot)
 }
 
+// UpdateOperator is a paid mutator transaction binding the contract method 0xac7475ed.
+//
+// Solidity: function updateOperator(address _operator) returns()
+func (_SubnetProviderUptime *SubnetProviderUptimeTransactor) UpdateOperator(opts *bind.TransactOpts, _operator common.Address) (*types.Transaction, error) {
+	return _SubnetProviderUptime.contract.Transact(opts, "updateOperator", _operator)
+}
+
+// UpdateOperator is a paid mutator transaction binding the contract method 0xac7475ed.
+//
+// Solidity: function updateOperator(address _operator) returns()
+func (_SubnetProviderUptime *SubnetProviderUptimeSession) UpdateOperator(_operator common.Address) (*types.Transaction, error) {
+	return _SubnetProviderUptime.Contract.UpdateOperator(&_SubnetProviderUptime.TransactOpts, _operator)
+}
+
+// UpdateOperator is a paid mutator transaction binding the contract method 0xac7475ed.
+//
+// Solidity: function updateOperator(address _operator) returns()
+func (_SubnetProviderUptime *SubnetProviderUptimeTransactorSession) UpdateOperator(_operator common.Address) (*types.Transaction, error) {
+	return _SubnetProviderUptime.Contract.UpdateOperator(&_SubnetProviderUptime.TransactOpts, _operator)
+}
+
 // UpdateRewardPerSecond is a paid mutator transaction binding the contract method 0x4004c8e7.
 //
 // Solidity: function updateRewardPerSecond(uint256 _rewardPerSecond) returns()
@@ -571,6 +654,27 @@ func (_SubnetProviderUptime *SubnetProviderUptimeSession) UpdateRewardPerSecond(
 // Solidity: function updateRewardPerSecond(uint256 _rewardPerSecond) returns()
 func (_SubnetProviderUptime *SubnetProviderUptimeTransactorSession) UpdateRewardPerSecond(_rewardPerSecond *big.Int) (*types.Transaction, error) {
 	return _SubnetProviderUptime.Contract.UpdateRewardPerSecond(&_SubnetProviderUptime.TransactOpts, _rewardPerSecond)
+}
+
+// UpdateVerifierPeerId is a paid mutator transaction binding the contract method 0xd14da7ad.
+//
+// Solidity: function updateVerifierPeerId(string _verifierPeerId) returns()
+func (_SubnetProviderUptime *SubnetProviderUptimeTransactor) UpdateVerifierPeerId(opts *bind.TransactOpts, _verifierPeerId string) (*types.Transaction, error) {
+	return _SubnetProviderUptime.contract.Transact(opts, "updateVerifierPeerId", _verifierPeerId)
+}
+
+// UpdateVerifierPeerId is a paid mutator transaction binding the contract method 0xd14da7ad.
+//
+// Solidity: function updateVerifierPeerId(string _verifierPeerId) returns()
+func (_SubnetProviderUptime *SubnetProviderUptimeSession) UpdateVerifierPeerId(_verifierPeerId string) (*types.Transaction, error) {
+	return _SubnetProviderUptime.Contract.UpdateVerifierPeerId(&_SubnetProviderUptime.TransactOpts, _verifierPeerId)
+}
+
+// UpdateVerifierPeerId is a paid mutator transaction binding the contract method 0xd14da7ad.
+//
+// Solidity: function updateVerifierPeerId(string _verifierPeerId) returns()
+func (_SubnetProviderUptime *SubnetProviderUptimeTransactorSession) UpdateVerifierPeerId(_verifierPeerId string) (*types.Transaction, error) {
+	return _SubnetProviderUptime.Contract.UpdateVerifierPeerId(&_SubnetProviderUptime.TransactOpts, _verifierPeerId)
 }
 
 // SubnetProviderUptimeMerkleRootUpdatedIterator is returned from FilterMerkleRootUpdated and is used to iterate over the raw logs and unpacked data for MerkleRootUpdated events raised by the SubnetProviderUptime contract.
@@ -702,6 +806,141 @@ func (_SubnetProviderUptime *SubnetProviderUptimeFilterer) WatchMerkleRootUpdate
 func (_SubnetProviderUptime *SubnetProviderUptimeFilterer) ParseMerkleRootUpdated(log types.Log) (*SubnetProviderUptimeMerkleRootUpdated, error) {
 	event := new(SubnetProviderUptimeMerkleRootUpdated)
 	if err := _SubnetProviderUptime.contract.UnpackLog(event, "MerkleRootUpdated", log); err != nil {
+		return nil, err
+	}
+	event.Raw = log
+	return event, nil
+}
+
+// SubnetProviderUptimeOperatorUpdatedIterator is returned from FilterOperatorUpdated and is used to iterate over the raw logs and unpacked data for OperatorUpdated events raised by the SubnetProviderUptime contract.
+type SubnetProviderUptimeOperatorUpdatedIterator struct {
+	Event *SubnetProviderUptimeOperatorUpdated // Event containing the contract specifics and raw log
+
+	contract *bind.BoundContract // Generic contract to use for unpacking event data
+	event    string              // Event name to use for unpacking event data
+
+	logs chan types.Log        // Log channel receiving the found contract events
+	sub  ethereum.Subscription // Subscription for errors, completion and termination
+	done bool                  // Whether the subscription completed delivering logs
+	fail error                 // Occurred error to stop iteration
+}
+
+// Next advances the iterator to the subsequent event, returning whether there
+// are any more events found. In case of a retrieval or parsing error, false is
+// returned and Error() can be queried for the exact failure.
+func (it *SubnetProviderUptimeOperatorUpdatedIterator) Next() bool {
+	// If the iterator failed, stop iterating
+	if it.fail != nil {
+		return false
+	}
+	// If the iterator completed, deliver directly whatever's available
+	if it.done {
+		select {
+		case log := <-it.logs:
+			it.Event = new(SubnetProviderUptimeOperatorUpdated)
+			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+				it.fail = err
+				return false
+			}
+			it.Event.Raw = log
+			return true
+
+		default:
+			return false
+		}
+	}
+	// Iterator still in progress, wait for either a data or an error event
+	select {
+	case log := <-it.logs:
+		it.Event = new(SubnetProviderUptimeOperatorUpdated)
+		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+			it.fail = err
+			return false
+		}
+		it.Event.Raw = log
+		return true
+
+	case err := <-it.sub.Err():
+		it.done = true
+		it.fail = err
+		return it.Next()
+	}
+}
+
+// Error returns any retrieval or parsing error occurred during filtering.
+func (it *SubnetProviderUptimeOperatorUpdatedIterator) Error() error {
+	return it.fail
+}
+
+// Close terminates the iteration process, releasing any pending underlying
+// resources.
+func (it *SubnetProviderUptimeOperatorUpdatedIterator) Close() error {
+	it.sub.Unsubscribe()
+	return nil
+}
+
+// SubnetProviderUptimeOperatorUpdated represents a OperatorUpdated event raised by the SubnetProviderUptime contract.
+type SubnetProviderUptimeOperatorUpdated struct {
+	OldOperator common.Address
+	NewOperator common.Address
+	Raw         types.Log // Blockchain specific contextual infos
+}
+
+// FilterOperatorUpdated is a free log retrieval operation binding the contract event 0xfbe5b6cbafb274f445d7fed869dc77a838d8243a22c460de156560e8857cad03.
+//
+// Solidity: event OperatorUpdated(address oldOperator, address newOperator)
+func (_SubnetProviderUptime *SubnetProviderUptimeFilterer) FilterOperatorUpdated(opts *bind.FilterOpts) (*SubnetProviderUptimeOperatorUpdatedIterator, error) {
+
+	logs, sub, err := _SubnetProviderUptime.contract.FilterLogs(opts, "OperatorUpdated")
+	if err != nil {
+		return nil, err
+	}
+	return &SubnetProviderUptimeOperatorUpdatedIterator{contract: _SubnetProviderUptime.contract, event: "OperatorUpdated", logs: logs, sub: sub}, nil
+}
+
+// WatchOperatorUpdated is a free log subscription operation binding the contract event 0xfbe5b6cbafb274f445d7fed869dc77a838d8243a22c460de156560e8857cad03.
+//
+// Solidity: event OperatorUpdated(address oldOperator, address newOperator)
+func (_SubnetProviderUptime *SubnetProviderUptimeFilterer) WatchOperatorUpdated(opts *bind.WatchOpts, sink chan<- *SubnetProviderUptimeOperatorUpdated) (event.Subscription, error) {
+
+	logs, sub, err := _SubnetProviderUptime.contract.WatchLogs(opts, "OperatorUpdated")
+	if err != nil {
+		return nil, err
+	}
+	return event.NewSubscription(func(quit <-chan struct{}) error {
+		defer sub.Unsubscribe()
+		for {
+			select {
+			case log := <-logs:
+				// New log arrived, parse the event and forward to the user
+				event := new(SubnetProviderUptimeOperatorUpdated)
+				if err := _SubnetProviderUptime.contract.UnpackLog(event, "OperatorUpdated", log); err != nil {
+					return err
+				}
+				event.Raw = log
+
+				select {
+				case sink <- event:
+				case err := <-sub.Err():
+					return err
+				case <-quit:
+					return nil
+				}
+			case err := <-sub.Err():
+				return err
+			case <-quit:
+				return nil
+			}
+		}
+	}), nil
+}
+
+// ParseOperatorUpdated is a log parse operation binding the contract event 0xfbe5b6cbafb274f445d7fed869dc77a838d8243a22c460de156560e8857cad03.
+//
+// Solidity: event OperatorUpdated(address oldOperator, address newOperator)
+func (_SubnetProviderUptime *SubnetProviderUptimeFilterer) ParseOperatorUpdated(log types.Log) (*SubnetProviderUptimeOperatorUpdated, error) {
+	event := new(SubnetProviderUptimeOperatorUpdated)
+	if err := _SubnetProviderUptime.contract.UnpackLog(event, "OperatorUpdated", log); err != nil {
 		return nil, err
 	}
 	event.Raw = log
@@ -1434,6 +1673,141 @@ func (_SubnetProviderUptime *SubnetProviderUptimeFilterer) WatchUptimeUpdated(op
 func (_SubnetProviderUptime *SubnetProviderUptimeFilterer) ParseUptimeUpdated(log types.Log) (*SubnetProviderUptimeUptimeUpdated, error) {
 	event := new(SubnetProviderUptimeUptimeUpdated)
 	if err := _SubnetProviderUptime.contract.UnpackLog(event, "UptimeUpdated", log); err != nil {
+		return nil, err
+	}
+	event.Raw = log
+	return event, nil
+}
+
+// SubnetProviderUptimeVerifierPeerIdUpdatedIterator is returned from FilterVerifierPeerIdUpdated and is used to iterate over the raw logs and unpacked data for VerifierPeerIdUpdated events raised by the SubnetProviderUptime contract.
+type SubnetProviderUptimeVerifierPeerIdUpdatedIterator struct {
+	Event *SubnetProviderUptimeVerifierPeerIdUpdated // Event containing the contract specifics and raw log
+
+	contract *bind.BoundContract // Generic contract to use for unpacking event data
+	event    string              // Event name to use for unpacking event data
+
+	logs chan types.Log        // Log channel receiving the found contract events
+	sub  ethereum.Subscription // Subscription for errors, completion and termination
+	done bool                  // Whether the subscription completed delivering logs
+	fail error                 // Occurred error to stop iteration
+}
+
+// Next advances the iterator to the subsequent event, returning whether there
+// are any more events found. In case of a retrieval or parsing error, false is
+// returned and Error() can be queried for the exact failure.
+func (it *SubnetProviderUptimeVerifierPeerIdUpdatedIterator) Next() bool {
+	// If the iterator failed, stop iterating
+	if it.fail != nil {
+		return false
+	}
+	// If the iterator completed, deliver directly whatever's available
+	if it.done {
+		select {
+		case log := <-it.logs:
+			it.Event = new(SubnetProviderUptimeVerifierPeerIdUpdated)
+			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+				it.fail = err
+				return false
+			}
+			it.Event.Raw = log
+			return true
+
+		default:
+			return false
+		}
+	}
+	// Iterator still in progress, wait for either a data or an error event
+	select {
+	case log := <-it.logs:
+		it.Event = new(SubnetProviderUptimeVerifierPeerIdUpdated)
+		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+			it.fail = err
+			return false
+		}
+		it.Event.Raw = log
+		return true
+
+	case err := <-it.sub.Err():
+		it.done = true
+		it.fail = err
+		return it.Next()
+	}
+}
+
+// Error returns any retrieval or parsing error occurred during filtering.
+func (it *SubnetProviderUptimeVerifierPeerIdUpdatedIterator) Error() error {
+	return it.fail
+}
+
+// Close terminates the iteration process, releasing any pending underlying
+// resources.
+func (it *SubnetProviderUptimeVerifierPeerIdUpdatedIterator) Close() error {
+	it.sub.Unsubscribe()
+	return nil
+}
+
+// SubnetProviderUptimeVerifierPeerIdUpdated represents a VerifierPeerIdUpdated event raised by the SubnetProviderUptime contract.
+type SubnetProviderUptimeVerifierPeerIdUpdated struct {
+	OldVerifierPeerId string
+	NewVerifierPeerId string
+	Raw               types.Log // Blockchain specific contextual infos
+}
+
+// FilterVerifierPeerIdUpdated is a free log retrieval operation binding the contract event 0x7f1ec80300d7812b29d17bbaab67b231a25f3da6b00f5ae6df703ede6f61e47f.
+//
+// Solidity: event VerifierPeerIdUpdated(string oldVerifierPeerId, string newVerifierPeerId)
+func (_SubnetProviderUptime *SubnetProviderUptimeFilterer) FilterVerifierPeerIdUpdated(opts *bind.FilterOpts) (*SubnetProviderUptimeVerifierPeerIdUpdatedIterator, error) {
+
+	logs, sub, err := _SubnetProviderUptime.contract.FilterLogs(opts, "VerifierPeerIdUpdated")
+	if err != nil {
+		return nil, err
+	}
+	return &SubnetProviderUptimeVerifierPeerIdUpdatedIterator{contract: _SubnetProviderUptime.contract, event: "VerifierPeerIdUpdated", logs: logs, sub: sub}, nil
+}
+
+// WatchVerifierPeerIdUpdated is a free log subscription operation binding the contract event 0x7f1ec80300d7812b29d17bbaab67b231a25f3da6b00f5ae6df703ede6f61e47f.
+//
+// Solidity: event VerifierPeerIdUpdated(string oldVerifierPeerId, string newVerifierPeerId)
+func (_SubnetProviderUptime *SubnetProviderUptimeFilterer) WatchVerifierPeerIdUpdated(opts *bind.WatchOpts, sink chan<- *SubnetProviderUptimeVerifierPeerIdUpdated) (event.Subscription, error) {
+
+	logs, sub, err := _SubnetProviderUptime.contract.WatchLogs(opts, "VerifierPeerIdUpdated")
+	if err != nil {
+		return nil, err
+	}
+	return event.NewSubscription(func(quit <-chan struct{}) error {
+		defer sub.Unsubscribe()
+		for {
+			select {
+			case log := <-logs:
+				// New log arrived, parse the event and forward to the user
+				event := new(SubnetProviderUptimeVerifierPeerIdUpdated)
+				if err := _SubnetProviderUptime.contract.UnpackLog(event, "VerifierPeerIdUpdated", log); err != nil {
+					return err
+				}
+				event.Raw = log
+
+				select {
+				case sink <- event:
+				case err := <-sub.Err():
+					return err
+				case <-quit:
+					return nil
+				}
+			case err := <-sub.Err():
+				return err
+			case <-quit:
+				return nil
+			}
+		}
+	}), nil
+}
+
+// ParseVerifierPeerIdUpdated is a log parse operation binding the contract event 0x7f1ec80300d7812b29d17bbaab67b231a25f3da6b00f5ae6df703ede6f61e47f.
+//
+// Solidity: event VerifierPeerIdUpdated(string oldVerifierPeerId, string newVerifierPeerId)
+func (_SubnetProviderUptime *SubnetProviderUptimeFilterer) ParseVerifierPeerIdUpdated(log types.Log) (*SubnetProviderUptimeVerifierPeerIdUpdated, error) {
+	event := new(SubnetProviderUptimeVerifierPeerIdUpdated)
+	if err := _SubnetProviderUptime.contract.UnpackLog(event, "VerifierPeerIdUpdated", log); err != nil {
 		return nil, err
 	}
 	event.Raw = log

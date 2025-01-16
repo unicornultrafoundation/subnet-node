@@ -52,6 +52,7 @@ type UptimeService struct {
 	Datastore      repo.Datastore    // Datastore for storing uptime records and proofs
 	cache          map[string]string // Cache for peer-to-subnet mapping
 	AccountService *account.AccountService
+	verifierPeerID string
 }
 
 // Start initializes the UptimeService and starts PubSub-related tasks
@@ -69,6 +70,15 @@ func (s *UptimeService) Start() error {
 
 	// Create a cancellable context
 	ctx, s.cancel = context.WithCancel(ctx)
+
+	// Retrieve the verifier peer ID once before starting the periodic retrieval
+	verifierPeerID, err := s.AccountService.Uptime().VerifierPeerId(nil)
+	if err != nil {
+		return fmt.Errorf("failed to retrieve verifier peer ID: %w", err)
+	}
+	s.verifierPeerID = verifierPeerID
+
+	go s.startRetrievingVerifier(ctx)
 
 	if s.IsProvider || s.IsVerifier {
 		// Start publishing, listening, and updating proofs in separate goroutines
@@ -191,7 +201,7 @@ func createUptimeKey(providerId int64) datastore.Key {
 }
 
 func (s *UptimeService) handleMerkeProofMsg(ctx context.Context, peerId peer.ID, merkeProof *puptime.MerkleProofMsg) {
-	if peerId.String() == VerifierPeerID {
+	if peerId.String() == s.verifierPeerID {
 		log.Debugf("Received MerkleProofs: %+v", merkeProof)
 		uptime, err := s.GetUptime(ctx)
 		if err != nil {
@@ -583,6 +593,28 @@ func (s *UptimeService) startReportingUptime(ctx context.Context) {
 				log.Errorf("Error reporting uptime: %v", err)
 			} else {
 				log.Debugf("Uptime reported successfully.")
+			}
+		}
+	}
+}
+
+// startRetrievingVerifier periodically retrieves the verifier peer ID every minute
+func (s *UptimeService) startRetrievingVerifier(ctx context.Context) {
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done(): // Exit if the context is cancelled
+			log.Println("Context cancelled, stopping verifier retrieval.")
+			return
+		case <-ticker.C: // On every tick, retrieve verifier peer ID
+			verifierPeerID, err := s.AccountService.Uptime().VerifierPeerId(nil)
+			if err != nil {
+				log.Errorf("Error retrieving verifier peer ID: %v", err)
+			} else {
+				s.verifierPeerID = verifierPeerID
+				log.Debugf("Verifier peer ID retrieved successfully: %s", verifierPeerID)
 			}
 		}
 	}
