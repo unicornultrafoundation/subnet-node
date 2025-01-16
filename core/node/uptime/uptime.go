@@ -32,8 +32,10 @@ type HeartbeatMessage struct {
 }
 
 const (
-	MerkleAPIURL   = "http://localhost:8787/generate-proofs"                // Replace with the actual API URL
-	VerifierPeerID = "12D3KooWGNQYBFWmKgiAgEsQ4u2WznEgR2NmrBbYcfq33yQo4D8a" // Verifier Peer ID
+	PublishInterval          = 5 * time.Minute
+	UpdateProofsInterval     = 30 * time.Minute
+	ReportUptimeInterval     = 2 * time.Hour
+	RetrieveVerifierInterval = 5 * time.Minute
 )
 
 type ProofResponse struct {
@@ -53,6 +55,7 @@ type UptimeService struct {
 	cache          map[string]string // Cache for peer-to-subnet mapping
 	AccountService *account.AccountService
 	verifierPeerID string
+	MerkleAPIURL   string
 }
 
 // Start initializes the UptimeService and starts PubSub-related tasks
@@ -109,7 +112,7 @@ func (s *UptimeService) Stop() error {
 
 // startPublishing periodically sends heartbeat messages to the PubSub topic
 func (s *UptimeService) startPublishing(ctx context.Context) {
-	ticker := time.NewTicker(30 * time.Second)
+	ticker := time.NewTicker(PublishInterval)
 	defer ticker.Stop()
 
 	for {
@@ -197,7 +200,7 @@ func (s *UptimeService) startListening(ctx context.Context) {
 
 // createUptimeKey generates the datastore key for a given provider ID.
 func createUptimeKey(providerId int64) datastore.Key {
-	return datastore.NewKey(fmt.Sprintf("/uptime/provider:%d", providerId))
+	return datastore.NewKey(fmt.Sprintf("/uptime/provider/%d", providerId))
 }
 
 func (s *UptimeService) handleMerkeProofMsg(ctx context.Context, peerId peer.ID, merkeProof *puptime.MerkleProofMsg) {
@@ -242,13 +245,13 @@ func (s *UptimeService) handleHeartbeatMsg(ctx context.Context, heartbeat *pupti
 
 	// Validate that the provider ID is not zero
 	if heartbeat.ProviderId == 0 {
-		log.Errorf("Invalid provider ID: %d", heartbeat.ProviderId)
+		log.Debugf("Invalid provider ID: %d", heartbeat.ProviderId)
 		return
 	}
 
 	// Update the peer's uptime based on the received message
 	if err := s.updatePeerUptime(ctx, heartbeat.ProviderId, heartbeat.Timestamp); err != nil {
-		log.Errorf("Error updating peer uptime: %v", err)
+		log.Debugf("Error updating peer uptime: %v", err)
 		return
 	}
 
@@ -271,6 +274,14 @@ func (s *UptimeService) updatePeerUptime(ctx context.Context, providerId int64, 
 			proof = record.Proof
 			isClaimed = record.IsClaimed
 		}
+	}
+
+	if uptime == 0 {
+		onchainTotalUptime, err := s.AccountService.Uptime().GetTotalUptime(nil, big.NewInt(providerId))
+		if err != nil {
+			return err
+		}
+		uptime = onchainTotalUptime.Int64()
 	}
 
 	// Calculate the time elapsed since the last timestamp
@@ -310,7 +321,7 @@ func (s *UptimeService) updatePeerUptime(ctx context.Context, providerId int64, 
 
 // updateProofs periodically generates and distributes Merkle proofs for all uptimes
 func (s *UptimeService) updateProofs(ctx context.Context) {
-	ticker := time.NewTicker(15 * time.Minute)
+	ticker := time.NewTicker(UpdateProofsInterval)
 	defer ticker.Stop()
 
 	for {
@@ -333,7 +344,7 @@ func (s *UptimeService) updateProofs(ctx context.Context) {
 // loadUptimes retrieves all uptime records from the datastore
 func (s *UptimeService) loadUptimes(ctx context.Context) ([]*puptime.UptimeRecord, error) {
 	query := query.Query{
-		Prefix: "/uptime/provider:",
+		Prefix: "/uptime/provider/",
 	}
 
 	iter, err := s.Datastore.Query(ctx, query)
@@ -365,6 +376,11 @@ func (s *UptimeService) generateAndDistributeProofs(ctx context.Context) error {
 		return fmt.Errorf("failed to load uptime records: %v", err)
 	}
 
+	if len(uptimes) == 0 {
+		log.Debugf("No uptime records found")
+		return nil
+	}
+
 	// Prepare the payload for the API
 	payload, err := json.Marshal(map[string]interface{}{
 		"records": prepareRecordsForAPI(uptimes),
@@ -375,7 +391,7 @@ func (s *UptimeService) generateAndDistributeProofs(ctx context.Context) error {
 	}
 
 	// Call the external API
-	resp, err := http.Post(MerkleAPIURL, "application/json", bytes.NewBuffer(payload))
+	resp, err := http.Post(s.MerkleAPIURL, "application/json", bytes.NewBuffer(payload))
 	if err != nil {
 		return fmt.Errorf("failed to call Merkle API: %v", err)
 	}
@@ -466,7 +482,6 @@ func (s *UptimeService) ReportUptime(ctx context.Context) error {
 	}
 
 	key, err := s.AccountService.NewKeyedTransactor()
-
 	if err != nil {
 		return nil
 	}
@@ -580,7 +595,7 @@ func hexStringToByte32(hexStr string) ([32]byte, error) {
 
 // startReportingUptime periodically calls ReportUptime every 12 hours
 func (s *UptimeService) startReportingUptime(ctx context.Context) {
-	ticker := time.NewTicker(30 * time.Minute)
+	ticker := time.NewTicker(ReportUptimeInterval)
 	defer ticker.Stop()
 
 	for {
@@ -600,7 +615,7 @@ func (s *UptimeService) startReportingUptime(ctx context.Context) {
 
 // startRetrievingVerifier periodically retrieves the verifier peer ID every minute
 func (s *UptimeService) startRetrievingVerifier(ctx context.Context) {
-	ticker := time.NewTicker(1 * time.Minute)
+	ticker := time.NewTicker(RetrieveVerifierInterval)
 	defer ticker.Stop()
 
 	for {
