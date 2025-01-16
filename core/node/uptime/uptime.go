@@ -80,6 +80,10 @@ func (s *UptimeService) Start() error {
 		go s.updateProofs(ctx)
 	}
 
+	if s.IsProvider {
+		go s.startReportingUptime(ctx)
+	}
+
 	log.Infof("UptimeService started for topic: %s", UptimeTopic)
 	return nil
 }
@@ -556,4 +560,24 @@ func hexStringToByte32(hexStr string) ([32]byte, error) {
 	copy(result[:], bytes)
 
 	return result, nil
+}
+
+// startReportingUptime periodically calls ReportUptime every 12 hours
+func (s *UptimeService) startReportingUptime(ctx context.Context) {
+	ticker := time.NewTicker(12 * time.Hour)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done(): // Exit if the context is cancelled
+			log.Println("Context cancelled, stopping uptime reporting.")
+			return
+		case <-ticker.C: // On every tick, report uptime
+			if err := s.ReportUptime(ctx); err != nil {
+				log.Errorf("Error reporting uptime: %v", err)
+			} else {
+				log.Debugf("Uptime reported successfully.")
+			}
+		}
+	}
 }
