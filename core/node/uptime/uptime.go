@@ -22,7 +22,7 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/repo"
 )
 
-var log = logrus.New().WithField("service", "uptime")
+var log = logrus.WithField("module", "uptime")
 
 var UptimeTopic = "topic/uptime"
 
@@ -227,6 +227,12 @@ func (s *UptimeService) handleHeartbeatMsg(ctx context.Context, heartbeat *pupti
 	currentTime := time.Now().Unix()
 	if heartbeat.Timestamp > currentTime+5 {
 		log.Errorf("Invalid heartbeat timestamp from provider %d: %d (current time: %d)", heartbeat.ProviderId, heartbeat.Timestamp, currentTime)
+		return
+	}
+
+	// Validate that the provider ID is not zero
+	if heartbeat.ProviderId == 0 {
+		log.Errorf("Invalid provider ID: %d", heartbeat.ProviderId)
 		return
 	}
 
