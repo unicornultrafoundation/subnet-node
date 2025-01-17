@@ -12,6 +12,7 @@ import (
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/errdefs"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ipfs/go-datastore"
 	p2phost "github.com/libp2p/go-libp2p/core/host"
@@ -75,6 +76,7 @@ func (s *Service) Start(ctx context.Context) error {
 		}
 
 		s.RestartStoppedContainers(ctx)
+		s.upgradeAppVersion(ctx)
 
 		// Update latest resource usage into datastore
 		if err := s.updateAllRunningContainersUsage(ctx); err != nil {
@@ -82,6 +84,7 @@ func (s *Service) Start(ctx context.Context) error {
 		}
 
 		// Start app sub-services
+		go s.startUpgradeAppVersion(ctx)
 		go s.startMonitoringUsage(ctx)
 		go s.startRewardClaimer(ctx)
 	}
@@ -128,6 +131,9 @@ func (s *Service) GetApp(ctx context.Context, appId *big.Int) (*App, error) {
 	// Retrieve metadata from datastore if available
 	metadata, err := s.GetContainerConfigProto(ctx, appId)
 	if err == nil {
+		if app.Metadata == nil {
+			app.Metadata = new(AppMetadata)
+		}
 		app.Metadata.ContainerConfig.Env = metadata.ContainerConfig.Env
 	}
 
@@ -419,6 +425,21 @@ func (s *Service) SaveContainerConfigProto(ctx context.Context, appId *big.Int, 
 	}
 
 	return nil
+}
+
+func (s *Service) RegisterProvider(providerName string, metadata string, website string) (common.Hash, error) {
+	// Create a new transactor
+	key, err := s.accountService.NewKeyedTransactor()
+	if err != nil {
+		return common.Hash{}, err
+	}
+
+	tx, err := s.accountService.Provider().RegisterProvider(key, providerName, metadata, s.accountService.GetAddress(), website)
+	if err != nil {
+		return common.Hash{}, err
+	}
+
+	return tx.Hash(), nil
 }
 
 // Extract appId from container ID
