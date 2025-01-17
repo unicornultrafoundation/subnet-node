@@ -13,6 +13,7 @@ import (
 	"github.com/containerd/typeurl/v2"
 	"github.com/shirou/gopsutil/process"
 	"github.com/unicornultrafoundation/subnet-node/common/networkutil"
+	"github.com/unicornultrafoundation/subnet-node/common/utils"
 )
 
 // StatEntry represents the resource usage statistics for a container.
@@ -145,10 +146,14 @@ func (s *Stats) updateStats(ctx context.Context, containerId string) error {
 		return fmt.Errorf("unsupported metrics type")
 	}
 
+	// Get GPU usage
+	usedGpu, _ := utils.GetGpuUsageByPid(int32(pid))
+
 	// Create current stats entry
 	currentStats := &StatEntry{
 		UsedUploadBytes:   totalTxBytes,
 		UsedDownloadBytes: totalRxBytes,
+		UsedGpu:           usedGpu,
 		UsedCpu:           usedCpu,
 		UsedMemory:        usedMemory,
 		UsedStorage:       uint64(snapshotUsage.Size),
@@ -169,8 +174,9 @@ func (s *Stats) updateStats(ctx context.Context, containerId string) error {
 		UsedUploadBytes:   currentStats.UsedUploadBytes - initialStats.UsedUploadBytes,
 		UsedDownloadBytes: currentStats.UsedDownloadBytes - initialStats.UsedDownloadBytes,
 		UsedCpu:           currentStats.UsedCpu - initialStats.UsedCpu,
-		UsedMemory:        currentStats.UsedMemory - initialStats.UsedMemory,
-		UsedStorage:       currentStats.UsedStorage - initialStats.UsedStorage,
+		UsedGpu:           currentStats.UsedGpu,
+		UsedMemory:        currentStats.UsedMemory,
+		UsedStorage:       currentStats.UsedStorage,
 	}
 
 	// Add final stats if they exist
@@ -178,8 +184,6 @@ func (s *Stats) updateStats(ctx context.Context, containerId string) error {
 		usedStats.UsedUploadBytes += finalStats.UsedUploadBytes
 		usedStats.UsedDownloadBytes += finalStats.UsedDownloadBytes
 		usedStats.UsedCpu += finalStats.UsedCpu
-		usedStats.UsedMemory += finalStats.UsedMemory
-		usedStats.UsedStorage += finalStats.UsedStorage
 	}
 
 	s.entries[containerId] = usedStats
