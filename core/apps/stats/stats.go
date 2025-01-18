@@ -223,9 +223,25 @@ func (s *Stats) FinalizeStats(containerId string) error {
 	return nil
 }
 
-// ClaimFinalStats claims the final stats for a given container ID.
-func (s *Stats) ClaimFinalStats(containerId string) (*StatEntry, error) {
+// ClearFinalStats clears the final stats for a given container ID.
+func (s *Stats) ClearFinalStats(containerId string) error {
 	// Lock the map for writing
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	_, exists := s.finalStats[containerId]
+	if !exists {
+		return fmt.Errorf("final stats not found for container ID: %s", containerId)
+	}
+
+	delete(s.finalStats, containerId)
+
+	return nil
+}
+
+// GetFinalStats retrieves the final stats for a given container ID.
+func (s *Stats) GetFinalStats(containerId string) (*StatEntry, error) {
+	// Lock the map for reading
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -234,29 +250,20 @@ func (s *Stats) ClaimFinalStats(containerId string) (*StatEntry, error) {
 		return nil, fmt.Errorf("final stats not found for container ID: %s", containerId)
 	}
 
-	delete(s.finalStats, containerId)
-
 	return entry, nil
 }
 
-// ClaimMultipleFinalStats claims the final stats for multiple container IDs.
-func (s *Stats) ClaimMultipleFinalStats(containerIds []string) (map[string]*StatEntry, error) {
-	// Lock the map for writing
+// GetAllFinalStats retrieves the final stats for all containers.
+func (s *Stats) GetAllFinalStats() (map[string]*StatEntry, error) {
+	// Lock the map for reading
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	claimedStats := make(map[string]*StatEntry)
-	for _, containerId := range containerIds {
-		entry, exists := s.finalStats[containerId]
-		if !exists {
-			return nil, fmt.Errorf("final stats not found for container ID: %s", containerId)
-		}
-
-		claimedStats[containerId] = entry
-		delete(s.finalStats, containerId)
+	if len(s.finalStats) == 0 {
+		return nil, fmt.Errorf("no final stats available")
 	}
 
-	return claimedStats, nil
+	return s.finalStats, nil
 }
 
 // Start starts the stats service and periodically updates stats for all running containers.
