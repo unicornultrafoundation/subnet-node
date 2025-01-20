@@ -2,50 +2,53 @@ package utils
 
 import (
 	"fmt"
+	"os/exec"
 	"runtime"
-
-	"github.com/NVIDIA/go-nvml/pkg/nvml"
+	"strconv"
+	"strings"
 )
 
-// GetGpuUsageByPid returns the GPU usage for a given PID.
-func GetGpuUsageByPid(pid int32) (uint64, error) {
+// GetGpuUsage returns the GPU usage for all processes.
+func GetGpuUsage() (map[int32]uint64, error) {
 	// Check if the operating system supports NVIDIA
 	if runtime.GOOS != "linux" {
-		return 0, fmt.Errorf("NVIDIA GPU usage is only supported on Linux")
+		return nil, fmt.Errorf("NVIDIA GPU usage is only supported on Linux")
 	}
 
-	// Initialize NVML library for GPU stats
-	if ret := nvml.Init(); ret != nvml.SUCCESS {
-		return 0, fmt.Errorf("failed to initialize NVML: %v", nvml.ErrorString(ret))
-	}
-	defer nvml.Shutdown()
-
-	// Get GPU usage
-	deviceCount, ret := nvml.DeviceGetCount()
-	if ret != nvml.SUCCESS {
-		return 0, fmt.Errorf("failed to get GPU device count: %v", nvml.ErrorString(ret))
+	// Check if nvidia-smi command is available
+	if _, err := exec.LookPath("nvidia-smi"); err != nil {
+		return nil, fmt.Errorf("nvidia-smi command not found: %v", err)
 	}
 
-	var usedGpu uint64
-	for i := 0; i < deviceCount; i++ {
-		device, ret := nvml.DeviceGetHandleByIndex(i)
-		if ret != nvml.SUCCESS {
-			return 0, fmt.Errorf("failed to get GPU device handle: %v", nvml.ErrorString(ret))
+	// Execute nvidia-smi command to get GPU processes
+	cmd := exec.Command("nvidia-smi", "--query-compute-apps=pid,used_memory", "--format=csv,noheader,nounits")
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute nvidia-smi: %v", err)
+	}
+
+	// Parse the output to get GPU usage for each process
+	lines := strings.Split(string(output), "\n")
+	gpuUsage := make(map[int32]uint64)
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
 		}
-
-		// Get the processes running on the GPU
-		processes, ret := device.GetComputeRunningProcesses()
-		if ret != nvml.SUCCESS {
-			return 0, fmt.Errorf("failed to get GPU processes: %v", nvml.ErrorString(ret))
+		fields := strings.Split(line, ",")
+		if len(fields) != 2 {
+			continue
 		}
-
-		// Check if the given PID is using the GPU
-		for _, process := range processes {
-			if process.Pid == uint32(pid) {
-				usedGpu++
-			}
+		gpuPid, err := strconv.Atoi(strings.TrimSpace(fields[0]))
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse PID from nvidia-smi output: %v", err)
 		}
+		usedMemory, err := strconv.ParseUint(strings.TrimSpace(fields[1]), 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse used memory from nvidia-smi output: %v", err)
+		}
+		gpuUsage[int32(gpuPid)] += usedMemory
 	}
 
-	return usedGpu, nil
+	return gpuUsage, nil
 }

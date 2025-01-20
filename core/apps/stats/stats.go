@@ -13,7 +13,6 @@ import (
 	"github.com/containerd/typeurl/v2"
 	"github.com/shirou/gopsutil/process"
 	"github.com/unicornultrafoundation/subnet-node/common/networkutil"
-	"github.com/unicornultrafoundation/subnet-node/common/utils"
 )
 
 // StatEntry represents the resource usage statistics for a container.
@@ -24,6 +23,7 @@ type StatEntry struct {
 	UsedCpu           uint64
 	UsedMemory        uint64
 	UsedStorage       uint64
+	Duration          time.Duration
 }
 
 // Stats manages the resource usage statistics for multiple containers.
@@ -34,6 +34,9 @@ type Stats struct {
 	finalStats       map[string]*StatEntry
 	containerdClient *containerd.Client
 	stopChan         chan struct{}
+	gpu              *GpuMonitor
+	containerToPid   map[string]int32
+	startTimes       map[string]time.Time
 }
 
 // NewStats creates a new Stats instance.
@@ -44,6 +47,9 @@ func NewStats(containerdClient *containerd.Client) *Stats {
 		finalStats:       make(map[string]*StatEntry),
 		containerdClient: containerdClient,
 		stopChan:         make(chan struct{}),
+		gpu:              NewGpuMonitor(5 * time.Second),
+		containerToPid:   make(map[string]int32),
+		startTimes:       make(map[string]time.Time),
 	}
 }
 
@@ -55,6 +61,10 @@ func (s *Stats) ClearUsageData() {
 	s.entries = make(map[string]*StatEntry)
 	s.firstStats = make(map[string]*StatEntry)
 	s.finalStats = make(map[string]*StatEntry)
+	s.containerToPid = make(map[string]int32)
+	s.startTimes = make(map[string]time.Time)
+
+	s.gpu.ClearAllGpuUsage()
 }
 
 // UpdateStats updates the stats for a given container ID.
@@ -79,6 +89,19 @@ func (s *Stats) updateStats(ctx context.Context, containerId string) error {
 	if err != nil {
 		return err
 	}
+
+	// Check if the process ID has changed
+	s.mu.Lock()
+	oldPid, exists := s.containerToPid[containerId]
+	if exists && oldPid != int32(pid) {
+		// Finalize stats for the old process ID
+		if err := s.finalizeStats(containerId); err != nil {
+			s.mu.Unlock()
+			return fmt.Errorf("failed to finalize stats for container %s: %v", containerId, err)
+		}
+	}
+	s.containerToPid[containerId] = int32(pid)
+	s.mu.Unlock()
 
 	// Get network I/O counters
 	netIO, err := proc.NetIOCounters(false)
@@ -147,7 +170,7 @@ func (s *Stats) updateStats(ctx context.Context, containerId string) error {
 	}
 
 	// Get GPU usage
-	usedGpu, _ := utils.GetGpuUsageByPid(int32(pid))
+	usedGpu, _ := s.gpu.GetAverageGpuUsageByPid(int32(pid))
 
 	// Create current stats entry
 	currentStats := &StatEntry{
@@ -166,6 +189,7 @@ func (s *Stats) updateStats(ctx context.Context, containerId string) error {
 	// Store the initial stats if not already stored
 	if _, exists := s.firstStats[containerId]; !exists {
 		s.firstStats[containerId] = currentStats
+		s.startTimes[containerId] = time.Now()
 	}
 
 	// Calculate the used stats by subtracting the initial stats
@@ -177,6 +201,7 @@ func (s *Stats) updateStats(ctx context.Context, containerId string) error {
 		UsedGpu:           currentStats.UsedGpu,
 		UsedMemory:        currentStats.UsedMemory,
 		UsedStorage:       currentStats.UsedStorage,
+		Duration:          time.Since(s.startTimes[containerId]),
 	}
 
 	// Add final stats if they exist
@@ -206,7 +231,7 @@ func (s *Stats) GetStats(containerId string) (*StatEntry, error) {
 }
 
 // FinalizeStats finalizes the stats for a given container ID.
-func (s *Stats) FinalizeStats(containerId string) error {
+func (s *Stats) finalizeStats(containerId string) error {
 	// Lock the map for writing
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -219,6 +244,13 @@ func (s *Stats) FinalizeStats(containerId string) error {
 	s.finalStats[containerId] = entry
 	delete(s.entries, containerId)
 	delete(s.firstStats, containerId)
+	delete(s.startTimes, containerId)
+
+	// Clear GPU usage for the corresponding process
+	if pid, exists := s.containerToPid[containerId]; exists {
+		s.gpu.ClearGpuUsageByPid(pid)
+		delete(s.containerToPid, containerId)
+	}
 
 	return nil
 }
@@ -232,6 +264,12 @@ func (s *Stats) ClearFinalStats(containerId string) error {
 	_, exists := s.finalStats[containerId]
 	if !exists {
 		return fmt.Errorf("final stats not found for container ID: %s", containerId)
+	}
+
+	// Clear GPU usage for the corresponding process
+	if pid, exists := s.containerToPid[containerId]; exists {
+		s.gpu.ClearGpuUsageByPid(pid)
+		delete(s.containerToPid, containerId)
 	}
 
 	delete(s.finalStats, containerId)
