@@ -28,28 +28,32 @@ type StatEntry struct {
 
 // Stats manages the resource usage statistics for multiple containers.
 type Stats struct {
-	mu               sync.Mutex
-	entries          map[string]*StatEntry
-	firstStats       map[string]*StatEntry
-	finalStats       map[string]*StatEntry
-	containerdClient *containerd.Client
-	stopChan         chan struct{}
-	gpu              *GpuMonitor
-	containerToPid   map[string]int32
-	startTimes       map[string]time.Time
+	mu                sync.Mutex
+	entries           map[string]*StatEntry
+	firstStats        map[string]*StatEntry
+	finalStats        map[string]*StatEntry
+	containerdClient  *containerd.Client
+	stopChan          chan struct{}
+	gpu               *GpuMonitor
+	containerToPid    map[string]int32
+	startTimes        map[string]time.Time
+	memoryUsage       map[int32]uint64
+	memorySampleCount map[int32]uint64
 }
 
 // NewStats creates a new Stats instance.
 func NewStats(containerdClient *containerd.Client) *Stats {
 	return &Stats{
-		entries:          make(map[string]*StatEntry),
-		firstStats:       make(map[string]*StatEntry),
-		finalStats:       make(map[string]*StatEntry),
-		containerdClient: containerdClient,
-		stopChan:         make(chan struct{}),
-		gpu:              NewGpuMonitor(5 * time.Second),
-		containerToPid:   make(map[string]int32),
-		startTimes:       make(map[string]time.Time),
+		entries:           make(map[string]*StatEntry),
+		firstStats:        make(map[string]*StatEntry),
+		finalStats:        make(map[string]*StatEntry),
+		containerdClient:  containerdClient,
+		stopChan:          make(chan struct{}),
+		gpu:               NewGpuMonitor(5 * time.Second),
+		containerToPid:    make(map[string]int32),
+		startTimes:        make(map[string]time.Time),
+		memoryUsage:       make(map[int32]uint64),
+		memorySampleCount: make(map[int32]uint64),
 	}
 }
 
@@ -63,6 +67,8 @@ func (s *Stats) ClearUsageData() {
 	s.finalStats = make(map[string]*StatEntry)
 	s.containerToPid = make(map[string]int32)
 	s.startTimes = make(map[string]time.Time)
+	s.memoryUsage = make(map[int32]uint64)
+	s.memorySampleCount = make(map[int32]uint64)
 
 	s.gpu.ClearAllGpuUsage()
 }
@@ -172,6 +178,12 @@ func (s *Stats) updateStats(ctx context.Context, containerId string) error {
 	// Get GPU usage
 	usedGpu, _ := s.gpu.GetAverageGpuUsageByPid(int32(pid))
 
+	// Store memory usage data
+	s.mu.Lock()
+	s.memoryUsage[int32(pid)] += usedMemory
+	s.memorySampleCount[int32(pid)]++
+	s.mu.Unlock()
+
 	// Create current stats entry
 	currentStats := &StatEntry{
 		UsedUploadBytes:   totalTxBytes,
@@ -199,7 +211,7 @@ func (s *Stats) updateStats(ctx context.Context, containerId string) error {
 		UsedDownloadBytes: currentStats.UsedDownloadBytes - initialStats.UsedDownloadBytes,
 		UsedCpu:           currentStats.UsedCpu - initialStats.UsedCpu,
 		UsedGpu:           currentStats.UsedGpu,
-		UsedMemory:        currentStats.UsedMemory,
+		UsedMemory:        s.memoryUsage[int32(pid)] / s.memorySampleCount[int32(pid)],
 		UsedStorage:       currentStats.UsedStorage,
 		Duration:          time.Since(s.startTimes[containerId]),
 	}
@@ -246,9 +258,11 @@ func (s *Stats) finalizeStats(containerId string) error {
 	delete(s.firstStats, containerId)
 	delete(s.startTimes, containerId)
 
-	// Clear GPU usage for the corresponding process
+	// Clear GPU and memory usage for the corresponding process
 	if pid, exists := s.containerToPid[containerId]; exists {
 		s.gpu.ClearGpuUsageByPid(pid)
+		delete(s.memoryUsage, pid)
+		delete(s.memorySampleCount, pid)
 		delete(s.containerToPid, containerId)
 	}
 
@@ -266,9 +280,11 @@ func (s *Stats) ClearFinalStats(containerId string) error {
 		return fmt.Errorf("final stats not found for container ID: %s", containerId)
 	}
 
-	// Clear GPU usage for the corresponding process
+	// Clear GPU and memory usage for the corresponding process
 	if pid, exists := s.containerToPid[containerId]; exists {
 		s.gpu.ClearGpuUsageByPid(pid)
+		delete(s.memoryUsage, pid)
+		delete(s.memorySampleCount, pid)
 		delete(s.containerToPid, containerId)
 	}
 
