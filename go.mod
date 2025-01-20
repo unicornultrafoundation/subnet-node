@@ -286,7 +286,7 @@ require (
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/containerd/cgroups/v3 v3.0.5
 	github.com/containerd/containerd v1.7.24
-	github.com/containerd/go-cni v1.1.11
+	github.com/containerd/go-cni v1.1.12
 	github.com/containerd/typeurl v1.0.2
 	github.com/deckarep/golang-set/v2 v2.6.0
 	github.com/ethereum/go-ethereum v1.14.12
