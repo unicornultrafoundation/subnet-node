@@ -30,11 +30,3 @@ func (api *NodeAPI) GetPeerId(ctx context.Context) (string, error) {
 func (api *NodeAPI) Restart(ctx context.Context) error {
 	return api.node.Close()
 }
-
-func (api *NodeAPI) IsRegistered(ctx context.Context) (bool, error) {
-	id, err := api.app.GetSubnetID(ctx)
-	if err != nil {
-		return false, err
-	}
-	return id.Int64() > 0, nil
-}

@@ -32,7 +32,7 @@ message App {
 
 message ResourceUsage {
   string app_id = 1;
-  string subnet_id = 2;
+  int64 provider_id = 2;
   string used_cpu = 3;
   string used_gpu = 4;
   string used_memory = 5;
@@ -40,6 +40,24 @@ message ResourceUsage {
   string used_upload_bytes = 7;
   string used_download_bytes = 8;
   string duration = 9;
+}
+
+// ResourceUsageV2 represents the resource usage data
+message ResourceUsageV2 {
+	bytes app_id = 1;
+	bytes provider_id = 2;
+	bytes used_cpu = 3;
+	bytes used_gpu = 4;
+	bytes used_memory = 5;
+	bytes used_storage = 6;
+	bytes used_upload_bytes = 7;
+  bytes used_download_bytes = 8; 
+  bytes duration = 9;
+}
+
+// ResourceUsageMetadata represents the resource usage info of an application
+message ResourceUsageMetadata {
+	repeated uint32 pids = 1;
 }
 
 message AppMetadata {
@@ -54,6 +72,7 @@ message AppInfo {
   string logo = 3;
   string banner = 4;
   string website = 5;
+  repeated string preview = 6;
 }
 
 message ContainerConfig {
@@ -84,4 +103,14 @@ message Volume {
 message ContactInfo {
   string email = 1;
   string github = 2;
+}
+
+message SignatureRequest {
+  oneof data {
+    ResourceUsageV2 usage = 1;
+  }
+}
+
+message SignatureResponse {
+  bytes signature = 1;
 }

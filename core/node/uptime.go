@@ -21,6 +21,7 @@ func UptimeService(lc fx.Lifecycle, repo repo.Repo, accountService *account.Acco
 		PubSub:         pubSub,
 		Datastore:      repo.Datastore(),
 		AccountService: accountService,
+		MerkleAPIURL:   cfg.GetString("uptime.merkle_api", "http://localhost:8787/generate-proofs"),
 	}
 	lc.Append(fx.Hook{
 		OnStop: func(ctx context.Context) error {

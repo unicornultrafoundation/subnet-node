@@ -1,12 +1,13 @@
 package p2p
 
 import (
-	"encoding/json"
 	"sync"
 
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/protocol"
 	ma "github.com/multiformats/go-multiaddr"
+	pbstream "github.com/unicornultrafoundation/subnet-node/common/io"
+	pbapp "github.com/unicornultrafoundation/subnet-node/proto/subnet/app"
 )
 
 // SignProtocolListener handles requests for signing resource usage data
@@ -14,7 +15,7 @@ type SignProtocolListener struct {
 	protoID       protocol.ID
 	listenAddr    ma.Multiaddr
 	targetAddr    ma.Multiaddr
-	signHandler   func(stream network.Stream) (string, error)
+	signHandler   func(stream network.Stream) ([]byte, error)
 	activeStreams sync.Map // Tracks active streams
 }
 
@@ -24,7 +25,7 @@ type SignatureResponse struct {
 }
 
 // NewSignProtocolListener creates a new listener for the signing protocol
-func NewSignProtocolListener(protoID protocol.ID, signHandler func(stream network.Stream) (string, error)) *SignProtocolListener {
+func NewSignProtocolListener(protoID protocol.ID, signHandler func(stream network.Stream) ([]byte, error)) *SignProtocolListener {
 	return &SignProtocolListener{
 		protoID:     protoID,
 		signHandler: signHandler,
@@ -77,8 +78,8 @@ func (l *SignProtocolListener) handleStream(stream network.Stream) {
 	}
 
 	// Send back the signature as a response
-	response := SignatureResponse{Signature: signature}
-	if err := json.NewEncoder(stream).Encode(response); err != nil {
+	response := pbapp.SignatureResponse{Signature: signature}
+	if err := pbstream.WriteProtoBuffered(stream, &response); err != nil {
 		log.Printf("Failed to send signature response: %v", err)
 	}
 }

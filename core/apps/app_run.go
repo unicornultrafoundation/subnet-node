@@ -17,10 +17,6 @@ func (s *Service) RunApp(ctx context.Context, appId *big.Int) (*App, error) {
 	// Set the namespace for the container
 	ctx = namespaces.WithNamespace(ctx, NAMESPACE)
 
-	if _, err := s.RegisterNode(ctx, appId); err != nil {
-		return nil, err
-	}
-
 	// Retrieve app details from the Ethereum contract
 	app, err := s.GetApp(ctx, appId)
 	if err != nil {
@@ -75,7 +71,7 @@ func (s *Service) RunApp(ctx context.Context, appId *big.Int) (*App, error) {
 	}
 
 	// Start the container
-	task, err := container.NewTask(ctx, cio.NewCreator(cio.WithStdio))
+	task, err := container.NewTask(ctx, cio.NewCreator())
 	if err != nil {
 		return nil, fmt.Errorf("failed to create task: %w", err)
 	}

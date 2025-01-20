@@ -53,7 +53,7 @@ func newListenersP2P(host p2phost.Host) *Listeners {
 
 		l := reg.Listeners[stream.Protocol()]
 		if l != nil {
-			go l.(*remoteListener).handleStream(stream)
+			go l.(*SignProtocolListener).handleStream(stream)
 		}
 	})
 

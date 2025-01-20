@@ -3,6 +3,8 @@ package account
 import (
 	"context"
 	"crypto/ecdsa"
+	"crypto/rand"
+	"fmt"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -20,12 +22,16 @@ var log = logrus.New().WithField("service", "account")
 
 // AccountService is a service to handle Ethereum transactions
 type AccountService struct {
-	privateKey        *ecdsa.PrivateKey
-	client            *ethclient.Client
-	chainID           *big.Int
-	subnetRegistry    *contracts.SubnetRegistry
-	subnetAppRegistry *contracts.SubnetAppRegistry
-	nftLicense        *contracts.ERC721
+	privateKey              *ecdsa.PrivateKey
+	client                  *ethclient.Client
+	chainID                 *big.Int
+	subnetProvider          *contracts.SubnetProvider
+	subnetProviderAddr      string
+	subnetAppStore          *contracts.SubnetAppStore
+	subnetAppStoreAddr      string
+	subnetProvierUptimeAddr string
+	subnetProvierUptime     *contracts.SubnetProviderUptime
+	providerID              int64
 }
 
 // NewAccountService initializes a new AccountService
@@ -43,8 +49,9 @@ func NewAccountService(cfg *config.C) (*AccountService, error) {
 		return nil, err
 	}
 
-	subnetAppRegistry, err := contracts.NewSubnetAppRegistry(
-		common.HexToAddress(cfg.GetString("apps.subnet_app_registry_contract", config.DefaultSubnetAppRegistryContract)),
+	subnetAppStoreAddr := cfg.GetString("apps.subnet_app_store", config.DefaultSubnetAppStoreAddr)
+	subnetAppStore, err := contracts.NewSubnetAppStore(
+		common.HexToAddress(subnetAppStoreAddr),
 		client,
 	)
 
@@ -52,8 +59,9 @@ func NewAccountService(cfg *config.C) (*AccountService, error) {
 		return nil, err
 	}
 
-	subnetRegistry, err := contracts.NewSubnetRegistry(
-		common.HexToAddress(cfg.GetString("apps.subnet_registry_contract", config.DefaultSubnetRegistryCOntract)),
+	subnetProviderAddr := cfg.GetString("apps.subnet_provider", config.DefaultSubnetProviderAddr)
+	subnetRegistry, err := contracts.NewSubnetProvider(
+		common.HexToAddress(subnetProviderAddr),
 		client,
 	)
 
@@ -61,25 +69,29 @@ func NewAccountService(cfg *config.C) (*AccountService, error) {
 		return nil, err
 	}
 
-	nftAddr, err := subnetRegistry.NftContract(nil)
+	subnetProviderUptimeAddr := cfg.GetString("apps.subnet_provider", config.DefaultSubnetProviderUptimeAddr)
+	subnetProviderUptime, err := contracts.NewSubnetProviderUptime(
+		common.HexToAddress(subnetProviderUptimeAddr),
+		client,
+	)
 
 	if err != nil {
 		return nil, err
 	}
 
-	nftLicense, err := contracts.NewERC721(nftAddr, client)
-
-	if err != nil {
-		return nil, err
-	}
+	providerId := int64(cfg.GetInt("provider.id", 0))
 
 	s := &AccountService{
-		privateKey:        privateKey,
-		client:            client,
-		chainID:           chainID,
-		subnetRegistry:    subnetRegistry,
-		subnetAppRegistry: subnetAppRegistry,
-		nftLicense:        nftLicense,
+		privateKey:              privateKey,
+		client:                  client,
+		chainID:                 chainID,
+		subnetProvider:          subnetRegistry,
+		subnetProviderAddr:      subnetProviderAddr,
+		subnetAppStore:          subnetAppStore,
+		subnetAppStoreAddr:      subnetAppStoreAddr,
+		subnetProvierUptimeAddr: subnetProviderUptimeAddr,
+		subnetProvierUptime:     subnetProviderUptime,
+		providerID:              providerId,
 	}
 	s.registerReloadCallback(cfg)
 	return s, nil
@@ -96,6 +108,10 @@ func (s *AccountService) registerReloadCallback(cfg *config.C) {
 			}
 			s.privateKey = privateKey
 		}
+
+		if cfg.HasChanged("provider.id") {
+			s.providerID = int64(cfg.GetInt("provider.id", 0))
+		}
 	})
 }
 
@@ -104,16 +120,32 @@ func (s *AccountService) GetClient() *ethclient.Client {
 	return s.client
 }
 
-func (s *AccountService) SubnetRegistry() *contracts.SubnetRegistry {
-	return s.subnetRegistry
+func (s *AccountService) Provider() *contracts.SubnetProvider {
+	return s.subnetProvider
 }
 
-func (s *AccountService) SubnetAppRegistry() *contracts.SubnetAppRegistry {
-	return s.subnetAppRegistry
+func (s *AccountService) AppStore() *contracts.SubnetAppStore {
+	return s.subnetAppStore
 }
 
-func (s *AccountService) NftLicense() *contracts.ERC721 {
-	return s.nftLicense
+func (s *AccountService) Uptime() *contracts.SubnetProviderUptime {
+	return s.subnetProvierUptime
+}
+
+func (s *AccountService) GetChainID() *big.Int {
+	return s.chainID
+}
+
+func (s *AccountService) AppStoreAddr() string {
+	return s.subnetAppStoreAddr
+}
+
+func (s *AccountService) ProviderAddr() string {
+	return s.subnetProviderAddr
+}
+
+func (s *AccountService) UptimeAddr() string {
+	return s.subnetProvierUptimeAddr
 }
 
 // GetAddress retrieves the Ethereum address from the private key
@@ -133,6 +165,10 @@ func (s *AccountService) GetBalance(address common.Address) (*big.Int, error) {
 
 func (s *AccountService) NewKeyedTransactor() (*bind.TransactOpts, error) {
 	return bind.NewKeyedTransactorWithChainID(s.privateKey, s.chainID)
+}
+
+func (s *AccountService) ProviderID() int64 {
+	return s.providerID
 }
 
 // SignAndSendTransaction creates, signs, and sends a transaction
@@ -183,4 +219,25 @@ func EthereumService(lc fx.Lifecycle, cfg *config.C) (*AccountService, error) {
 	})
 
 	return service, nil
+}
+
+// Sign the hash using ECDSA
+func (account *AccountService) Sign(hash []byte) ([]byte, error) {
+	r, s, err := ecdsa.Sign(rand.Reader, account.privateKey, hash)
+	if err != nil {
+		return nil, fmt.Errorf("failed to sign: %v", err)
+	}
+
+	// Ensure `s` is in the lower half-order
+	halfOrder := new(big.Int).Rsh(crypto.S256().Params().N, 1)
+	v := byte(27)
+	if s.Cmp(halfOrder) > 0 {
+		s.Sub(crypto.S256().Params().N, s)
+		v = 28
+	}
+
+	// Format signature: r (32 bytes) || s (32 bytes) || v (1 byte)
+	signature := append(r.Bytes(), append(s.Bytes(), v)...)
+
+	return signature, nil
 }
