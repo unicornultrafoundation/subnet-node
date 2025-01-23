@@ -18,6 +18,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/unicornultrafoundation/subnet-node/core/apps/stats"
 	"github.com/unicornultrafoundation/subnet-node/core/contracts"
 	pbapp "github.com/unicornultrafoundation/subnet-node/proto/subnet/app"
 )
@@ -138,7 +139,7 @@ type Volume struct {
 }
 
 func decodeAndParseMetadata(encodedMetadata string) (*AppMetadata, error) {
-	// Giải mã Base64
+	// Decode Base64
 	decodedBytes, err := base64.StdEncoding.DecodeString(encodedMetadata)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode base64 metadata: %w", err)
@@ -1180,4 +1181,20 @@ type NameValueType struct {
 	Name  string      `json:"name"`
 	Value interface{} `json:"value"`
 	Typ   string      `json:"type"`
+}
+
+func ConvertStatEntryToResourceUsage(entry *stats.StatEntry, appId, providerId *big.Int) *ResourceUsage {
+	usage := ResourceUsage{
+		AppId:             appId,
+		ProviderId:        providerId,
+		UsedCpu:           big.NewInt(int64(entry.UsedCpu)),
+		UsedGpu:           big.NewInt(int64(entry.UsedGpu)),
+		UsedMemory:        big.NewInt(int64(entry.UsedMemory)),
+		UsedStorage:       big.NewInt(int64(entry.UsedStorage)),
+		UsedUploadBytes:   big.NewInt(int64(entry.UsedDownloadBytes)),
+		UsedDownloadBytes: big.NewInt(int64(entry.UsedDownloadBytes)),
+		Duration:          big.NewInt(int64(entry.Duration)),
+	}
+
+	return &usage
 }

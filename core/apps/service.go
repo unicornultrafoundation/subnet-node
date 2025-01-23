@@ -22,6 +22,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/config"
 	"github.com/unicornultrafoundation/subnet-node/core/account"
+	"github.com/unicornultrafoundation/subnet-node/core/apps/stats"
 	"github.com/unicornultrafoundation/subnet-node/p2p"
 	pbapp "github.com/unicornultrafoundation/subnet-node/proto/subnet/app"
 )
@@ -39,10 +40,10 @@ type Service struct {
 	ethClient        *ethclient.Client
 	containerdClient *containerd.Client
 	P2P              *p2p.P2P
-	PeerHost         p2phost.Host `optional:"true"` // the network host (server+client)
-	subnetID         big.Int
+	PeerHost         p2phost.Host  `optional:"true"` // the network host (server+client)
 	stopChan         chan struct{} // Channel to stop background tasks
 	accountService   *account.AccountService
+	statService      *stats.Stats
 	Datastore        datastore.Datastore // Datastore for storing resource usage
 }
 
@@ -74,18 +75,14 @@ func (s *Service) Start(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("error connecting to containerd: %v", err)
 		}
+		s.statService = stats.NewStats(s.containerdClient)
 
 		s.RestartStoppedContainers(ctx)
 		s.upgradeAppVersion(ctx)
 
-		// Update latest resource usage into datastore
-		if err := s.updateAllRunningContainersUsage(ctx); err != nil {
-			return err
-		}
-
 		// Start app sub-services
 		go s.startUpgradeAppVersion(ctx)
-		go s.startMonitoringUsage(ctx)
+		go s.statService.Start()
 		go s.startRewardClaimer(ctx)
 	}
 
@@ -106,6 +103,9 @@ func (s *Service) Stop(ctx context.Context) error {
 			return fmt.Errorf("failed to close containerd client: %w", err)
 		}
 	}
+
+	// Close sub-services
+	s.statService.Stop()
 
 	log.Info("Subnet Apps Service stopped successfully.")
 	return nil
@@ -163,6 +163,100 @@ func (s *Service) GetContainerConfigProto(ctx context.Context, appId *big.Int) (
 	return ProtoToAppMetadata(&protoConfig), nil
 }
 
+func (s *Service) GetUsage(ctx context.Context, appId *big.Int) (*ResourceUsage, error) {
+	containerId := getContainerIdFromAppId(appId)
+	providerId := big.NewInt(s.accountService.ProviderID())
+
+	// Get resource usage from stats
+	statUsage, _ := s.statService.GetStats(containerId)
+	if statUsage == nil {
+		statUsage, _ = s.statService.GetFinalStats(containerId)
+	}
+
+	// Get usage from smart contract
+	smcUsage, err := s.accountService.AppStore().GetDeployment(nil, appId, providerId)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get resource usage from smart contract for appId %s, providerId %s: %v", appId.String(), providerId.String(), err)
+	}
+
+	usage := convertToResourceUsage(smcUsage, appId, providerId)
+
+	if statUsage != nil {
+		// Override memory, storage & gpu value with stats data
+		usage.UsedMemory = big.NewInt(int64(statUsage.UsedMemory))
+		usage.UsedStorage = big.NewInt(int64(statUsage.UsedStorage))
+		usage.UsedGpu = big.NewInt(int64(statUsage.UsedGpu))
+
+		// Add bandwidth & cpu value from smart contract into stats data
+		usage.UsedUploadBytes.Add(usage.UsedUploadBytes, big.NewInt(int64(statUsage.UsedUploadBytes)))
+		usage.UsedDownloadBytes.Add(usage.UsedDownloadBytes, big.NewInt(int64(statUsage.UsedDownloadBytes)))
+		usage.UsedCpu.Add(usage.UsedCpu, big.NewInt(int64(statUsage.UsedCpu)))
+		usage.Duration.Add(usage.Duration, big.NewInt(int64(statUsage.Duration.Seconds())))
+	}
+
+	return usage, nil
+}
+
+func (s *Service) GetAllRunningContainersUsage(ctx context.Context) (*ResourceUsage, error) {
+	// Set the namespace for the containers
+	ctx = namespaces.WithNamespace(ctx, NAMESPACE)
+
+	// Fetch all running containers
+	containers, err := s.containerdClient.Containers(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch running containers: %w", err)
+	}
+
+	// Initialize a single ResourceUsage to aggregate all usage
+	totalUsage := &ResourceUsage{
+		UsedCpu:           big.NewInt(0),
+		UsedGpu:           big.NewInt(0),
+		UsedMemory:        big.NewInt(0),
+		UsedStorage:       big.NewInt(0),
+		UsedUploadBytes:   big.NewInt(0),
+		UsedDownloadBytes: big.NewInt(0),
+		Duration:          big.NewInt(0),
+	}
+
+	providerId := big.NewInt(s.accountService.ProviderID())
+
+	// Iterate over each container and aggregate its resource usage
+	for _, container := range containers {
+		containerId := container.ID()
+		appId, err := getAppIdFromContainerId(containerId)
+
+		if err != nil {
+			return nil, err
+		}
+
+		usage, err := s.GetUsage(ctx, appId)
+		if err != nil {
+			usage = &ResourceUsage{
+				AppId:             appId,
+				ProviderId:        providerId,
+				UsedCpu:           big.NewInt(0),
+				UsedGpu:           big.NewInt(0),
+				UsedMemory:        big.NewInt(0),
+				UsedStorage:       big.NewInt(0),
+				UsedUploadBytes:   big.NewInt(0),
+				UsedDownloadBytes: big.NewInt(0),
+				Duration:          big.NewInt(0),
+			}
+		}
+
+		// Aggregate the usage
+		totalUsage.UsedCpu.Add(totalUsage.UsedCpu, usage.UsedCpu)
+		totalUsage.UsedGpu.Add(totalUsage.UsedGpu, usage.UsedGpu)
+		totalUsage.UsedMemory.Add(totalUsage.UsedMemory, usage.UsedMemory)
+		totalUsage.UsedStorage.Add(totalUsage.UsedStorage, usage.UsedStorage)
+		totalUsage.UsedUploadBytes.Add(totalUsage.UsedUploadBytes, usage.UsedUploadBytes)
+		totalUsage.UsedDownloadBytes.Add(totalUsage.UsedDownloadBytes, usage.UsedDownloadBytes)
+		totalUsage.Duration.Add(totalUsage.Duration, usage.Duration)
+	}
+
+	return totalUsage, nil
+}
+
 // Stops and removes the container for the specified app.
 func (s *Service) RemoveApp(ctx context.Context, appId *big.Int) (*App, error) {
 	// Set the namespace for the container
@@ -213,10 +307,10 @@ func (s *Service) GetContainerStatus(ctx context.Context, appId *big.Int) (Proce
 	// Set the namespace for the container
 	ctx = namespaces.WithNamespace(ctx, NAMESPACE)
 
-	app := App{ID: appId}
+	containerId := getContainerIdFromAppId(appId)
 
 	// Load the container for the app
-	container, err := s.containerdClient.LoadContainer(ctx, app.ContainerId())
+	container, err := s.containerdClient.LoadContainer(ctx, containerId)
 	if err != nil {
 		if errdefs.IsNotFound(err) {
 			return NotFound, nil
@@ -452,4 +546,11 @@ func getAppIdFromContainerId(containerId string) (*big.Int, error) {
 	}
 
 	return appID, nil
+}
+
+// Extract containerId from appId
+func getContainerIdFromAppId(appId *big.Int) string {
+	app := App{ID: appId}
+
+	return app.ContainerId()
 }
