@@ -3,6 +3,7 @@ package apps
 import (
 	"context"
 	"fmt"
+	"math/big"
 	"time"
 
 	"github.com/containerd/containerd/namespaces"
@@ -45,6 +46,7 @@ func (s *Service) ClaimRewardsForAllRunningContainers(ctx context.Context) {
 		// Get container ID (assuming appID is same as container ID)
 		containerId := container.ID()
 		appId, err := getAppIdFromContainerId(containerId)
+		providerId := big.NewInt(s.accountService.ProviderID())
 
 		if err != nil {
 			log.Errorf("Failed to get appId from containerId %s: %v", containerId, err)
@@ -52,7 +54,9 @@ func (s *Service) ClaimRewardsForAllRunningContainers(ctx context.Context) {
 		}
 
 		// Fetch resource usage
-		usage, err := s.GetUsage(ctx, appId)
+		usageEntry, err := s.statService.GetFinalStats(containerId)
+		usage := ConvertStatEntryToResourceUsage(usageEntry, appId, providerId)
+
 		if err != nil {
 			log.Errorf("Failed to get resource usage for container %s: %v", containerId, err)
 			continue
@@ -88,6 +92,7 @@ func (s *Service) ClaimRewardsForAllRunningContainers(ctx context.Context) {
 			log.Errorf("Failed to claim reward for container %s: %v", containerId, err)
 		} else {
 			log.Infof("Reward claimed successfully for container %s, transaction hash: %s", containerId, txHash.Hex())
+			s.statService.ClearFinalStats(containerId)
 		}
 	}
 }
