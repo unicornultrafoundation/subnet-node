@@ -21,7 +21,7 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/repo/snrepo"
 )
 
-var log = logrus.New().WithField("service", "subnet")
+var log = logrus.WithField("service", "subnet")
 
 func Main(repoPath string, configPath *string) {
 	if err := run(repoPath, configPath); err != nil {

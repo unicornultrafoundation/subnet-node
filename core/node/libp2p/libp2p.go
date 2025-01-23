@@ -16,7 +16,7 @@ import (
 	"go.uber.org/fx"
 )
 
-var log = logrus.New().WithField("service", "p2pnode")
+var log = logrus.WithField("service", "p2pnode")
 
 type Libp2pOpts struct {
 	fx.Out

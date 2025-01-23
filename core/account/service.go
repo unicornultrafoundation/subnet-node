@@ -18,7 +18,7 @@ import (
 	"go.uber.org/fx"
 )
 
-var log = logrus.New().WithField("service", "account")
+var log = logrus.WithField("service", "account")
 
 // AccountService is a service to handle Ethereum transactions
 type AccountService struct {

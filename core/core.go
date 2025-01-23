@@ -27,7 +27,7 @@ import (
 	irouting "github.com/unicornultrafoundation/subnet-node/routing"
 )
 
-var log = logrus.New().WithField("service", "core")
+var log = logrus.WithField("service", "core")
 
 // SubnetNode is Subnet Core module. It represents an Subnet instance.
 type SubnetNode struct {

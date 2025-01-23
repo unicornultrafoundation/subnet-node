@@ -14,7 +14,7 @@ import (
 const MetadataApi = "rpc"
 const EngineApi = "engine"
 
-var log = logrus.New().WithField("rpc", "rpc")
+var log = logrus.WithField("rpc", "rpc")
 
 // CodecOption specifies which type of messages a codec supports.
 //

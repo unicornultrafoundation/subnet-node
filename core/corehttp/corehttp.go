@@ -15,7 +15,7 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/core"
 )
 
-var log = logrus.New().WithField("core", "server")
+var log = logrus.WithField("core", "server")
 
 // shutdownTimeout is the timeout after which we'll stop waiting for hung
 // commands to return on shutdown.
