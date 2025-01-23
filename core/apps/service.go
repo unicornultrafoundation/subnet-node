@@ -39,10 +39,10 @@ type Service struct {
 	ethClient        *ethclient.Client
 	containerdClient *containerd.Client
 	P2P              *p2p.P2P
-	PeerHost         p2phost.Host `optional:"true"` // the network host (server+client)
-	subnetID         big.Int
+	PeerHost         p2phost.Host  `optional:"true"` // the network host (server+client)
 	stopChan         chan struct{} // Channel to stop background tasks
 	accountService   *account.AccountService
+	usageService     *UsageService
 	Datastore        datastore.Datastore // Datastore for storing resource usage
 }
 
@@ -74,18 +74,19 @@ func (s *Service) Start(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("error connecting to containerd: %v", err)
 		}
+		s.usageService = NewUsages(s.containerdClient, s.accountService)
 
 		s.RestartStoppedContainers(ctx)
 		s.upgradeAppVersion(ctx)
 
 		// Update latest resource usage into datastore
-		if err := s.updateAllRunningContainersUsage(ctx); err != nil {
+		if err := s.usageService.updateAllRunningContainersUsage(ctx); err != nil {
 			return err
 		}
 
 		// Start app sub-services
 		go s.startUpgradeAppVersion(ctx)
-		go s.startMonitoringUsage(ctx)
+		go s.usageService.Start(ctx)
 		go s.startRewardClaimer(ctx)
 	}
 
@@ -98,6 +99,7 @@ func (s *Service) Stop(ctx context.Context) error {
 
 	// Close stopChan to stop all background tasks
 	close(s.stopChan)
+	s.usageService.Stop()
 
 	// Close the containerd client
 	if s.containerdClient != nil {
@@ -161,6 +163,10 @@ func (s *Service) GetContainerConfigProto(ctx context.Context, appId *big.Int) (
 	}
 
 	return ProtoToAppMetadata(&protoConfig), nil
+}
+
+func (s *Service) GetUsage(ctx context.Context, appId *big.Int) (*ResourceUsage, error) {
+	return s.usageService.getUsageFromExternal(appId)
 }
 
 // Stops and removes the container for the specified app.

@@ -15,7 +15,7 @@ import (
 )
 
 func (s *Service) startRewardClaimer(ctx context.Context) {
-	ticker := time.NewTicker(1 * time.Hour) // Đặt thời gian định kỳ là 1 giờ
+	ticker := time.NewTicker(1 * time.Hour)
 	defer ticker.Stop()
 
 	for {
@@ -88,6 +88,7 @@ func (s *Service) ClaimRewardsForAllRunningContainers(ctx context.Context) {
 			log.Errorf("Failed to claim reward for container %s: %v", containerId, err)
 		} else {
 			log.Infof("Reward claimed successfully for container %s, transaction hash: %s", containerId, txHash.Hex())
+			s.usageService.finalizeUsages(usage)
 		}
 	}
 }
