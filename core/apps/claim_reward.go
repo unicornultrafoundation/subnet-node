@@ -16,7 +16,7 @@ import (
 )
 
 func (s *Service) startRewardClaimer(ctx context.Context) {
-	ticker := time.NewTicker(1 * time.Hour) // Đặt thời gian định kỳ là 1 giờ
+	ticker := time.NewTicker(1 * time.Hour)
 	defer ticker.Stop()
 
 	for {
