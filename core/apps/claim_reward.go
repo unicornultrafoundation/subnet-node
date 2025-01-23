@@ -54,6 +54,12 @@ func (s *Service) ClaimRewardsForAllRunningContainers(ctx context.Context) {
 		}
 
 		// Fetch resource usage
+		err = s.statService.FinalizeStats(containerId)
+		if err != nil {
+			log.Errorf("Failed to finalize stats from containerId %s: %v", containerId, err)
+			continue
+		}
+
 		usageEntry, err := s.statService.GetFinalStats(containerId)
 		usage := ConvertStatEntryToResourceUsage(usageEntry, appId, providerId)
 

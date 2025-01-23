@@ -101,7 +101,7 @@ func (s *Stats) updateStats(ctx context.Context, containerId string) error {
 	oldPid, exists := s.containerToPid[containerId]
 	if exists && oldPid != int32(pid) {
 		// Finalize stats for the old process ID
-		if err := s.finalizeStats(containerId); err != nil {
+		if err := s.FinalizeStats(containerId); err != nil {
 			s.mu.Unlock()
 			return fmt.Errorf("failed to finalize stats for container %s: %v", containerId, err)
 		}
@@ -243,7 +243,7 @@ func (s *Stats) GetStats(containerId string) (*StatEntry, error) {
 }
 
 // FinalizeStats finalizes the stats for a given container ID.
-func (s *Stats) finalizeStats(containerId string) error {
+func (s *Stats) FinalizeStats(containerId string) error {
 	// Lock the map for writing
 	s.mu.Lock()
 	defer s.mu.Unlock()
