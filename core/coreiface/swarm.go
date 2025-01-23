@@ -38,7 +38,7 @@ type ConnectionInfo interface {
 // SwarmAPI specifies the interface to libp2p swarm
 type SwarmAPI interface {
 	// Connect to a given peer
-	Connect(context.Context, peer.AddrInfo) error
+	Connect(context.Context, ma.Multiaddr) error
 
 	// Disconnect from a given address
 	Disconnect(context.Context, ma.Multiaddr) error

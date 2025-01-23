@@ -66,7 +66,7 @@ func LibP2P(bcfg *BuildCfg, cfg *config.C) fx.Option {
 		}
 	}
 
-	enableAutoTLS := cfg.GetBool("autotls.enabled", true)
+	enableAutoTLS := cfg.GetBool("autotls.enabled", false)
 	enableRelayTransport := cfg.GetBool("swarm.transports.network.relay", true)
 	enableRelayService := cfg.GetBool("swarm.relay_service.enabled", enableRelayTransport)
 	enableRelayClient := cfg.GetBool("swarm.relay_client.enabled", enableRelayService)

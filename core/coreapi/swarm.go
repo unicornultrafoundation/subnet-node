@@ -34,19 +34,24 @@ const (
 	connectionManagerWeight = 100
 )
 
-func (api *SwarmAPI) Connect(ctx context.Context, pi peer.AddrInfo) error {
-	ctx, span := tracing.Span(ctx, "CoreAPI.SwarmAPI", "Connect", trace.WithAttributes(attribute.String("peerid", pi.ID.String())))
+func (api *SwarmAPI) Connect(ctx context.Context, addr ma.Multiaddr) error {
+	_, span := tracing.Span(ctx, "CoreAPI.SwarmAPI", "Connect", trace.WithAttributes(attribute.String("addr", addr.String())))
 	defer span.End()
 
 	if api.peerHost == nil {
 		return coreiface.ErrOffline
 	}
 
+	pi, err := peer.AddrInfoFromP2pAddr(addr)
+	if err != nil {
+		return err
+	}
+
 	if swrm, ok := api.peerHost.Network().(*swarm.Swarm); ok {
 		swrm.Backoff().Clear(pi.ID)
 	}
 
-	if err := api.peerHost.Connect(ctx, pi); err != nil {
+	if err := api.peerHost.Connect(ctx, *pi); err != nil {
 		return err
 	}
 
