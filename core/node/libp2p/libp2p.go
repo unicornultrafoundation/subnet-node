@@ -88,7 +88,7 @@ func UserAgent() func() (opts Libp2pOpts, err error) {
 
 func ForceReachability(cfg *config.C) func() (opts Libp2pOpts, err error) {
 	return func() (opts Libp2pOpts, err error) {
-		v := cfg.GetString("internal.libp2p_force_reachability", "public")
+		v := cfg.GetString("internal.libp2p_force_reachability", "private")
 		switch v {
 		case "public":
 			opts.Opts = append(opts.Opts, libp2p.ForceReachabilityPublic())

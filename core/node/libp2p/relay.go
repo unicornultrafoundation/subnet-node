@@ -101,7 +101,7 @@ func MaybeAutoRelay(cfg *config.C, enabled bool) fx.Option {
 						}()
 						return r
 					},
-					autorelay.WithMinInterval(0),
+					autorelay.WithBootDelay(0),
 				))
 			return
 		}),
