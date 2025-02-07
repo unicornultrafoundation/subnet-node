@@ -229,11 +229,12 @@ func (account *AccountService) Sign(hash []byte) ([]byte, error) {
 	}
 
 	// Ensure `s` is in the lower half-order
-	halfOrder := new(big.Int).Rsh(crypto.S256().Params().N, 1)
+	curve := account.privateKey.Curve
+	halfOrder := new(big.Int).Rsh(curve.Params().N, 1)
 	v := byte(27)
 	if s.Cmp(halfOrder) > 0 {
-		s.Sub(crypto.S256().Params().N, s)
-		v = 28
+		s = new(big.Int).Sub(curve.Params().N, s)
+		v = byte(28)
 	}
 
 	// Format signature: r (32 bytes) || s (32 bytes) || v (1 byte)
