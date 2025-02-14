@@ -1,6 +1,7 @@
 package config
 
 const DefaultRPC = "https://rpc-nebulas-testnet.u2u.xyz"
-const DefaultSubnetAppStoreAddr = "0xCb0b58e5048e65248f2B0aF4d10623A2AAF03DC5"
-const DefaultSubnetProviderAddr = "0xc8CacDebBCe0eb9B052fA33ADb14e05A6168C691"
-const DefaultSubnetProviderUptimeAddr = "0x15B4ba69eDC064815C26A358ac9e7ac3A73C1B34"
+const DefaultSubnetAppStoreAddr = "0x984a3633256eD119EA118B8Ccf1dCe5D0FBc626E"
+const DefaultSubnetProviderAddr = "0x55F67461A9aA953eFA0D6645AD3d3Ac272733bAF"
+const DefaultSubnetProviderUptimeAddr = "0x530e2BB5ceFA2ffBcB0F615B16491D79Dc3dde80"
+const DefaultSubnetVerifier = "0x20869fEDD2e6a25FB447fb202F66a65E8512df3D"
