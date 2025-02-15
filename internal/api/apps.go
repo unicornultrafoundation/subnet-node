@@ -161,14 +161,6 @@ func (api *AppAPI) RemoveApp(ctx context.Context, appId hexutil.Big) (*appResult
 	return convertToAppResult(subnetApp), nil
 }
 
-func (api *AppAPI) RegisterProvider(_ctx context.Context, providerName string, metadata string, website string) (common.Hash, error) {
-	tx, err := api.appService.RegisterProvider(providerName, metadata, website)
-	if err != nil {
-		return common.Hash{}, err
-	}
-	return tx, nil
-}
-
 func (api *AppAPI) GetUsage(ctx context.Context, appId hexutil.Big) (*resourceUsageResult, error) {
 	usage, err := api.appService.GetUsage(ctx, appId.ToInt())
 	if err != nil {

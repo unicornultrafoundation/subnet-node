@@ -1130,7 +1130,7 @@ func ConvertStatEntryToResourceUsage(entry *stats.StatEntry, appId, providerId *
 		UsedStorage:       big.NewInt(int64(entry.UsedStorage)),
 		UsedUploadBytes:   big.NewInt(int64(entry.UsedDownloadBytes)),
 		UsedDownloadBytes: big.NewInt(int64(entry.UsedDownloadBytes)),
-		Duration:          big.NewInt(int64(entry.Duration)),
+		Duration:          big.NewInt(entry.Duration),
 	}
 
 	return &usage

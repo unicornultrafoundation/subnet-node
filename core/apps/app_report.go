@@ -15,26 +15,26 @@ import (
 	pbapp "github.com/unicornultrafoundation/subnet-node/proto/subnet/app"
 )
 
-func (s *Service) startRewardClaimer(ctx context.Context) {
-	ticker := time.NewTicker(1 * time.Hour)
+func (s *Service) startReportLoop(ctx context.Context) {
+	ticker := time.NewTicker(1 * time.Minute)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ticker.C:
-			log.Infof("Starting reward claim for all running containers...")
-			s.ClaimRewardsForAllRunningContainers(ctx)
+			log.Infof("Starting report for all running containers...")
+			s.reportAllRunningContainers(ctx)
 		case <-s.stopChan:
-			log.Infof("Stopping reward claimer for all containers")
+			log.Infof("Stopping report for all containers")
 			return
 		case <-ctx.Done():
-			log.Infof("Context canceled, stopping reward claimer")
+			log.Infof("Context canceled, stopping report")
 			return
 		}
 	}
 }
 
-func (s *Service) ClaimRewardsForAllRunningContainers(ctx context.Context) {
+func (s *Service) reportAllRunningContainers(ctx context.Context) {
 	// Fetch all running containers
 	containers, err := s.containerdClient.Containers(namespaces.WithNamespace(ctx, NAMESPACE))
 	if err != nil {
@@ -62,6 +62,7 @@ func (s *Service) ClaimRewardsForAllRunningContainers(ctx context.Context) {
 
 		usageEntry, err := s.statService.GetFinalStats(containerId)
 		usage := ConvertStatEntryToResourceUsage(usageEntry, appId, providerId)
+		usage.PeerId = s.peerId.String()
 
 		if err != nil {
 			log.Errorf("Failed to get resource usage for container %s: %v", containerId, err)
@@ -81,7 +82,7 @@ func (s *Service) ClaimRewardsForAllRunningContainers(ctx context.Context) {
 			continue
 		}
 
-		signature, err := s.RequestSignature(ctx, ownerPeerID, PROTOCOL_ID, usageProto)
+		signature, err := s.requestSignature(ctx, ownerPeerID, PROTOCOL_ID, usageProto)
 		if err != nil {
 			log.Errorf("Failed to get signature from peerId %s for container %s: %v", string(app.PeerId), containerId, err)
 			continue
@@ -103,7 +104,7 @@ func (s *Service) ClaimRewardsForAllRunningContainers(ctx context.Context) {
 	}
 }
 
-func (s *Service) SignResourceUsage(usage *ResourceUsage) ([]byte, error) {
+func (s *Service) signResourceUsage(usage *ResourceUsage) ([]byte, error) {
 	filledUsage := fillDefaultResourceUsage(usage)
 	typedData, err := s.ConvertUsageToTypedData(filledUsage)
 	if err != nil {
@@ -118,10 +119,10 @@ func (s *Service) SignResourceUsage(usage *ResourceUsage) ([]byte, error) {
 	return s.accountService.Sign(typedDataHash)
 }
 
-func (s *Service) RequestSignature(ctx context.Context, peerID peer.ID, protoID protocol.ID, usage *pbapp.ResourceUsage) ([]byte, error) {
+func (s *Service) requestSignature(ctx context.Context, peerID peer.ID, protoID protocol.ID, usage *pbapp.ResourceUsage) ([]byte, error) {
 	if peerID == s.peerId {
 		// You are the app owner. Self-sign signature
-		return s.SignResourceUsage(ProtoToResourceUsage(usage))
+		return s.signResourceUsage(ProtoToResourceUsage(usage))
 	}
 
 	// Request signature from app owner's peer
@@ -133,12 +134,12 @@ func (s *Service) RequestSignature(ctx context.Context, peerID peer.ID, protoID 
 	defer stream.Close()
 
 	// Send the resource usage data
-	if err := SendSignUsageRequest(stream, usage); err != nil {
+	if err := sendSignUsageRequest(stream, usage); err != nil {
 		return []byte{}, fmt.Errorf("failed to send sign resource usage request: %w", err)
 	}
 
 	// Receive the signature response
-	response, err := ReceiveSignatureResponse(stream)
+	response, err := receiveSignatureResponse(stream)
 	if err != nil {
 		return []byte{}, fmt.Errorf("failed to receive signature response: %w", err)
 	}
@@ -146,7 +147,7 @@ func (s *Service) RequestSignature(ctx context.Context, peerID peer.ID, protoID 
 	return response.Signature, nil
 }
 
-func SendSignUsageRequest(s network.Stream, usage *pbapp.ResourceUsage) error {
+func sendSignUsageRequest(s network.Stream, usage *pbapp.ResourceUsage) error {
 	signatureRequest := pbapp.SignatureRequest{
 		Data: &pbapp.SignatureRequest_Usage{
 			Usage: usage,
@@ -162,7 +163,7 @@ func SendSignUsageRequest(s network.Stream, usage *pbapp.ResourceUsage) error {
 	return nil
 }
 
-func ReceiveSignRequest(s network.Stream) (*pbapp.SignatureRequest, error) {
+func receiveSignRequest(s network.Stream) (*pbapp.SignatureRequest, error) {
 	response := &pbapp.SignatureRequest{}
 
 	err := pbstream.ReadProtoBuffered(s, response)
@@ -174,7 +175,7 @@ func ReceiveSignRequest(s network.Stream) (*pbapp.SignatureRequest, error) {
 	return response, nil
 }
 
-func ReceiveSignatureResponse(s network.Stream) (*pbapp.SignatureResponse, error) {
+func receiveSignatureResponse(s network.Stream) (*pbapp.SignatureResponse, error) {
 	response := &pbapp.SignatureResponse{}
 
 	err := pbstream.ReadProtoBuffered(s, response)
@@ -202,6 +203,7 @@ func (s *Service) ConvertUsageToTypedData(usage *ResourceUsage) (*TypedData, err
 			"Usage": []Type{
 				{Name: "providerId", Type: "uint256"},
 				{Name: "appId", Type: "uint256"},
+				{Name: "peerId", Type: "string"},
 				{Name: "usedCpu", Type: "uint256"},
 				{Name: "usedGpu", Type: "uint256"},
 				{Name: "usedMemory", Type: "uint256"},
@@ -221,6 +223,7 @@ func (s *Service) ConvertUsageToTypedData(usage *ResourceUsage) (*TypedData, err
 		Message: TypedDataMessage{
 			"providerId":        usage.ProviderId,
 			"appId":             usage.AppId,
+			"peerId":            usage.PeerId,
 			"usedCpu":           usage.UsedCpu,
 			"usedGpu":           usage.UsedGpu,
 			"usedMemory":        usage.UsedMemory,

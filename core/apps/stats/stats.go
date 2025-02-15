@@ -23,7 +23,7 @@ type StatEntry struct {
 	UsedCpu           uint64
 	UsedMemory        uint64
 	UsedStorage       uint64
-	Duration          time.Duration
+	Duration          int64
 }
 
 // Stats manages the resource usage statistics for multiple containers.
@@ -213,7 +213,7 @@ func (s *Stats) updateStats(ctx context.Context, containerId string) error {
 		UsedGpu:           currentStats.UsedGpu,
 		UsedMemory:        s.memoryUsage[int32(pid)] / s.memorySampleCount[int32(pid)],
 		UsedStorage:       currentStats.UsedStorage,
-		Duration:          time.Since(s.startTimes[containerId]),
+		Duration:          int64(time.Since(s.startTimes[containerId]).Seconds()),
 	}
 
 	// Add final stats if they exist
