@@ -45,6 +45,7 @@ type Service struct {
 	accountService   *account.AccountService
 	statService      *stats.Stats
 	Datastore        datastore.Datastore // Datastore for storing resource usage
+	verifier         *Verifier           // Verifier for resource usage
 }
 
 // Initializes the Service with Ethereum and containerd clients.
@@ -59,6 +60,7 @@ func New(peerHost p2phost.Host, peerId peer.ID, cfg *config.C, P2P *p2p.P2P, dat
 		stopChan:       make(chan struct{}),
 		accountService: accountService,
 		ethClient:      accountService.GetClient(),
+		verifier:       NewVerifier(),
 	}
 }
 
@@ -170,28 +172,20 @@ func (s *Service) GetUsage(ctx context.Context, appId *big.Int) (*ResourceUsage,
 	// Get resource usage from stats
 	statUsage, _ := s.statService.GetStats(containerId)
 	if statUsage == nil {
-		statUsage, _ = s.statService.GetFinalStats(containerId)
+		statUsage = &stats.StatEntry{}
 	}
 
-	// Get usage from smart contract
-	smcUsage, err := s.accountService.AppStore().GetDeployment(nil, appId, providerId)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get resource usage from smart contract for appId %s, providerId %s: %v", appId.String(), providerId.String(), err)
-	}
-
-	usage := convertToResourceUsage(smcUsage, appId, providerId)
-
-	if statUsage != nil {
-		// Override memory, storage & gpu value with stats data
-		usage.UsedMemory = big.NewInt(int64(statUsage.UsedMemory))
-		usage.UsedStorage = big.NewInt(int64(statUsage.UsedStorage))
-		usage.UsedGpu = big.NewInt(int64(statUsage.UsedGpu))
-
-		// Add bandwidth & cpu value from smart contract into stats data
-		usage.UsedUploadBytes.Add(usage.UsedUploadBytes, big.NewInt(int64(statUsage.UsedUploadBytes)))
-		usage.UsedDownloadBytes.Add(usage.UsedDownloadBytes, big.NewInt(int64(statUsage.UsedDownloadBytes)))
-		usage.UsedCpu.Add(usage.UsedCpu, big.NewInt(int64(statUsage.UsedCpu)))
-		usage.Duration.Add(usage.Duration, big.NewInt(int64(statUsage.Duration.Seconds())))
+	usage := &ResourceUsage{
+		AppId:             appId,
+		ProviderId:        providerId,
+		PeerId:            s.peerId.String(),
+		UsedCpu:           big.NewInt(int64(statUsage.UsedCpu)),
+		UsedGpu:           big.NewInt(int64(statUsage.UsedGpu)),
+		UsedMemory:        big.NewInt(int64(statUsage.UsedMemory)),
+		UsedStorage:       big.NewInt(int64(statUsage.UsedStorage)),
+		UsedUploadBytes:   big.NewInt(int64(statUsage.UsedUploadBytes)),
+		UsedDownloadBytes: big.NewInt(int64(statUsage.UsedDownloadBytes)),
+		Duration:          big.NewInt(int64(statUsage.Duration)),
 	}
 
 	return usage, nil
@@ -359,13 +353,19 @@ func (s *Service) RegisterSignProtocol() error {
 		switch data := signRequest.Data.(type) {
 		case *pbapp.SignatureRequest_Usage:
 			usage := convertUsageFromProto(*data.Usage)
+
+			// Verify the resource usage before signing
+			if err := s.verifier.VerifyResourceUsage(usage, stream); err != nil {
+				return []byte{}, fmt.Errorf("failed to verify resource usage: %w", err)
+			}
+
 			signature, err = s.SignResourceUsage(usage)
 
 			if err != nil {
 				return []byte{}, fmt.Errorf("failed to sign resource usage: %w", err)
 			}
 		default:
-			return []byte{}, fmt.Errorf("unsupport this signature request type: %w", err)
+			return []byte{}, fmt.Errorf("unsupported signature request type: %w", err)
 		}
 
 		return signature, nil
@@ -480,7 +480,7 @@ func (s *Service) RestartContainer(ctx context.Context, appId *big.Int) error {
 
 // 	// Execute the contract call
 // 	result, err := s.ethClient.CallContract(ctx, msg, nil)
-// 	if err != nil {
+// 	if (err != nil) {
 // 		log.Errorf("Failed to call contract for AppNode details: %v", err)
 // 		return ResourceUsage{}, err
 // 	}

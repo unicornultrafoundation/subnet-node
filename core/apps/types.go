@@ -78,6 +78,7 @@ func (app *App) ContainerId() string {
 type ResourceUsage struct {
 	AppId             *big.Int `json:"appId"`
 	ProviderId        *big.Int `json:"providerId"`
+	PeerId            string   `json:"peerId"`
 	UsedCpu           *big.Int `json:"usedCpu"`
 	UsedGpu           *big.Int `json:"usedGpu"`
 	UsedMemory        *big.Int `json:"usedMemory"`
@@ -170,7 +171,6 @@ func convertToApp(subnetApp contracts.SubnetAppStoreApp, id *big.Int, status Pro
 		Symbol:              subnetApp.Symbol,
 		Budget:              subnetApp.Budget,
 		SpentBudget:         subnetApp.SpentBudget,
-		NodeCount:           subnetApp.NodeCount,
 		PricePerCpu:         subnetApp.PricePerCpu,
 		PricePerGpu:         subnetApp.PricePerGpu,
 		PricePerMemoryGB:    subnetApp.PricePerMemoryGB,
@@ -178,20 +178,6 @@ func convertToApp(subnetApp contracts.SubnetAppStoreApp, id *big.Int, status Pro
 		PricePerBandwidthGB: subnetApp.PricePerBandwidthGB,
 		Status:              status,
 		Metadata:            metadata,
-	}
-}
-
-func convertToResourceUsage(usage contracts.SubnetAppStoreDeployment, appId *big.Int, providerId *big.Int) *ResourceUsage {
-	return &ResourceUsage{
-		AppId:             appId,
-		ProviderId:        providerId,
-		UsedCpu:           usage.UsedCpu,
-		UsedGpu:           usage.UsedGpu,
-		UsedMemory:        usage.UsedMemory,
-		UsedStorage:       usage.UsedStorage,
-		UsedUploadBytes:   usage.UsedUploadBytes,
-		UsedDownloadBytes: usage.UsedDownloadBytes,
-		Duration:          usage.Duration,
 	}
 }
 
