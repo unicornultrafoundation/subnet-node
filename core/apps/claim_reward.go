@@ -118,10 +118,10 @@ func (s *Service) SignResourceUsage(usage *ResourceUsage) ([]byte, error) {
 	return s.accountService.Sign(typedDataHash)
 }
 
-func (s *Service) RequestSignature(ctx context.Context, peerID peer.ID, protoID protocol.ID, usage *pbapp.ResourceUsageV2) ([]byte, error) {
+func (s *Service) RequestSignature(ctx context.Context, peerID peer.ID, protoID protocol.ID, usage *pbapp.ResourceUsage) ([]byte, error) {
 	if peerID == s.peerId {
 		// You are the app owner. Self-sign signature
-		return s.SignResourceUsage(convertUsageFromProto(*usage))
+		return s.SignResourceUsage(ProtoToResourceUsage(usage))
 	}
 
 	// Request signature from app owner's peer
@@ -146,7 +146,7 @@ func (s *Service) RequestSignature(ctx context.Context, peerID peer.ID, protoID 
 	return response.Signature, nil
 }
 
-func SendSignUsageRequest(s network.Stream, usage *pbapp.ResourceUsageV2) error {
+func SendSignUsageRequest(s network.Stream, usage *pbapp.ResourceUsage) error {
 	signatureRequest := pbapp.SignatureRequest{
 		Data: &pbapp.SignatureRequest_Usage{
 			Usage: usage,

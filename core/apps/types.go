@@ -140,8 +140,10 @@ type Volume struct {
 }
 
 func decodeAndParseMetadata(encodedMetadata string) (*AppMetadata, error) {
+
 	// Decode Base64
 	decodedBytes, err := base64.StdEncoding.DecodeString(encodedMetadata)
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode base64 metadata: %w", err)
 	}
@@ -159,7 +161,7 @@ func decodeAndParseMetadata(encodedMetadata string) (*AppMetadata, error) {
 func convertToApp(subnetApp contracts.SubnetAppStoreApp, id *big.Int, status ProcessStatus) *App {
 	metadata, err := decodeAndParseMetadata(subnetApp.Metadata)
 	if err != nil {
-		fmt.Printf("Warning: Failed to parse metadata for app %s: %v\n", subnetApp.Name, err)
+		log.Warnf("Warning: Failed to parse metadata for app %s: %v\n", subnetApp.Name, err)
 		metadata = nil
 	}
 
@@ -220,20 +222,6 @@ func bytesToBigInt(data []byte) *big.Int {
 	return new(big.Int).SetBytes(data)
 }
 
-func convertUsageFromProto(usage pbapp.ResourceUsageV2) *ResourceUsage {
-	return &ResourceUsage{
-		AppId:             bytesToBigInt(usage.AppId),
-		ProviderId:        bytesToBigInt(usage.ProviderId),
-		UsedCpu:           bytesToBigInt(usage.UsedCpu),
-		UsedGpu:           bytesToBigInt(usage.UsedGpu),
-		UsedMemory:        bytesToBigInt(usage.UsedMemory),
-		UsedStorage:       bytesToBigInt(usage.UsedStorage),
-		UsedUploadBytes:   bytesToBigInt(usage.UsedUploadBytes),
-		UsedDownloadBytes: bytesToBigInt(usage.UsedDownloadBytes),
-		Duration:          bytesToBigInt(usage.Duration),
-	}
-}
-
 // Helper function to convert *big.Int to []byte
 func bigIntToBytes(value *big.Int) []byte {
 	if value == nil {
@@ -242,10 +230,11 @@ func bigIntToBytes(value *big.Int) []byte {
 	return value.Bytes()
 }
 
-func convertUsageToProto(usage ResourceUsage) *pbapp.ResourceUsageV2 {
-	return &pbapp.ResourceUsageV2{
+func convertUsageToProto(usage ResourceUsage) *pbapp.ResourceUsage {
+	return &pbapp.ResourceUsage{
 		AppId:             bigIntToBytes(usage.AppId),
 		ProviderId:        bigIntToBytes(usage.ProviderId),
+		PeerId:            usage.PeerId,
 		UsedCpu:           bigIntToBytes(usage.UsedCpu),
 		UsedGpu:           bigIntToBytes(usage.UsedGpu),
 		UsedMemory:        bigIntToBytes(usage.UsedMemory),
@@ -318,11 +307,6 @@ func ProtoToApp(protoApp *pbapp.App) (*App, error) {
 		return nil, fmt.Errorf("invalid price per bandwidth gb: %s", protoApp.PricePerBandwidthGb)
 	}
 
-	usage, err := ProtoToResourceUsage(protoApp.Usage)
-	if err != nil {
-		return nil, err
-	}
-
 	return &App{
 		ID:                   id,
 		PeerId:               protoApp.PeerId,
@@ -344,7 +328,7 @@ func ProtoToApp(protoApp *pbapp.App) (*App, error) {
 		PricePerStorageGB:    pricePerStorageGB,
 		PricePerBandwidthGB:  pricePerBandwidthGB,
 		Status:               ProcessStatus(protoApp.Status),
-		Usage:                usage,
+		Usage:                ProtoToResourceUsage(protoApp.Usage),
 		Metadata:             ProtoToAppMetadata(protoApp.Metadata),
 		IP:                   protoApp.Ip,
 	}, nil
@@ -378,66 +362,33 @@ func AppToProto(app *App) *pbapp.App {
 	}
 }
 
-func ProtoToResourceUsage(protoUsage *pbapp.ResourceUsage) (*ResourceUsage, error) {
-	appId, ok := new(big.Int).SetString(protoUsage.AppId, 10)
-	if !ok {
-		return nil, fmt.Errorf("invalid app id: %s", protoUsage.AppId)
-	}
-	providerId := big.NewInt(protoUsage.ProviderId)
-
-	usedCpu, ok := new(big.Int).SetString(protoUsage.UsedCpu, 10)
-	if !ok {
-		return nil, fmt.Errorf("invalid used cpu: %s", protoUsage.UsedCpu)
-	}
-	usedGpu, ok := new(big.Int).SetString(protoUsage.UsedGpu, 10)
-	if !ok {
-		return nil, fmt.Errorf("invalid used gpu: %s", protoUsage.UsedGpu)
-	}
-	usedMemory, ok := new(big.Int).SetString(protoUsage.UsedMemory, 10)
-	if !ok {
-		return nil, fmt.Errorf("invalid used memory: %s", protoUsage.UsedMemory)
-	}
-	usedStorage, ok := new(big.Int).SetString(protoUsage.UsedStorage, 10)
-	if !ok {
-		return nil, fmt.Errorf("invalid used storage: %s", protoUsage.UsedStorage)
-	}
-	usedUploadBytes, ok := new(big.Int).SetString(protoUsage.UsedUploadBytes, 10)
-	if !ok {
-		return nil, fmt.Errorf("invalid used upload bytes: %s", protoUsage.UsedUploadBytes)
-	}
-	usedDownloadBytes, ok := new(big.Int).SetString(protoUsage.UsedDownloadBytes, 10)
-	if !ok {
-		return nil, fmt.Errorf("invalid used download bytes: %s", protoUsage.UsedDownloadBytes)
-	}
-	duration, ok := new(big.Int).SetString(protoUsage.Duration, 10)
-	if !ok {
-		return nil, fmt.Errorf("invalid duration: %s", protoUsage.Duration)
-	}
-
-	return &ResourceUsage{
-		AppId:             appId,
-		ProviderId:        providerId,
-		UsedCpu:           usedCpu,
-		UsedGpu:           usedGpu,
-		UsedMemory:        usedMemory,
-		UsedStorage:       usedStorage,
-		UsedUploadBytes:   usedUploadBytes,
-		UsedDownloadBytes: usedDownloadBytes,
-		Duration:          duration,
-	}, nil
-}
-
 func ResourceUsageToProto(usage *ResourceUsage) *pbapp.ResourceUsage {
 	return &pbapp.ResourceUsage{
-		AppId:             usage.AppId.String(),
-		ProviderId:        usage.ProviderId.Int64(),
-		UsedCpu:           usage.UsedCpu.String(),
-		UsedGpu:           usage.UsedGpu.String(),
-		UsedMemory:        usage.UsedMemory.String(),
-		UsedStorage:       usage.UsedStorage.String(),
-		UsedUploadBytes:   usage.UsedUploadBytes.String(),
-		UsedDownloadBytes: usage.UsedDownloadBytes.String(),
-		Duration:          usage.Duration.String(),
+		AppId:             usage.AppId.Bytes(),
+		ProviderId:        usage.ProviderId.Bytes(),
+		PeerId:            usage.PeerId,
+		UsedCpu:           usage.UsedCpu.Bytes(),
+		UsedGpu:           usage.UsedGpu.Bytes(),
+		UsedMemory:        usage.UsedMemory.Bytes(),
+		UsedStorage:       usage.UsedStorage.Bytes(),
+		UsedUploadBytes:   usage.UsedUploadBytes.Bytes(),
+		UsedDownloadBytes: usage.UsedDownloadBytes.Bytes(),
+		Duration:          usage.Duration.Bytes(),
+	}
+}
+
+func ProtoToResourceUsage(usage *pbapp.ResourceUsage) *ResourceUsage {
+	return &ResourceUsage{
+		AppId:             bytesToBigInt(usage.AppId),
+		ProviderId:        bytesToBigInt(usage.ProviderId),
+		PeerId:            usage.PeerId,
+		UsedCpu:           bytesToBigInt(usage.UsedCpu),
+		UsedGpu:           bytesToBigInt(usage.UsedGpu),
+		UsedMemory:        bytesToBigInt(usage.UsedMemory),
+		UsedStorage:       bytesToBigInt(usage.UsedStorage),
+		UsedUploadBytes:   bytesToBigInt(usage.UsedUploadBytes),
+		UsedDownloadBytes: bytesToBigInt(usage.UsedDownloadBytes),
+		Duration:          bytesToBigInt(usage.Duration),
 	}
 }
 

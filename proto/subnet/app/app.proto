@@ -28,22 +28,12 @@ message App {
   ResourceUsage usage = 21;
   AppMetadata metadata = 22;
   string ip = 23;
+  string operator = 24;
+  string verifier = 25;
 }
 
+// ResourceUsage represents the resource usage data
 message ResourceUsage {
-  string app_id = 1;
-  int64 provider_id = 2;
-  string used_cpu = 3;
-  string used_gpu = 4;
-  string used_memory = 5;
-  string used_storage = 6;
-  string used_upload_bytes = 7;
-  string used_download_bytes = 8;
-  string duration = 9;
-}
-
-// ResourceUsageV2 represents the resource usage data
-message ResourceUsageV2 {
 	bytes app_id = 1;
 	bytes provider_id = 2;
 	bytes used_cpu = 3;
@@ -53,11 +43,7 @@ message ResourceUsageV2 {
 	bytes used_upload_bytes = 7;
   bytes used_download_bytes = 8; 
   bytes duration = 9;
-}
-
-// ResourceUsageMetadata represents the resource usage info of an application
-message ResourceUsageMetadata {
-	repeated uint32 pids = 1;
+  string peer_id = 10;
 }
 
 message AppMetadata {
@@ -107,7 +93,7 @@ message ContactInfo {
 
 message SignatureRequest {
   oneof data {
-    ResourceUsageV2 usage = 1;
+    ResourceUsage usage = 1;
   }
 }
 

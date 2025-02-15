@@ -352,7 +352,7 @@ func (s *Service) RegisterSignProtocol() error {
 		var signature []byte
 		switch data := signRequest.Data.(type) {
 		case *pbapp.SignatureRequest_Usage:
-			usage := convertUsageFromProto(*data.Usage)
+			usage := ProtoToResourceUsage(data.Usage)
 
 			// Verify the resource usage before signing
 			if err := s.verifier.VerifyResourceUsage(usage, stream); err != nil {
