@@ -8,10 +8,11 @@ import (
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/errdefs"
+	atypes "github.com/unicornultrafoundation/subnet-node/core/apps/types"
 )
 
 // Stops and removes the container for the specified app.
-func (s *Service) RemoveApp(ctx context.Context, appId *big.Int) (*App, error) {
+func (s *Service) RemoveApp(ctx context.Context, appId *big.Int) (*atypes.App, error) {
 	// Set the namespace for the container
 	ctx = namespaces.WithNamespace(ctx, NAMESPACE)
 
@@ -51,6 +52,6 @@ func (s *Service) RemoveApp(ctx context.Context, appId *big.Int) (*App, error) {
 	}
 
 	log.Printf("App %s removed successfully: Container ID: %s", app.Symbol, app.ContainerId())
-	app.Status = NotFound
+	app.Status = atypes.NotFound
 	return app, nil
 }

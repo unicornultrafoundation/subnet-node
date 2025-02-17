@@ -7,10 +7,11 @@ import (
 
 	"github.com/containerd/containerd/namespaces"
 	"github.com/unicornultrafoundation/subnet-node/core/apps/stats"
+	atypes "github.com/unicornultrafoundation/subnet-node/core/apps/types"
 )
 
-func (s *Service) GetUsage(ctx context.Context, appId *big.Int) (*ResourceUsage, error) {
-	containerId := getContainerIdFromAppId(appId)
+func (s *Service) GetUsage(ctx context.Context, appId *big.Int) (*atypes.ResourceUsage, error) {
+	containerId := atypes.GetContainerIdFromAppId(appId)
 	providerId := big.NewInt(s.accountService.ProviderID())
 
 	// Get resource usage from stats
@@ -19,7 +20,7 @@ func (s *Service) GetUsage(ctx context.Context, appId *big.Int) (*ResourceUsage,
 		statUsage = &stats.StatEntry{}
 	}
 
-	usage := &ResourceUsage{
+	usage := &atypes.ResourceUsage{
 		AppId:             appId,
 		ProviderId:        providerId,
 		PeerId:            s.peerId.String(),
@@ -35,7 +36,7 @@ func (s *Service) GetUsage(ctx context.Context, appId *big.Int) (*ResourceUsage,
 	return usage, nil
 }
 
-func (s *Service) GetAllRunningContainersUsage(ctx context.Context) (*ResourceUsage, error) {
+func (s *Service) GetAllRunningContainersUsage(ctx context.Context) (*atypes.ResourceUsage, error) {
 	// Set the namespace for the containers
 	ctx = namespaces.WithNamespace(ctx, NAMESPACE)
 
@@ -46,7 +47,7 @@ func (s *Service) GetAllRunningContainersUsage(ctx context.Context) (*ResourceUs
 	}
 
 	// Initialize a single ResourceUsage to aggregate all usage
-	totalUsage := &ResourceUsage{
+	totalUsage := &atypes.ResourceUsage{
 		UsedCpu:           big.NewInt(0),
 		UsedGpu:           big.NewInt(0),
 		UsedMemory:        big.NewInt(0),
@@ -61,7 +62,7 @@ func (s *Service) GetAllRunningContainersUsage(ctx context.Context) (*ResourceUs
 	// Iterate over each container and aggregate its resource usage
 	for _, container := range containers {
 		containerId := container.ID()
-		appId, err := getAppIdFromContainerId(containerId)
+		appId, err := atypes.GetAppIdFromContainerId(containerId)
 
 		if err != nil {
 			return nil, err
@@ -69,7 +70,7 @@ func (s *Service) GetAllRunningContainersUsage(ctx context.Context) (*ResourceUs
 
 		usage, err := s.GetUsage(ctx, appId)
 		if err != nil {
-			usage = &ResourceUsage{
+			usage = &atypes.ResourceUsage{
 				AppId:             appId,
 				ProviderId:        providerId,
 				UsedCpu:           big.NewInt(0),

@@ -7,11 +7,9 @@ import (
 	"time"
 
 	"github.com/containerd/containerd/namespaces"
-	"github.com/ethereum/go-ethereum/common/math"
-	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
-	pbstream "github.com/unicornultrafoundation/subnet-node/common/io"
+	atypes "github.com/unicornultrafoundation/subnet-node/core/apps/types"
 	pbapp "github.com/unicornultrafoundation/subnet-node/proto/subnet/app"
 )
 
@@ -45,7 +43,7 @@ func (s *Service) reportAllRunningContainers(ctx context.Context) {
 	for _, container := range containers {
 		// Get container ID (assuming appID is same as container ID)
 		containerId := container.ID()
-		appId, err := getAppIdFromContainerId(containerId)
+		appId, err := atypes.GetAppIdFromContainerId(containerId)
 		providerId := big.NewInt(s.accountService.ProviderID())
 
 		if err != nil {
@@ -61,14 +59,14 @@ func (s *Service) reportAllRunningContainers(ctx context.Context) {
 		}
 
 		usageEntry, err := s.statService.GetFinalStats(containerId)
-		usage := ConvertStatEntryToResourceUsage(usageEntry, appId, providerId)
+		usage := atypes.ConvertStatEntryToResourceUsage(usageEntry, appId, providerId)
 		usage.PeerId = s.peerId.String()
 
 		if err != nil {
 			log.Errorf("Failed to get resource usage for container %s: %v", containerId, err)
 			continue
 		}
-		usageProto := convertUsageToProto(*usage)
+		usageProto := atypes.ConvertUsageToProto(*usage)
 
 		// Get App owner's PeerID
 		app, err := s.GetApp(ctx, appId)
@@ -104,27 +102,7 @@ func (s *Service) reportAllRunningContainers(ctx context.Context) {
 	}
 }
 
-func (s *Service) signResourceUsage(usage *ResourceUsage) ([]byte, error) {
-	filledUsage := fillDefaultResourceUsage(usage)
-	typedData, err := s.ConvertUsageToTypedData(filledUsage)
-	if err != nil {
-		return []byte{}, fmt.Errorf("failed to get usage typed data: %v", err)
-	}
-
-	typedDataHash, _, err := TypedDataAndHash(*typedData)
-	if err != nil {
-		return []byte{}, fmt.Errorf("failed to hash typed data: %v", err)
-	}
-
-	return s.accountService.Sign(typedDataHash)
-}
-
 func (s *Service) requestSignature(ctx context.Context, peerID peer.ID, protoID protocol.ID, usage *pbapp.ResourceUsage) ([]byte, error) {
-	if peerID == s.peerId {
-		// You are the app owner. Self-sign signature
-		return s.signResourceUsage(ProtoToResourceUsage(usage))
-	}
-
 	// Request signature from app owner's peer
 	// Open a stream to the remote peer
 	stream, err := s.PeerHost.NewStream(ctx, peerID, protoID)
@@ -134,104 +112,15 @@ func (s *Service) requestSignature(ctx context.Context, peerID peer.ID, protoID 
 	defer stream.Close()
 
 	// Send the resource usage data
-	if err := sendSignUsageRequest(stream, usage); err != nil {
+	if err := atypes.SendSignUsageRequest(stream, usage); err != nil {
 		return []byte{}, fmt.Errorf("failed to send sign resource usage request: %w", err)
 	}
 
 	// Receive the signature response
-	response, err := receiveSignatureResponse(stream)
+	response, err := atypes.ReceiveSignatureResponse(stream)
 	if err != nil {
 		return []byte{}, fmt.Errorf("failed to receive signature response: %w", err)
 	}
 
 	return response.Signature, nil
-}
-
-func sendSignUsageRequest(s network.Stream, usage *pbapp.ResourceUsage) error {
-	signatureRequest := pbapp.SignatureRequest{
-		Data: &pbapp.SignatureRequest_Usage{
-			Usage: usage,
-		},
-	}
-
-	err := pbstream.WriteProtoBuffered(s, &signatureRequest)
-	if err != nil {
-		s.Reset()
-		return fmt.Errorf("failed to send resource usage sign request: %v", err)
-	}
-
-	return nil
-}
-
-func receiveSignRequest(s network.Stream) (*pbapp.SignatureRequest, error) {
-	response := &pbapp.SignatureRequest{}
-
-	err := pbstream.ReadProtoBuffered(s, response)
-	if err != nil {
-		s.Reset()
-		return nil, fmt.Errorf("failed to receive signature request: %v", err)
-	}
-
-	return response, nil
-}
-
-func receiveSignatureResponse(s network.Stream) (*pbapp.SignatureResponse, error) {
-	response := &pbapp.SignatureResponse{}
-
-	err := pbstream.ReadProtoBuffered(s, response)
-	if err != nil {
-		s.Reset()
-		return nil, fmt.Errorf("failed to receive signature response: %v", err)
-	}
-
-	return response, nil
-}
-
-func (s *Service) ConvertUsageToTypedData(usage *ResourceUsage) (*TypedData, error) {
-	var domainType = []Type{
-		{Name: "name", Type: "string"},
-		{Name: "version", Type: "string"},
-		{Name: "chainId", Type: "uint256"},
-		{Name: "verifyingContract", Type: "address"},
-	}
-
-	chainID := math.HexOrDecimal256(*s.accountService.GetChainID())
-
-	usageTypedData := TypedData{
-		Types: Types{
-			"EIP712Domain": domainType,
-			"Usage": []Type{
-				{Name: "providerId", Type: "uint256"},
-				{Name: "appId", Type: "uint256"},
-				{Name: "peerId", Type: "string"},
-				{Name: "usedCpu", Type: "uint256"},
-				{Name: "usedGpu", Type: "uint256"},
-				{Name: "usedMemory", Type: "uint256"},
-				{Name: "usedStorage", Type: "uint256"},
-				{Name: "usedUploadBytes", Type: "uint256"},
-				{Name: "usedDownloadBytes", Type: "uint256"},
-				{Name: "duration", Type: "uint256"},
-			},
-		},
-		Domain: TypedDataDomain{
-			Name:              "SubnetAppStore",
-			Version:           "1",
-			ChainId:           &chainID,
-			VerifyingContract: s.accountService.AppStoreAddr(),
-		},
-		PrimaryType: "Usage",
-		Message: TypedDataMessage{
-			"providerId":        usage.ProviderId,
-			"appId":             usage.AppId,
-			"peerId":            usage.PeerId,
-			"usedCpu":           usage.UsedCpu,
-			"usedGpu":           usage.UsedGpu,
-			"usedMemory":        usage.UsedMemory,
-			"usedStorage":       usage.UsedStorage,
-			"usedUploadBytes":   usage.UsedUploadBytes,
-			"usedDownloadBytes": usage.UsedDownloadBytes,
-			"duration":          usage.Duration,
-		},
-	}
-	return &usageTypedData, nil
 }

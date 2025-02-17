@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"math/big"
-	"strings"
 
 	"github.com/gogo/protobuf/proto"
 
@@ -20,7 +19,10 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/config"
 	"github.com/unicornultrafoundation/subnet-node/core/account"
+	"github.com/unicornultrafoundation/subnet-node/core/apps/verifier"
+
 	"github.com/unicornultrafoundation/subnet-node/core/apps/stats"
+	atypes "github.com/unicornultrafoundation/subnet-node/core/apps/types"
 	"github.com/unicornultrafoundation/subnet-node/p2p"
 	pbapp "github.com/unicornultrafoundation/subnet-node/proto/subnet/app"
 )
@@ -43,28 +45,28 @@ type Service struct {
 	accountService   *account.AccountService
 	statService      *stats.Stats
 	Datastore        datastore.Datastore // Datastore for storing resource usage
-	verifier         *Verifier           // Verifier for resource usage
+	verifier         *verifier.Verifier  // Verifier for resource usage
 }
 
 // Initializes the Service with Ethereum and containerd clients.
-func New(peerHost p2phost.Host, peerId peer.ID, cfg *config.C, P2P *p2p.P2P, dataStore datastore.Datastore, accountService *account.AccountService) *Service {
+func New(peerHost p2phost.Host, peerId peer.ID, cfg *config.C, P2P *p2p.P2P, ds datastore.Datastore, acc *account.AccountService) *Service {
 	return &Service{
 		peerId:         peerId,
 		PeerHost:       peerHost,
 		P2P:            P2P,
 		cfg:            cfg,
-		Datastore:      dataStore,
+		Datastore:      ds,
 		IsProvider:     cfg.GetBool("provider.enable", false),
 		stopChan:       make(chan struct{}),
-		accountService: accountService,
-		ethClient:      accountService.GetClient(),
-		verifier:       NewVerifier(),
+		accountService: acc,
+		ethClient:      acc.GetClient(),
+		verifier:       verifier.NewVerifier(ds, P2P, acc),
 	}
 }
 
 func (s *Service) Start(ctx context.Context) error {
 	// Register the P2P protocol for signing
-	if err := s.RegisterSignProtocol(); err != nil {
+	if err := s.verifier.Register(); err != nil {
 		return fmt.Errorf("failed to register signing protocol: %w", err)
 	}
 
@@ -115,7 +117,7 @@ func (s *Service) GetAppCount() (*big.Int, error) {
 	return s.accountService.AppStore().AppCount(nil)
 }
 
-func (s *Service) GetContainerConfigProto(ctx context.Context, appId *big.Int) (*AppMetadata, error) {
+func (s *Service) GetContainerConfigProto(ctx context.Context, appId *big.Int) (*atypes.AppMetadata, error) {
 	configKey := datastore.NewKey(fmt.Sprintf("container-config-%s", appId.String()))
 	configData, err := s.Datastore.Get(ctx, configKey)
 	if err != nil {
@@ -127,50 +129,50 @@ func (s *Service) GetContainerConfigProto(ctx context.Context, appId *big.Int) (
 		return nil, fmt.Errorf("failed to unmarshal container config: %w", err)
 	}
 
-	return ProtoToAppMetadata(&protoConfig), nil
+	return atypes.ProtoToAppMetadata(&protoConfig), nil
 }
 
 // Retrieves the status of a container associated with a specific app.
-func (s *Service) GetContainerStatus(ctx context.Context, appId *big.Int) (ProcessStatus, error) {
+func (s *Service) GetContainerStatus(ctx context.Context, appId *big.Int) (atypes.ProcessStatus, error) {
 	// Set the namespace for the container
 	ctx = namespaces.WithNamespace(ctx, NAMESPACE)
 
-	containerId := getContainerIdFromAppId(appId)
+	containerId := atypes.GetContainerIdFromAppId(appId)
 
 	// Load the container for the app
 	container, err := s.containerdClient.LoadContainer(ctx, containerId)
 	if err != nil {
 		if errdefs.IsNotFound(err) {
-			return NotFound, nil
+			return atypes.NotFound, nil
 		}
-		return Unknown, err
+		return atypes.Unknown, err
 	}
 
 	// Retrieve the task for the container
 	task, err := container.Task(ctx, nil)
 	if err != nil {
-		return Stopped, nil // Task does not exist
+		return atypes.Stopped, nil // Task does not exist
 	}
 
 	// Retrieve the status of the task
 	status, err := task.Status(ctx)
 	if err != nil {
-		return Stopped, fmt.Errorf("failed to get task status: %w", err)
+		return atypes.Stopped, fmt.Errorf("failed to get task status: %w", err)
 	}
 
 	switch status.Status {
 	case containerd.Created:
-		return Created, nil
+		return atypes.Created, nil
 	case containerd.Paused:
-		return Paused, nil
+		return atypes.Paused, nil
 	case containerd.Running:
-		return Running, nil
+		return atypes.Running, nil
 	case containerd.Stopped:
-		return Stopped, nil
+		return atypes.Stopped, nil
 	case containerd.Pausing:
-		return Pausing, nil
+		return atypes.Pausing, nil
 	default:
-		return Unknown, nil
+		return atypes.Unknown, nil
 	}
 }
 
@@ -183,8 +185,8 @@ func (s *Service) GetContainerIP(ctx context.Context, appId *big.Int) (string, e
 	return ip, nil
 }
 
-func (s *Service) SaveContainerConfigProto(ctx context.Context, appId *big.Int, config ContainerConfig) error {
-	protoConfig := AppMetadataToProto(&AppMetadata{ContainerConfig: config})
+func (s *Service) SaveContainerConfigProto(ctx context.Context, appId *big.Int, config atypes.ContainerConfig) error {
+	protoConfig := atypes.AppMetadataToProto(&atypes.AppMetadata{ContainerConfig: config})
 	configData, err := proto.Marshal(protoConfig)
 	if err != nil {
 		return fmt.Errorf("failed to marshal container config: %w", err)
@@ -196,23 +198,4 @@ func (s *Service) SaveContainerConfigProto(ctx context.Context, appId *big.Int, 
 	}
 
 	return nil
-}
-
-// Extract appId from container ID
-func getAppIdFromContainerId(containerId string) (*big.Int, error) {
-	appIDStr := strings.TrimPrefix(containerId, "subnet-app-")
-	appID, ok := new(big.Int).SetString(appIDStr, 10)
-
-	if !ok {
-		return nil, fmt.Errorf("invalid container ID: %s", containerId)
-	}
-
-	return appID, nil
-}
-
-// Extract containerId from appId
-func getContainerIdFromAppId(appId *big.Int) string {
-	app := App{ID: appId}
-
-	return app.ContainerId()
 }

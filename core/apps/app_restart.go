@@ -6,6 +6,7 @@ import (
 	"math/big"
 
 	"github.com/containerd/containerd/namespaces"
+	atypes "github.com/unicornultrafoundation/subnet-node/core/apps/types"
 )
 
 func (s *Service) RestartStoppedContainers(ctx context.Context) error {
@@ -21,7 +22,7 @@ func (s *Service) RestartStoppedContainers(ctx context.Context) error {
 	for _, container := range containers {
 		// Get container ID (assuming appID is same as container ID)
 		containerId := container.ID()
-		appId, err := getAppIdFromContainerId(containerId)
+		appId, err := atypes.GetAppIdFromContainerId(containerId)
 
 		if err != nil {
 			log.Errorf("failed to get appId from containerId %s: %v", containerId, err)
@@ -35,7 +36,7 @@ func (s *Service) RestartStoppedContainers(ctx context.Context) error {
 			continue
 		}
 
-		if status == Stopped {
+		if status == atypes.Stopped {
 			err := s.RestartContainer(ctx, appId)
 
 			if err != nil {

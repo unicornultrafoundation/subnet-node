@@ -18,10 +18,18 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/protocol"
+	"github.com/sirupsen/logrus"
+	pbstream "github.com/unicornultrafoundation/subnet-node/common/io"
 	"github.com/unicornultrafoundation/subnet-node/core/apps/stats"
 	"github.com/unicornultrafoundation/subnet-node/core/contracts"
 	pbapp "github.com/unicornultrafoundation/subnet-node/proto/subnet/app"
 )
+
+var log = logrus.WithField("service", "apps")
+
+const PROTOCOL_ID = protocol.ID("subnet-apps")
 
 // ProcessStatus returns a human readable status for the Process representing its current status
 type ProcessStatus string
@@ -158,7 +166,7 @@ func decodeAndParseMetadata(encodedMetadata string) (*AppMetadata, error) {
 	return &metadata, nil
 }
 
-func convertToApp(subnetApp contracts.SubnetAppStoreApp, id *big.Int, status ProcessStatus) *App {
+func ConvertToApp(subnetApp contracts.SubnetAppStoreApp, id *big.Int, status ProcessStatus) *App {
 	metadata, err := decodeAndParseMetadata(subnetApp.Metadata)
 	if err != nil {
 		log.Warnf("Warning: Failed to parse metadata for app %s: %v\n", subnetApp.Name, err)
@@ -183,7 +191,7 @@ func convertToApp(subnetApp contracts.SubnetAppStoreApp, id *big.Int, status Pro
 	}
 }
 
-func fillDefaultResourceUsage(usage *ResourceUsage) *ResourceUsage {
+func FillDefaultResourceUsage(usage *ResourceUsage) *ResourceUsage {
 	if usage.AppId == nil {
 		usage.AppId = big.NewInt(0)
 	}
@@ -230,7 +238,7 @@ func bigIntToBytes(value *big.Int) []byte {
 	return value.Bytes()
 }
 
-func convertUsageToProto(usage ResourceUsage) *pbapp.ResourceUsage {
+func ConvertUsageToProto(usage ResourceUsage) *pbapp.ResourceUsage {
 	return &pbapp.ResourceUsage{
 		AppId:             bigIntToBytes(usage.AppId),
 		ProviderId:        bigIntToBytes(usage.ProviderId),
@@ -1134,4 +1142,112 @@ func ConvertStatEntryToResourceUsage(entry *stats.StatEntry, appId, providerId *
 	}
 
 	return &usage
+}
+
+// Extract appId from container ID
+func GetAppIdFromContainerId(containerId string) (*big.Int, error) {
+	appIDStr := strings.TrimPrefix(containerId, "subnet-app-")
+	appID, ok := new(big.Int).SetString(appIDStr, 10)
+
+	if !ok {
+		return nil, fmt.Errorf("invalid container ID: %s", containerId)
+	}
+
+	return appID, nil
+}
+
+// Extract containerId from appId
+func GetContainerIdFromAppId(appId *big.Int) string {
+	app := App{ID: appId}
+
+	return app.ContainerId()
+}
+
+func ReceiveSignRequest(s network.Stream) (*pbapp.SignatureRequest, error) {
+	response := &pbapp.SignatureRequest{}
+
+	err := pbstream.ReadProtoBuffered(s, response)
+	if err != nil {
+		s.Reset()
+		return nil, fmt.Errorf("failed to receive signature request: %v", err)
+	}
+
+	return response, nil
+}
+
+func ReceiveSignatureResponse(s network.Stream) (*pbapp.SignatureResponse, error) {
+	response := &pbapp.SignatureResponse{}
+
+	err := pbstream.ReadProtoBuffered(s, response)
+	if err != nil {
+		s.Reset()
+		return nil, fmt.Errorf("failed to receive signature response: %v", err)
+	}
+
+	return response, nil
+}
+
+func ConvertUsageToTypedData(usage *ResourceUsage, chainid *big.Int, cAddr string) (*TypedData, error) {
+	var domainType = []Type{
+		{Name: "name", Type: "string"},
+		{Name: "version", Type: "string"},
+		{Name: "chainId", Type: "uint256"},
+		{Name: "verifyingContract", Type: "address"},
+	}
+
+	chainID := math.HexOrDecimal256(*chainid)
+
+	usageTypedData := TypedData{
+		Types: Types{
+			"EIP712Domain": domainType,
+			"Usage": []Type{
+				{Name: "providerId", Type: "uint256"},
+				{Name: "appId", Type: "uint256"},
+				{Name: "peerId", Type: "string"},
+				{Name: "usedCpu", Type: "uint256"},
+				{Name: "usedGpu", Type: "uint256"},
+				{Name: "usedMemory", Type: "uint256"},
+				{Name: "usedStorage", Type: "uint256"},
+				{Name: "usedUploadBytes", Type: "uint256"},
+				{Name: "usedDownloadBytes", Type: "uint256"},
+				{Name: "duration", Type: "uint256"},
+			},
+		},
+		Domain: TypedDataDomain{
+			Name:              "SubnetAppStore",
+			Version:           "1",
+			ChainId:           &chainID,
+			VerifyingContract: cAddr,
+		},
+		PrimaryType: "Usage",
+		Message: TypedDataMessage{
+			"providerId":        usage.ProviderId,
+			"appId":             usage.AppId,
+			"peerId":            usage.PeerId,
+			"usedCpu":           usage.UsedCpu,
+			"usedGpu":           usage.UsedGpu,
+			"usedMemory":        usage.UsedMemory,
+			"usedStorage":       usage.UsedStorage,
+			"usedUploadBytes":   usage.UsedUploadBytes,
+			"usedDownloadBytes": usage.UsedDownloadBytes,
+			"duration":          usage.Duration,
+		},
+	}
+	return &usageTypedData, nil
+}
+
+func SendSignUsageRequest(s network.Stream, usage *pbapp.ResourceUsage) error {
+	signatureRequest := pbapp.SignatureRequest{
+		Data: &pbapp.SignatureRequest_Usage{
+			Usage: usage,
+		},
+	}
+
+	err := pbstream.WriteProtoBuffered(s, &signatureRequest)
+	if err != nil {
+		s.Reset()
+		return fmt.Errorf("failed to send resource usage sign request: %v", err)
+	}
+
+	return nil
 }
