@@ -19,7 +19,7 @@ func (s *Service) ReportUsage(ctx context.Context, appId, usedCpu, usedGpu, used
 
 	peerId := s.peerId.String()
 
-	// Call the ClaimReward function from the ABI
+	// Call the ReportUsage function from the ABI
 	tx, err := s.accountService.AppStore().ReportUsage(key, providerId, appId, peerId, usedCpu, usedGpu, usedMemory, usedStorage, usedUploadBytes, usedDownloadBytes, duration, signature)
 	if err != nil {
 		return common.Hash{}, err

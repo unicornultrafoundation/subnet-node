@@ -91,12 +91,12 @@ func (s *Service) reportAllRunningContainers(ctx context.Context) {
 			continue
 		}
 
-		// Claim reward
+		// report
 		txHash, err := s.ReportUsage(ctx, appId, usage.UsedCpu, usage.UsedGpu, usage.UsedMemory, usage.UsedStorage, usage.UsedUploadBytes, usage.UsedDownloadBytes, usage.Duration, signature)
 		if err != nil {
-			log.Errorf("Failed to claim reward for container %s: %v", containerId, err)
+			log.Errorf("Failed to report for container %s: %v", containerId, err)
 		} else {
-			log.Infof("Reward claimed successfully for container %s, transaction hash: %s", containerId, txHash.Hex())
+			log.Infof("Report successfully for container %s, transaction hash: %s", containerId, txHash.Hex())
 			s.statService.ClearFinalStats(containerId)
 		}
 	}
