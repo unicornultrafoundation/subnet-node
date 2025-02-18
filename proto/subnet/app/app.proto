@@ -43,7 +43,8 @@ message ResourceUsage {
 	bytes used_upload_bytes = 7;
   bytes used_download_bytes = 8; 
   bytes duration = 9;
-  string peer_id = 10;
+  bytes timestamp = 10;
+  string peer_id = 11;
 }
 
 message AppMetadata {

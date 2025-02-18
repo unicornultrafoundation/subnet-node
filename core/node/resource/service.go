@@ -64,9 +64,9 @@ func (s *Service) updateLoop() {
 		log.Debugf("Failed to update resource: %v\n", err)
 	}
 
-	if err := s.subscribe(); err != nil {
-		log.Debugf("Failed to subscribe: %v\n", err)
-	}
+	// if err := s.subscribe(); err != nil {
+	// 	log.Debugf("Failed to subscribe: %v\n", err)
+	// }
 
 	for {
 		select {
@@ -89,7 +89,7 @@ func (s *Service) updateLoop() {
 func (s *Service) updateResourceLoop() error {
 	res, err := GetResource()
 	if err != nil {
-		return fmt.Errorf("failed to get resource info: %w", err)
+		log.Errorf("failed to get resource info: %s", err.Error())
 	}
 
 	s.resource = res
@@ -98,34 +98,6 @@ func (s *Service) updateResourceLoop() error {
 
 func (s *Service) GetResource() *ResourceInfo {
 	return s.resource
-}
-
-func (s *Service) subscribe() error {
-	if !s.IsProvider {
-		return nil
-	}
-	// 2. Publish basic resource information to PubSub
-	if s.pubsubTopic == nil {
-		data, err := json.Marshal(s.resource)
-		if err != nil {
-			return fmt.Errorf("failed to marshal resource info: %w", err)
-		}
-		s.pubsubTopic, err = s.PubSub.Join(s.resource.Topic())
-		if err != nil {
-			return err
-		}
-		if err := s.pubsubTopic.Publish(context.Background(), data); err != nil {
-			return fmt.Errorf("failed to publish resource info to pubsub: %w", err)
-		}
-
-		log.Debug("Published resource info to PubSub.")
-		_, err = s.pubsubTopic.Subscribe(pubsub.WithBufferSize(1))
-		if err != nil {
-			return err
-		}
-
-	}
-	return nil
 }
 
 // Updates resource information to DHT and PubSub
@@ -146,11 +118,11 @@ func (s *Service) updateDHTLoop() error {
 
 	log.Debugf("Updated resource in DHT: %s\n", key)
 
-	if err := s.pubsubTopic.Publish(context.Background(), data); err != nil {
-		return fmt.Errorf("failed to publish resource info to pubsub: %w", err)
-	}
+	// if err := s.pubsubTopic.Publish(context.Background(), data); err != nil {
+	// 	return fmt.Errorf("failed to publish resource info to pubsub: %w", err)
+	// }
 
-	log.Debug("Published resource info to PubSub.")
+	// log.Debug("Published resource info to PubSub.")
 
 	return nil
 }

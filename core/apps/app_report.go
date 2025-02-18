@@ -61,6 +61,7 @@ func (s *Service) reportAllRunningContainers(ctx context.Context) {
 		usageEntry, err := s.statService.GetFinalStats(containerId)
 		usage := atypes.ConvertStatEntryToResourceUsage(usageEntry, appId, providerId)
 		usage.PeerId = s.peerId.String()
+		usage.Timestamp = big.NewInt(time.Now().Unix())
 
 		if err != nil {
 			log.Errorf("Failed to get resource usage for container %s: %v", containerId, err)
@@ -92,7 +93,7 @@ func (s *Service) reportAllRunningContainers(ctx context.Context) {
 		}
 
 		// report
-		txHash, err := s.ReportUsage(ctx, appId, usage.UsedCpu, usage.UsedGpu, usage.UsedMemory, usage.UsedStorage, usage.UsedUploadBytes, usage.UsedDownloadBytes, usage.Duration, signature)
+		txHash, err := s.ReportUsage(ctx, usage, signature)
 		if err != nil {
 			log.Errorf("Failed to report for container %s: %v", containerId, err)
 		} else {

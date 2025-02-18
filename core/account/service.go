@@ -3,7 +3,6 @@ package account
 import (
 	"context"
 	"crypto/ecdsa"
-	"crypto/rand"
 	"fmt"
 	"math/big"
 
@@ -13,6 +12,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/sirupsen/logrus"
+	signer "github.com/unicornultrafoundation/subnet-node/common/signer"
 	"github.com/unicornultrafoundation/subnet-node/config"
 	"github.com/unicornultrafoundation/subnet-node/core/contracts"
 	"go.uber.org/fx"
@@ -223,21 +223,19 @@ func EthereumService(lc fx.Lifecycle, cfg *config.C) (*AccountService, error) {
 
 // Sign the hash using ECDSA
 func (account *AccountService) Sign(hash []byte) ([]byte, error) {
-	r, s, err := ecdsa.Sign(rand.Reader, account.privateKey, hash)
+	signature, err := crypto.Sign(hash, account.privateKey)
 	if err != nil {
-		return nil, fmt.Errorf("failed to sign: %v", err)
+		return nil, err
 	}
-
-	// Ensure `s` is in the lower half-order
-	halfOrder := new(big.Int).Rsh(crypto.S256().Params().N, 1)
-	v := byte(27)
-	if s.Cmp(halfOrder) > 0 {
-		s.Sub(crypto.S256().Params().N, s)
-		v = 28
-	}
-
-	// Format signature: r (32 bytes) || s (32 bytes) || v (1 byte)
-	signature := append(r.Bytes(), append(s.Bytes(), v)...)
-
+	signature[64] += 27
 	return signature, nil
+}
+
+func (account *AccountService) SignTypedData(typedData *signer.TypedData) ([]byte, error) {
+	typedDataHash, _, err := signer.TypedDataAndHash(*typedData)
+	if err != nil {
+		return []byte{}, fmt.Errorf("failed to hash typed data: %v", err)
+	}
+
+	return account.Sign(typedDataHash)
 }

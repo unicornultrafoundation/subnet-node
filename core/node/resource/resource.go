@@ -14,7 +14,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-var log = logrus.New().WithField("node", "resource")
+var log = logrus.WithField("node", "resource")
 
 type ResourceInfo struct {
 	Region    RegionInfo    `json:"region"`
@@ -59,7 +59,10 @@ func getRegion() (RegionInfo, error) {
 	client := ipinfo.NewClient(nil, nil, "")
 	info, err := client.GetIPInfo(nil)
 	if err != nil {
-		return RegionInfo{}, err
+		return RegionInfo{
+			Region:  "unknown",
+			Country: "unknown",
+		}, err
 	}
 	return RegionInfo{
 		Region:  info.Region,
@@ -115,6 +118,30 @@ func GetResource() (*ResourceInfo, error) {
 		resource ResourceInfo
 		mutex    sync.Mutex
 	)
+
+	resource = ResourceInfo{
+		Region: RegionInfo{
+			Region:  "unknown",
+			Country: "unknown",
+		},
+		CPU: CpuInfo{
+			Count: 0,
+			Name:  "unknown",
+		},
+		GPU: GpuInfo{
+			Count: 0,
+			Name:  "unknown",
+		},
+		Memory: MemoryInfo{
+			Total: 0,
+			Used:  0,
+		},
+		Bandwidth: BandwidthInfo{
+			Latency:       0,
+			UploadSpeed:   0,
+			DownloadSpeed: 0,
+		},
+	}
 
 	// Run resource fetchers in parallel
 	wg.Add(4)
