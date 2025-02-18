@@ -175,17 +175,14 @@ func (v *Verifier) verifySuddenHighUsage(usage *atypes.ResourceUsage) error {
 }
 
 func (v *Verifier) verifyRelayer(stream network.Stream) error {
-	// Lấy địa chỉ từ kết nối
 	remoteAddr := stream.Conn().RemoteMultiaddr()
 
-	// Kiểm tra nếu peer kết nối đến qua relayer
 	if stream.Conn().Stat().Direction == network.DirInbound && isRelayed(remoteAddr) {
 		return fmt.Errorf("peer is coming through a relayer: %s", stream.Conn().RemotePeer().String())
 	}
 	return nil
 }
 
-// Hàm kiểm tra địa chỉ có qua relayer không
 func isRelayed(addr ma.Multiaddr) bool {
 	return addr != nil && addr.String() == "/p2p-circuit"
 }
