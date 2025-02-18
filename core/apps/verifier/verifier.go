@@ -10,6 +10,7 @@ import (
 
 	"github.com/ipfs/go-datastore"
 	"github.com/libp2p/go-libp2p/core/network"
+	ma "github.com/multiformats/go-multiaddr"
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/core/account"
 	atypes "github.com/unicornultrafoundation/subnet-node/core/apps/types"
@@ -174,11 +175,19 @@ func (v *Verifier) verifySuddenHighUsage(usage *atypes.ResourceUsage) error {
 }
 
 func (v *Verifier) verifyRelayer(stream network.Stream) error {
-	// Check if the peer is coming through a relayer
-	if stream.Conn().Stat().Direction == network.DirInbound && stream.Conn().RemoteMultiaddr().String() != "" {
+	// Lấy địa chỉ từ kết nối
+	remoteAddr := stream.Conn().RemoteMultiaddr()
+
+	// Kiểm tra nếu peer kết nối đến qua relayer
+	if stream.Conn().Stat().Direction == network.DirInbound && isRelayed(remoteAddr) {
 		return fmt.Errorf("peer is coming through a relayer: %s", stream.Conn().RemotePeer().String())
 	}
 	return nil
+}
+
+// Hàm kiểm tra địa chỉ có qua relayer không
+func isRelayed(addr ma.Multiaddr) bool {
+	return addr != nil && addr.String() == "/p2p-circuit"
 }
 
 func (v *Verifier) calculateAverageUsage(appId *big.Int) (*atypes.ResourceUsage, error) {
