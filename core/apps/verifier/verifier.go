@@ -19,8 +19,8 @@ import (
 
 var log = logrus.WithField("service", "app-verifier")
 
-const reportInterval = 1 * time.Minute // Define the minimum interval between reports
-const maxFailures = 5                  // Maximum allowed failures before marking as fraudulent
+const reportInterval = 30 * time.Minute // Define the minimum interval between reports
+const maxFailures = 5                   // Maximum allowed failures before marking as fraudulent
 
 // Default average usage values for a basic app in bytes
 var defaultAverageUsage = &atypes.ResourceUsage{

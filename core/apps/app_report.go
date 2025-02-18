@@ -14,7 +14,7 @@ import (
 )
 
 func (s *Service) startReportLoop(ctx context.Context) {
-	ticker := time.NewTicker(1 * time.Minute)
+	ticker := time.NewTicker(29 * time.Minute)
 	defer ticker.Stop()
 
 	for {
