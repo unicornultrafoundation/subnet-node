@@ -22,6 +22,16 @@ var log = logrus.WithField("service", "app-verifier")
 const reportInterval = 1 * time.Minute // Define the minimum interval between reports
 const maxFailures = 5                  // Maximum allowed failures before marking as fraudulent
 
+// Default average usage values for a basic app in bytes
+var defaultAverageUsage = &atypes.ResourceUsage{
+	UsedCpu:           big.NewInt(10000000),   // Default CPU usage
+	UsedGpu:           big.NewInt(2147483648), // Default GPU usage
+	UsedMemory:        big.NewInt(2147483648), // Default Memory usage in bytes
+	UsedStorage:       big.NewInt(2147483648), // Default Storage usage in bytes
+	UsedUploadBytes:   big.NewInt(2147483648), // Default Upload usage in bytes
+	UsedDownloadBytes: big.NewInt(2147483648), // Default Download usage in bytes
+}
+
 // Verifier is a struct that provides methods to verify resource usage
 type Verifier struct {
 	ds              datastore.Datastore
@@ -55,18 +65,22 @@ func (v *Verifier) VerifyResourceUsage(ctx context.Context, usage *atypes.Resour
 	}
 
 	if err := v.verifyPeerID(usage, stream); err != nil {
+		v.incrementFailureCount(usage.PeerId)
 		return err
 	}
 
 	if err := v.verifyDuration(usage); err != nil {
+		v.incrementFailureCount(usage.PeerId)
 		return err
 	}
 
 	if err := v.verifyReportInterval(usage); err != nil {
+		v.incrementFailureCount(usage.PeerId)
 		return err
 	}
 
 	if err := v.verifySuddenHighUsage(usage); err != nil {
+		v.incrementFailureCount(usage.PeerId)
 		return err
 	}
 
@@ -127,6 +141,26 @@ func (v *Verifier) verifySuddenHighUsage(usage *atypes.ResourceUsage) error {
 		return fmt.Errorf("failed to calculate average usage: %v", err)
 	}
 
+	// Handle cases where previous usage is zero
+	if averageUsage.UsedCpu.Cmp(big.NewInt(0)) == 0 {
+		averageUsage.UsedCpu = defaultAverageUsage.UsedCpu
+	}
+	if averageUsage.UsedGpu.Cmp(big.NewInt(0)) == 0 {
+		averageUsage.UsedGpu = defaultAverageUsage.UsedGpu
+	}
+	if averageUsage.UsedMemory.Cmp(big.NewInt(0)) == 0 {
+		averageUsage.UsedMemory = defaultAverageUsage.UsedMemory
+	}
+	if averageUsage.UsedStorage.Cmp(big.NewInt(0)) == 0 {
+		averageUsage.UsedStorage = defaultAverageUsage.UsedStorage
+	}
+	if averageUsage.UsedUploadBytes.Cmp(big.NewInt(0)) == 0 {
+		averageUsage.UsedUploadBytes = defaultAverageUsage.UsedUploadBytes
+	}
+	if averageUsage.UsedDownloadBytes.Cmp(big.NewInt(0)) == 0 {
+		averageUsage.UsedDownloadBytes = defaultAverageUsage.UsedDownloadBytes
+	}
+
 	if usage.UsedCpu.Cmp(big.NewInt(0).Mul(averageUsage.UsedCpu, big.NewInt(2))) > 0 ||
 		usage.UsedGpu.Cmp(big.NewInt(0).Mul(averageUsage.UsedGpu, big.NewInt(2))) > 0 ||
 		usage.UsedMemory.Cmp(big.NewInt(0).Mul(averageUsage.UsedMemory, big.NewInt(2))) > 0 ||
@@ -148,9 +182,6 @@ func (v *Verifier) verifyRelayer(stream network.Stream) error {
 }
 
 func (v *Verifier) calculateAverageUsage(appId *big.Int) (*atypes.ResourceUsage, error) {
-	v.mu.Lock()
-	defer v.mu.Unlock()
-
 	var totalCpu, totalGpu, totalMemory, totalStorage, totalUpload, totalDownload int64
 	var count int64
 
@@ -169,8 +200,8 @@ func (v *Verifier) calculateAverageUsage(appId *big.Int) (*atypes.ResourceUsage,
 
 	// Select a random subset of peer IDs
 	numPeers := len(peerIDs)
-	if numPeers > 10 {
-		numPeers = 10
+	if numPeers > 30 {
+		numPeers = 30
 	}
 	selectedPeers := peerIDs[:numPeers]
 
@@ -187,7 +218,8 @@ func (v *Verifier) calculateAverageUsage(appId *big.Int) (*atypes.ResourceUsage,
 	}
 
 	if count == 0 {
-		return nil, fmt.Errorf("no usage data available for app ID: %s", appId.String())
+		// Return default average usage if no peers are available
+		return defaultAverageUsage, nil
 	}
 
 	averageUsage := &atypes.ResourceUsage{
@@ -250,10 +282,8 @@ func (s *Verifier) Register() error {
 		switch data := signRequest.Data.(type) {
 		case *pbapp.SignatureRequest_Usage:
 			usage := atypes.ProtoToResourceUsage(data.Usage)
-
 			// Verify the resource usage before signing
 			if err := s.VerifyResourceUsage(context.Background(), usage, stream); err != nil {
-				s.incrementFailureCount(usage.PeerId)
 				return []byte{}, fmt.Errorf("failed to verify resource usage: %w", err)
 			}
 
