@@ -87,18 +87,19 @@ func (s *Service) reportAllRunningContainers(ctx context.Context) {
 			continue
 		}
 
+		s.statService.ClearFinalStats(containerId)
+
 		if len(signature) == 0 {
 			log.Errorf("Failed to get signature for container %s. Peers num: %d", containerId, len(s.PeerHost.Network().Peers()))
 			continue
 		}
-
 		// report
 		txHash, err := s.ReportUsage(ctx, usage, signature)
 		if err != nil {
 			log.Errorf("Failed to report for container %s: %v", containerId, err)
 		} else {
 			log.Infof("Report successfully for container %s, transaction hash: %s", containerId, txHash.Hex())
-			s.statService.ClearFinalStats(containerId)
+
 		}
 	}
 }
