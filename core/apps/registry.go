@@ -18,7 +18,7 @@ func (s *Service) ReportUsage(ctx context.Context, appId, usedCpu, usedGpu, used
 	}
 
 	// Call the ClaimReward function from the ABI
-	tx, err := s.accountService.AppStore().ReportUsage(key, providerId, appId, usedCpu, usedGpu, usedMemory, usedStorage, usedUploadBytes, usedDownloadBytes, duration, signature)
+	tx, err := s.accountService.AppStore().ReportUsage(key, appId, providerId, usedCpu, usedGpu, usedMemory, usedStorage, usedUploadBytes, usedDownloadBytes, duration, signature)
 	if err != nil {
 		return common.Hash{}, err
 	}

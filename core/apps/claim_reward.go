@@ -212,7 +212,7 @@ func (s *Service) ConvertUsageToTypedData(usage *ResourceUsage) (*TypedData, err
 			},
 		},
 		Domain: TypedDataDomain{
-			Name:              "SubnetAppStore",
+			Name:              "SubnetAppRegistry",
 			Version:           "1",
 			ChainId:           &chainID,
 			VerifyingContract: s.accountService.AppStoreAddr(),
