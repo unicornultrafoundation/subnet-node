@@ -3,328 +3,310 @@ package verifier
 import (
 	"context"
 	"fmt"
-	"math/big"
-	"math/rand"
-	"sync"
+	"io"
 	"time"
 
+	ggio "github.com/gogo/protobuf/io"
+	proto "github.com/gogo/protobuf/proto"
 	"github.com/ipfs/go-datastore"
+	"github.com/ipfs/go-datastore/query"
+	p2phost "github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
-	ma "github.com/multiformats/go-multiaddr"
+	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/core/account"
 	atypes "github.com/unicornultrafoundation/subnet-node/core/apps/types"
 	"github.com/unicornultrafoundation/subnet-node/p2p"
-	pbapp "github.com/unicornultrafoundation/subnet-node/proto/subnet/app"
+	pvtypes "github.com/unicornultrafoundation/subnet-node/proto/subnet/app/verifier"
 )
 
 var log = logrus.WithField("service", "app-verifier")
-
-const reportInterval = 30 * time.Minute // Define the minimum interval between reports
-const maxFailures = 5                   // Maximum allowed failures before marking as fraudulent
-
-// Default average usage values for a basic app in bytes
-var defaultAverageUsage = &atypes.ResourceUsage{
-	UsedCpu:           big.NewInt(10000000),   // Default CPU usage
-	UsedGpu:           big.NewInt(2147483648), // Default GPU usage
-	UsedMemory:        big.NewInt(2147483648), // Default Memory usage in bytes
-	UsedStorage:       big.NewInt(2147483648), // Default Storage usage in bytes
-	UsedUploadBytes:   big.NewInt(2147483648), // Default Upload usage in bytes
-	UsedDownloadBytes: big.NewInt(2147483648), // Default Download usage in bytes
-}
 
 // Verifier is a struct that provides methods to verify resource usage
 type Verifier struct {
 	ds              datastore.Datastore
 	p2p             *p2p.P2P
 	acc             *account.AccountService
-	previousUsages  map[string]*atypes.ResourceUsage
 	fraudulentNodes map[string]bool
-	ipAddresses     map[string]struct{}
 	failureCounts   map[string]int
-	mu              sync.Mutex
+	ps              p2phost.Host // the network host (server+client)
 }
 
 // NewVerifier creates a new instance of Verifier
-func NewVerifier(ds datastore.Datastore, P2P *p2p.P2P, acc *account.AccountService) *Verifier {
+func NewVerifier(ds datastore.Datastore, ps p2phost.Host, P2P *p2p.P2P, acc *account.AccountService) *Verifier {
 	v := &Verifier{
 		ds:              ds,
 		p2p:             P2P,
 		acc:             acc,
-		previousUsages:  make(map[string]*atypes.ResourceUsage),
+		ps:              ps,
 		fraudulentNodes: make(map[string]bool),
-		ipAddresses:     make(map[string]struct{}),
 		failureCounts:   make(map[string]int),
 	}
+	go v.periodicCheck()
 	return v
 }
 
-// VerifyResourceUsage verifies the resource usage before signing
-func (v *Verifier) VerifyResourceUsage(ctx context.Context, usage *atypes.ResourceUsage, stream network.Stream) error {
-	if v.isFraudulentNode(usage.PeerId) {
-		return fmt.Errorf("fraudulent node detected: %s", usage.PeerId)
-	}
-
-	if err := v.verifyPeerID(usage, stream); err != nil {
-		v.incrementFailureCount(usage.PeerId)
-		return err
-	}
-
-	if err := v.verifyDuration(usage); err != nil {
-		v.incrementFailureCount(usage.PeerId)
-		return err
-	}
-
-	if err := v.verifyReportInterval(usage); err != nil {
-		v.incrementFailureCount(usage.PeerId)
-		return err
-	}
-
-	if err := v.verifySuddenHighUsage(usage); err != nil {
-		v.incrementFailureCount(usage.PeerId)
-		return err
-	}
-
-	if err := v.verifyRelayer(stream); err != nil {
-		return err
-	}
-
+func (v *Verifier) Register() error {
+	v.ps.SetStreamHandler(atypes.ProtocolAppVerifierUsageReport, v.onUsageReport)
+	v.ps.SetStreamHandler(atypes.ProtocolAppSignatureRequest, v.onSignatureRequest)
 	return nil
 }
 
-func (v *Verifier) verifyPeerID(usage *atypes.ResourceUsage, stream network.Stream) error {
-	if usage.PeerId != stream.Conn().RemotePeer().String() {
-		return fmt.Errorf("peer ID mismatch: expected %s, got %s", stream.Conn().RemotePeer().String(), usage.PeerId)
-	}
-	return nil
-}
-
-func (v *Verifier) verifyDuration(usage *atypes.ResourceUsage) error {
-	v.mu.Lock()
-	defer v.mu.Unlock()
-
-	if usage.Duration.Int64() > int64(2*reportInterval.Seconds()) {
-		return fmt.Errorf("invalid duration: duration %s exceeds twice the report interval %s", usage.Duration.String(), reportInterval.String())
-	}
-
-	previousUsage, exists := v.previousUsages[usage.PeerId]
-	if exists {
-		currentTime := time.Unix(usage.Timestamp.Int64(), 0)
-		prevTime := time.Unix(previousUsage.Timestamp.Int64(), 0)
-		if int64(currentTime.Sub(prevTime).Seconds()) < usage.Duration.Int64() {
-			return fmt.Errorf("invalid duration: current duration %s is not greater than previous duration %s", usage.Duration.String(), previousUsage.Duration.String())
-		}
-	}
-	return nil
-}
-
-func (v *Verifier) verifyReportInterval(usage *atypes.ResourceUsage) error {
-	v.mu.Lock()
-	defer v.mu.Unlock()
-
-	previousUsage, exists := v.previousUsages[usage.PeerId]
-	if exists {
-		currentTime := time.Unix(usage.Timestamp.Int64(), 0)
-		prevTime := time.Unix(previousUsage.Timestamp.Int64(), 0)
-		if currentTime.Sub(prevTime) < reportInterval {
-			return fmt.Errorf("reports must be spaced by at least %s", reportInterval.String())
-		}
-	}
-	return nil
-}
-
-func (v *Verifier) verifySuddenHighUsage(usage *atypes.ResourceUsage) error {
-	v.mu.Lock()
-	defer v.mu.Unlock()
-
-	averageUsage, err := v.calculateAverageUsage(usage.AppId)
+func (v *Verifier) onSignatureRequest(s network.Stream) {
+	msg := &pvtypes.SignatureRequest{}
+	buf, err := io.ReadAll(s)
 	if err != nil {
-		return fmt.Errorf("failed to calculate average usage: %v", err)
+		s.Reset()
+		log.Println(err)
+		return
+	}
+	s.Close()
+
+	// unmarshal it
+	err = proto.Unmarshal(buf, msg)
+	if err != nil {
+		log.Println(err)
+		return
 	}
 
-	// Handle cases where previous usage is zero
-	if averageUsage.UsedCpu.Cmp(big.NewInt(0)) == 0 {
-		averageUsage.UsedCpu = defaultAverageUsage.UsedCpu
-	}
-	if averageUsage.UsedGpu.Cmp(big.NewInt(0)) == 0 {
-		averageUsage.UsedGpu = defaultAverageUsage.UsedGpu
-	}
-	if averageUsage.UsedMemory.Cmp(big.NewInt(0)) == 0 {
-		averageUsage.UsedMemory = defaultAverageUsage.UsedMemory
-	}
-	if averageUsage.UsedStorage.Cmp(big.NewInt(0)) == 0 {
-		averageUsage.UsedStorage = defaultAverageUsage.UsedStorage
-	}
-	if averageUsage.UsedUploadBytes.Cmp(big.NewInt(0)) == 0 {
-		averageUsage.UsedUploadBytes = defaultAverageUsage.UsedUploadBytes
-	}
-	if averageUsage.UsedDownloadBytes.Cmp(big.NewInt(0)) == 0 {
-		averageUsage.UsedDownloadBytes = defaultAverageUsage.UsedDownloadBytes
+	log.Printf("%s: Received signature request from %s. Message: %s", s.Conn().LocalPeer(), s.Conn().RemotePeer(), msg)
+
+	usageInfo, err := v.getUsageInfoFromDB(msg.AppId, string(s.Conn().RemotePeer()))
+
+	if err != nil {
+		log.Printf("Failed to get usage info from database: %v", err)
+		return
 	}
 
-	if usage.UsedCpu.Cmp(big.NewInt(0).Mul(averageUsage.UsedCpu, big.NewInt(2))) > 0 ||
-		usage.UsedGpu.Cmp(big.NewInt(0).Mul(averageUsage.UsedGpu, big.NewInt(2))) > 0 ||
-		usage.UsedMemory.Cmp(big.NewInt(0).Mul(averageUsage.UsedMemory, big.NewInt(2))) > 0 ||
-		usage.UsedStorage.Cmp(big.NewInt(0).Mul(averageUsage.UsedStorage, big.NewInt(2))) > 0 ||
-		usage.UsedUploadBytes.Cmp(big.NewInt(0).Mul(averageUsage.UsedUploadBytes, big.NewInt(2))) > 0 ||
-		usage.UsedDownloadBytes.Cmp(big.NewInt(0).Mul(averageUsage.UsedDownloadBytes, big.NewInt(2))) > 0 {
-		return fmt.Errorf("sudden high resource usage detected for peer ID: %s", usage.PeerId)
-	}
-
-	return nil
-}
-
-func (v *Verifier) verifyRelayer(stream network.Stream) error {
-	remoteAddr := stream.Conn().RemoteMultiaddr()
-
-	if stream.Conn().Stat().Direction == network.DirInbound && isRelayed(remoteAddr) {
-		return fmt.Errorf("peer is coming through a relayer: %s", stream.Conn().RemotePeer().String())
-	}
-	return nil
-}
-
-func isRelayed(addr ma.Multiaddr) bool {
-	return addr != nil && addr.String() == "/p2p-circuit"
-}
-
-func (v *Verifier) calculateAverageUsage(appId *big.Int) (*atypes.ResourceUsage, error) {
-	var totalCpu, totalGpu, totalMemory, totalStorage, totalUpload, totalDownload int64
-	var count int64
-
-	// Get a list of all peer IDs for the given app ID
-	peerIDs := make([]string, 0)
-	for peerID, usage := range v.previousUsages {
-		if usage.AppId.Cmp(appId) == 0 {
-			peerIDs = append(peerIDs, peerID)
+	if usageInfo.SignedUsage != nil {
+		ok := v.sendProtoMessage(s.Conn().RemotePeer(), atypes.ProtocollAppSignatureReceive, &pvtypes.SignatureResponse{
+			SignedUsage: usageInfo.SignedUsage,
+		})
+		if !ok {
+			log.Printf("Failed to send signature response to %s", s.Conn().RemotePeer())
+		} else {
+			log.Printf("Sent signature response to %s", s.Conn().RemotePeer())
 		}
 	}
+}
 
-	// Shuffle the list of peer IDs
-	rand.Shuffle(len(peerIDs), func(i, j int) {
-		peerIDs[i], peerIDs[j] = peerIDs[j], peerIDs[i]
-	})
-
-	// Select a random subset of peer IDs
-	numPeers := len(peerIDs)
-	if numPeers > 30 {
-		numPeers = 30
+func (v *Verifier) onUsageReport(s network.Stream) {
+	msg := &pvtypes.UsageReport{}
+	buf, err := io.ReadAll(s)
+	if err != nil {
+		s.Reset()
+		log.Println(err)
+		return
 	}
-	selectedPeers := peerIDs[:numPeers]
+	s.Close()
 
-	// Calculate the average usage for the selected peers
-	for _, peerID := range selectedPeers {
-		usage := v.previousUsages[peerID]
-		totalCpu += usage.UsedCpu.Int64()
-		totalGpu += usage.UsedGpu.Int64()
-		totalMemory += usage.UsedMemory.Int64()
-		totalStorage += usage.UsedStorage.Int64()
-		totalUpload += usage.UsedUploadBytes.Int64()
-		totalDownload += usage.UsedDownloadBytes.Int64()
-		count++
+	// unmarshal it
+	err = proto.Unmarshal(buf, msg)
+	if err != nil {
+		log.Println(err)
+		return
 	}
 
-	if count == 0 {
-		// Return default average usage if no peers are available
-		return defaultAverageUsage, nil
+	// Validate timestamp
+	currentTime := time.Now().Unix()
+	reportTime := msg.Timestamp
+	if abs(currentTime-reportTime) > 1 {
+		log.Printf("Timestamp validation failed: report time %d is not within 1 second of current time %d", reportTime, currentTime)
+		return
 	}
 
-	averageUsage := &atypes.ResourceUsage{
-		UsedCpu:           big.NewInt(totalCpu / count),
-		UsedGpu:           big.NewInt(totalGpu / count),
-		UsedMemory:        big.NewInt(totalMemory / count),
-		UsedStorage:       big.NewInt(totalStorage / count),
-		UsedUploadBytes:   big.NewInt(totalUpload / count),
-		UsedDownloadBytes: big.NewInt(totalDownload / count),
+	// Check if the previous report time is greater than 25 seconds
+	previousReportTime, err := v.getPreviousTimestampFromDB(msg.AppId, msg.PeerId)
+	if err == nil && previousReportTime < 30 {
+		log.Printf("Previous timestamp validation failed: previous report time %d is less than 25 seconds", previousReportTime)
+		return
 	}
 
-	return averageUsage, nil
-}
-
-func (v *Verifier) updatePreviousUsage(usage *atypes.ResourceUsage) {
-	v.mu.Lock()
-	defer v.mu.Unlock()
-
-	v.previousUsages[usage.PeerId] = usage
-}
-
-func (v *Verifier) incrementFailureCount(peerId string) {
-	v.mu.Lock()
-	defer v.mu.Unlock()
-
-	v.failureCounts[peerId]++
-	if v.failureCounts[peerId] >= maxFailures {
-		v.markAsFraudulent(peerId)
+	// Log usage report to the database
+	err = v.logUsageReportToDB(msg)
+	if err != nil {
+		log.Printf("Failed to log usage report to database: %v", err)
+		return
 	}
+
+	log.Printf("%s: Received usage report from %s. Message: %s", s.Conn().LocalPeer(), s.Conn().RemotePeer(), msg)
+
 }
 
-func (v *Verifier) resetFailureCount(peerId string) {
-	v.mu.Lock()
-	defer v.mu.Unlock()
+func (v *Verifier) periodicCheck() {
+	for {
+		time.Sleep(30 * time.Minute) // Run the check every hour
 
-	v.failureCounts[peerId] = 0
-}
-
-func (v *Verifier) markAsFraudulent(peerId string) {
-	v.fraudulentNodes[peerId] = true
-}
-
-func (v *Verifier) isFraudulentNode(peerId string) bool {
-	v.mu.Lock()
-	defer v.mu.Unlock()
-
-	return v.fraudulentNodes[peerId]
-}
-
-func (s *Verifier) Register() error {
-	// Define the signing logic
-	signHandler := func(stream network.Stream) ([]byte, error) {
-		signRequest, err := atypes.ReceiveSignRequest(stream)
-
+		usagesByAppId, usageReportIds, err := v.queryUsageReports()
 		if err != nil {
-			return []byte{}, fmt.Errorf("failed to receive sign request: %w", err)
+			log.Errorf("Failed to query usage reports: %v", err)
+			continue
 		}
 
-		var signature []byte
-		switch data := signRequest.Data.(type) {
-		case *pbapp.SignatureRequest_Usage:
-			usage := atypes.ProtoToResourceUsage(data.Usage)
-			// Verify the resource usage before signing
-			if err := s.VerifyResourceUsage(context.Background(), usage, stream); err != nil {
-				return []byte{}, fmt.Errorf("failed to verify resource usage: %w", err)
-			}
-
-			signature, err = s.signResourceUsage(usage)
-
-			if err != nil {
-				return []byte{}, fmt.Errorf("failed to sign resource usage: %w", err)
-			}
-			s.updatePreviousUsage(usage)
-			s.resetFailureCount(usage.PeerId)
-
-		default:
-			return []byte{}, fmt.Errorf("unsupported signature request type: %w", err)
+		signedUsages, err := v.processUsageReports(usagesByAppId)
+		if err != nil {
+			log.Errorf("Failed to process usage reports: %v", err)
+			continue
 		}
 
-		return signature, nil
+		err = v.saveAndSendSignedUsages(signedUsages, usageReportIds)
+		if err != nil {
+			log.Errorf("Failed to save and send signed usages: %v", err)
+		}
+	}
+}
+
+func (v *Verifier) queryUsageReports() (map[int64][]*pvtypes.UsageReport, []string, error) {
+	query := query.Query{
+		Prefix: "/usage_reports/",
 	}
 
-	// Create the listener for the signing protocol
-	listener := p2p.NewSignProtocolListener(atypes.PROTOCOL_ID, signHandler)
-
-	// Register the listener in the ListenersP2P
-	err := s.p2p.ListenersP2P.Register(listener)
+	results, err := v.ds.Query(context.Background(), query)
 	if err != nil {
-		return err
+		return nil, nil, fmt.Errorf("failed to query usage info from datastore: %v", err)
 	}
 
-	log.Debugf("Registered signing protocol: %s", atypes.PROTOCOL_ID)
+	usagesByAppId := make(map[int64][]*pvtypes.UsageReport)
+	usageReportIds := make([]string, 0)
+	for result := range results.Next() {
+		if result.Error != nil {
+			return nil, nil, fmt.Errorf("error iterating results: %v", result.Error)
+		}
+
+		usage := &pvtypes.UsageReport{}
+		if err := proto.Unmarshal(result.Entry.Value, usage); err != nil {
+			return nil, nil, fmt.Errorf("failed to unmarshal usage report: %v", err)
+		}
+
+		usageReportIds = append(usageReportIds, result.Entry.Key)
+
+		if len(usagesByAppId[usage.AppId]) == 0 {
+			usagesByAppId[usage.AppId] = make([]*pvtypes.UsageReport, 0)
+		}
+		usagesByAppId[usage.AppId] = append(usagesByAppId[usage.AppId], usage)
+	}
+
+	return usagesByAppId, usageReportIds, nil
+}
+
+func (v *Verifier) processUsageReports(usagesByAppId map[int64][]*pvtypes.UsageReport) ([]*pvtypes.SignedUsage, error) {
+	signedUsages := make([]*pvtypes.SignedUsage, 0)
+	for _, logs := range usagesByAppId {
+		// Khởi tạo detector với ngưỡng 2
+		detector := AnomalyDetector{Logs: logs, Threshold: 2}
+		peerScores := detector.detect()
+
+		usagesByPeer := make(map[string][]*pvtypes.UsageReport)
+		for _, log := range logs {
+			if peerScores[log.PeerId] > 0 {
+				if len(usagesByPeer[log.PeerId]) == 0 {
+					usagesByPeer[log.PeerId] = make([]*pvtypes.UsageReport, 0)
+				}
+				usagesByPeer[log.PeerId] = append(usagesByPeer[log.PeerId], log)
+			}
+		}
+
+		for _, peerLogs := range usagesByPeer {
+			signedUsage := &pvtypes.SignedUsage{}
+			for _, peerlog := range peerLogs {
+				signedUsage.Cpu = peerlog.Cpu
+				signedUsage.Gpu = peerlog.Gpu
+				signedUsage.Memory = peerlog.Memory
+				signedUsage.UploadBytes = peerlog.UploadBytes
+				signedUsage.DownloadBytes = peerlog.DownloadBytes
+				signedUsage.Storage = peerlog.Storage
+				signedUsage.PeerId = peerlog.PeerId
+				signedUsage.AppId = peerlog.AppId
+				signedUsage.Timestamp = peerlog.Timestamp
+				signedUsage.Duration += 30
+			}
+			peerlognum := int64(len(peerLogs))
+			signedUsage.Cpu /= peerlognum
+			signedUsage.Gpu /= peerlognum
+			signedUsage.Memory /= peerlognum
+			signedUsage.UploadBytes /= peerlognum
+			signedUsage.DownloadBytes /= peerlognum
+			signedUsage.Storage /= peerlognum
+			signedUsage.Duration += 30
+			if err := v.signResourceUsage(signedUsage); err != nil {
+				return nil, fmt.Errorf("failed to sign resource usage: %v", err)
+			}
+
+			signedUsages = append(signedUsages, signedUsage)
+		}
+	}
+	return signedUsages, nil
+}
+
+func (v *Verifier) saveAndSendSignedUsages(signedUsages []*pvtypes.SignedUsage, usageReportIds []string) error {
+	b := datastore.NewBasicBatch(v.ds)
+
+	err := v.saveSignedUsages(b, signedUsages)
+	if err != nil {
+		return fmt.Errorf("failed to save signed usages: %v", err)
+	}
+
+	for _, id := range usageReportIds {
+		b.Delete(context.Background(), datastore.NewKey(id))
+	}
+
+	err = b.Commit(context.Background())
+	if err != nil {
+		return fmt.Errorf("failed to commit batch: %v", err)
+	}
+
+	for _, signedUsage := range signedUsages {
+		ok := v.sendProtoMessage(peer.ID(signedUsage.PeerId), atypes.ProtocollAppSignatureReceive, &pvtypes.SignatureResponse{
+			SignedUsage: signedUsage,
+		})
+		if !ok {
+			return fmt.Errorf("failed to send signed usage to peer %s", signedUsage.PeerId)
+		} else {
+			log.Infof("Sent signed usage to peer %s", signedUsage.PeerId)
+		}
+	}
+
 	return nil
 }
 
-func (s *Verifier) signResourceUsage(usage *atypes.ResourceUsage) ([]byte, error) {
+func abs(x int64) int64 {
+	if x < 0 {
+		return -x
+	}
+	return x
+}
+
+func (s *Verifier) signResourceUsage(usage *pvtypes.SignedUsage) error {
 	typedData, err := atypes.ConvertUsageToTypedData(usage, s.acc.GetChainID(), s.acc.AppStoreAddr())
 	if err != nil {
-		return []byte{}, fmt.Errorf("failed to get usage typed data: %v", err)
+		return fmt.Errorf("failed to get usage typed data: %v", err)
 	}
-	return s.acc.SignTypedData(typedData)
+	hash, signature, err := s.acc.SignTypedData(typedData)
+	if err != nil {
+		return fmt.Errorf("failed to sign usage: %v", err)
+	}
+
+	usage.Signature = signature
+	usage.Hash = hash
+
+	return nil
+}
+
+func (v *Verifier) sendProtoMessage(id peer.ID, p protocol.ID, data proto.Message) bool {
+	s, err := v.ps.NewStream(context.Background(), id, p)
+	if err != nil {
+		log.Println(err)
+		return false
+	}
+	defer s.Close()
+
+	writer := ggio.NewFullWriter(s)
+	err = writer.WriteMsg(data)
+	if err != nil {
+		log.Println(err)
+		s.Reset()
+		return false
+	}
+	return true
 }

@@ -17,11 +17,14 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/core/apps/stats"
 	"github.com/unicornultrafoundation/subnet-node/core/contracts"
 	pbapp "github.com/unicornultrafoundation/subnet-node/proto/subnet/app"
+	pvtypes "github.com/unicornultrafoundation/subnet-node/proto/subnet/app/verifier"
 )
 
 var log = logrus.WithField("service", "apps")
 
-const PROTOCOL_ID = protocol.ID("subnet-apps")
+const ProtocolAppVerifierUsageReport = protocol.ID("/x/app/verifier/usagereport/0.0.1")
+const ProtocolAppSignatureRequest = protocol.ID("/x/app/verifier/signreq/0.0.1")
+const ProtocollAppSignatureReceive = protocol.ID("/x/app/verifier/signrev/0.0.1")
 
 // ProcessStatus returns a human readable status for the Process representing its current status
 type ProcessStatus string
@@ -548,19 +551,7 @@ func ReceiveSignRequest(s network.Stream) (*pbapp.SignatureRequest, error) {
 	return response, nil
 }
 
-func ReceiveSignatureResponse(s network.Stream) (*pbapp.SignatureResponse, error) {
-	response := &pbapp.SignatureResponse{}
-
-	err := pbstream.ReadProtoBuffered(s, response)
-	if err != nil {
-		s.Reset()
-		return nil, fmt.Errorf("failed to receive signature response: %v", err)
-	}
-
-	return response, nil
-}
-
-func ConvertUsageToTypedData(usage *ResourceUsage, chainid *big.Int, cAddr string) (*signer.TypedData, error) {
+func ConvertUsageToTypedData(usage *pvtypes.SignedUsage, chainid *big.Int, cAddr string) (*signer.TypedData, error) {
 	var domainType = []signer.Type{
 		{Name: "name", Type: "string"},
 		{Name: "version", Type: "string"},
@@ -598,32 +589,16 @@ func ConvertUsageToTypedData(usage *ResourceUsage, chainid *big.Int, cAddr strin
 			"appId":             usage.AppId,
 			"providerId":        usage.ProviderId,
 			"peerId":            usage.PeerId,
-			"usedCpu":           usage.UsedCpu,
-			"usedGpu":           usage.UsedGpu,
-			"usedMemory":        usage.UsedMemory,
-			"usedStorage":       usage.UsedStorage,
-			"usedUploadBytes":   usage.UsedUploadBytes,
-			"usedDownloadBytes": usage.UsedDownloadBytes,
+			"usedCpu":           usage.Cpu,
+			"usedGpu":           usage.Gpu,
+			"usedMemory":        usage.Memory,
+			"usedStorage":       usage.Storage,
+			"usedUploadBytes":   usage.UploadBytes,
+			"usedDownloadBytes": usage.DownloadBytes,
 			"duration":          usage.Duration,
 			"timestamp":         usage.Timestamp,
 		},
 	}
 
 	return &usageTypedData, nil
-}
-
-func SendSignUsageRequest(s network.Stream, usage *pbapp.ResourceUsage) error {
-	signatureRequest := pbapp.SignatureRequest{
-		Data: &pbapp.SignatureRequest_Usage{
-			Usage: usage,
-		},
-	}
-
-	err := pbstream.WriteProtoBuffered(s, &signatureRequest)
-	if err != nil {
-		s.Reset()
-		return fmt.Errorf("failed to send resource usage sign request: %v", err)
-	}
-
-	return nil
 }

@@ -231,11 +231,11 @@ func (account *AccountService) Sign(hash []byte) ([]byte, error) {
 	return signature, nil
 }
 
-func (account *AccountService) SignTypedData(typedData *signer.TypedData) ([]byte, error) {
+func (account *AccountService) SignTypedData(typedData *signer.TypedData) ([]byte, []byte, error) {
 	typedDataHash, _, err := signer.TypedDataAndHash(*typedData)
 	if err != nil {
-		return []byte{}, fmt.Errorf("failed to hash typed data: %v", err)
+		return []byte{}, []byte{}, fmt.Errorf("failed to hash typed data: %v", err)
 	}
-
-	return account.Sign(typedDataHash)
+	s, e := account.Sign(typedDataHash)
+	return typedDataHash, s, e
 }

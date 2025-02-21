@@ -2,19 +2,22 @@ package apps
 
 import (
 	"context"
-	"fmt"
+	"io"
 	"math/big"
 	"time"
 
 	"github.com/containerd/containerd/namespaces"
+	ggio "github.com/gogo/protobuf/io"
+	"github.com/gogo/protobuf/proto"
+	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
 	atypes "github.com/unicornultrafoundation/subnet-node/core/apps/types"
-	pbapp "github.com/unicornultrafoundation/subnet-node/proto/subnet/app"
+	pvtypes "github.com/unicornultrafoundation/subnet-node/proto/subnet/app/verifier"
 )
 
 func (s *Service) startReportLoop(ctx context.Context) {
-	ticker := time.NewTicker(29 * time.Minute)
+	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
 	for {
@@ -59,15 +62,23 @@ func (s *Service) reportAllRunningContainers(ctx context.Context) {
 		}
 
 		usageEntry, err := s.statService.GetFinalStats(containerId)
-		usage := atypes.ConvertStatEntryToResourceUsage(usageEntry, appId, providerId)
-		usage.PeerId = s.peerId.String()
-		usage.Timestamp = big.NewInt(time.Now().Unix())
 
 		if err != nil {
-			log.Errorf("Failed to get resource usage for container %s: %v", containerId, err)
+			log.Errorf("Failed to get final stats from containerId %s: %v", containerId, err)
 			continue
 		}
-		usageProto := atypes.ConvertUsageToProto(*usage)
+
+		usage := &pvtypes.UsageReport{
+			AppId:       appId.Int64(),
+			ProviderId:  providerId.Int64(),
+			PeerId:      s.peerId.String(),
+			Cpu:         int64(usageEntry.UsedCpu),
+			Gpu:         int64(usageEntry.UsedGpu),
+			Memory:      int64(usageEntry.UsedMemory),
+			Storage:     int64(usageEntry.UsedStorage),
+			UploadBytes: int64(usageEntry.UsedDownloadBytes),
+			Timestamp:   time.Now().Unix(),
+		}
 
 		// Get App owner's PeerID
 		app, err := s.GetApp(ctx, appId)
@@ -75,54 +86,63 @@ func (s *Service) reportAllRunningContainers(ctx context.Context) {
 			log.Errorf("Failed to get app info from appId %s: %v", appId, err)
 			continue
 		}
-		ownerPeerID, err := peer.Decode(app.PeerId)
+		veriferPeerID, err := peer.Decode(app.PeerId)
 		if err != nil {
 			log.Errorf("Failed to decode peerID %s: %v", app.PeerId, err)
 			continue
 		}
 
-		signature, err := s.requestSignature(ctx, ownerPeerID, PROTOCOL_ID, usageProto)
-		if err != nil {
-			log.Errorf("Failed to get signature from peerId %s for container %s: %v", string(app.PeerId), containerId, err)
-			continue
+		ok := s.sendProtoMessage(veriferPeerID, atypes.ProtocolAppVerifierUsageReport, usage)
+		if !ok {
+			log.Errorf("Failed to send usage report for app %d", appId)
 		}
 
 		s.statService.ClearFinalStats(containerId)
-
-		if len(signature) == 0 {
-			log.Errorf("Failed to get signature for container %s. Peers num: %d", containerId, len(s.PeerHost.Network().Peers()))
-			continue
-		}
-		// report
-		txHash, err := s.ReportUsage(ctx, usage, signature)
-		if err != nil {
-			log.Errorf("Failed to report for container %s: %v", containerId, err)
-		} else {
-			log.Infof("Report successfully for container %s, transaction hash: %s", containerId, txHash.Hex())
-
-		}
 	}
 }
 
-func (s *Service) requestSignature(ctx context.Context, peerID peer.ID, protoID protocol.ID, usage *pbapp.ResourceUsage) ([]byte, error) {
-	// Request signature from app owner's peer
-	// Open a stream to the remote peer
-	stream, err := s.PeerHost.NewStream(ctx, peerID, protoID)
+func (s *Service) onSignatureReceive(stream network.Stream) {
+	msg := &pvtypes.SignatureResponse{}
+	buf, err := io.ReadAll(stream)
 	if err != nil {
-		return []byte{}, fmt.Errorf("failed to open stream to peer %s: %w", peerID, err)
+		stream.Reset()
+		log.Println(err)
+		return
+	}
+	stream.Close()
+
+	// unmarshal it
+	err = proto.Unmarshal(buf, msg)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	log.Printf("%s: Received signature response from %s. Message: %s", stream.Conn().LocalPeer(), stream.Conn().RemotePeer(), msg)
+
+	// report
+	txHash, err := s.ReportUsage(context.Background(), msg)
+	if err != nil {
+		log.Errorf("Failed to report for app %d: %v", msg.SignedUsage.AppId, err)
+	} else {
+		log.Infof("Report successfully for app %d, transaction hash: %s", msg.SignedUsage.AppId, txHash.Hex())
+	}
+}
+
+func (s *Service) sendProtoMessage(id peer.ID, p protocol.ID, data proto.Message) bool {
+	stream, err := s.PeerHost.NewStream(context.Background(), id, p)
+	if err != nil {
+		log.Println(err)
+		return false
 	}
 	defer stream.Close()
 
-	// Send the resource usage data
-	if err := atypes.SendSignUsageRequest(stream, usage); err != nil {
-		return []byte{}, fmt.Errorf("failed to send sign resource usage request: %w", err)
-	}
-
-	// Receive the signature response
-	response, err := atypes.ReceiveSignatureResponse(stream)
+	writer := ggio.NewFullWriter(stream)
+	err = writer.WriteMsg(data)
 	if err != nil {
-		return []byte{}, fmt.Errorf("failed to receive signature response: %w", err)
+		log.Println(err)
+		stream.Reset()
+		return false
 	}
-
-	return response.Signature, nil
+	return true
 }

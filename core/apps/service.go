@@ -60,7 +60,7 @@ func New(peerHost p2phost.Host, peerId peer.ID, cfg *config.C, P2P *p2p.P2P, ds 
 		stopChan:       make(chan struct{}),
 		accountService: acc,
 		ethClient:      acc.GetClient(),
-		verifier:       verifier.NewVerifier(ds, P2P, acc),
+		verifier:       verifier.NewVerifier(ds, peerHost, P2P, acc),
 	}
 }
 
@@ -71,6 +71,8 @@ func (s *Service) Start(ctx context.Context) error {
 	}
 
 	if s.IsProvider {
+		s.PeerHost.SetStreamHandler(atypes.ProtocollAppSignatureReceive, s.onSignatureReceive)
+
 		// Connect to containerd daemon
 		var err error
 		s.containerdClient, err = containerd.New("/run/containerd/containerd.sock")
