@@ -2,8 +2,8 @@ package snrepo
 
 import (
 	"errors"
-	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"sync"
@@ -91,7 +91,7 @@ func newSNRepo(rpath string, userConfigFilePath *string) (*SNRepo, error) {
 	c := config.NewC(l)
 	err = c.Load(configPath)
 	if err != nil {
-		fmt.Printf("failed to load config: %s", err)
+		log.Printf("failed to load config: %s", err)
 		os.Exit(1)
 	}
 

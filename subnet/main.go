@@ -31,7 +31,7 @@ func Main(repoPath string, configPath *string) {
 
 func run(repoPath string, configPath *string) error {
 	// let the user know we're going.
-	fmt.Printf("Initializing Subnet Node...\n")
+	log.Printf("Initializing Subnet Node...\n")
 
 	if !snrepo.IsInitialized(repoPath) {
 		_, err := ninit.Init(repoPath, os.Stdout)
@@ -90,7 +90,7 @@ func run(repoPath string, configPath *string) error {
 
 func printLibp2pPorts(node *core.SubnetNode) {
 	if !node.IsOnline {
-		fmt.Println("Swarm not listening, running in offline mode.")
+		log.Println("Swarm not listening, running in offline mode.")
 		return
 	}
 
@@ -138,9 +138,9 @@ func printLibp2pPorts(node *core.SubnetNode) {
 			protocols = append(protocols, protocol)
 		}
 		sort.Strings(protocols)
-		fmt.Printf("Swarm listening on %s (%s)\n", host, strings.Join(protocols, "+"))
+		log.Printf("Swarm listening on %s (%s)\n", host, strings.Join(protocols, "+"))
 	}
-	fmt.Printf("Run 'subnet id' to inspect announced and discovered multiaddrs of this node.\n")
+	log.Printf("Run 'subnet id' to inspect announced and discovered multiaddrs of this node.\n")
 }
 
 func serveHTTPApi(cfg *config.C, node *core.SubnetNode) (<-chan error, error) {
@@ -174,7 +174,7 @@ func serveHTTPApi(cfg *config.C, node *core.SubnetNode) (<-chan error, error) {
 
 	for _, listener := range listeners {
 		// we might have listened to /tcp/0 - let's see what we are listing on
-		fmt.Printf("RPC API server listening on %s\n", listener.Multiaddr())
+		log.Printf("RPC API server listening on %s\n", listener.Multiaddr())
 	}
 
 	opts := []corehttp.ServeOption{

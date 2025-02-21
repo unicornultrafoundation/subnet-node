@@ -3,9 +3,11 @@ package verifier
 import (
 	"context"
 	"fmt"
+	"sort"
 
 	proto "github.com/gogo/protobuf/proto"
 	"github.com/ipfs/go-datastore"
+	"github.com/ipfs/go-datastore/query"
 	pvtypes "github.com/unicornultrafoundation/subnet-node/proto/subnet/app/verifier"
 )
 
@@ -78,19 +80,12 @@ func (v *Verifier) storeUsageInfoToDB(appId int64, peerId string, usageInfo *pvt
 func (v *Verifier) getPreviousTimestampFromDB(appId int64, peerId string) (int64, error) {
 	usageInfo, err := v.getUsageInfoFromDB(appId, peerId)
 	if err != nil {
+		if err == datastore.ErrNotFound {
+			return 0, nil
+		}
 		return 0, err
 	}
 	return usageInfo.PreviousUsageReport.Timestamp, nil
-}
-
-func (v *Verifier) markPeerAsGood(appId int64, peerId string) error {
-	// Mark the peer as good in the datastore
-	key := datastore.NewKey(fmt.Sprintf("/good_peers/%d/%s", appId, peerId))
-	err := v.ds.Put(context.Background(), key, []byte("true"))
-	if err != nil {
-		return fmt.Errorf("failed to mark peer as good in datastore: %v", err)
-	}
-	return nil
 }
 
 func (v *Verifier) saveSignedUsages(w datastore.Write, signedUsage []*pvtypes.SignedUsage) error {
@@ -110,4 +105,40 @@ func (v *Verifier) saveSignedUsages(w datastore.Write, signedUsage []*pvtypes.Si
 
 	}
 	return nil
+}
+
+func (v *Verifier) getSignedUsages(appId int64, peerId string, limit int) ([]*pvtypes.SignedUsage, error) {
+	query := query.Query{
+		Prefix: fmt.Sprintf("/signed_usage/%d/%s", appId, peerId),
+		Orders: []query.Order{query.OrderByKeyDescending{}},
+		Limit:  limit,
+	}
+
+	results, err := v.ds.Query(context.Background(), query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query signed usages from datastore: %v", err)
+	}
+	defer results.Close()
+
+	signedUsages := make([]*pvtypes.SignedUsage, 0)
+	for result := range results.Next() {
+		if result.Error != nil {
+			return nil, fmt.Errorf("error iterating results: %v", result.Error)
+		}
+
+		signedUsage := &pvtypes.SignedUsage{}
+		err = proto.Unmarshal(result.Entry.Value, signedUsage)
+		if err != nil {
+			return nil, fmt.Errorf("failed to unmarshal signed usage: %v", err)
+		}
+
+		signedUsages = append(signedUsages, signedUsage)
+	}
+
+	// Sort the signed usages by timestamp
+	sort.Slice(signedUsages, func(i, j int) bool {
+		return signedUsages[i].Timestamp < signedUsages[j].Timestamp
+	})
+
+	return signedUsages, nil
 }

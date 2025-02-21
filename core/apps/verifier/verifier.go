@@ -8,6 +8,7 @@ import (
 
 	ggio "github.com/gogo/protobuf/io"
 	proto "github.com/gogo/protobuf/proto"
+	lru "github.com/hashicorp/golang-lru"
 	"github.com/ipfs/go-datastore"
 	"github.com/ipfs/go-datastore/query"
 	p2phost "github.com/libp2p/go-libp2p/core/host"
@@ -31,10 +32,12 @@ type Verifier struct {
 	fraudulentNodes map[string]bool
 	failureCounts   map[string]int
 	ps              p2phost.Host // the network host (server+client)
+	previousTimes   *lru.Cache
 }
 
 // NewVerifier creates a new instance of Verifier
 func NewVerifier(ds datastore.Datastore, ps p2phost.Host, P2P *p2p.P2P, acc *account.AccountService) *Verifier {
+	cache, _ := lru.New(128)
 	v := &Verifier{
 		ds:              ds,
 		p2p:             P2P,
@@ -42,6 +45,7 @@ func NewVerifier(ds datastore.Datastore, ps p2phost.Host, P2P *p2p.P2P, acc *acc
 		ps:              ps,
 		fraudulentNodes: make(map[string]bool),
 		failureCounts:   make(map[string]int),
+		previousTimes:   cache,
 	}
 	go v.periodicCheck()
 	return v
@@ -72,21 +76,23 @@ func (v *Verifier) onSignatureRequest(s network.Stream) {
 
 	log.Printf("%s: Received signature request from %s. Message: %s", s.Conn().LocalPeer(), s.Conn().RemotePeer(), msg)
 
-	usageInfo, err := v.getUsageInfoFromDB(msg.AppId, string(s.Conn().RemotePeer()))
+	usages, err := v.getSignedUsages(msg.AppId, string(s.Conn().RemotePeer()), 30)
 
 	if err != nil {
 		log.Printf("Failed to get usage info from database: %v", err)
 		return
 	}
 
-	if usageInfo.SignedUsage != nil {
-		ok := v.sendProtoMessage(s.Conn().RemotePeer(), atypes.ProtocollAppSignatureReceive, &pvtypes.SignatureResponse{
-			SignedUsage: usageInfo.SignedUsage,
-		})
-		if !ok {
-			log.Printf("Failed to send signature response to %s", s.Conn().RemotePeer())
-		} else {
-			log.Printf("Sent signature response to %s", s.Conn().RemotePeer())
+	if len(usages) > 0 {
+		for _, usage := range usages {
+			ok := v.sendProtoMessage(s.Conn().RemotePeer(), atypes.ProtocollAppSignatureReceive, &pvtypes.SignatureResponse{
+				SignedUsage: usage,
+			})
+			if !ok {
+				log.Printf("Failed to send signature response to %s", s.Conn().RemotePeer())
+			} else {
+				log.Printf("Sent signature response to %s", s.Conn().RemotePeer())
+			}
 		}
 	}
 }
@@ -116,9 +122,25 @@ func (v *Verifier) onUsageReport(s network.Stream) {
 		return
 	}
 
+	// Check if the remote peer matches the usage report peer
+	if s.Conn().RemotePeer().String() != msg.PeerId {
+		log.Printf("Peer ID mismatch: remote peer %s does not match usage report peer %s", s.Conn().RemotePeer(), msg.PeerId)
+		return
+	}
+
 	// Check if the previous report time is greater than 25 seconds
-	previousReportTime, err := v.getPreviousTimestampFromDB(msg.AppId, msg.PeerId)
-	if err == nil && previousReportTime < 30 {
+	cacheKey := fmt.Sprintf("%d-%s", msg.AppId, msg.PeerId)
+	previousReportTime, ok := v.previousTimes.Get(cacheKey)
+	if !ok {
+		previousReportTime, err = v.getPreviousTimestampFromDB(msg.AppId, msg.PeerId)
+		if err != nil {
+			log.Printf("Failed to get previous timestamp from database: %v", err)
+			return
+		}
+		v.previousTimes.Add(cacheKey, previousReportTime)
+	}
+
+	if time.Since(time.Unix(previousReportTime.(int64), 0)).Seconds() < 30 {
 		log.Printf("Previous timestamp validation failed: previous report time %d is less than 25 seconds", previousReportTime)
 		return
 	}
@@ -130,13 +152,15 @@ func (v *Verifier) onUsageReport(s network.Stream) {
 		return
 	}
 
-	log.Printf("%s: Received usage report from %s. Message: %s", s.Conn().LocalPeer(), s.Conn().RemotePeer(), msg)
+	// Update the cached previous report time
+	v.previousTimes.Add(cacheKey, msg.Timestamp)
 
+	log.Printf("%s: Received usage report from %s. Message: %s", s.Conn().LocalPeer(), s.Conn().RemotePeer(), msg)
 }
 
 func (v *Verifier) periodicCheck() {
 	for {
-		time.Sleep(30 * time.Minute) // Run the check every hour
+		time.Sleep(1 * time.Minute) // Run the check every hour
 
 		usagesByAppId, usageReportIds, err := v.queryUsageReports()
 		if err != nil {
@@ -186,14 +210,14 @@ func (v *Verifier) queryUsageReports() (map[int64][]*pvtypes.UsageReport, []stri
 		}
 		usagesByAppId[usage.AppId] = append(usagesByAppId[usage.AppId], usage)
 	}
-
+	log.Printf("Usage reports: %+v\n", usagesByAppId)
 	return usagesByAppId, usageReportIds, nil
 }
 
 func (v *Verifier) processUsageReports(usagesByAppId map[int64][]*pvtypes.UsageReport) ([]*pvtypes.SignedUsage, error) {
 	signedUsages := make([]*pvtypes.SignedUsage, 0)
 	for _, logs := range usagesByAppId {
-		// Khởi tạo detector với ngưỡng 2
+		// Initialize detector with threshold 2
 		detector := AnomalyDetector{Logs: logs, Threshold: 2}
 		peerScores := detector.detect()
 
@@ -206,19 +230,18 @@ func (v *Verifier) processUsageReports(usagesByAppId map[int64][]*pvtypes.UsageR
 				usagesByPeer[log.PeerId] = append(usagesByPeer[log.PeerId], log)
 			}
 		}
-
 		for _, peerLogs := range usagesByPeer {
 			signedUsage := &pvtypes.SignedUsage{}
 			for _, peerlog := range peerLogs {
-				signedUsage.Cpu = peerlog.Cpu
-				signedUsage.Gpu = peerlog.Gpu
-				signedUsage.Memory = peerlog.Memory
-				signedUsage.UploadBytes = peerlog.UploadBytes
-				signedUsage.DownloadBytes = peerlog.DownloadBytes
-				signedUsage.Storage = peerlog.Storage
+				signedUsage.Cpu += peerlog.Cpu
+				signedUsage.Gpu += peerlog.Gpu
+				signedUsage.Memory = +peerlog.Memory
+				signedUsage.UploadBytes = +peerlog.UploadBytes
+				signedUsage.DownloadBytes = +peerlog.DownloadBytes
+				signedUsage.Storage = +peerlog.Storage
 				signedUsage.PeerId = peerlog.PeerId
 				signedUsage.AppId = peerlog.AppId
-				signedUsage.Timestamp = peerlog.Timestamp
+				signedUsage.ProviderId = peerlog.ProviderId
 				signedUsage.Duration += 30
 			}
 			peerlognum := int64(len(peerLogs))
@@ -228,7 +251,7 @@ func (v *Verifier) processUsageReports(usagesByAppId map[int64][]*pvtypes.UsageR
 			signedUsage.UploadBytes /= peerlognum
 			signedUsage.DownloadBytes /= peerlognum
 			signedUsage.Storage /= peerlognum
-			signedUsage.Duration += 30
+			signedUsage.Timestamp = time.Now().Unix()
 			if err := v.signResourceUsage(signedUsage); err != nil {
 				return nil, fmt.Errorf("failed to sign resource usage: %v", err)
 			}
@@ -257,11 +280,17 @@ func (v *Verifier) saveAndSendSignedUsages(signedUsages []*pvtypes.SignedUsage, 
 	}
 
 	for _, signedUsage := range signedUsages {
-		ok := v.sendProtoMessage(peer.ID(signedUsage.PeerId), atypes.ProtocollAppSignatureReceive, &pvtypes.SignatureResponse{
+		peerID, err := peer.Decode(signedUsage.PeerId)
+		if err != nil {
+			log.Errorf("Failed to decode peerID %s: %v", peerID, err)
+			continue
+		}
+
+		ok := v.sendProtoMessage(peerID, atypes.ProtocollAppSignatureReceive, &pvtypes.SignatureResponse{
 			SignedUsage: signedUsage,
 		})
 		if !ok {
-			return fmt.Errorf("failed to send signed usage to peer %s", signedUsage.PeerId)
+			log.Errorf("failed to send signed usage to peer %s", signedUsage.PeerId)
 		} else {
 			log.Infof("Sent signed usage to peer %s", signedUsage.PeerId)
 		}
@@ -278,6 +307,7 @@ func abs(x int64) int64 {
 }
 
 func (s *Verifier) signResourceUsage(usage *pvtypes.SignedUsage) error {
+	log.Printf("Signing usage: %+v\n", usage)
 	typedData, err := atypes.ConvertUsageToTypedData(usage, s.acc.GetChainID(), s.acc.AppStoreAddr())
 	if err != nil {
 		return fmt.Errorf("failed to get usage typed data: %v", err)

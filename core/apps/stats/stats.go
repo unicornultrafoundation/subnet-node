@@ -3,6 +3,7 @@ package stats
 import (
 	"context"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -349,7 +350,7 @@ func (s *Stats) updateAllRunningContainersStats() {
 	// Fetch all running containers
 	containers, err := s.containerdClient.Containers(ctx)
 	if err != nil {
-		fmt.Printf("failed to fetch running containers: %v\n", err)
+		log.Printf("failed to fetch running containers: %v\n", err)
 		return
 	}
 
@@ -357,7 +358,7 @@ func (s *Stats) updateAllRunningContainersStats() {
 	for _, container := range containers {
 		containerId := container.ID()
 		if err := s.updateStats(ctx, containerId); err != nil {
-			fmt.Printf("failed to update stats for container %s: %v\n", containerId, err)
+			log.Printf("failed to update stats for container %s: %v\n", containerId, err)
 		}
 	}
 }

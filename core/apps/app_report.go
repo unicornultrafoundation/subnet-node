@@ -69,15 +69,16 @@ func (s *Service) reportAllRunningContainers(ctx context.Context) {
 		}
 
 		usage := &pvtypes.UsageReport{
-			AppId:       appId.Int64(),
-			ProviderId:  providerId.Int64(),
-			PeerId:      s.peerId.String(),
-			Cpu:         int64(usageEntry.UsedCpu),
-			Gpu:         int64(usageEntry.UsedGpu),
-			Memory:      int64(usageEntry.UsedMemory),
-			Storage:     int64(usageEntry.UsedStorage),
-			UploadBytes: int64(usageEntry.UsedDownloadBytes),
-			Timestamp:   time.Now().Unix(),
+			AppId:         appId.Int64(),
+			ProviderId:    providerId.Int64(),
+			PeerId:        s.peerId.String(),
+			Cpu:           int64(usageEntry.UsedCpu),
+			Gpu:           int64(usageEntry.UsedGpu),
+			Memory:        int64(usageEntry.UsedMemory),
+			Storage:       int64(usageEntry.UsedStorage),
+			UploadBytes:   int64(usageEntry.UsedUploadBytes),
+			DownloadBytes: int64(usageEntry.UsedDownloadBytes),
+			Timestamp:     time.Now().Unix(),
 		}
 
 		// Get App owner's PeerID

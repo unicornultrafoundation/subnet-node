@@ -3,6 +3,7 @@ package container
 import (
 	"context"
 	"fmt"
+	"log"
 	"os/exec"
 	"strings"
 	"syscall"
@@ -83,7 +84,7 @@ func (cm *ContainerManager) StartContainer(ctx context.Context, container contai
 		return nil, fmt.Errorf("failed to setup network: %w", err)
 	}
 
-	fmt.Printf("Container %s started successfully\n", container.ID())
+	log.Printf("Container %s started successfully\n", container.ID())
 	return task, nil
 }
 
