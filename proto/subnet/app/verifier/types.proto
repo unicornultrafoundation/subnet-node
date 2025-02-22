@@ -52,10 +52,13 @@ message UsageInfo {
 	SignedUsage signedUsage = 2;
 }
 
-message PoWChallenge {
-	string challenge = 1;
+message PowRequest {
+  string id = 1;
+  int64 difficulty = 2;
 }
 
-message PoWResponse {
-	string response = 1;
+message PowResponse {
+  string id = 1;
+  string hash = 2;
+  int64 nonce = 3;
 }

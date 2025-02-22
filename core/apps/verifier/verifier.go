@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"sync"
 	"time"
 
 	ggio "github.com/gogo/protobuf/io"
@@ -33,6 +34,7 @@ type Verifier struct {
 	failureCounts   map[string]int
 	ps              p2phost.Host // the network host (server+client)
 	previousTimes   *lru.Cache
+	pow             *Pow
 }
 
 // NewVerifier creates a new instance of Verifier
@@ -46,6 +48,7 @@ func NewVerifier(ds datastore.Datastore, ps p2phost.Host, P2P *p2p.P2P, acc *acc
 		fraudulentNodes: make(map[string]bool),
 		failureCounts:   make(map[string]int),
 		previousTimes:   cache,
+		pow:             NewPow(NodeVerifier, ps, P2P),
 	}
 	go v.periodicCheck()
 	return v
@@ -162,11 +165,14 @@ func (v *Verifier) periodicCheck() {
 	for {
 		time.Sleep(1 * time.Minute) // Run the check every hour
 
-		usagesByAppId, usageReportIds, err := v.queryUsageReports()
+		usagesByAppId, usageReportIds, uniquePeerIds, err := v.queryUsageReports()
 		if err != nil {
 			log.Errorf("Failed to query usage reports: %v", err)
 			continue
 		}
+
+		v.pow.RequestPoWFromPeers(uniquePeerIds, 10)
+		time.Sleep(1 * time.Minute)
 
 		signedUsages, err := v.processUsageReports(usagesByAppId)
 		if err != nil {
@@ -174,36 +180,42 @@ func (v *Verifier) periodicCheck() {
 			continue
 		}
 
-		err = v.saveAndSendSignedUsages(signedUsages, usageReportIds)
+		v.pow.Clear()
+
+		err = v.saveAndSendSignedUsages(signedUsages, usageReportIds, 10)
 		if err != nil {
 			log.Errorf("Failed to save and send signed usages: %v", err)
 		}
+
+		log.Printf("Unique peer IDs: %v", uniquePeerIds)
 	}
 }
 
-func (v *Verifier) queryUsageReports() (map[int64][]*pvtypes.UsageReport, []string, error) {
+func (v *Verifier) queryUsageReports() (map[int64][]*pvtypes.UsageReport, []string, []peer.ID, error) {
 	query := query.Query{
 		Prefix: "/usage_reports/",
 	}
 
 	results, err := v.ds.Query(context.Background(), query)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to query usage info from datastore: %v", err)
+		return nil, nil, nil, fmt.Errorf("failed to query usage info from datastore: %v", err)
 	}
 
 	usagesByAppId := make(map[int64][]*pvtypes.UsageReport)
 	usageReportIds := make([]string, 0)
+	uniquePeerIds := make(map[string]struct{})
 	for result := range results.Next() {
 		if result.Error != nil {
-			return nil, nil, fmt.Errorf("error iterating results: %v", result.Error)
+			return nil, nil, nil, fmt.Errorf("error iterating results: %v", result.Error)
 		}
 
 		usage := &pvtypes.UsageReport{}
 		if err := proto.Unmarshal(result.Entry.Value, usage); err != nil {
-			return nil, nil, fmt.Errorf("failed to unmarshal usage report: %v", err)
+			return nil, nil, nil, fmt.Errorf("failed to unmarshal usage report: %v", err)
 		}
 
 		usageReportIds = append(usageReportIds, result.Entry.Key)
+		uniquePeerIds[usage.PeerId] = struct{}{}
 
 		if len(usagesByAppId[usage.AppId]) == 0 {
 			usagesByAppId[usage.AppId] = make([]*pvtypes.UsageReport, 0)
@@ -211,18 +223,33 @@ func (v *Verifier) queryUsageReports() (map[int64][]*pvtypes.UsageReport, []stri
 		usagesByAppId[usage.AppId] = append(usagesByAppId[usage.AppId], usage)
 	}
 	log.Printf("Usage reports: %+v\n", usagesByAppId)
-	return usagesByAppId, usageReportIds, nil
+
+	peerIds := make([]peer.ID, 0, len(uniquePeerIds))
+	for peerId := range uniquePeerIds {
+		parsedPeerId, _ := peer.Decode(peerId)
+		peerIds = append(peerIds, parsedPeerId)
+	}
+
+	return usagesByAppId, usageReportIds, peerIds, nil
 }
 
 func (v *Verifier) processUsageReports(usagesByAppId map[int64][]*pvtypes.UsageReport) ([]*pvtypes.SignedUsage, error) {
 	signedUsages := make([]*pvtypes.SignedUsage, 0)
 	for _, logs := range usagesByAppId {
+		// Filter logs by qualified peers
+		filteredLogs := make([]*pvtypes.UsageReport, 0)
+		for _, log := range logs {
+			if v.pow.IsPeerQualified(log.PeerId) {
+				filteredLogs = append(filteredLogs, log)
+			}
+		}
+
 		// Initialize detector with threshold 2
-		detector := AnomalyDetector{Logs: logs, Threshold: 2}
+		detector := AnomalyDetector{Logs: filteredLogs, Threshold: 2}
 		peerScores := detector.detect()
 
 		usagesByPeer := make(map[string][]*pvtypes.UsageReport)
-		for _, log := range logs {
+		for _, log := range filteredLogs {
 			if peerScores[log.PeerId] > 0 {
 				if len(usagesByPeer[log.PeerId]) == 0 {
 					usagesByPeer[log.PeerId] = make([]*pvtypes.UsageReport, 0)
@@ -262,7 +289,7 @@ func (v *Verifier) processUsageReports(usagesByAppId map[int64][]*pvtypes.UsageR
 	return signedUsages, nil
 }
 
-func (v *Verifier) saveAndSendSignedUsages(signedUsages []*pvtypes.SignedUsage, usageReportIds []string) error {
+func (v *Verifier) saveAndSendSignedUsages(signedUsages []*pvtypes.SignedUsage, usageReportIds []string, workerCount int) error {
 	b := datastore.NewBasicBatch(v.ds)
 
 	err := v.saveSignedUsages(b, signedUsages)
@@ -279,23 +306,42 @@ func (v *Verifier) saveAndSendSignedUsages(signedUsages []*pvtypes.SignedUsage, 
 		return fmt.Errorf("failed to commit batch: %v", err)
 	}
 
-	for _, signedUsage := range signedUsages {
-		peerID, err := peer.Decode(signedUsage.PeerId)
-		if err != nil {
-			log.Errorf("Failed to decode peerID %s: %v", peerID, err)
-			continue
-		}
+	return v.sendSignedUsages(signedUsages, workerCount)
+}
 
-		ok := v.sendProtoMessage(peerID, atypes.ProtocollAppSignatureReceive, &pvtypes.SignatureResponse{
-			SignedUsage: signedUsage,
-		})
-		if !ok {
-			log.Errorf("failed to send signed usage to peer %s", signedUsage.PeerId)
-		} else {
-			log.Infof("Sent signed usage to peer %s", signedUsage.PeerId)
-		}
+func (v *Verifier) sendSignedUsages(signedUsages []*pvtypes.SignedUsage, workerCount int) error {
+	var wg sync.WaitGroup
+	jobs := make(chan *pvtypes.SignedUsage, len(signedUsages))
+
+	for w := 0; w < workerCount; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for signedUsage := range jobs {
+				peerID, err := peer.Decode(signedUsage.PeerId)
+				if err != nil {
+					log.Errorf("Failed to decode peerID %s: %v", peerID, err)
+					continue
+				}
+
+				ok := v.sendProtoMessage(peerID, atypes.ProtocollAppSignatureReceive, &pvtypes.SignatureResponse{
+					SignedUsage: signedUsage,
+				})
+				if !ok {
+					log.Errorf("failed to send signed usage to peer %s", signedUsage.PeerId)
+				} else {
+					log.Infof("Sent signed usage to peer %s", signedUsage.PeerId)
+				}
+			}
+		}()
 	}
 
+	for _, signedUsage := range signedUsages {
+		jobs <- signedUsage
+	}
+	close(jobs)
+
+	wg.Wait()
 	return nil
 }
 
