@@ -112,7 +112,7 @@ func (s *Service) reportAllRunningContainers(ctx context.Context) {
 func (s *Service) onSignatureReceive(stream network.Stream) {
 	peerID := stream.Conn().RemotePeer().String()
 	if !s.pow.IsVerifierPeer(peerID) {
-		log.Printf("Signature response from non-verifier peer %s rejected", peerID)
+		log.Warnf("Signature response from non-verifier peer %s rejected", peerID)
 		stream.Reset()
 		return
 	}
@@ -121,7 +121,7 @@ func (s *Service) onSignatureReceive(stream network.Stream) {
 	buf, err := io.ReadAll(stream)
 	if err != nil {
 		stream.Reset()
-		log.Println(err)
+		log.Error(err)
 		return
 	}
 	stream.Close()
@@ -129,11 +129,11 @@ func (s *Service) onSignatureReceive(stream network.Stream) {
 	// unmarshal it
 	err = proto.Unmarshal(buf, msg)
 	if err != nil {
-		log.Println(err)
+		log.Error(err)
 		return
 	}
 
-	log.Printf("%s: Received signature response from %s. Message: %s", stream.Conn().LocalPeer(), stream.Conn().RemotePeer(), msg)
+	log.Infof("%s: Received signature response from %s. Message: %s", stream.Conn().LocalPeer(), stream.Conn().RemotePeer(), msg)
 
 	// report
 	txHash, err := s.ReportUsage(context.Background(), msg)
@@ -147,7 +147,7 @@ func (s *Service) onSignatureReceive(stream network.Stream) {
 func (s *Service) sendProtoMessage(id peer.ID, p protocol.ID, data proto.Message) bool {
 	stream, err := s.PeerHost.NewStream(context.Background(), id, p)
 	if err != nil {
-		log.Println(err)
+		log.Error(err)
 		return false
 	}
 	defer stream.Close()
@@ -155,7 +155,7 @@ func (s *Service) sendProtoMessage(id peer.ID, p protocol.ID, data proto.Message
 	writer := ggio.NewFullWriter(stream)
 	err = writer.WriteMsg(data)
 	if err != nil {
-		log.Println(err)
+		log.Error(err)
 		stream.Reset()
 		return false
 	}

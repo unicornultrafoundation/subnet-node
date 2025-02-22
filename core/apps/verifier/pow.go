@@ -113,7 +113,7 @@ func (p *Pow) performPoW(data string, difficulty int) (string, int) {
 	close(stopChan)
 	wg.Wait()
 
-	log.Printf("✅ PoW CPU completed! Nonce: %d, Hash: %s, Time: %s\n", result.nonce, result.hash, time.Since(start))
+	log.Infof("✅ PoW CPU completed! Nonce: %d, Hash: %s, Time: %s\n", result.nonce, result.hash, time.Since(start))
 	return result.hash, result.nonce
 }
 
@@ -138,9 +138,9 @@ func (p *Pow) RequestPoW(peerID peer.ID) {
 
 	ok := p.sendProtoMessage(peerID, atypes.ProtocolAppPoWRequest, powRequest)
 	if !ok {
-		log.Printf("Failed to send PoW request to peer %s", peerID)
+		log.Warnf("Failed to send PoW request to peer %s", peerID)
 	} else {
-		log.Printf("Sent PoW request to peer %s", peerID)
+		log.Infof("Sent PoW request to peer %s", peerID)
 	}
 }
 
@@ -171,36 +171,36 @@ func (p *Pow) OnPoWResponse(s network.Stream) {
 	buf, err := io.ReadAll(s)
 	if err != nil {
 		s.Reset()
-		log.Println(err)
+		log.Error(err)
 		return
 	}
 	s.Close()
 
 	err = proto.Unmarshal(buf, msg)
 	if err != nil {
-		log.Println(err)
+		log.Error(err)
 		return
 	}
 
 	peerID := s.Conn().RemotePeer().String()
 	powRequest, exists := p.requests[msg.Id]
 	if !exists {
-		log.Printf("Received unexpected PoW response from %s", peerID)
+		log.Warnf("Received unexpected PoW response from %s", peerID)
 		return
 	}
 	duration := time.Since(powRequest)
 	expectedMaxPoWTime := time.Duration(msg.Nonce/5000)*time.Millisecond + 500*time.Millisecond // Adjust this based on your requirements
-	log.Printf("Received PoW response from %s. Duration: %s, Nonce: %d, Hash: %s, Expected Max Time: %s", peerID, duration, msg.Nonce, msg.Hash, expectedMaxPoWTime)
+	log.Infof("Received PoW response from %s. Duration: %s, Nonce: %d, Hash: %s, Expected Max Time: %s", peerID, duration, msg.Nonce, msg.Hash, expectedMaxPoWTime)
 	// Verify PoW
 	if p.verifyPoW(msg.Id, int(msg.Nonce), msg.Hash, 6) {
 		if duration <= expectedMaxPoWTime {
-			log.Printf("PoW verified successfully for peer %s", peerID)
+			log.Infof("PoW verified successfully for peer %s", peerID)
 			p.qualifiedPeers[peerID] = true
 		} else {
-			log.Printf("PoW verification failed for peer %s: exceeded maximum time", peerID)
+			log.Warnf("PoW verification failed for peer %s: exceeded maximum time", peerID)
 		}
 	} else {
-		log.Printf("PoW verification failed for peer %s", peerID)
+		log.Warnf("PoW verification failed for peer %s", peerID)
 	}
 
 	delete(p.requests, peerID)
@@ -209,7 +209,7 @@ func (p *Pow) OnPoWResponse(s network.Stream) {
 func (p *Pow) OnPoWRequest(s network.Stream) {
 	peerID := s.Conn().RemotePeer().String()
 	if !p.IsVerifierPeer(peerID) {
-		log.Printf("PoW request from non-verifier peer %s rejected", peerID)
+		log.Warnf("PoW request from non-verifier peer %s rejected", peerID)
 		s.Reset()
 		return
 	}
@@ -218,18 +218,18 @@ func (p *Pow) OnPoWRequest(s network.Stream) {
 	buf, err := io.ReadAll(s)
 	if err != nil {
 		s.Reset()
-		log.Println(err)
+		log.Error(err)
 		return
 	}
 	s.Close()
 
 	err = proto.Unmarshal(buf, msg)
 	if err != nil {
-		log.Println(err)
+		log.Error(err)
 		return
 	}
 
-	log.Printf("Received PoW request from %s. Data: %s, Difficulty: %d", s.Conn().RemotePeer(), msg.Id, msg.Difficulty)
+	log.Infof("Received PoW request from %s. Data: %s, Difficulty: %d", s.Conn().RemotePeer(), msg.Id, msg.Difficulty)
 
 	hash, nonce := p.performPoW(msg.Id, int(msg.Difficulty))
 
@@ -241,9 +241,9 @@ func (p *Pow) OnPoWRequest(s network.Stream) {
 
 	ok := p.sendProtoMessage(s.Conn().RemotePeer(), atypes.ProtocolAppPoWResponse, response)
 	if !ok {
-		log.Printf("Failed to send PoW response to peer %s", s.Conn().RemotePeer())
+		log.Warnf("Failed to send PoW response to peer %s", s.Conn().RemotePeer())
 	} else {
-		log.Printf("Sent PoW response to peer %s", s.Conn().RemotePeer())
+		log.Infof("Sent PoW response to peer %s", s.Conn().RemotePeer())
 	}
 }
 
@@ -294,7 +294,7 @@ func (p *Pow) Clear() {
 func (pow *Pow) sendProtoMessage(id peer.ID, p protocol.ID, data proto.Message) bool {
 	s, err := pow.ps.NewStream(context.Background(), id, p)
 	if err != nil {
-		log.Println(err)
+		log.Error(err)
 		return false
 	}
 	defer s.Close()
@@ -302,7 +302,7 @@ func (pow *Pow) sendProtoMessage(id peer.ID, p protocol.ID, data proto.Message) 
 	writer := ggio.NewFullWriter(s)
 	err = writer.WriteMsg(data)
 	if err != nil {
-		log.Println(err)
+		log.Error(err)
 		s.Reset()
 		return false
 	}

@@ -65,7 +65,7 @@ func (v *Verifier) onSignatureRequest(s network.Stream) {
 	buf, err := io.ReadAll(s)
 	if err != nil {
 		s.Reset()
-		log.Println(err)
+		log.Error(err)
 		return
 	}
 	s.Close()
@@ -73,16 +73,16 @@ func (v *Verifier) onSignatureRequest(s network.Stream) {
 	// unmarshal it
 	err = proto.Unmarshal(buf, msg)
 	if err != nil {
-		log.Println(err)
+		log.Error(err)
 		return
 	}
 
-	log.Printf("%s: Received signature request from %s. Message: %s", s.Conn().LocalPeer(), s.Conn().RemotePeer(), msg)
+	log.Infof("%s: Received signature request from %s. Message: %s", s.Conn().LocalPeer(), s.Conn().RemotePeer(), msg)
 
 	usages, err := v.getSignedUsages(msg.AppId, string(s.Conn().RemotePeer()), 30)
 
 	if err != nil {
-		log.Printf("Failed to get usage info from database: %v", err)
+		log.Errorf("Failed to get usage info from database: %v", err)
 		return
 	}
 
@@ -92,9 +92,9 @@ func (v *Verifier) onSignatureRequest(s network.Stream) {
 				SignedUsage: usage,
 			})
 			if !ok {
-				log.Printf("Failed to send signature response to %s", s.Conn().RemotePeer())
+				log.Warnf("Failed to send signature response to %s", s.Conn().RemotePeer())
 			} else {
-				log.Printf("Sent signature response to %s", s.Conn().RemotePeer())
+				log.Infof("Sent signature response to %s", s.Conn().RemotePeer())
 			}
 		}
 	}
@@ -105,7 +105,7 @@ func (v *Verifier) onUsageReport(s network.Stream) {
 	buf, err := io.ReadAll(s)
 	if err != nil {
 		s.Reset()
-		log.Println(err)
+		log.Error(err)
 		return
 	}
 	s.Close()
@@ -113,7 +113,7 @@ func (v *Verifier) onUsageReport(s network.Stream) {
 	// unmarshal it
 	err = proto.Unmarshal(buf, msg)
 	if err != nil {
-		log.Println(err)
+		log.Error(err)
 		return
 	}
 
@@ -121,13 +121,13 @@ func (v *Verifier) onUsageReport(s network.Stream) {
 	currentTime := time.Now().Unix()
 	reportTime := msg.Timestamp
 	if abs(currentTime-reportTime) > 1 {
-		log.Printf("Timestamp validation failed: report time %d is not within 1 second of current time %d", reportTime, currentTime)
+		log.Warnf("Timestamp validation failed: report time %d is not within 1 second of current time %d", reportTime, currentTime)
 		return
 	}
 
 	// Check if the remote peer matches the usage report peer
 	if s.Conn().RemotePeer().String() != msg.PeerId {
-		log.Printf("Peer ID mismatch: remote peer %s does not match usage report peer %s", s.Conn().RemotePeer(), msg.PeerId)
+		log.Warnf("Peer ID mismatch: remote peer %s does not match usage report peer %s", s.Conn().RemotePeer(), msg.PeerId)
 		return
 	}
 
@@ -137,28 +137,28 @@ func (v *Verifier) onUsageReport(s network.Stream) {
 	if !ok {
 		previousReportTime, err = v.getPreviousTimestampFromDB(msg.AppId, msg.PeerId)
 		if err != nil {
-			log.Printf("Failed to get previous timestamp from database: %v", err)
+			log.Errorf("Failed to get previous timestamp from database: %v", err)
 			return
 		}
 		v.previousTimes.Add(cacheKey, previousReportTime)
 	}
 
 	if time.Since(time.Unix(previousReportTime.(int64), 0)).Seconds() < 30 {
-		log.Printf("Previous timestamp validation failed: previous report time %d is less than 25 seconds", previousReportTime)
+		log.Warnf("Previous timestamp validation failed: previous report time %d is less than 25 seconds", previousReportTime)
 		return
 	}
 
 	// Log usage report to the database
 	err = v.logUsageReportToDB(msg)
 	if err != nil {
-		log.Printf("Failed to log usage report to database: %v", err)
+		log.Errorf("Failed to log usage report to database: %v", err)
 		return
 	}
 
 	// Update the cached previous report time
 	v.previousTimes.Add(cacheKey, msg.Timestamp)
 
-	log.Printf("%s: Received usage report from %s. Message: %s", s.Conn().LocalPeer(), s.Conn().RemotePeer(), msg)
+	log.Infof("%s: Received usage report from %s. Message: %s", s.Conn().LocalPeer(), s.Conn().RemotePeer(), msg)
 }
 
 func (v *Verifier) periodicCheck() {
@@ -187,7 +187,7 @@ func (v *Verifier) periodicCheck() {
 			log.Errorf("Failed to save and send signed usages: %v", err)
 		}
 
-		log.Printf("Unique peer IDs: %v", uniquePeerIds)
+		log.Infof("Unique peer IDs: %v", uniquePeerIds)
 	}
 }
 
@@ -222,7 +222,7 @@ func (v *Verifier) queryUsageReports() (map[int64][]*pvtypes.UsageReport, []stri
 		}
 		usagesByAppId[usage.AppId] = append(usagesByAppId[usage.AppId], usage)
 	}
-	log.Printf("Usage reports: %+v\n", usagesByAppId)
+	log.Debugf("Usage reports: %+v\n", usagesByAppId)
 
 	peerIds := make([]peer.ID, 0, len(uniquePeerIds))
 	for peerId := range uniquePeerIds {
@@ -353,7 +353,7 @@ func abs(x int64) int64 {
 }
 
 func (s *Verifier) signResourceUsage(usage *pvtypes.SignedUsage) error {
-	log.Printf("Signing usage: %+v\n", usage)
+	log.Debugf("Signing usage: %+v\n", usage)
 	typedData, err := atypes.ConvertUsageToTypedData(usage, s.acc.GetChainID(), s.acc.AppStoreAddr())
 	if err != nil {
 		return fmt.Errorf("failed to get usage typed data: %v", err)
@@ -372,7 +372,7 @@ func (s *Verifier) signResourceUsage(usage *pvtypes.SignedUsage) error {
 func (v *Verifier) sendProtoMessage(id peer.ID, p protocol.ID, data proto.Message) bool {
 	s, err := v.ps.NewStream(context.Background(), id, p)
 	if err != nil {
-		log.Println(err)
+		log.Error(err)
 		return false
 	}
 	defer s.Close()
@@ -380,7 +380,7 @@ func (v *Verifier) sendProtoMessage(id peer.ID, p protocol.ID, data proto.Messag
 	writer := ggio.NewFullWriter(s)
 	err = writer.WriteMsg(data)
 	if err != nil {
-		log.Println(err)
+		log.Error(err)
 		s.Reset()
 		return false
 	}
