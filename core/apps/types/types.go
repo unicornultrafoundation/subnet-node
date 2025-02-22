@@ -25,6 +25,7 @@ var log = logrus.WithField("service", "apps")
 const ProtocolAppVerifierUsageReport = protocol.ID("/x/app/verifier/usagereport/0.0.1")
 const ProtocolAppSignatureRequest = protocol.ID("/x/app/verifier/signreq/0.0.1")
 const ProtocollAppSignatureReceive = protocol.ID("/x/app/verifier/signrev/0.0.1")
+const ProtocolAppPoWChallenge = protocol.ID("/x/app/verifier/powchallenge/0.0.1")
 
 // ProcessStatus returns a human readable status for the Process representing its current status
 type ProcessStatus string

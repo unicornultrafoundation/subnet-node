@@ -21,7 +21,6 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/core/account"
 	"github.com/unicornultrafoundation/subnet-node/core/apps"
 	"github.com/unicornultrafoundation/subnet-node/core/node/resource"
-	"github.com/unicornultrafoundation/subnet-node/core/node/uptime"
 	"github.com/unicornultrafoundation/subnet-node/p2p"
 	"github.com/unicornultrafoundation/subnet-node/repo"
 	irouting "github.com/unicornultrafoundation/subnet-node/routing"
@@ -46,7 +45,6 @@ type SubnetNode struct {
 	RecordValidator record.Validator
 	Resource        *resource.Service       `optional:"true"`
 	Apps            *apps.Service           `optional:"true"`
-	Uptime          *uptime.UptimeService   `optional:"true"`
 	Account         *account.AccountService `optional:"true"`
 
 	// Online

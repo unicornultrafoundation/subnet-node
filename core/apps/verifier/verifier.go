@@ -2,8 +2,10 @@ package verifier
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"io"
+	"math/big"
 	"time"
 
 	ggio "github.com/gogo/protobuf/io"
@@ -54,6 +56,7 @@ func NewVerifier(ds datastore.Datastore, ps p2phost.Host, P2P *p2p.P2P, acc *acc
 func (v *Verifier) Register() error {
 	v.ps.SetStreamHandler(atypes.ProtocolAppVerifierUsageReport, v.onUsageReport)
 	v.ps.SetStreamHandler(atypes.ProtocolAppSignatureRequest, v.onSignatureRequest)
+	v.ps.SetStreamHandler(atypes.ProtocolAppPoWChallenge, v.onPoWChallenge)
 	return nil
 }
 
@@ -156,6 +159,53 @@ func (v *Verifier) onUsageReport(s network.Stream) {
 	v.previousTimes.Add(cacheKey, msg.Timestamp)
 
 	log.Printf("%s: Received usage report from %s. Message: %s", s.Conn().LocalPeer(), s.Conn().RemotePeer(), msg)
+}
+
+func (v *Verifier) onPoWChallenge(s network.Stream) {
+	msg := &pvtypes.PoWChallenge{}
+	buf, err := io.ReadAll(s)
+	if err != nil {
+		s.Reset()
+		log.Println(err)
+		return
+	}
+	s.Close()
+
+	// unmarshal it
+	err = proto.Unmarshal(buf, msg)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	log.Printf("%s: Received PoW challenge from %s. Message: %s", s.Conn().LocalPeer(), s.Conn().RemotePeer(), msg)
+
+	// Generate a PoW challenge
+	challenge := v.generatePoWChallenge()
+
+	// Send the challenge to the peer
+	ok := v.sendProtoMessage(s.Conn().RemotePeer(), atypes.ProtocolAppPoWChallenge, &pvtypes.PoWChallenge{
+		Challenge: challenge,
+	})
+	if !ok {
+		log.Printf("Failed to send PoW challenge to %s", s.Conn().RemotePeer())
+	} else {
+		log.Printf("Sent PoW challenge to %s", s.Conn().RemotePeer())
+	}
+}
+
+func (v *Verifier) generatePoWChallenge() string {
+	// Generate a random challenge
+	challenge := fmt.Sprintf("%d", time.Now().UnixNano())
+	return challenge
+}
+
+func (v *Verifier) verifyPoWResponse(challenge, response string, difficulty int) bool {
+	// Verify the PoW response
+	hash := sha256.Sum256([]byte(challenge + response))
+	hashInt := new(big.Int).SetBytes(hash[:])
+	target := new(big.Int).Lsh(big.NewInt(1), uint(256-difficulty))
+	return hashInt.Cmp(target) == -1
 }
 
 func (v *Verifier) periodicCheck() {
