@@ -23,7 +23,9 @@ import (
 	pvtypes "github.com/unicornultrafoundation/subnet-node/proto/subnet/app/verifier"
 )
 
-const defaultDifficulty = 6
+const (
+	defaultDifficulty = 6
+)
 
 type NodeType int
 
@@ -39,6 +41,8 @@ type Pow struct {
 	p2p            *p2p.P2P
 	qualifiedPeers map[string]bool
 	nodeType       NodeType
+	verifierPeers  map[string]bool
+	mu             sync.RWMutex
 }
 
 // NewPow creates a new instance of Pow
@@ -49,6 +53,7 @@ func NewPow(nodeType NodeType, ps p2phost.Host, P2P *p2p.P2P) *Pow {
 		p2p:            P2P,
 		qualifiedPeers: make(map[string]bool),
 		nodeType:       nodeType,
+		verifierPeers:  make(map[string]bool),
 	}
 
 	if nodeType == NodeVerifier {
@@ -183,14 +188,17 @@ func (p *Pow) OnPoWResponse(s network.Stream) {
 		log.Printf("Received unexpected PoW response from %s", peerID)
 		return
 	}
-
 	duration := time.Since(powRequest)
-	log.Printf("Received PoW response from %s. Duration: %s, Nonce: %d, Hash: %s", peerID, duration, msg.Nonce, msg.Hash)
-
+	expectedMaxPoWTime := time.Duration(msg.Nonce/5000)*time.Millisecond + 500*time.Millisecond // Adjust this based on your requirements
+	log.Printf("Received PoW response from %s. Duration: %s, Nonce: %d, Hash: %s, Expected Max Time: %s", peerID, duration, msg.Nonce, msg.Hash, expectedMaxPoWTime)
 	// Verify PoW
 	if p.verifyPoW(msg.Id, int(msg.Nonce), msg.Hash, 6) {
-		log.Printf("PoW verified successfully for peer %s", peerID)
-		p.qualifiedPeers[peerID] = true
+		if duration <= expectedMaxPoWTime {
+			log.Printf("PoW verified successfully for peer %s", peerID)
+			p.qualifiedPeers[peerID] = true
+		} else {
+			log.Printf("PoW verification failed for peer %s: exceeded maximum time", peerID)
+		}
 	} else {
 		log.Printf("PoW verification failed for peer %s", peerID)
 	}
@@ -199,6 +207,13 @@ func (p *Pow) OnPoWResponse(s network.Stream) {
 }
 
 func (p *Pow) OnPoWRequest(s network.Stream) {
+	peerID := s.Conn().RemotePeer().String()
+	if !p.IsVerifierPeer(peerID) {
+		log.Printf("PoW request from non-verifier peer %s rejected", peerID)
+		s.Reset()
+		return
+	}
+
 	msg := &pvtypes.PowRequest{}
 	buf, err := io.ReadAll(s)
 	if err != nil {
@@ -230,6 +245,33 @@ func (p *Pow) OnPoWRequest(s network.Stream) {
 	} else {
 		log.Printf("Sent PoW response to peer %s", s.Conn().RemotePeer())
 	}
+}
+
+func (p *Pow) UpdateVerifierPeers(peerIDs []string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.verifierPeers = make(map[string]bool)
+	for _, peerID := range peerIDs {
+		p.verifierPeers[peerID] = true
+	}
+}
+
+func (p *Pow) AddVerifierPeer(peerID string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.verifierPeers[peerID] = true
+}
+
+func (p *Pow) RemoveVerifierPeer(peerID string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	delete(p.verifierPeers, peerID)
+}
+
+func (p *Pow) IsVerifierPeer(peerID string) bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.verifierPeers[peerID]
 }
 
 func (p *Pow) GetQualifiedPeers() []string {

@@ -36,6 +36,7 @@ const RESOURCE_USAGE_KEY = "resource-usage-v2"
 type Service struct {
 	peerId           peer.ID
 	IsProvider       bool
+	IsVerifier       bool
 	cfg              *config.C
 	ethClient        *ethclient.Client
 	containerdClient *containerd.Client
@@ -46,6 +47,7 @@ type Service struct {
 	statService      *stats.Stats
 	Datastore        datastore.Datastore // Datastore for storing resource usage
 	verifier         *verifier.Verifier  // Verifier for resource usage
+	pow              *verifier.Pow       // Proof of Work for resource usage
 }
 
 // Initializes the Service with Ethereum and containerd clients.
@@ -57,6 +59,7 @@ func New(peerHost p2phost.Host, peerId peer.ID, cfg *config.C, P2P *p2p.P2P, ds 
 		cfg:            cfg,
 		Datastore:      ds,
 		IsProvider:     cfg.GetBool("provider.enable", false),
+		IsVerifier:     cfg.GetBool("verifier.enable", false),
 		stopChan:       make(chan struct{}),
 		accountService: acc,
 		ethClient:      acc.GetClient(),
@@ -65,12 +68,15 @@ func New(peerHost p2phost.Host, peerId peer.ID, cfg *config.C, P2P *p2p.P2P, ds 
 }
 
 func (s *Service) Start(ctx context.Context) error {
-	// Register the P2P protocol for signing
-	if err := s.verifier.Register(); err != nil {
-		return fmt.Errorf("failed to register signing protocol: %w", err)
+	if s.IsVerifier {
+		// Register the P2P protocol for signing
+		if err := s.verifier.Register(); err != nil {
+			return fmt.Errorf("failed to register signing protocol: %w", err)
+		}
 	}
 
 	if s.IsProvider {
+		s.pow = verifier.NewPow(verifier.NodeProvider, s.PeerHost, s.P2P)
 		s.PeerHost.SetStreamHandler(atypes.ProtocollAppSignatureReceive, s.onSignatureReceive)
 
 		// Connect to containerd daemon

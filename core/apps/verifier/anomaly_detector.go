@@ -50,8 +50,8 @@ func (a *AnomalyDetector) computeMeanStd() {
 		peerStats["CPU"] = append(peerStats["CPU"], float64(log.Cpu))
 		peerStats["GPU"] = append(peerStats["GPU"], float64(log.Cpu))
 		peerStats["Memory"] = append(peerStats["Memory"], float64(log.Memory))
-		peerStats["UploadBytes"] = append(peerStats["Network"], float64(log.UploadBytes))
-		peerStats["DownloadBytes"] = append(peerStats["Storage"], float64(log.DownloadBytes))
+		peerStats["UploadBytes"] = append(peerStats["UploadBytes"], float64(log.UploadBytes))
+		peerStats["DownloadBytes"] = append(peerStats["DownloadBytes"], float64(log.DownloadBytes))
 		peerStats["Storage"] = append(peerStats["Storage"], float64(log.Storage))
 	}
 

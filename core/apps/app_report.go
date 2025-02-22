@@ -43,6 +43,8 @@ func (s *Service) reportAllRunningContainers(ctx context.Context) {
 		return
 	}
 
+	verifierPeerIDs := make([]string, 0)
+
 	for _, container := range containers {
 		// Get container ID (assuming appID is same as container ID)
 		containerId := container.ID()
@@ -53,6 +55,20 @@ func (s *Service) reportAllRunningContainers(ctx context.Context) {
 			log.Errorf("Failed to get appId from containerId %s: %v", containerId, err)
 			continue
 		}
+
+		// Get App owner's PeerID
+		app, err := s.GetApp(ctx, appId)
+		if err != nil {
+			log.Errorf("Failed to get app info from appId %s: %v", appId, err)
+			continue
+		}
+		veriferPeerID, err := peer.Decode(app.PeerId)
+		if err != nil {
+			log.Errorf("Failed to decode peerID %s: %v", app.PeerId, err)
+			continue
+		}
+
+		verifierPeerIDs = append(verifierPeerIDs, app.PeerId)
 
 		// Fetch resource usage
 		err = s.statService.FinalizeStats(containerId)
@@ -81,18 +97,6 @@ func (s *Service) reportAllRunningContainers(ctx context.Context) {
 			Timestamp:     time.Now().Unix(),
 		}
 
-		// Get App owner's PeerID
-		app, err := s.GetApp(ctx, appId)
-		if err != nil {
-			log.Errorf("Failed to get app info from appId %s: %v", appId, err)
-			continue
-		}
-		veriferPeerID, err := peer.Decode(app.PeerId)
-		if err != nil {
-			log.Errorf("Failed to decode peerID %s: %v", app.PeerId, err)
-			continue
-		}
-
 		ok := s.sendProtoMessage(veriferPeerID, atypes.ProtocolAppVerifierUsageReport, usage)
 		if !ok {
 			log.Errorf("Failed to send usage report for app %d", appId)
@@ -100,9 +104,19 @@ func (s *Service) reportAllRunningContainers(ctx context.Context) {
 
 		s.statService.ClearFinalStats(containerId)
 	}
+
+	// Update verifier peers in Pow
+	s.pow.UpdateVerifierPeers(verifierPeerIDs)
 }
 
 func (s *Service) onSignatureReceive(stream network.Stream) {
+	peerID := stream.Conn().RemotePeer().String()
+	if !s.pow.IsVerifierPeer(peerID) {
+		log.Printf("Signature response from non-verifier peer %s rejected", peerID)
+		stream.Reset()
+		return
+	}
+
 	msg := &pvtypes.SignatureResponse{}
 	buf, err := io.ReadAll(stream)
 	if err != nil {
