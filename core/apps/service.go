@@ -25,6 +25,7 @@ import (
 	atypes "github.com/unicornultrafoundation/subnet-node/core/apps/types"
 	"github.com/unicornultrafoundation/subnet-node/p2p"
 	pbapp "github.com/unicornultrafoundation/subnet-node/proto/subnet/app"
+	pvtypes "github.com/unicornultrafoundation/subnet-node/proto/subnet/app/verifier"
 )
 
 var log = logrus.WithField("service", "apps")
@@ -34,36 +35,38 @@ const PROTOCOL_ID = protocol.ID("subnet-apps")
 const RESOURCE_USAGE_KEY = "resource-usage-v2"
 
 type Service struct {
-	peerId           peer.ID
-	IsProvider       bool
-	IsVerifier       bool
-	cfg              *config.C
-	ethClient        *ethclient.Client
-	containerdClient *containerd.Client
-	P2P              *p2p.P2P
-	PeerHost         p2phost.Host  `optional:"true"` // the network host (server+client)
-	stopChan         chan struct{} // Channel to stop background tasks
-	accountService   *account.AccountService
-	statService      *stats.Stats
-	Datastore        datastore.Datastore // Datastore for storing resource usage
-	verifier         *verifier.Verifier  // Verifier for resource usage
-	pow              *verifier.Pow       // Proof of Work for resource usage
+	peerId                peer.ID
+	IsProvider            bool
+	IsVerifier            bool
+	cfg                   *config.C
+	ethClient             *ethclient.Client
+	containerdClient      *containerd.Client
+	P2P                   *p2p.P2P
+	PeerHost              p2phost.Host  `optional:"true"` // the network host (server+client)
+	stopChan              chan struct{} // Channel to stop background tasks
+	accountService        *account.AccountService
+	statService           *stats.Stats
+	Datastore             datastore.Datastore // Datastore for storing resource usage
+	verifier              *verifier.Verifier  // Verifier for resource usage
+	pow                   *verifier.Pow       // Proof of Work for resource usage
+	signatureResponseChan chan *pvtypes.SignatureResponse
 }
 
 // Initializes the Service with Ethereum and containerd clients.
 func New(peerHost p2phost.Host, peerId peer.ID, cfg *config.C, P2P *p2p.P2P, ds datastore.Datastore, acc *account.AccountService) *Service {
 	return &Service{
-		peerId:         peerId,
-		PeerHost:       peerHost,
-		P2P:            P2P,
-		cfg:            cfg,
-		Datastore:      ds,
-		IsProvider:     cfg.GetBool("provider.enable", false),
-		IsVerifier:     cfg.GetBool("verifier.enable", false),
-		stopChan:       make(chan struct{}),
-		accountService: acc,
-		ethClient:      acc.GetClient(),
-		verifier:       verifier.NewVerifier(ds, peerHost, P2P, acc),
+		peerId:                peerId,
+		PeerHost:              peerHost,
+		P2P:                   P2P,
+		cfg:                   cfg,
+		Datastore:             ds,
+		IsProvider:            cfg.GetBool("provider.enable", false),
+		IsVerifier:            cfg.GetBool("verifier.enable", false),
+		stopChan:              make(chan struct{}),
+		accountService:        acc,
+		ethClient:             acc.GetClient(),
+		verifier:              verifier.NewVerifier(ds, peerHost, P2P, acc),
+		signatureResponseChan: make(chan *pvtypes.SignatureResponse, 100),
 	}
 }
 
@@ -94,6 +97,7 @@ func (s *Service) Start(ctx context.Context) error {
 		go s.startUpgradeAppVersion(ctx)
 		go s.statService.Start()
 		go s.startReportLoop(ctx)
+		go s.handleSignatureResponses(ctx)
 	}
 
 	log.Info("Subnet Apps Service started successfully.")
@@ -116,6 +120,8 @@ func (s *Service) Stop(ctx context.Context) error {
 
 	// Close sub-services
 	s.statService.Stop()
+
+	close(s.signatureResponseChan)
 
 	log.Info("Subnet Apps Service stopped successfully.")
 	return nil

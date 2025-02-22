@@ -136,12 +136,27 @@ func (s *Service) onSignatureReceive(stream network.Stream) {
 
 	log.Infof("%s: Received signature response from %s. Message: %s", stream.Conn().LocalPeer(), stream.Conn().RemotePeer(), msg)
 
-	// report
-	txHash, err := s.ReportUsage(context.Background(), msg)
-	if err != nil {
-		log.Errorf("Failed to report for app %d: %v", msg.SignedUsage.AppId, err)
-	} else {
-		log.Infof("Report successfully for app %d, transaction hash: %s", msg.SignedUsage.AppId, txHash.Hex())
+	// Send the message to the channel for sequential processing
+	s.signatureResponseChan <- msg
+}
+
+func (s *Service) handleSignatureResponses(ctx context.Context) {
+	for {
+		select {
+		case msg := <-s.signatureResponseChan:
+			txHash, err := s.ReportUsage(ctx, msg)
+			if err != nil {
+				log.Errorf("Failed to report for app %d: %v", msg.SignedUsage.AppId, err)
+			} else {
+				log.Infof("Report successfully for app %d, transaction hash: %s", msg.SignedUsage.AppId, txHash.Hex())
+			}
+		case <-ctx.Done():
+			log.Infof("Context canceled, stopping handleSignatureResponses")
+			return
+		case <-s.stopChan:
+			log.Infof("Stopping handleSignatureResponses")
+			return
+		}
 	}
 }
 

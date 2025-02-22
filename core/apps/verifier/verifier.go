@@ -271,7 +271,7 @@ func (v *Verifier) processUsageReports(usagesByAppId map[int64][]*pvtypes.UsageR
 				signedUsage.PeerId = peerlog.PeerId
 				signedUsage.AppId = peerlog.AppId
 				signedUsage.ProviderId = peerlog.ProviderId
-				signedUsage.Duration += 30
+				signedUsage.Duration += int64(ReportTimeThreshold.Seconds())
 			}
 			peerlognum := int64(len(peerLogs))
 			signedUsage.Cpu /= peerlognum
