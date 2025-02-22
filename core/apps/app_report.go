@@ -13,11 +13,12 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
 	atypes "github.com/unicornultrafoundation/subnet-node/core/apps/types"
+	"github.com/unicornultrafoundation/subnet-node/core/apps/verifier"
 	pvtypes "github.com/unicornultrafoundation/subnet-node/proto/subnet/app/verifier"
 )
 
 func (s *Service) startReportLoop(ctx context.Context) {
-	ticker := time.NewTicker(30 * time.Second)
+	ticker := time.NewTicker(verifier.ReportTimeThreshold)
 	defer ticker.Stop()
 
 	for {

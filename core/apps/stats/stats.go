@@ -324,7 +324,7 @@ func (s *Stats) GetAllFinalStats() (map[string]*StatEntry, error) {
 // Start starts the stats service and periodically updates stats for all running containers.
 func (s *Stats) Start() {
 	go func() {
-		ticker := time.NewTicker(30 * time.Second)
+		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
 
 		for {

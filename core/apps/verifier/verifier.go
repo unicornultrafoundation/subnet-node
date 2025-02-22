@@ -25,6 +25,8 @@ import (
 
 var log = logrus.WithField("service", "app-verifier")
 
+const ReportTimeThreshold = 1 * time.Minute
+
 // Verifier is a struct that provides methods to verify resource usage
 type Verifier struct {
 	ds              datastore.Datastore
@@ -143,8 +145,8 @@ func (v *Verifier) onUsageReport(s network.Stream) {
 		v.previousTimes.Add(cacheKey, previousReportTime)
 	}
 
-	if time.Since(time.Unix(previousReportTime.(int64), 0)).Seconds() < 30 {
-		log.Warnf("Previous timestamp validation failed: previous report time %d is less than 25 seconds", previousReportTime)
+	if time.Since(time.Unix(previousReportTime.(int64), 0)) < ReportTimeThreshold {
+		log.Warnf("Previous timestamp validation failed: previous report time %d is less than %s", previousReportTime, ReportTimeThreshold)
 		return
 	}
 
