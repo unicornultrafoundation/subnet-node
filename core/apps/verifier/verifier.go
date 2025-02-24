@@ -237,6 +237,7 @@ func (v *Verifier) queryUsageReports() (map[int64][]*pvtypes.UsageReport, []stri
 
 func (v *Verifier) processUsageReports(usagesByAppId map[int64][]*pvtypes.UsageReport) ([]*pvtypes.SignedUsage, error) {
 	signedUsages := make([]*pvtypes.SignedUsage, 0)
+
 	for _, logs := range usagesByAppId {
 		// Filter logs by qualified peers
 		filteredLogs := make([]*pvtypes.UsageReport, 0)
@@ -259,7 +260,17 @@ func (v *Verifier) processUsageReports(usagesByAppId map[int64][]*pvtypes.UsageR
 				usagesByPeer[log.PeerId] = append(usagesByPeer[log.PeerId], log)
 			}
 		}
-		for _, peerLogs := range usagesByPeer {
+		for peerId, peerLogs := range usagesByPeer {
+			// Check if peerLogs come from different providers
+			providerSet := make(map[int64]struct{})
+			for _, peerlog := range peerLogs {
+				providerSet[peerlog.ProviderId] = struct{}{}
+			}
+			if len(providerSet) > 1 {
+				log.Warnf("Skipping signing for peer %s as logs come from multiple providers", peerId)
+				continue
+			}
+
 			signedUsage := &pvtypes.SignedUsage{}
 			for _, peerlog := range peerLogs {
 				signedUsage.Cpu += peerlog.Cpu
