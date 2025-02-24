@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"runtime"
 	"sync"
 	"time"
 
@@ -25,7 +26,10 @@ import (
 
 var log = logrus.WithField("service", "app-verifier")
 
-const ReportTimeThreshold = 1 * time.Minute
+const (
+	ReportTimeThreshold  = 1 * time.Minute
+	DefaultCheckInterval = 1 * time.Hour // Default check interval is 1 hour
+)
 
 // Verifier is a struct that provides methods to verify resource usage
 type Verifier struct {
@@ -52,7 +56,7 @@ func NewVerifier(ds datastore.Datastore, ps p2phost.Host, P2P *p2p.P2P, acc *acc
 		previousTimes:   cache,
 		pow:             NewPow(NodeVerifier, ps, P2P),
 	}
-	go v.periodicCheck()
+	go v.periodicCheck(DefaultCheckInterval) // Pass the default check interval
 	return v
 }
 
@@ -163,9 +167,9 @@ func (v *Verifier) onUsageReport(s network.Stream) {
 	log.Infof("%s: Received usage report from %s. Message: %s", s.Conn().LocalPeer(), s.Conn().RemotePeer(), msg)
 }
 
-func (v *Verifier) periodicCheck() {
+func (v *Verifier) periodicCheck(interval time.Duration) {
 	for {
-		time.Sleep(1 * time.Minute) // Run the check every hour
+		time.Sleep(interval) // Use the provided interval for the check
 
 		usagesByAppId, usageReportIds, uniquePeerIds, err := v.queryUsageReports()
 		if err != nil {
@@ -184,7 +188,7 @@ func (v *Verifier) periodicCheck() {
 
 		v.pow.Clear()
 
-		err = v.saveAndSendSignedUsages(signedUsages, usageReportIds, 10)
+		err = v.saveAndSendSignedUsages(signedUsages, usageReportIds)
 		if err != nil {
 			log.Errorf("Failed to save and send signed usages: %v", err)
 		}
@@ -291,7 +295,9 @@ func (v *Verifier) processUsageReports(usagesByAppId map[int64][]*pvtypes.UsageR
 	return signedUsages, nil
 }
 
-func (v *Verifier) saveAndSendSignedUsages(signedUsages []*pvtypes.SignedUsage, usageReportIds []string, workerCount int) error {
+func (v *Verifier) saveAndSendSignedUsages(signedUsages []*pvtypes.SignedUsage, usageReportIds []string) error {
+	workerCount := runtime.NumCPU() // Use the number of CPUs available on the machine
+
 	b := datastore.NewBasicBatch(v.ds)
 
 	err := v.saveSignedUsages(b, signedUsages)
