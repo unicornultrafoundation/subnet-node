@@ -57,8 +57,9 @@ type Service struct {
 	signatureResponseChan chan *pvtypes.SignatureResponse
 
 	// Caching fields
-	gitHubAppCache *cache.Cache
-	subnetAppCache *cache.Cache
+	gitHubAppCache  *cache.Cache
+	subnetAppCache  *cache.Cache
+	gitHubAppsCache *cache.Cache
 }
 
 // Initializes the Service with Ethereum and containerd clients.
@@ -78,6 +79,7 @@ func New(peerHost p2phost.Host, peerId peer.ID, cfg *config.C, P2P *p2p.P2P, ds 
 		signatureResponseChan: make(chan *pvtypes.SignatureResponse, 100),
 		gitHubAppCache:        cache.New(1*time.Minute, 2*time.Minute),
 		subnetAppCache:        cache.New(1*time.Minute, 2*time.Minute),
+		gitHubAppsCache:       cache.New(1*time.Minute, 2*time.Minute),
 	}
 }
 
@@ -227,6 +229,10 @@ func (s *Service) SaveContainerConfigProto(ctx context.Context, appId *big.Int, 
 
 // Fetches the list of apps from GitHub with caching.
 func (s *Service) getGitHubApps(url string) ([]GitHubApp, error) {
+	if cachedApps, found := s.gitHubAppsCache.Get(url); found {
+		return cachedApps.([]GitHubApp), nil
+	}
+
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err
@@ -254,6 +260,7 @@ func (s *Service) getGitHubApps(url string) ([]GitHubApp, error) {
 		return nil, err
 	}
 
+	s.gitHubAppsCache.Set(url, gitHubApps, cache.DefaultExpiration)
 	return gitHubApps, nil
 }
 
