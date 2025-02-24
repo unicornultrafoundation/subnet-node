@@ -173,7 +173,6 @@ func decodeAndParseMetadata(encodedMetadata string) (*AppMetadata, error) {
 func ConvertToApp(subnetApp contracts.SubnetAppStoreApp, id *big.Int, status ProcessStatus) *App {
 	metadata, err := decodeAndParseMetadata(subnetApp.Metadata)
 	if err != nil {
-		log.Warnf("Warning: Failed to parse metadata for app %s: %v\n", subnetApp.Name, err)
 		metadata = nil
 	}
 
