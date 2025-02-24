@@ -103,6 +103,7 @@ func (v *Verifier) onSignatureRequest(s network.Stream) {
 }
 
 func (v *Verifier) onUsageReport(s network.Stream) {
+	currentTime := time.Now().Unix()
 	msg := &pvtypes.UsageReport{}
 	buf, err := io.ReadAll(s)
 	if err != nil {
@@ -120,10 +121,9 @@ func (v *Verifier) onUsageReport(s network.Stream) {
 	}
 
 	// Validate timestamp
-	currentTime := time.Now().Unix()
 	reportTime := msg.Timestamp
-	if abs(currentTime-reportTime) > 1 {
-		log.Warnf("Timestamp validation failed: report time %d is not within 1 second of current time %d", reportTime, currentTime)
+	if abs(currentTime-reportTime) > 2 {
+		log.Warnf("Timestamp validation failed: report time %d is not within 2 second of current time %d", reportTime, currentTime)
 		return
 	}
 
@@ -145,7 +145,7 @@ func (v *Verifier) onUsageReport(s network.Stream) {
 		v.previousTimes.Add(cacheKey, previousReportTime)
 	}
 
-	if time.Since(time.Unix(previousReportTime.(int64), 0)) < ReportTimeThreshold {
+	if msg.Timestamp-previousReportTime.(int64) < int64(ReportTimeThreshold.Seconds()) {
 		log.Warnf("Previous timestamp validation failed: previous report time %d is less than %s", previousReportTime, ReportTimeThreshold)
 		return
 	}
