@@ -2,10 +2,15 @@ package apps
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"math/big"
+	"net/http"
+	"time"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/patrickmn/go-cache"
 
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/namespaces"
@@ -50,6 +55,11 @@ type Service struct {
 	verifier              *verifier.Verifier  // Verifier for resource usage
 	pow                   *verifier.Pow       // Proof of Work for resource usage
 	signatureResponseChan chan *pvtypes.SignatureResponse
+
+	// Caching fields
+	gitHubAppCache  *cache.Cache
+	subnetAppCache  *cache.Cache
+	gitHubAppsCache *cache.Cache
 }
 
 // Initializes the Service with Ethereum and containerd clients.
@@ -67,6 +77,9 @@ func New(peerHost p2phost.Host, peerId peer.ID, cfg *config.C, P2P *p2p.P2P, ds 
 		ethClient:             acc.GetClient(),
 		verifier:              verifier.NewVerifier(ds, peerHost, P2P, acc),
 		signatureResponseChan: make(chan *pvtypes.SignatureResponse, 100),
+		gitHubAppCache:        cache.New(1*time.Minute, 2*time.Minute),
+		subnetAppCache:        cache.New(1*time.Minute, 2*time.Minute),
+		gitHubAppsCache:       cache.New(1*time.Minute, 2*time.Minute),
 	}
 }
 
@@ -212,4 +225,78 @@ func (s *Service) SaveContainerConfigProto(ctx context.Context, appId *big.Int, 
 	}
 
 	return nil
+}
+
+// Fetches the list of apps from GitHub with caching.
+func (s *Service) getGitHubApps(url string) ([]GitHubApp, error) {
+	if cachedApps, found := s.gitHubAppsCache.Get(url); found {
+		return cachedApps.([]GitHubApp), nil
+	}
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to fetch GitHub apps: %s", resp.Status)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var gitHubApps []GitHubApp
+	if err := json.Unmarshal(body, &gitHubApps); err != nil {
+		return nil, err
+	}
+
+	s.gitHubAppsCache.Set(url, gitHubApps, cache.DefaultExpiration)
+	return gitHubApps, nil
+}
+
+// Fetches a GitHub app by its ID with caching.
+func (s *Service) getGitHubAppByID(id int64) (*GitHubApp, error) {
+	if cachedApp, found := s.gitHubAppCache.Get(fmt.Sprintf("%d", id)); found {
+		return cachedApp.(*GitHubApp), nil
+	}
+
+	gitHubApps, err := s.getGitHubApps(gitHubAppsURL)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, app := range gitHubApps {
+		if app.ID == id {
+			s.gitHubAppCache.Set(fmt.Sprintf("%d", id), &app, cache.DefaultExpiration)
+			return &app, nil
+		}
+	}
+
+	return nil, fmt.Errorf("GitHub app with ID %d not found", id)
+}
+
+// Fetches a subnet app by its ID with caching.
+func (s *Service) getSubnetAppByID(_ context.Context, appId *big.Int) (*atypes.App, error) {
+	if cachedApp, found := s.subnetAppCache.Get(appId.String()); found {
+		return cachedApp.(*atypes.App), nil
+	}
+
+	subnetApp, err := s.accountService.AppStore().GetApp(nil, appId)
+	if err != nil {
+		return nil, err
+	}
+
+	app := atypes.ConvertToApp(subnetApp, appId, atypes.Unknown)
+	s.subnetAppCache.Set(appId.String(), app, cache.DefaultExpiration)
+	return app, nil
 }

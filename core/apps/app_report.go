@@ -63,13 +63,18 @@ func (s *Service) reportAllRunningContainers(ctx context.Context) {
 			log.Errorf("Failed to get app info from appId %s: %v", appId, err)
 			continue
 		}
-		veriferPeerID, err := peer.Decode(app.PeerId)
-		if err != nil {
-			log.Errorf("Failed to decode peerID %s: %v", app.PeerId, err)
+
+		if len(app.PeerIds) == 0 {
 			continue
 		}
 
-		verifierPeerIDs = append(verifierPeerIDs, app.PeerId)
+		veriferPeerID, err := peer.Decode(app.PeerIds[0])
+		if err != nil {
+			log.Errorf("Failed to decode peerID %s: %v", app.PeerIds[0], err)
+			continue
+		}
+
+		verifierPeerIDs = append(verifierPeerIDs, app.PeerIds[0])
 
 		// Fetch resource usage
 		err = s.statService.FinalizeStats(containerId)

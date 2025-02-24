@@ -8,35 +8,56 @@ import (
 	atypes "github.com/unicornultrafoundation/subnet-node/core/apps/types"
 )
 
+const gitHubAppsURL = "https://raw.githubusercontent.com/unicornultrafoundation/subnet-apps/refs/heads/main/index.json"
+
 type AppFilter struct {
 	Status atypes.ProcessStatus `json:"status"`
 	Query  string               `json:"query"`
 }
 
+type GitHubApp struct {
+	ID                 int64                  `json:"id"`
+	Symbol             string                 `json:"symbol"`
+	Name               string                 `json:"name"`
+	Description        string                 `json:"description"`
+	Logo               string                 `json:"logo"`
+	BannerUrls         []string               `json:"banners_urls"`
+	DefaultBannerIndex int64                  `json:"default_banner_index"`
+	Website            string                 `json:"website"`
+	Container          atypes.ContainerConfig `json:"container"`
+}
+
+// Checks if the app matches the filter criteria.
+func appMatchesFilter(app GitHubApp, status atypes.ProcessStatus, filter AppFilter) bool {
+	return (filter.Status == "" || status == filter.Status) &&
+		(filter.Query == "" || strings.Contains(strings.ToLower(app.Name), strings.ToLower(filter.Query)) ||
+			strings.Contains(strings.ToLower(app.Symbol), strings.ToLower(filter.Query)))
+}
+
 // Retrieves a list of apps from the Ethereum contract and checks their container status.
 func (s *Service) GetApps(ctx context.Context, start *big.Int, end *big.Int, filter AppFilter) ([]*atypes.App, int, error) {
-	appCount, err := s.GetAppCount()
+	// Fetch JSON file from GitHub
+	gitHubApps, err := s.getGitHubApps(gitHubAppsURL)
 	if err != nil {
 		return nil, 0, err
 	}
-	subnetApps, err := s.accountService.AppStore().ListApps(nil, big.NewInt(1), appCount)
-	if err != nil {
-		return nil, 0, err
-	}
-
 	apps := make([]*atypes.App, 0)
-	for i, subnetApp := range subnetApps {
-		appId := big.NewInt(1)
+	for i, gitHubApp := range gitHubApps {
+		appId := big.NewInt(gitHubApp.ID)
 		appId.Add(appId, big.NewInt(int64(i)))
 		appStatus, err := s.GetContainerStatus(ctx, appId)
 		if err != nil {
 			return nil, 0, err
 		}
 
-		if (filter.Status == "" || appStatus == filter.Status) &&
-			(filter.Query == "" || strings.Contains(strings.ToLower(subnetApp.Name), strings.ToLower(filter.Query)) ||
-				strings.Contains(strings.ToLower(subnetApp.Symbol), strings.ToLower(filter.Query))) {
-			apps = append(apps, atypes.ConvertToApp(subnetApp, appId, appStatus))
+		if appMatchesFilter(gitHubApp, appStatus, filter) {
+			app, err := s.GetApp(ctx, appId)
+			if err != nil {
+				log.Errorf("Failed to get app %s: %v", appId, err)
+				continue
+			}
+
+			apps = append(apps, app)
 		}
 	}
 
