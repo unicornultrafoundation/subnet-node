@@ -75,7 +75,6 @@ func New(peerHost p2phost.Host, peerId peer.ID, cfg *config.C, P2P *p2p.P2P, ds 
 		stopChan:              make(chan struct{}),
 		accountService:        acc,
 		ethClient:             acc.GetClient(),
-		verifier:              verifier.NewVerifier(ds, peerHost, P2P, acc),
 		signatureResponseChan: make(chan *pvtypes.SignatureResponse, 100),
 		gitHubAppCache:        cache.New(1*time.Minute, 2*time.Minute),
 		subnetAppCache:        cache.New(1*time.Minute, 2*time.Minute),
@@ -85,6 +84,7 @@ func New(peerHost p2phost.Host, peerId peer.ID, cfg *config.C, P2P *p2p.P2P, ds 
 
 func (s *Service) Start(ctx context.Context) error {
 	if s.IsVerifier {
+		s.verifier = verifier.NewVerifier(s.Datastore, s.PeerHost, s.P2P, s.accountService)
 		// Register the P2P protocol for signing
 		if err := s.verifier.Register(); err != nil {
 			return fmt.Errorf("failed to register signing protocol: %w", err)
