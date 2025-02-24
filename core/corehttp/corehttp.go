@@ -15,7 +15,7 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/core"
 )
 
-var log = logrus.New().WithField("core", "server")
+var log = logrus.WithField("core", "server")
 
 // shutdownTimeout is the timeout after which we'll stop waiting for hung
 // commands to return on shutdown.
@@ -71,7 +71,7 @@ func ListenAndServe(n *core.SubnetNode, listeningMultiAddr string, options ...Se
 
 	// we might have listened to /tcp/0 - let's see what we are listing on
 	addr = list.Multiaddr()
-	fmt.Printf("RPC API server listening on %s\n", addr)
+	log.Printf("RPC API server listening on %s\n", addr)
 
 	return Serve(n, manet.NetListener(list), options...)
 }

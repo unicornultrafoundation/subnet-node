@@ -2,6 +2,7 @@ package stats
 
 import (
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -52,7 +53,7 @@ func (gm *GpuMonitor) monitor() {
 			// Get GPU usage for all processes
 			gpuUsage, err := utils.GetGpuUsage()
 			if err != nil {
-				fmt.Printf("failed to get GPU usage: %v\n", err)
+				log.Printf("failed to get GPU usage: %v\n", err)
 				time.Sleep(gm.Interval)
 				continue
 			}
@@ -67,7 +68,7 @@ func (gm *GpuMonitor) monitor() {
 
 			// Print GPU usage for each process
 			for pid, usage := range gpuUsage {
-				fmt.Printf("PID: %d, GPU Memory Used: %d MiB\n", pid, usage)
+				log.Printf("PID: %d, GPU Memory Used: %d MiB\n", pid, usage)
 			}
 
 			time.Sleep(gm.Interval)

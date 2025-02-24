@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 
+	logging "github.com/ipfs/go-log/v2"
+
 	"github.com/sirupsen/logrus"
 	ninit "github.com/unicornultrafoundation/subnet-node/cmd/init"
 	"github.com/unicornultrafoundation/subnet-node/subnet"
@@ -30,6 +32,7 @@ func main() {
 
 	if *debugFlag {
 		logrus.SetLevel(logrus.DebugLevel)
+		logging.SetAllLoggers(logging.LevelDebug)
 	}
 
 	if *printVersion {

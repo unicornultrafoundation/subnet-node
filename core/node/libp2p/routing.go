@@ -2,7 +2,6 @@ package libp2p
 
 import (
 	"context"
-	"fmt"
 	"runtime/debug"
 	"sort"
 	"time"
@@ -252,7 +251,7 @@ func autoRelayFeeder(peers []peer.AddrInfo, peerChan chan<- peer.AddrInfo) fx.Op
 
 		defer func() {
 			if r := recover(); r != nil {
-				fmt.Println("Recovering from unexpected error in AutoRelayFeeder:", r)
+				log.Println("Recovering from unexpected error in AutoRelayFeeder:", r)
 				debug.PrintStack()
 			}
 		}()

@@ -71,7 +71,7 @@ func newHandler(connCtx context.Context, conn jsonWriter, idgen func() ID, reg *
 		cancelRoot:           cancelRoot,
 		allowSubscribe:       true,
 		serverSubs:           make(map[ID]*Subscription),
-		log:                  logrus.New().WithField("rpc", "handler"),
+		log:                  logrus.WithField("rpc", "handler"),
 		batchRequestLimit:    batchRequestLimit,
 		batchResponseMaxSize: batchResponseMaxSize,
 	}

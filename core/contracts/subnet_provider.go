@@ -29,6 +29,12 @@ var (
 	_ = abi.ConvertType
 )
 
+// SubnetProviderPeerNode is an auto generated low-level Go binding around an user-defined struct.
+type SubnetProviderPeerNode struct {
+	IsRegistered bool
+	Metadata     string
+}
+
 // SubnetProviderProvider is an auto generated low-level Go binding around an user-defined struct.
 type SubnetProviderProvider struct {
 	TokenId      *big.Int
@@ -36,11 +42,12 @@ type SubnetProviderProvider struct {
 	Operator     common.Address
 	Website      string
 	Metadata     string
+	IsJailed     bool
 }
 
 // SubnetProviderMetaData contains all meta data concerning the SubnetProvider contract.
 var SubnetProviderMetaData = &bind.MetaData{
-	ABI: "[{\"inputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"constructor\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"sender\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"}],\"name\":\"ERC721IncorrectOwner\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"ERC721InsufficientApproval\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"approver\",\"type\":\"address\"}],\"name\":\"ERC721InvalidApprover\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"}],\"name\":\"ERC721InvalidOperator\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"}],\"name\":\"ERC721InvalidOwner\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"receiver\",\"type\":\"address\"}],\"name\":\"ERC721InvalidReceiver\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"sender\",\"type\":\"address\"}],\"name\":\"ERC721InvalidSender\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"ERC721NonexistentToken\",\"type\":\"error\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"approved\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"Approval\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"bool\",\"name\":\"approved\",\"type\":\"bool\"}],\"name\":\"ApprovalForAll\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"address\",\"name\":\"providerAddress\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"NFTMinted\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"}],\"name\":\"OperatorUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"ProviderDeleted\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"address\",\"name\":\"providerAddress\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"providerName\",\"type\":\"string\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"metadata\",\"type\":\"string\"},{\"indexed\":false,\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"website\",\"type\":\"string\"}],\"name\":\"ProviderRegistered\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"providerName\",\"type\":\"string\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"metadata\",\"type\":\"string\"},{\"indexed\":false,\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"website\",\"type\":\"string\"}],\"name\":\"ProviderUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"from\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"to\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"Transfer\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"website\",\"type\":\"string\"}],\"name\":\"WebsiteUpdated\",\"type\":\"event\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"to\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"approve\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"}],\"name\":\"balanceOf\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"deleteProvider\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"getApproved\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"_tokenId\",\"type\":\"uint256\"}],\"name\":\"getProvider\",\"outputs\":[{\"components\":[{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"providerName\",\"type\":\"string\"},{\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"},{\"internalType\":\"string\",\"name\":\"website\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"metadata\",\"type\":\"string\"}],\"internalType\":\"structSubnetProvider.Provider\",\"name\":\"\",\"type\":\"tuple\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"}],\"name\":\"isApprovedForAll\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"name\",\"outputs\":[{\"internalType\":\"string\",\"name\":\"\",\"type\":\"string\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"ownerOf\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"name\":\"providers\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"providerName\",\"type\":\"string\"},{\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"},{\"internalType\":\"string\",\"name\":\"website\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"metadata\",\"type\":\"string\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"string\",\"name\":\"_providerName\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"_metadata\",\"type\":\"string\"},{\"internalType\":\"address\",\"name\":\"_operator\",\"type\":\"address\"},{\"internalType\":\"string\",\"name\":\"_website\",\"type\":\"string\"}],\"name\":\"registerProvider\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"from\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"to\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"safeTransferFrom\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"from\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"to\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"},{\"internalType\":\"bytes\",\"name\":\"data\",\"type\":\"bytes\"}],\"name\":\"safeTransferFrom\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"},{\"internalType\":\"bool\",\"name\":\"approved\",\"type\":\"bool\"}],\"name\":\"setApprovalForAll\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes4\",\"name\":\"interfaceId\",\"type\":\"bytes4\"}],\"name\":\"supportsInterface\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"symbol\",\"outputs\":[{\"internalType\":\"string\",\"name\":\"\",\"type\":\"string\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"tokenURI\",\"outputs\":[{\"internalType\":\"string\",\"name\":\"\",\"type\":\"string\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"from\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"to\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"transferFrom\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"_operator\",\"type\":\"address\"}],\"name\":\"updateOperator\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"_providerName\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"_metadata\",\"type\":\"string\"},{\"internalType\":\"address\",\"name\":\"_operator\",\"type\":\"address\"},{\"internalType\":\"string\",\"name\":\"_website\",\"type\":\"string\"}],\"name\":\"updateProvider\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"_website\",\"type\":\"string\"}],\"name\":\"updateWebsite\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]",
+	ABI: "[{\"inputs\":[{\"internalType\":\"address\",\"name\":\"sender\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"}],\"name\":\"ERC721IncorrectOwner\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"ERC721InsufficientApproval\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"approver\",\"type\":\"address\"}],\"name\":\"ERC721InvalidApprover\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"}],\"name\":\"ERC721InvalidOperator\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"}],\"name\":\"ERC721InvalidOwner\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"receiver\",\"type\":\"address\"}],\"name\":\"ERC721InvalidReceiver\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"sender\",\"type\":\"address\"}],\"name\":\"ERC721InvalidSender\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"ERC721NonexistentToken\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"InvalidInitialization\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"NotInitializing\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"}],\"name\":\"OwnableInvalidOwner\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"account\",\"type\":\"address\"}],\"name\":\"OwnableUnauthorizedAccount\",\"type\":\"error\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"approved\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"Approval\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"bool\",\"name\":\"approved\",\"type\":\"bool\"}],\"name\":\"ApprovalForAll\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint64\",\"name\":\"version\",\"type\":\"uint64\"}],\"name\":\"Initialized\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"address\",\"name\":\"providerAddress\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"NFTMinted\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"}],\"name\":\"OperatorUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"previousOwner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"OwnershipTransferred\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"peerId\",\"type\":\"string\"}],\"name\":\"PeerNodeDeleted\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"peerId\",\"type\":\"string\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"metadata\",\"type\":\"string\"}],\"name\":\"PeerNodeRegistered\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"peerId\",\"type\":\"string\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"metadata\",\"type\":\"string\"}],\"name\":\"PeerNodeUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"ProviderDeleted\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"ProviderJailed\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"address\",\"name\":\"providerAddress\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"providerName\",\"type\":\"string\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"metadata\",\"type\":\"string\"},{\"indexed\":false,\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"website\",\"type\":\"string\"}],\"name\":\"ProviderRegistered\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"ProviderUnjailed\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"providerName\",\"type\":\"string\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"metadata\",\"type\":\"string\"},{\"indexed\":false,\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"website\",\"type\":\"string\"}],\"name\":\"ProviderUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"from\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"to\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"Transfer\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"website\",\"type\":\"string\"}],\"name\":\"WebsiteUpdated\",\"type\":\"event\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"to\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"approve\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"}],\"name\":\"balanceOf\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"peerId\",\"type\":\"string\"}],\"name\":\"deletePeerNode\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"deleteProvider\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"getApproved\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"peerId\",\"type\":\"string\"}],\"name\":\"getPeerNode\",\"outputs\":[{\"components\":[{\"internalType\":\"bool\",\"name\":\"isRegistered\",\"type\":\"bool\"},{\"internalType\":\"string\",\"name\":\"metadata\",\"type\":\"string\"}],\"internalType\":\"structSubnetProvider.PeerNode\",\"name\":\"\",\"type\":\"tuple\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"_tokenId\",\"type\":\"uint256\"}],\"name\":\"getProvider\",\"outputs\":[{\"components\":[{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"providerName\",\"type\":\"string\"},{\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"},{\"internalType\":\"string\",\"name\":\"website\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"metadata\",\"type\":\"string\"},{\"internalType\":\"bool\",\"name\":\"isJailed\",\"type\":\"bool\"}],\"internalType\":\"structSubnetProvider.Provider\",\"name\":\"\",\"type\":\"tuple\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"initialOwner\",\"type\":\"address\"}],\"name\":\"initialize\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"}],\"name\":\"isApprovedForAll\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"jailProvider\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"name\",\"outputs\":[{\"internalType\":\"string\",\"name\":\"\",\"type\":\"string\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"owner\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"ownerOf\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"\",\"type\":\"string\"}],\"name\":\"peerNodeRegistered\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"isRegistered\",\"type\":\"bool\"},{\"internalType\":\"string\",\"name\":\"metadata\",\"type\":\"string\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"name\":\"providers\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"providerName\",\"type\":\"string\"},{\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"},{\"internalType\":\"string\",\"name\":\"website\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"metadata\",\"type\":\"string\"},{\"internalType\":\"bool\",\"name\":\"isJailed\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"peerId\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"metadata\",\"type\":\"string\"}],\"name\":\"registerPeerNode\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"string\",\"name\":\"_providerName\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"_metadata\",\"type\":\"string\"},{\"internalType\":\"address\",\"name\":\"_operator\",\"type\":\"address\"},{\"internalType\":\"string\",\"name\":\"_website\",\"type\":\"string\"}],\"name\":\"registerProvider\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"renounceOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"from\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"to\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"safeTransferFrom\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"from\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"to\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"},{\"internalType\":\"bytes\",\"name\":\"data\",\"type\":\"bytes\"}],\"name\":\"safeTransferFrom\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"},{\"internalType\":\"bool\",\"name\":\"approved\",\"type\":\"bool\"}],\"name\":\"setApprovalForAll\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes4\",\"name\":\"interfaceId\",\"type\":\"bytes4\"}],\"name\":\"supportsInterface\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"symbol\",\"outputs\":[{\"internalType\":\"string\",\"name\":\"\",\"type\":\"string\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"tokenURI\",\"outputs\":[{\"internalType\":\"string\",\"name\":\"\",\"type\":\"string\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"from\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"to\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"transferFrom\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"transferOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"unjailProvider\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"_operator\",\"type\":\"address\"}],\"name\":\"updateOperator\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"peerId\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"metadata\",\"type\":\"string\"}],\"name\":\"updatePeerNode\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"_providerName\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"_metadata\",\"type\":\"string\"},{\"internalType\":\"address\",\"name\":\"_operator\",\"type\":\"address\"},{\"internalType\":\"string\",\"name\":\"_website\",\"type\":\"string\"}],\"name\":\"updateProvider\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"_website\",\"type\":\"string\"}],\"name\":\"updateWebsite\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"verifier\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"version\",\"outputs\":[{\"internalType\":\"string\",\"name\":\"\",\"type\":\"string\"}],\"stateMutability\":\"pure\",\"type\":\"function\"}]",
 }
 
 // SubnetProviderABI is the input ABI used to generate the binding from.
@@ -251,9 +258,40 @@ func (_SubnetProvider *SubnetProviderCallerSession) GetApproved(tokenId *big.Int
 	return _SubnetProvider.Contract.GetApproved(&_SubnetProvider.CallOpts, tokenId)
 }
 
+// GetPeerNode is a free data retrieval call binding the contract method 0x65ffb2ec.
+//
+// Solidity: function getPeerNode(uint256 tokenId, string peerId) view returns((bool,string))
+func (_SubnetProvider *SubnetProviderCaller) GetPeerNode(opts *bind.CallOpts, tokenId *big.Int, peerId string) (SubnetProviderPeerNode, error) {
+	var out []interface{}
+	err := _SubnetProvider.contract.Call(opts, &out, "getPeerNode", tokenId, peerId)
+
+	if err != nil {
+		return *new(SubnetProviderPeerNode), err
+	}
+
+	out0 := *abi.ConvertType(out[0], new(SubnetProviderPeerNode)).(*SubnetProviderPeerNode)
+
+	return out0, err
+
+}
+
+// GetPeerNode is a free data retrieval call binding the contract method 0x65ffb2ec.
+//
+// Solidity: function getPeerNode(uint256 tokenId, string peerId) view returns((bool,string))
+func (_SubnetProvider *SubnetProviderSession) GetPeerNode(tokenId *big.Int, peerId string) (SubnetProviderPeerNode, error) {
+	return _SubnetProvider.Contract.GetPeerNode(&_SubnetProvider.CallOpts, tokenId, peerId)
+}
+
+// GetPeerNode is a free data retrieval call binding the contract method 0x65ffb2ec.
+//
+// Solidity: function getPeerNode(uint256 tokenId, string peerId) view returns((bool,string))
+func (_SubnetProvider *SubnetProviderCallerSession) GetPeerNode(tokenId *big.Int, peerId string) (SubnetProviderPeerNode, error) {
+	return _SubnetProvider.Contract.GetPeerNode(&_SubnetProvider.CallOpts, tokenId, peerId)
+}
+
 // GetProvider is a free data retrieval call binding the contract method 0x5c42d079.
 //
-// Solidity: function getProvider(uint256 _tokenId) view returns((uint256,string,address,string,string))
+// Solidity: function getProvider(uint256 _tokenId) view returns((uint256,string,address,string,string,bool))
 func (_SubnetProvider *SubnetProviderCaller) GetProvider(opts *bind.CallOpts, _tokenId *big.Int) (SubnetProviderProvider, error) {
 	var out []interface{}
 	err := _SubnetProvider.contract.Call(opts, &out, "getProvider", _tokenId)
@@ -270,14 +308,14 @@ func (_SubnetProvider *SubnetProviderCaller) GetProvider(opts *bind.CallOpts, _t
 
 // GetProvider is a free data retrieval call binding the contract method 0x5c42d079.
 //
-// Solidity: function getProvider(uint256 _tokenId) view returns((uint256,string,address,string,string))
+// Solidity: function getProvider(uint256 _tokenId) view returns((uint256,string,address,string,string,bool))
 func (_SubnetProvider *SubnetProviderSession) GetProvider(_tokenId *big.Int) (SubnetProviderProvider, error) {
 	return _SubnetProvider.Contract.GetProvider(&_SubnetProvider.CallOpts, _tokenId)
 }
 
 // GetProvider is a free data retrieval call binding the contract method 0x5c42d079.
 //
-// Solidity: function getProvider(uint256 _tokenId) view returns((uint256,string,address,string,string))
+// Solidity: function getProvider(uint256 _tokenId) view returns((uint256,string,address,string,string,bool))
 func (_SubnetProvider *SubnetProviderCallerSession) GetProvider(_tokenId *big.Int) (SubnetProviderProvider, error) {
 	return _SubnetProvider.Contract.GetProvider(&_SubnetProvider.CallOpts, _tokenId)
 }
@@ -344,6 +382,37 @@ func (_SubnetProvider *SubnetProviderCallerSession) Name() (string, error) {
 	return _SubnetProvider.Contract.Name(&_SubnetProvider.CallOpts)
 }
 
+// Owner is a free data retrieval call binding the contract method 0x8da5cb5b.
+//
+// Solidity: function owner() view returns(address)
+func (_SubnetProvider *SubnetProviderCaller) Owner(opts *bind.CallOpts) (common.Address, error) {
+	var out []interface{}
+	err := _SubnetProvider.contract.Call(opts, &out, "owner")
+
+	if err != nil {
+		return *new(common.Address), err
+	}
+
+	out0 := *abi.ConvertType(out[0], new(common.Address)).(*common.Address)
+
+	return out0, err
+
+}
+
+// Owner is a free data retrieval call binding the contract method 0x8da5cb5b.
+//
+// Solidity: function owner() view returns(address)
+func (_SubnetProvider *SubnetProviderSession) Owner() (common.Address, error) {
+	return _SubnetProvider.Contract.Owner(&_SubnetProvider.CallOpts)
+}
+
+// Owner is a free data retrieval call binding the contract method 0x8da5cb5b.
+//
+// Solidity: function owner() view returns(address)
+func (_SubnetProvider *SubnetProviderCallerSession) Owner() (common.Address, error) {
+	return _SubnetProvider.Contract.Owner(&_SubnetProvider.CallOpts)
+}
+
 // OwnerOf is a free data retrieval call binding the contract method 0x6352211e.
 //
 // Solidity: function ownerOf(uint256 tokenId) view returns(address)
@@ -375,15 +444,61 @@ func (_SubnetProvider *SubnetProviderCallerSession) OwnerOf(tokenId *big.Int) (c
 	return _SubnetProvider.Contract.OwnerOf(&_SubnetProvider.CallOpts, tokenId)
 }
 
+// PeerNodeRegistered is a free data retrieval call binding the contract method 0xb88923bc.
+//
+// Solidity: function peerNodeRegistered(uint256 , string ) view returns(bool isRegistered, string metadata)
+func (_SubnetProvider *SubnetProviderCaller) PeerNodeRegistered(opts *bind.CallOpts, arg0 *big.Int, arg1 string) (struct {
+	IsRegistered bool
+	Metadata     string
+}, error) {
+	var out []interface{}
+	err := _SubnetProvider.contract.Call(opts, &out, "peerNodeRegistered", arg0, arg1)
+
+	outstruct := new(struct {
+		IsRegistered bool
+		Metadata     string
+	})
+	if err != nil {
+		return *outstruct, err
+	}
+
+	outstruct.IsRegistered = *abi.ConvertType(out[0], new(bool)).(*bool)
+	outstruct.Metadata = *abi.ConvertType(out[1], new(string)).(*string)
+
+	return *outstruct, err
+
+}
+
+// PeerNodeRegistered is a free data retrieval call binding the contract method 0xb88923bc.
+//
+// Solidity: function peerNodeRegistered(uint256 , string ) view returns(bool isRegistered, string metadata)
+func (_SubnetProvider *SubnetProviderSession) PeerNodeRegistered(arg0 *big.Int, arg1 string) (struct {
+	IsRegistered bool
+	Metadata     string
+}, error) {
+	return _SubnetProvider.Contract.PeerNodeRegistered(&_SubnetProvider.CallOpts, arg0, arg1)
+}
+
+// PeerNodeRegistered is a free data retrieval call binding the contract method 0xb88923bc.
+//
+// Solidity: function peerNodeRegistered(uint256 , string ) view returns(bool isRegistered, string metadata)
+func (_SubnetProvider *SubnetProviderCallerSession) PeerNodeRegistered(arg0 *big.Int, arg1 string) (struct {
+	IsRegistered bool
+	Metadata     string
+}, error) {
+	return _SubnetProvider.Contract.PeerNodeRegistered(&_SubnetProvider.CallOpts, arg0, arg1)
+}
+
 // Providers is a free data retrieval call binding the contract method 0x50f3fc81.
 //
-// Solidity: function providers(uint256 ) view returns(uint256 tokenId, string providerName, address operator, string website, string metadata)
+// Solidity: function providers(uint256 ) view returns(uint256 tokenId, string providerName, address operator, string website, string metadata, bool isJailed)
 func (_SubnetProvider *SubnetProviderCaller) Providers(opts *bind.CallOpts, arg0 *big.Int) (struct {
 	TokenId      *big.Int
 	ProviderName string
 	Operator     common.Address
 	Website      string
 	Metadata     string
+	IsJailed     bool
 }, error) {
 	var out []interface{}
 	err := _SubnetProvider.contract.Call(opts, &out, "providers", arg0)
@@ -394,6 +509,7 @@ func (_SubnetProvider *SubnetProviderCaller) Providers(opts *bind.CallOpts, arg0
 		Operator     common.Address
 		Website      string
 		Metadata     string
+		IsJailed     bool
 	})
 	if err != nil {
 		return *outstruct, err
@@ -404,6 +520,7 @@ func (_SubnetProvider *SubnetProviderCaller) Providers(opts *bind.CallOpts, arg0
 	outstruct.Operator = *abi.ConvertType(out[2], new(common.Address)).(*common.Address)
 	outstruct.Website = *abi.ConvertType(out[3], new(string)).(*string)
 	outstruct.Metadata = *abi.ConvertType(out[4], new(string)).(*string)
+	outstruct.IsJailed = *abi.ConvertType(out[5], new(bool)).(*bool)
 
 	return *outstruct, err
 
@@ -411,26 +528,28 @@ func (_SubnetProvider *SubnetProviderCaller) Providers(opts *bind.CallOpts, arg0
 
 // Providers is a free data retrieval call binding the contract method 0x50f3fc81.
 //
-// Solidity: function providers(uint256 ) view returns(uint256 tokenId, string providerName, address operator, string website, string metadata)
+// Solidity: function providers(uint256 ) view returns(uint256 tokenId, string providerName, address operator, string website, string metadata, bool isJailed)
 func (_SubnetProvider *SubnetProviderSession) Providers(arg0 *big.Int) (struct {
 	TokenId      *big.Int
 	ProviderName string
 	Operator     common.Address
 	Website      string
 	Metadata     string
+	IsJailed     bool
 }, error) {
 	return _SubnetProvider.Contract.Providers(&_SubnetProvider.CallOpts, arg0)
 }
 
 // Providers is a free data retrieval call binding the contract method 0x50f3fc81.
 //
-// Solidity: function providers(uint256 ) view returns(uint256 tokenId, string providerName, address operator, string website, string metadata)
+// Solidity: function providers(uint256 ) view returns(uint256 tokenId, string providerName, address operator, string website, string metadata, bool isJailed)
 func (_SubnetProvider *SubnetProviderCallerSession) Providers(arg0 *big.Int) (struct {
 	TokenId      *big.Int
 	ProviderName string
 	Operator     common.Address
 	Website      string
 	Metadata     string
+	IsJailed     bool
 }, error) {
 	return _SubnetProvider.Contract.Providers(&_SubnetProvider.CallOpts, arg0)
 }
@@ -528,6 +647,68 @@ func (_SubnetProvider *SubnetProviderCallerSession) TokenURI(tokenId *big.Int) (
 	return _SubnetProvider.Contract.TokenURI(&_SubnetProvider.CallOpts, tokenId)
 }
 
+// Verifier is a free data retrieval call binding the contract method 0x2b7ac3f3.
+//
+// Solidity: function verifier() view returns(address)
+func (_SubnetProvider *SubnetProviderCaller) Verifier(opts *bind.CallOpts) (common.Address, error) {
+	var out []interface{}
+	err := _SubnetProvider.contract.Call(opts, &out, "verifier")
+
+	if err != nil {
+		return *new(common.Address), err
+	}
+
+	out0 := *abi.ConvertType(out[0], new(common.Address)).(*common.Address)
+
+	return out0, err
+
+}
+
+// Verifier is a free data retrieval call binding the contract method 0x2b7ac3f3.
+//
+// Solidity: function verifier() view returns(address)
+func (_SubnetProvider *SubnetProviderSession) Verifier() (common.Address, error) {
+	return _SubnetProvider.Contract.Verifier(&_SubnetProvider.CallOpts)
+}
+
+// Verifier is a free data retrieval call binding the contract method 0x2b7ac3f3.
+//
+// Solidity: function verifier() view returns(address)
+func (_SubnetProvider *SubnetProviderCallerSession) Verifier() (common.Address, error) {
+	return _SubnetProvider.Contract.Verifier(&_SubnetProvider.CallOpts)
+}
+
+// Version is a free data retrieval call binding the contract method 0x54fd4d50.
+//
+// Solidity: function version() pure returns(string)
+func (_SubnetProvider *SubnetProviderCaller) Version(opts *bind.CallOpts) (string, error) {
+	var out []interface{}
+	err := _SubnetProvider.contract.Call(opts, &out, "version")
+
+	if err != nil {
+		return *new(string), err
+	}
+
+	out0 := *abi.ConvertType(out[0], new(string)).(*string)
+
+	return out0, err
+
+}
+
+// Version is a free data retrieval call binding the contract method 0x54fd4d50.
+//
+// Solidity: function version() pure returns(string)
+func (_SubnetProvider *SubnetProviderSession) Version() (string, error) {
+	return _SubnetProvider.Contract.Version(&_SubnetProvider.CallOpts)
+}
+
+// Version is a free data retrieval call binding the contract method 0x54fd4d50.
+//
+// Solidity: function version() pure returns(string)
+func (_SubnetProvider *SubnetProviderCallerSession) Version() (string, error) {
+	return _SubnetProvider.Contract.Version(&_SubnetProvider.CallOpts)
+}
+
 // Approve is a paid mutator transaction binding the contract method 0x095ea7b3.
 //
 // Solidity: function approve(address to, uint256 tokenId) returns()
@@ -547,6 +728,27 @@ func (_SubnetProvider *SubnetProviderSession) Approve(to common.Address, tokenId
 // Solidity: function approve(address to, uint256 tokenId) returns()
 func (_SubnetProvider *SubnetProviderTransactorSession) Approve(to common.Address, tokenId *big.Int) (*types.Transaction, error) {
 	return _SubnetProvider.Contract.Approve(&_SubnetProvider.TransactOpts, to, tokenId)
+}
+
+// DeletePeerNode is a paid mutator transaction binding the contract method 0x680bf85c.
+//
+// Solidity: function deletePeerNode(uint256 tokenId, string peerId) returns()
+func (_SubnetProvider *SubnetProviderTransactor) DeletePeerNode(opts *bind.TransactOpts, tokenId *big.Int, peerId string) (*types.Transaction, error) {
+	return _SubnetProvider.contract.Transact(opts, "deletePeerNode", tokenId, peerId)
+}
+
+// DeletePeerNode is a paid mutator transaction binding the contract method 0x680bf85c.
+//
+// Solidity: function deletePeerNode(uint256 tokenId, string peerId) returns()
+func (_SubnetProvider *SubnetProviderSession) DeletePeerNode(tokenId *big.Int, peerId string) (*types.Transaction, error) {
+	return _SubnetProvider.Contract.DeletePeerNode(&_SubnetProvider.TransactOpts, tokenId, peerId)
+}
+
+// DeletePeerNode is a paid mutator transaction binding the contract method 0x680bf85c.
+//
+// Solidity: function deletePeerNode(uint256 tokenId, string peerId) returns()
+func (_SubnetProvider *SubnetProviderTransactorSession) DeletePeerNode(tokenId *big.Int, peerId string) (*types.Transaction, error) {
+	return _SubnetProvider.Contract.DeletePeerNode(&_SubnetProvider.TransactOpts, tokenId, peerId)
 }
 
 // DeleteProvider is a paid mutator transaction binding the contract method 0xac953e8d.
@@ -570,6 +772,69 @@ func (_SubnetProvider *SubnetProviderTransactorSession) DeleteProvider(tokenId *
 	return _SubnetProvider.Contract.DeleteProvider(&_SubnetProvider.TransactOpts, tokenId)
 }
 
+// Initialize is a paid mutator transaction binding the contract method 0xc4d66de8.
+//
+// Solidity: function initialize(address initialOwner) returns()
+func (_SubnetProvider *SubnetProviderTransactor) Initialize(opts *bind.TransactOpts, initialOwner common.Address) (*types.Transaction, error) {
+	return _SubnetProvider.contract.Transact(opts, "initialize", initialOwner)
+}
+
+// Initialize is a paid mutator transaction binding the contract method 0xc4d66de8.
+//
+// Solidity: function initialize(address initialOwner) returns()
+func (_SubnetProvider *SubnetProviderSession) Initialize(initialOwner common.Address) (*types.Transaction, error) {
+	return _SubnetProvider.Contract.Initialize(&_SubnetProvider.TransactOpts, initialOwner)
+}
+
+// Initialize is a paid mutator transaction binding the contract method 0xc4d66de8.
+//
+// Solidity: function initialize(address initialOwner) returns()
+func (_SubnetProvider *SubnetProviderTransactorSession) Initialize(initialOwner common.Address) (*types.Transaction, error) {
+	return _SubnetProvider.Contract.Initialize(&_SubnetProvider.TransactOpts, initialOwner)
+}
+
+// JailProvider is a paid mutator transaction binding the contract method 0x574e5d6b.
+//
+// Solidity: function jailProvider(uint256 tokenId) returns()
+func (_SubnetProvider *SubnetProviderTransactor) JailProvider(opts *bind.TransactOpts, tokenId *big.Int) (*types.Transaction, error) {
+	return _SubnetProvider.contract.Transact(opts, "jailProvider", tokenId)
+}
+
+// JailProvider is a paid mutator transaction binding the contract method 0x574e5d6b.
+//
+// Solidity: function jailProvider(uint256 tokenId) returns()
+func (_SubnetProvider *SubnetProviderSession) JailProvider(tokenId *big.Int) (*types.Transaction, error) {
+	return _SubnetProvider.Contract.JailProvider(&_SubnetProvider.TransactOpts, tokenId)
+}
+
+// JailProvider is a paid mutator transaction binding the contract method 0x574e5d6b.
+//
+// Solidity: function jailProvider(uint256 tokenId) returns()
+func (_SubnetProvider *SubnetProviderTransactorSession) JailProvider(tokenId *big.Int) (*types.Transaction, error) {
+	return _SubnetProvider.Contract.JailProvider(&_SubnetProvider.TransactOpts, tokenId)
+}
+
+// RegisterPeerNode is a paid mutator transaction binding the contract method 0x54884320.
+//
+// Solidity: function registerPeerNode(uint256 tokenId, string peerId, string metadata) returns()
+func (_SubnetProvider *SubnetProviderTransactor) RegisterPeerNode(opts *bind.TransactOpts, tokenId *big.Int, peerId string, metadata string) (*types.Transaction, error) {
+	return _SubnetProvider.contract.Transact(opts, "registerPeerNode", tokenId, peerId, metadata)
+}
+
+// RegisterPeerNode is a paid mutator transaction binding the contract method 0x54884320.
+//
+// Solidity: function registerPeerNode(uint256 tokenId, string peerId, string metadata) returns()
+func (_SubnetProvider *SubnetProviderSession) RegisterPeerNode(tokenId *big.Int, peerId string, metadata string) (*types.Transaction, error) {
+	return _SubnetProvider.Contract.RegisterPeerNode(&_SubnetProvider.TransactOpts, tokenId, peerId, metadata)
+}
+
+// RegisterPeerNode is a paid mutator transaction binding the contract method 0x54884320.
+//
+// Solidity: function registerPeerNode(uint256 tokenId, string peerId, string metadata) returns()
+func (_SubnetProvider *SubnetProviderTransactorSession) RegisterPeerNode(tokenId *big.Int, peerId string, metadata string) (*types.Transaction, error) {
+	return _SubnetProvider.Contract.RegisterPeerNode(&_SubnetProvider.TransactOpts, tokenId, peerId, metadata)
+}
+
 // RegisterProvider is a paid mutator transaction binding the contract method 0xea677b77.
 //
 // Solidity: function registerProvider(string _providerName, string _metadata, address _operator, string _website) returns(uint256)
@@ -589,6 +854,27 @@ func (_SubnetProvider *SubnetProviderSession) RegisterProvider(_providerName str
 // Solidity: function registerProvider(string _providerName, string _metadata, address _operator, string _website) returns(uint256)
 func (_SubnetProvider *SubnetProviderTransactorSession) RegisterProvider(_providerName string, _metadata string, _operator common.Address, _website string) (*types.Transaction, error) {
 	return _SubnetProvider.Contract.RegisterProvider(&_SubnetProvider.TransactOpts, _providerName, _metadata, _operator, _website)
+}
+
+// RenounceOwnership is a paid mutator transaction binding the contract method 0x715018a6.
+//
+// Solidity: function renounceOwnership() returns()
+func (_SubnetProvider *SubnetProviderTransactor) RenounceOwnership(opts *bind.TransactOpts) (*types.Transaction, error) {
+	return _SubnetProvider.contract.Transact(opts, "renounceOwnership")
+}
+
+// RenounceOwnership is a paid mutator transaction binding the contract method 0x715018a6.
+//
+// Solidity: function renounceOwnership() returns()
+func (_SubnetProvider *SubnetProviderSession) RenounceOwnership() (*types.Transaction, error) {
+	return _SubnetProvider.Contract.RenounceOwnership(&_SubnetProvider.TransactOpts)
+}
+
+// RenounceOwnership is a paid mutator transaction binding the contract method 0x715018a6.
+//
+// Solidity: function renounceOwnership() returns()
+func (_SubnetProvider *SubnetProviderTransactorSession) RenounceOwnership() (*types.Transaction, error) {
+	return _SubnetProvider.Contract.RenounceOwnership(&_SubnetProvider.TransactOpts)
 }
 
 // SafeTransferFrom is a paid mutator transaction binding the contract method 0x42842e0e.
@@ -675,6 +961,48 @@ func (_SubnetProvider *SubnetProviderTransactorSession) TransferFrom(from common
 	return _SubnetProvider.Contract.TransferFrom(&_SubnetProvider.TransactOpts, from, to, tokenId)
 }
 
+// TransferOwnership is a paid mutator transaction binding the contract method 0xf2fde38b.
+//
+// Solidity: function transferOwnership(address newOwner) returns()
+func (_SubnetProvider *SubnetProviderTransactor) TransferOwnership(opts *bind.TransactOpts, newOwner common.Address) (*types.Transaction, error) {
+	return _SubnetProvider.contract.Transact(opts, "transferOwnership", newOwner)
+}
+
+// TransferOwnership is a paid mutator transaction binding the contract method 0xf2fde38b.
+//
+// Solidity: function transferOwnership(address newOwner) returns()
+func (_SubnetProvider *SubnetProviderSession) TransferOwnership(newOwner common.Address) (*types.Transaction, error) {
+	return _SubnetProvider.Contract.TransferOwnership(&_SubnetProvider.TransactOpts, newOwner)
+}
+
+// TransferOwnership is a paid mutator transaction binding the contract method 0xf2fde38b.
+//
+// Solidity: function transferOwnership(address newOwner) returns()
+func (_SubnetProvider *SubnetProviderTransactorSession) TransferOwnership(newOwner common.Address) (*types.Transaction, error) {
+	return _SubnetProvider.Contract.TransferOwnership(&_SubnetProvider.TransactOpts, newOwner)
+}
+
+// UnjailProvider is a paid mutator transaction binding the contract method 0x60e6df65.
+//
+// Solidity: function unjailProvider(uint256 tokenId) returns()
+func (_SubnetProvider *SubnetProviderTransactor) UnjailProvider(opts *bind.TransactOpts, tokenId *big.Int) (*types.Transaction, error) {
+	return _SubnetProvider.contract.Transact(opts, "unjailProvider", tokenId)
+}
+
+// UnjailProvider is a paid mutator transaction binding the contract method 0x60e6df65.
+//
+// Solidity: function unjailProvider(uint256 tokenId) returns()
+func (_SubnetProvider *SubnetProviderSession) UnjailProvider(tokenId *big.Int) (*types.Transaction, error) {
+	return _SubnetProvider.Contract.UnjailProvider(&_SubnetProvider.TransactOpts, tokenId)
+}
+
+// UnjailProvider is a paid mutator transaction binding the contract method 0x60e6df65.
+//
+// Solidity: function unjailProvider(uint256 tokenId) returns()
+func (_SubnetProvider *SubnetProviderTransactorSession) UnjailProvider(tokenId *big.Int) (*types.Transaction, error) {
+	return _SubnetProvider.Contract.UnjailProvider(&_SubnetProvider.TransactOpts, tokenId)
+}
+
 // UpdateOperator is a paid mutator transaction binding the contract method 0xc65a391d.
 //
 // Solidity: function updateOperator(uint256 tokenId, address _operator) returns()
@@ -694,6 +1022,27 @@ func (_SubnetProvider *SubnetProviderSession) UpdateOperator(tokenId *big.Int, _
 // Solidity: function updateOperator(uint256 tokenId, address _operator) returns()
 func (_SubnetProvider *SubnetProviderTransactorSession) UpdateOperator(tokenId *big.Int, _operator common.Address) (*types.Transaction, error) {
 	return _SubnetProvider.Contract.UpdateOperator(&_SubnetProvider.TransactOpts, tokenId, _operator)
+}
+
+// UpdatePeerNode is a paid mutator transaction binding the contract method 0x53fad0fd.
+//
+// Solidity: function updatePeerNode(uint256 tokenId, string peerId, string metadata) returns()
+func (_SubnetProvider *SubnetProviderTransactor) UpdatePeerNode(opts *bind.TransactOpts, tokenId *big.Int, peerId string, metadata string) (*types.Transaction, error) {
+	return _SubnetProvider.contract.Transact(opts, "updatePeerNode", tokenId, peerId, metadata)
+}
+
+// UpdatePeerNode is a paid mutator transaction binding the contract method 0x53fad0fd.
+//
+// Solidity: function updatePeerNode(uint256 tokenId, string peerId, string metadata) returns()
+func (_SubnetProvider *SubnetProviderSession) UpdatePeerNode(tokenId *big.Int, peerId string, metadata string) (*types.Transaction, error) {
+	return _SubnetProvider.Contract.UpdatePeerNode(&_SubnetProvider.TransactOpts, tokenId, peerId, metadata)
+}
+
+// UpdatePeerNode is a paid mutator transaction binding the contract method 0x53fad0fd.
+//
+// Solidity: function updatePeerNode(uint256 tokenId, string peerId, string metadata) returns()
+func (_SubnetProvider *SubnetProviderTransactorSession) UpdatePeerNode(tokenId *big.Int, peerId string, metadata string) (*types.Transaction, error) {
+	return _SubnetProvider.Contract.UpdatePeerNode(&_SubnetProvider.TransactOpts, tokenId, peerId, metadata)
 }
 
 // UpdateProvider is a paid mutator transaction binding the contract method 0xef17ed7e.
@@ -1054,6 +1403,140 @@ func (_SubnetProvider *SubnetProviderFilterer) ParseApprovalForAll(log types.Log
 	return event, nil
 }
 
+// SubnetProviderInitializedIterator is returned from FilterInitialized and is used to iterate over the raw logs and unpacked data for Initialized events raised by the SubnetProvider contract.
+type SubnetProviderInitializedIterator struct {
+	Event *SubnetProviderInitialized // Event containing the contract specifics and raw log
+
+	contract *bind.BoundContract // Generic contract to use for unpacking event data
+	event    string              // Event name to use for unpacking event data
+
+	logs chan types.Log        // Log channel receiving the found contract events
+	sub  ethereum.Subscription // Subscription for errors, completion and termination
+	done bool                  // Whether the subscription completed delivering logs
+	fail error                 // Occurred error to stop iteration
+}
+
+// Next advances the iterator to the subsequent event, returning whether there
+// are any more events found. In case of a retrieval or parsing error, false is
+// returned and Error() can be queried for the exact failure.
+func (it *SubnetProviderInitializedIterator) Next() bool {
+	// If the iterator failed, stop iterating
+	if it.fail != nil {
+		return false
+	}
+	// If the iterator completed, deliver directly whatever's available
+	if it.done {
+		select {
+		case log := <-it.logs:
+			it.Event = new(SubnetProviderInitialized)
+			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+				it.fail = err
+				return false
+			}
+			it.Event.Raw = log
+			return true
+
+		default:
+			return false
+		}
+	}
+	// Iterator still in progress, wait for either a data or an error event
+	select {
+	case log := <-it.logs:
+		it.Event = new(SubnetProviderInitialized)
+		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+			it.fail = err
+			return false
+		}
+		it.Event.Raw = log
+		return true
+
+	case err := <-it.sub.Err():
+		it.done = true
+		it.fail = err
+		return it.Next()
+	}
+}
+
+// Error returns any retrieval or parsing error occurred during filtering.
+func (it *SubnetProviderInitializedIterator) Error() error {
+	return it.fail
+}
+
+// Close terminates the iteration process, releasing any pending underlying
+// resources.
+func (it *SubnetProviderInitializedIterator) Close() error {
+	it.sub.Unsubscribe()
+	return nil
+}
+
+// SubnetProviderInitialized represents a Initialized event raised by the SubnetProvider contract.
+type SubnetProviderInitialized struct {
+	Version uint64
+	Raw     types.Log // Blockchain specific contextual infos
+}
+
+// FilterInitialized is a free log retrieval operation binding the contract event 0xc7f505b2f371ae2175ee4913f4499e1f2633a7b5936321eed1cdaeb6115181d2.
+//
+// Solidity: event Initialized(uint64 version)
+func (_SubnetProvider *SubnetProviderFilterer) FilterInitialized(opts *bind.FilterOpts) (*SubnetProviderInitializedIterator, error) {
+
+	logs, sub, err := _SubnetProvider.contract.FilterLogs(opts, "Initialized")
+	if err != nil {
+		return nil, err
+	}
+	return &SubnetProviderInitializedIterator{contract: _SubnetProvider.contract, event: "Initialized", logs: logs, sub: sub}, nil
+}
+
+// WatchInitialized is a free log subscription operation binding the contract event 0xc7f505b2f371ae2175ee4913f4499e1f2633a7b5936321eed1cdaeb6115181d2.
+//
+// Solidity: event Initialized(uint64 version)
+func (_SubnetProvider *SubnetProviderFilterer) WatchInitialized(opts *bind.WatchOpts, sink chan<- *SubnetProviderInitialized) (event.Subscription, error) {
+
+	logs, sub, err := _SubnetProvider.contract.WatchLogs(opts, "Initialized")
+	if err != nil {
+		return nil, err
+	}
+	return event.NewSubscription(func(quit <-chan struct{}) error {
+		defer sub.Unsubscribe()
+		for {
+			select {
+			case log := <-logs:
+				// New log arrived, parse the event and forward to the user
+				event := new(SubnetProviderInitialized)
+				if err := _SubnetProvider.contract.UnpackLog(event, "Initialized", log); err != nil {
+					return err
+				}
+				event.Raw = log
+
+				select {
+				case sink <- event:
+				case err := <-sub.Err():
+					return err
+				case <-quit:
+					return nil
+				}
+			case err := <-sub.Err():
+				return err
+			case <-quit:
+				return nil
+			}
+		}
+	}), nil
+}
+
+// ParseInitialized is a log parse operation binding the contract event 0xc7f505b2f371ae2175ee4913f4499e1f2633a7b5936321eed1cdaeb6115181d2.
+//
+// Solidity: event Initialized(uint64 version)
+func (_SubnetProvider *SubnetProviderFilterer) ParseInitialized(log types.Log) (*SubnetProviderInitialized, error) {
+	event := new(SubnetProviderInitialized)
+	if err := _SubnetProvider.contract.UnpackLog(event, "Initialized", log); err != nil {
+		return nil, err
+	}
+	event.Raw = log
+	return event, nil
+}
+
 // SubnetProviderNFTMintedIterator is returned from FilterNFTMinted and is used to iterate over the raw logs and unpacked data for NFTMinted events raised by the SubnetProvider contract.
 type SubnetProviderNFTMintedIterator struct {
 	Event *SubnetProviderNFTMinted // Event containing the contract specifics and raw log
@@ -1324,6 +1807,596 @@ func (_SubnetProvider *SubnetProviderFilterer) ParseOperatorUpdated(log types.Lo
 	return event, nil
 }
 
+// SubnetProviderOwnershipTransferredIterator is returned from FilterOwnershipTransferred and is used to iterate over the raw logs and unpacked data for OwnershipTransferred events raised by the SubnetProvider contract.
+type SubnetProviderOwnershipTransferredIterator struct {
+	Event *SubnetProviderOwnershipTransferred // Event containing the contract specifics and raw log
+
+	contract *bind.BoundContract // Generic contract to use for unpacking event data
+	event    string              // Event name to use for unpacking event data
+
+	logs chan types.Log        // Log channel receiving the found contract events
+	sub  ethereum.Subscription // Subscription for errors, completion and termination
+	done bool                  // Whether the subscription completed delivering logs
+	fail error                 // Occurred error to stop iteration
+}
+
+// Next advances the iterator to the subsequent event, returning whether there
+// are any more events found. In case of a retrieval or parsing error, false is
+// returned and Error() can be queried for the exact failure.
+func (it *SubnetProviderOwnershipTransferredIterator) Next() bool {
+	// If the iterator failed, stop iterating
+	if it.fail != nil {
+		return false
+	}
+	// If the iterator completed, deliver directly whatever's available
+	if it.done {
+		select {
+		case log := <-it.logs:
+			it.Event = new(SubnetProviderOwnershipTransferred)
+			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+				it.fail = err
+				return false
+			}
+			it.Event.Raw = log
+			return true
+
+		default:
+			return false
+		}
+	}
+	// Iterator still in progress, wait for either a data or an error event
+	select {
+	case log := <-it.logs:
+		it.Event = new(SubnetProviderOwnershipTransferred)
+		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+			it.fail = err
+			return false
+		}
+		it.Event.Raw = log
+		return true
+
+	case err := <-it.sub.Err():
+		it.done = true
+		it.fail = err
+		return it.Next()
+	}
+}
+
+// Error returns any retrieval or parsing error occurred during filtering.
+func (it *SubnetProviderOwnershipTransferredIterator) Error() error {
+	return it.fail
+}
+
+// Close terminates the iteration process, releasing any pending underlying
+// resources.
+func (it *SubnetProviderOwnershipTransferredIterator) Close() error {
+	it.sub.Unsubscribe()
+	return nil
+}
+
+// SubnetProviderOwnershipTransferred represents a OwnershipTransferred event raised by the SubnetProvider contract.
+type SubnetProviderOwnershipTransferred struct {
+	PreviousOwner common.Address
+	NewOwner      common.Address
+	Raw           types.Log // Blockchain specific contextual infos
+}
+
+// FilterOwnershipTransferred is a free log retrieval operation binding the contract event 0x8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0.
+//
+// Solidity: event OwnershipTransferred(address indexed previousOwner, address indexed newOwner)
+func (_SubnetProvider *SubnetProviderFilterer) FilterOwnershipTransferred(opts *bind.FilterOpts, previousOwner []common.Address, newOwner []common.Address) (*SubnetProviderOwnershipTransferredIterator, error) {
+
+	var previousOwnerRule []interface{}
+	for _, previousOwnerItem := range previousOwner {
+		previousOwnerRule = append(previousOwnerRule, previousOwnerItem)
+	}
+	var newOwnerRule []interface{}
+	for _, newOwnerItem := range newOwner {
+		newOwnerRule = append(newOwnerRule, newOwnerItem)
+	}
+
+	logs, sub, err := _SubnetProvider.contract.FilterLogs(opts, "OwnershipTransferred", previousOwnerRule, newOwnerRule)
+	if err != nil {
+		return nil, err
+	}
+	return &SubnetProviderOwnershipTransferredIterator{contract: _SubnetProvider.contract, event: "OwnershipTransferred", logs: logs, sub: sub}, nil
+}
+
+// WatchOwnershipTransferred is a free log subscription operation binding the contract event 0x8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0.
+//
+// Solidity: event OwnershipTransferred(address indexed previousOwner, address indexed newOwner)
+func (_SubnetProvider *SubnetProviderFilterer) WatchOwnershipTransferred(opts *bind.WatchOpts, sink chan<- *SubnetProviderOwnershipTransferred, previousOwner []common.Address, newOwner []common.Address) (event.Subscription, error) {
+
+	var previousOwnerRule []interface{}
+	for _, previousOwnerItem := range previousOwner {
+		previousOwnerRule = append(previousOwnerRule, previousOwnerItem)
+	}
+	var newOwnerRule []interface{}
+	for _, newOwnerItem := range newOwner {
+		newOwnerRule = append(newOwnerRule, newOwnerItem)
+	}
+
+	logs, sub, err := _SubnetProvider.contract.WatchLogs(opts, "OwnershipTransferred", previousOwnerRule, newOwnerRule)
+	if err != nil {
+		return nil, err
+	}
+	return event.NewSubscription(func(quit <-chan struct{}) error {
+		defer sub.Unsubscribe()
+		for {
+			select {
+			case log := <-logs:
+				// New log arrived, parse the event and forward to the user
+				event := new(SubnetProviderOwnershipTransferred)
+				if err := _SubnetProvider.contract.UnpackLog(event, "OwnershipTransferred", log); err != nil {
+					return err
+				}
+				event.Raw = log
+
+				select {
+				case sink <- event:
+				case err := <-sub.Err():
+					return err
+				case <-quit:
+					return nil
+				}
+			case err := <-sub.Err():
+				return err
+			case <-quit:
+				return nil
+			}
+		}
+	}), nil
+}
+
+// ParseOwnershipTransferred is a log parse operation binding the contract event 0x8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0.
+//
+// Solidity: event OwnershipTransferred(address indexed previousOwner, address indexed newOwner)
+func (_SubnetProvider *SubnetProviderFilterer) ParseOwnershipTransferred(log types.Log) (*SubnetProviderOwnershipTransferred, error) {
+	event := new(SubnetProviderOwnershipTransferred)
+	if err := _SubnetProvider.contract.UnpackLog(event, "OwnershipTransferred", log); err != nil {
+		return nil, err
+	}
+	event.Raw = log
+	return event, nil
+}
+
+// SubnetProviderPeerNodeDeletedIterator is returned from FilterPeerNodeDeleted and is used to iterate over the raw logs and unpacked data for PeerNodeDeleted events raised by the SubnetProvider contract.
+type SubnetProviderPeerNodeDeletedIterator struct {
+	Event *SubnetProviderPeerNodeDeleted // Event containing the contract specifics and raw log
+
+	contract *bind.BoundContract // Generic contract to use for unpacking event data
+	event    string              // Event name to use for unpacking event data
+
+	logs chan types.Log        // Log channel receiving the found contract events
+	sub  ethereum.Subscription // Subscription for errors, completion and termination
+	done bool                  // Whether the subscription completed delivering logs
+	fail error                 // Occurred error to stop iteration
+}
+
+// Next advances the iterator to the subsequent event, returning whether there
+// are any more events found. In case of a retrieval or parsing error, false is
+// returned and Error() can be queried for the exact failure.
+func (it *SubnetProviderPeerNodeDeletedIterator) Next() bool {
+	// If the iterator failed, stop iterating
+	if it.fail != nil {
+		return false
+	}
+	// If the iterator completed, deliver directly whatever's available
+	if it.done {
+		select {
+		case log := <-it.logs:
+			it.Event = new(SubnetProviderPeerNodeDeleted)
+			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+				it.fail = err
+				return false
+			}
+			it.Event.Raw = log
+			return true
+
+		default:
+			return false
+		}
+	}
+	// Iterator still in progress, wait for either a data or an error event
+	select {
+	case log := <-it.logs:
+		it.Event = new(SubnetProviderPeerNodeDeleted)
+		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+			it.fail = err
+			return false
+		}
+		it.Event.Raw = log
+		return true
+
+	case err := <-it.sub.Err():
+		it.done = true
+		it.fail = err
+		return it.Next()
+	}
+}
+
+// Error returns any retrieval or parsing error occurred during filtering.
+func (it *SubnetProviderPeerNodeDeletedIterator) Error() error {
+	return it.fail
+}
+
+// Close terminates the iteration process, releasing any pending underlying
+// resources.
+func (it *SubnetProviderPeerNodeDeletedIterator) Close() error {
+	it.sub.Unsubscribe()
+	return nil
+}
+
+// SubnetProviderPeerNodeDeleted represents a PeerNodeDeleted event raised by the SubnetProvider contract.
+type SubnetProviderPeerNodeDeleted struct {
+	TokenId *big.Int
+	PeerId  string
+	Raw     types.Log // Blockchain specific contextual infos
+}
+
+// FilterPeerNodeDeleted is a free log retrieval operation binding the contract event 0x3146c234fc656b2d6bd448c8a0a8deef61fc0efd2c579531e2f4843624249ec7.
+//
+// Solidity: event PeerNodeDeleted(uint256 indexed tokenId, string peerId)
+func (_SubnetProvider *SubnetProviderFilterer) FilterPeerNodeDeleted(opts *bind.FilterOpts, tokenId []*big.Int) (*SubnetProviderPeerNodeDeletedIterator, error) {
+
+	var tokenIdRule []interface{}
+	for _, tokenIdItem := range tokenId {
+		tokenIdRule = append(tokenIdRule, tokenIdItem)
+	}
+
+	logs, sub, err := _SubnetProvider.contract.FilterLogs(opts, "PeerNodeDeleted", tokenIdRule)
+	if err != nil {
+		return nil, err
+	}
+	return &SubnetProviderPeerNodeDeletedIterator{contract: _SubnetProvider.contract, event: "PeerNodeDeleted", logs: logs, sub: sub}, nil
+}
+
+// WatchPeerNodeDeleted is a free log subscription operation binding the contract event 0x3146c234fc656b2d6bd448c8a0a8deef61fc0efd2c579531e2f4843624249ec7.
+//
+// Solidity: event PeerNodeDeleted(uint256 indexed tokenId, string peerId)
+func (_SubnetProvider *SubnetProviderFilterer) WatchPeerNodeDeleted(opts *bind.WatchOpts, sink chan<- *SubnetProviderPeerNodeDeleted, tokenId []*big.Int) (event.Subscription, error) {
+
+	var tokenIdRule []interface{}
+	for _, tokenIdItem := range tokenId {
+		tokenIdRule = append(tokenIdRule, tokenIdItem)
+	}
+
+	logs, sub, err := _SubnetProvider.contract.WatchLogs(opts, "PeerNodeDeleted", tokenIdRule)
+	if err != nil {
+		return nil, err
+	}
+	return event.NewSubscription(func(quit <-chan struct{}) error {
+		defer sub.Unsubscribe()
+		for {
+			select {
+			case log := <-logs:
+				// New log arrived, parse the event and forward to the user
+				event := new(SubnetProviderPeerNodeDeleted)
+				if err := _SubnetProvider.contract.UnpackLog(event, "PeerNodeDeleted", log); err != nil {
+					return err
+				}
+				event.Raw = log
+
+				select {
+				case sink <- event:
+				case err := <-sub.Err():
+					return err
+				case <-quit:
+					return nil
+				}
+			case err := <-sub.Err():
+				return err
+			case <-quit:
+				return nil
+			}
+		}
+	}), nil
+}
+
+// ParsePeerNodeDeleted is a log parse operation binding the contract event 0x3146c234fc656b2d6bd448c8a0a8deef61fc0efd2c579531e2f4843624249ec7.
+//
+// Solidity: event PeerNodeDeleted(uint256 indexed tokenId, string peerId)
+func (_SubnetProvider *SubnetProviderFilterer) ParsePeerNodeDeleted(log types.Log) (*SubnetProviderPeerNodeDeleted, error) {
+	event := new(SubnetProviderPeerNodeDeleted)
+	if err := _SubnetProvider.contract.UnpackLog(event, "PeerNodeDeleted", log); err != nil {
+		return nil, err
+	}
+	event.Raw = log
+	return event, nil
+}
+
+// SubnetProviderPeerNodeRegisteredIterator is returned from FilterPeerNodeRegistered and is used to iterate over the raw logs and unpacked data for PeerNodeRegistered events raised by the SubnetProvider contract.
+type SubnetProviderPeerNodeRegisteredIterator struct {
+	Event *SubnetProviderPeerNodeRegistered // Event containing the contract specifics and raw log
+
+	contract *bind.BoundContract // Generic contract to use for unpacking event data
+	event    string              // Event name to use for unpacking event data
+
+	logs chan types.Log        // Log channel receiving the found contract events
+	sub  ethereum.Subscription // Subscription for errors, completion and termination
+	done bool                  // Whether the subscription completed delivering logs
+	fail error                 // Occurred error to stop iteration
+}
+
+// Next advances the iterator to the subsequent event, returning whether there
+// are any more events found. In case of a retrieval or parsing error, false is
+// returned and Error() can be queried for the exact failure.
+func (it *SubnetProviderPeerNodeRegisteredIterator) Next() bool {
+	// If the iterator failed, stop iterating
+	if it.fail != nil {
+		return false
+	}
+	// If the iterator completed, deliver directly whatever's available
+	if it.done {
+		select {
+		case log := <-it.logs:
+			it.Event = new(SubnetProviderPeerNodeRegistered)
+			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+				it.fail = err
+				return false
+			}
+			it.Event.Raw = log
+			return true
+
+		default:
+			return false
+		}
+	}
+	// Iterator still in progress, wait for either a data or an error event
+	select {
+	case log := <-it.logs:
+		it.Event = new(SubnetProviderPeerNodeRegistered)
+		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+			it.fail = err
+			return false
+		}
+		it.Event.Raw = log
+		return true
+
+	case err := <-it.sub.Err():
+		it.done = true
+		it.fail = err
+		return it.Next()
+	}
+}
+
+// Error returns any retrieval or parsing error occurred during filtering.
+func (it *SubnetProviderPeerNodeRegisteredIterator) Error() error {
+	return it.fail
+}
+
+// Close terminates the iteration process, releasing any pending underlying
+// resources.
+func (it *SubnetProviderPeerNodeRegisteredIterator) Close() error {
+	it.sub.Unsubscribe()
+	return nil
+}
+
+// SubnetProviderPeerNodeRegistered represents a PeerNodeRegistered event raised by the SubnetProvider contract.
+type SubnetProviderPeerNodeRegistered struct {
+	TokenId  *big.Int
+	PeerId   string
+	Metadata string
+	Raw      types.Log // Blockchain specific contextual infos
+}
+
+// FilterPeerNodeRegistered is a free log retrieval operation binding the contract event 0x0871c769e3d0dd7570972a54898f3d91c96d0f36f068b0074dc418d2a0621274.
+//
+// Solidity: event PeerNodeRegistered(uint256 indexed tokenId, string peerId, string metadata)
+func (_SubnetProvider *SubnetProviderFilterer) FilterPeerNodeRegistered(opts *bind.FilterOpts, tokenId []*big.Int) (*SubnetProviderPeerNodeRegisteredIterator, error) {
+
+	var tokenIdRule []interface{}
+	for _, tokenIdItem := range tokenId {
+		tokenIdRule = append(tokenIdRule, tokenIdItem)
+	}
+
+	logs, sub, err := _SubnetProvider.contract.FilterLogs(opts, "PeerNodeRegistered", tokenIdRule)
+	if err != nil {
+		return nil, err
+	}
+	return &SubnetProviderPeerNodeRegisteredIterator{contract: _SubnetProvider.contract, event: "PeerNodeRegistered", logs: logs, sub: sub}, nil
+}
+
+// WatchPeerNodeRegistered is a free log subscription operation binding the contract event 0x0871c769e3d0dd7570972a54898f3d91c96d0f36f068b0074dc418d2a0621274.
+//
+// Solidity: event PeerNodeRegistered(uint256 indexed tokenId, string peerId, string metadata)
+func (_SubnetProvider *SubnetProviderFilterer) WatchPeerNodeRegistered(opts *bind.WatchOpts, sink chan<- *SubnetProviderPeerNodeRegistered, tokenId []*big.Int) (event.Subscription, error) {
+
+	var tokenIdRule []interface{}
+	for _, tokenIdItem := range tokenId {
+		tokenIdRule = append(tokenIdRule, tokenIdItem)
+	}
+
+	logs, sub, err := _SubnetProvider.contract.WatchLogs(opts, "PeerNodeRegistered", tokenIdRule)
+	if err != nil {
+		return nil, err
+	}
+	return event.NewSubscription(func(quit <-chan struct{}) error {
+		defer sub.Unsubscribe()
+		for {
+			select {
+			case log := <-logs:
+				// New log arrived, parse the event and forward to the user
+				event := new(SubnetProviderPeerNodeRegistered)
+				if err := _SubnetProvider.contract.UnpackLog(event, "PeerNodeRegistered", log); err != nil {
+					return err
+				}
+				event.Raw = log
+
+				select {
+				case sink <- event:
+				case err := <-sub.Err():
+					return err
+				case <-quit:
+					return nil
+				}
+			case err := <-sub.Err():
+				return err
+			case <-quit:
+				return nil
+			}
+		}
+	}), nil
+}
+
+// ParsePeerNodeRegistered is a log parse operation binding the contract event 0x0871c769e3d0dd7570972a54898f3d91c96d0f36f068b0074dc418d2a0621274.
+//
+// Solidity: event PeerNodeRegistered(uint256 indexed tokenId, string peerId, string metadata)
+func (_SubnetProvider *SubnetProviderFilterer) ParsePeerNodeRegistered(log types.Log) (*SubnetProviderPeerNodeRegistered, error) {
+	event := new(SubnetProviderPeerNodeRegistered)
+	if err := _SubnetProvider.contract.UnpackLog(event, "PeerNodeRegistered", log); err != nil {
+		return nil, err
+	}
+	event.Raw = log
+	return event, nil
+}
+
+// SubnetProviderPeerNodeUpdatedIterator is returned from FilterPeerNodeUpdated and is used to iterate over the raw logs and unpacked data for PeerNodeUpdated events raised by the SubnetProvider contract.
+type SubnetProviderPeerNodeUpdatedIterator struct {
+	Event *SubnetProviderPeerNodeUpdated // Event containing the contract specifics and raw log
+
+	contract *bind.BoundContract // Generic contract to use for unpacking event data
+	event    string              // Event name to use for unpacking event data
+
+	logs chan types.Log        // Log channel receiving the found contract events
+	sub  ethereum.Subscription // Subscription for errors, completion and termination
+	done bool                  // Whether the subscription completed delivering logs
+	fail error                 // Occurred error to stop iteration
+}
+
+// Next advances the iterator to the subsequent event, returning whether there
+// are any more events found. In case of a retrieval or parsing error, false is
+// returned and Error() can be queried for the exact failure.
+func (it *SubnetProviderPeerNodeUpdatedIterator) Next() bool {
+	// If the iterator failed, stop iterating
+	if it.fail != nil {
+		return false
+	}
+	// If the iterator completed, deliver directly whatever's available
+	if it.done {
+		select {
+		case log := <-it.logs:
+			it.Event = new(SubnetProviderPeerNodeUpdated)
+			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+				it.fail = err
+				return false
+			}
+			it.Event.Raw = log
+			return true
+
+		default:
+			return false
+		}
+	}
+	// Iterator still in progress, wait for either a data or an error event
+	select {
+	case log := <-it.logs:
+		it.Event = new(SubnetProviderPeerNodeUpdated)
+		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+			it.fail = err
+			return false
+		}
+		it.Event.Raw = log
+		return true
+
+	case err := <-it.sub.Err():
+		it.done = true
+		it.fail = err
+		return it.Next()
+	}
+}
+
+// Error returns any retrieval or parsing error occurred during filtering.
+func (it *SubnetProviderPeerNodeUpdatedIterator) Error() error {
+	return it.fail
+}
+
+// Close terminates the iteration process, releasing any pending underlying
+// resources.
+func (it *SubnetProviderPeerNodeUpdatedIterator) Close() error {
+	it.sub.Unsubscribe()
+	return nil
+}
+
+// SubnetProviderPeerNodeUpdated represents a PeerNodeUpdated event raised by the SubnetProvider contract.
+type SubnetProviderPeerNodeUpdated struct {
+	TokenId  *big.Int
+	PeerId   string
+	Metadata string
+	Raw      types.Log // Blockchain specific contextual infos
+}
+
+// FilterPeerNodeUpdated is a free log retrieval operation binding the contract event 0xaac9f0167af86d3540388db7322c095eb7bf138b2ee88ffee321073dac6e90eb.
+//
+// Solidity: event PeerNodeUpdated(uint256 indexed tokenId, string peerId, string metadata)
+func (_SubnetProvider *SubnetProviderFilterer) FilterPeerNodeUpdated(opts *bind.FilterOpts, tokenId []*big.Int) (*SubnetProviderPeerNodeUpdatedIterator, error) {
+
+	var tokenIdRule []interface{}
+	for _, tokenIdItem := range tokenId {
+		tokenIdRule = append(tokenIdRule, tokenIdItem)
+	}
+
+	logs, sub, err := _SubnetProvider.contract.FilterLogs(opts, "PeerNodeUpdated", tokenIdRule)
+	if err != nil {
+		return nil, err
+	}
+	return &SubnetProviderPeerNodeUpdatedIterator{contract: _SubnetProvider.contract, event: "PeerNodeUpdated", logs: logs, sub: sub}, nil
+}
+
+// WatchPeerNodeUpdated is a free log subscription operation binding the contract event 0xaac9f0167af86d3540388db7322c095eb7bf138b2ee88ffee321073dac6e90eb.
+//
+// Solidity: event PeerNodeUpdated(uint256 indexed tokenId, string peerId, string metadata)
+func (_SubnetProvider *SubnetProviderFilterer) WatchPeerNodeUpdated(opts *bind.WatchOpts, sink chan<- *SubnetProviderPeerNodeUpdated, tokenId []*big.Int) (event.Subscription, error) {
+
+	var tokenIdRule []interface{}
+	for _, tokenIdItem := range tokenId {
+		tokenIdRule = append(tokenIdRule, tokenIdItem)
+	}
+
+	logs, sub, err := _SubnetProvider.contract.WatchLogs(opts, "PeerNodeUpdated", tokenIdRule)
+	if err != nil {
+		return nil, err
+	}
+	return event.NewSubscription(func(quit <-chan struct{}) error {
+		defer sub.Unsubscribe()
+		for {
+			select {
+			case log := <-logs:
+				// New log arrived, parse the event and forward to the user
+				event := new(SubnetProviderPeerNodeUpdated)
+				if err := _SubnetProvider.contract.UnpackLog(event, "PeerNodeUpdated", log); err != nil {
+					return err
+				}
+				event.Raw = log
+
+				select {
+				case sink <- event:
+				case err := <-sub.Err():
+					return err
+				case <-quit:
+					return nil
+				}
+			case err := <-sub.Err():
+				return err
+			case <-quit:
+				return nil
+			}
+		}
+	}), nil
+}
+
+// ParsePeerNodeUpdated is a log parse operation binding the contract event 0xaac9f0167af86d3540388db7322c095eb7bf138b2ee88ffee321073dac6e90eb.
+//
+// Solidity: event PeerNodeUpdated(uint256 indexed tokenId, string peerId, string metadata)
+func (_SubnetProvider *SubnetProviderFilterer) ParsePeerNodeUpdated(log types.Log) (*SubnetProviderPeerNodeUpdated, error) {
+	event := new(SubnetProviderPeerNodeUpdated)
+	if err := _SubnetProvider.contract.UnpackLog(event, "PeerNodeUpdated", log); err != nil {
+		return nil, err
+	}
+	event.Raw = log
+	return event, nil
+}
+
 // SubnetProviderProviderDeletedIterator is returned from FilterProviderDeleted and is used to iterate over the raw logs and unpacked data for ProviderDeleted events raised by the SubnetProvider contract.
 type SubnetProviderProviderDeletedIterator struct {
 	Event *SubnetProviderProviderDeleted // Event containing the contract specifics and raw log
@@ -1452,6 +2525,140 @@ func (_SubnetProvider *SubnetProviderFilterer) WatchProviderDeleted(opts *bind.W
 func (_SubnetProvider *SubnetProviderFilterer) ParseProviderDeleted(log types.Log) (*SubnetProviderProviderDeleted, error) {
 	event := new(SubnetProviderProviderDeleted)
 	if err := _SubnetProvider.contract.UnpackLog(event, "ProviderDeleted", log); err != nil {
+		return nil, err
+	}
+	event.Raw = log
+	return event, nil
+}
+
+// SubnetProviderProviderJailedIterator is returned from FilterProviderJailed and is used to iterate over the raw logs and unpacked data for ProviderJailed events raised by the SubnetProvider contract.
+type SubnetProviderProviderJailedIterator struct {
+	Event *SubnetProviderProviderJailed // Event containing the contract specifics and raw log
+
+	contract *bind.BoundContract // Generic contract to use for unpacking event data
+	event    string              // Event name to use for unpacking event data
+
+	logs chan types.Log        // Log channel receiving the found contract events
+	sub  ethereum.Subscription // Subscription for errors, completion and termination
+	done bool                  // Whether the subscription completed delivering logs
+	fail error                 // Occurred error to stop iteration
+}
+
+// Next advances the iterator to the subsequent event, returning whether there
+// are any more events found. In case of a retrieval or parsing error, false is
+// returned and Error() can be queried for the exact failure.
+func (it *SubnetProviderProviderJailedIterator) Next() bool {
+	// If the iterator failed, stop iterating
+	if it.fail != nil {
+		return false
+	}
+	// If the iterator completed, deliver directly whatever's available
+	if it.done {
+		select {
+		case log := <-it.logs:
+			it.Event = new(SubnetProviderProviderJailed)
+			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+				it.fail = err
+				return false
+			}
+			it.Event.Raw = log
+			return true
+
+		default:
+			return false
+		}
+	}
+	// Iterator still in progress, wait for either a data or an error event
+	select {
+	case log := <-it.logs:
+		it.Event = new(SubnetProviderProviderJailed)
+		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+			it.fail = err
+			return false
+		}
+		it.Event.Raw = log
+		return true
+
+	case err := <-it.sub.Err():
+		it.done = true
+		it.fail = err
+		return it.Next()
+	}
+}
+
+// Error returns any retrieval or parsing error occurred during filtering.
+func (it *SubnetProviderProviderJailedIterator) Error() error {
+	return it.fail
+}
+
+// Close terminates the iteration process, releasing any pending underlying
+// resources.
+func (it *SubnetProviderProviderJailedIterator) Close() error {
+	it.sub.Unsubscribe()
+	return nil
+}
+
+// SubnetProviderProviderJailed represents a ProviderJailed event raised by the SubnetProvider contract.
+type SubnetProviderProviderJailed struct {
+	TokenId *big.Int
+	Raw     types.Log // Blockchain specific contextual infos
+}
+
+// FilterProviderJailed is a free log retrieval operation binding the contract event 0x590eb05a981525a1494d36860dcfac158c9073c44a026a5dbd5e62b19b57e86f.
+//
+// Solidity: event ProviderJailed(uint256 tokenId)
+func (_SubnetProvider *SubnetProviderFilterer) FilterProviderJailed(opts *bind.FilterOpts) (*SubnetProviderProviderJailedIterator, error) {
+
+	logs, sub, err := _SubnetProvider.contract.FilterLogs(opts, "ProviderJailed")
+	if err != nil {
+		return nil, err
+	}
+	return &SubnetProviderProviderJailedIterator{contract: _SubnetProvider.contract, event: "ProviderJailed", logs: logs, sub: sub}, nil
+}
+
+// WatchProviderJailed is a free log subscription operation binding the contract event 0x590eb05a981525a1494d36860dcfac158c9073c44a026a5dbd5e62b19b57e86f.
+//
+// Solidity: event ProviderJailed(uint256 tokenId)
+func (_SubnetProvider *SubnetProviderFilterer) WatchProviderJailed(opts *bind.WatchOpts, sink chan<- *SubnetProviderProviderJailed) (event.Subscription, error) {
+
+	logs, sub, err := _SubnetProvider.contract.WatchLogs(opts, "ProviderJailed")
+	if err != nil {
+		return nil, err
+	}
+	return event.NewSubscription(func(quit <-chan struct{}) error {
+		defer sub.Unsubscribe()
+		for {
+			select {
+			case log := <-logs:
+				// New log arrived, parse the event and forward to the user
+				event := new(SubnetProviderProviderJailed)
+				if err := _SubnetProvider.contract.UnpackLog(event, "ProviderJailed", log); err != nil {
+					return err
+				}
+				event.Raw = log
+
+				select {
+				case sink <- event:
+				case err := <-sub.Err():
+					return err
+				case <-quit:
+					return nil
+				}
+			case err := <-sub.Err():
+				return err
+			case <-quit:
+				return nil
+			}
+		}
+	}), nil
+}
+
+// ParseProviderJailed is a log parse operation binding the contract event 0x590eb05a981525a1494d36860dcfac158c9073c44a026a5dbd5e62b19b57e86f.
+//
+// Solidity: event ProviderJailed(uint256 tokenId)
+func (_SubnetProvider *SubnetProviderFilterer) ParseProviderJailed(log types.Log) (*SubnetProviderProviderJailed, error) {
+	event := new(SubnetProviderProviderJailed)
+	if err := _SubnetProvider.contract.UnpackLog(event, "ProviderJailed", log); err != nil {
 		return nil, err
 	}
 	event.Raw = log
@@ -1591,6 +2798,140 @@ func (_SubnetProvider *SubnetProviderFilterer) WatchProviderRegistered(opts *bin
 func (_SubnetProvider *SubnetProviderFilterer) ParseProviderRegistered(log types.Log) (*SubnetProviderProviderRegistered, error) {
 	event := new(SubnetProviderProviderRegistered)
 	if err := _SubnetProvider.contract.UnpackLog(event, "ProviderRegistered", log); err != nil {
+		return nil, err
+	}
+	event.Raw = log
+	return event, nil
+}
+
+// SubnetProviderProviderUnjailedIterator is returned from FilterProviderUnjailed and is used to iterate over the raw logs and unpacked data for ProviderUnjailed events raised by the SubnetProvider contract.
+type SubnetProviderProviderUnjailedIterator struct {
+	Event *SubnetProviderProviderUnjailed // Event containing the contract specifics and raw log
+
+	contract *bind.BoundContract // Generic contract to use for unpacking event data
+	event    string              // Event name to use for unpacking event data
+
+	logs chan types.Log        // Log channel receiving the found contract events
+	sub  ethereum.Subscription // Subscription for errors, completion and termination
+	done bool                  // Whether the subscription completed delivering logs
+	fail error                 // Occurred error to stop iteration
+}
+
+// Next advances the iterator to the subsequent event, returning whether there
+// are any more events found. In case of a retrieval or parsing error, false is
+// returned and Error() can be queried for the exact failure.
+func (it *SubnetProviderProviderUnjailedIterator) Next() bool {
+	// If the iterator failed, stop iterating
+	if it.fail != nil {
+		return false
+	}
+	// If the iterator completed, deliver directly whatever's available
+	if it.done {
+		select {
+		case log := <-it.logs:
+			it.Event = new(SubnetProviderProviderUnjailed)
+			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+				it.fail = err
+				return false
+			}
+			it.Event.Raw = log
+			return true
+
+		default:
+			return false
+		}
+	}
+	// Iterator still in progress, wait for either a data or an error event
+	select {
+	case log := <-it.logs:
+		it.Event = new(SubnetProviderProviderUnjailed)
+		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+			it.fail = err
+			return false
+		}
+		it.Event.Raw = log
+		return true
+
+	case err := <-it.sub.Err():
+		it.done = true
+		it.fail = err
+		return it.Next()
+	}
+}
+
+// Error returns any retrieval or parsing error occurred during filtering.
+func (it *SubnetProviderProviderUnjailedIterator) Error() error {
+	return it.fail
+}
+
+// Close terminates the iteration process, releasing any pending underlying
+// resources.
+func (it *SubnetProviderProviderUnjailedIterator) Close() error {
+	it.sub.Unsubscribe()
+	return nil
+}
+
+// SubnetProviderProviderUnjailed represents a ProviderUnjailed event raised by the SubnetProvider contract.
+type SubnetProviderProviderUnjailed struct {
+	TokenId *big.Int
+	Raw     types.Log // Blockchain specific contextual infos
+}
+
+// FilterProviderUnjailed is a free log retrieval operation binding the contract event 0xbfe4239d342acd9a5f1aa3191e74a1fb9072e0843e6caa633dec9557ef37f768.
+//
+// Solidity: event ProviderUnjailed(uint256 tokenId)
+func (_SubnetProvider *SubnetProviderFilterer) FilterProviderUnjailed(opts *bind.FilterOpts) (*SubnetProviderProviderUnjailedIterator, error) {
+
+	logs, sub, err := _SubnetProvider.contract.FilterLogs(opts, "ProviderUnjailed")
+	if err != nil {
+		return nil, err
+	}
+	return &SubnetProviderProviderUnjailedIterator{contract: _SubnetProvider.contract, event: "ProviderUnjailed", logs: logs, sub: sub}, nil
+}
+
+// WatchProviderUnjailed is a free log subscription operation binding the contract event 0xbfe4239d342acd9a5f1aa3191e74a1fb9072e0843e6caa633dec9557ef37f768.
+//
+// Solidity: event ProviderUnjailed(uint256 tokenId)
+func (_SubnetProvider *SubnetProviderFilterer) WatchProviderUnjailed(opts *bind.WatchOpts, sink chan<- *SubnetProviderProviderUnjailed) (event.Subscription, error) {
+
+	logs, sub, err := _SubnetProvider.contract.WatchLogs(opts, "ProviderUnjailed")
+	if err != nil {
+		return nil, err
+	}
+	return event.NewSubscription(func(quit <-chan struct{}) error {
+		defer sub.Unsubscribe()
+		for {
+			select {
+			case log := <-logs:
+				// New log arrived, parse the event and forward to the user
+				event := new(SubnetProviderProviderUnjailed)
+				if err := _SubnetProvider.contract.UnpackLog(event, "ProviderUnjailed", log); err != nil {
+					return err
+				}
+				event.Raw = log
+
+				select {
+				case sink <- event:
+				case err := <-sub.Err():
+					return err
+				case <-quit:
+					return nil
+				}
+			case err := <-sub.Err():
+				return err
+			case <-quit:
+				return nil
+			}
+		}
+	}), nil
+}
+
+// ParseProviderUnjailed is a log parse operation binding the contract event 0xbfe4239d342acd9a5f1aa3191e74a1fb9072e0843e6caa633dec9557ef37f768.
+//
+// Solidity: event ProviderUnjailed(uint256 tokenId)
+func (_SubnetProvider *SubnetProviderFilterer) ParseProviderUnjailed(log types.Log) (*SubnetProviderProviderUnjailed, error) {
+	event := new(SubnetProviderProviderUnjailed)
+	if err := _SubnetProvider.contract.UnpackLog(event, "ProviderUnjailed", log); err != nil {
 		return nil, err
 	}
 	event.Raw = log

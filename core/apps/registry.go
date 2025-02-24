@@ -7,18 +7,25 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
+	pvtypes "github.com/unicornultrafoundation/subnet-node/proto/subnet/app/verifier"
 )
 
-func (s *Service) ReportUsage(ctx context.Context, appId, usedCpu, usedGpu, usedMemory, usedStorage, usedUploadBytes, usedDownloadBytes, duration *big.Int, signature []byte) (common.Hash, error) {
-	providerId := big.NewInt(s.accountService.ProviderID())
+func (s *Service) ReportUsage(ctx context.Context, sign *pvtypes.SignatureResponse) (common.Hash, error) {
 	// Create a new transactor
 	key, err := s.accountService.NewKeyedTransactor()
 	if err != nil {
 		return common.Hash{}, err
 	}
 
-	// Call the ClaimReward function from the ABI
-	tx, err := s.accountService.AppStore().ReportUsage(key, providerId, appId, usedCpu, usedGpu, usedMemory, usedStorage, usedUploadBytes, usedDownloadBytes, duration, signature)
+	usage := sign.SignedUsage
+
+	// Call the ReportUsage function from the ABI
+	tx, err := s.accountService.AppStore().ReportUsage(
+		key, big.NewInt(usage.AppId), big.NewInt(usage.ProviderId), usage.PeerId,
+		big.NewInt(usage.Cpu), big.NewInt(usage.Gpu), big.NewInt(usage.Memory), big.NewInt(usage.Storage),
+		big.NewInt(usage.UploadBytes), big.NewInt(usage.DownloadBytes), big.NewInt(usage.Duration),
+		big.NewInt(usage.Timestamp),
+		usage.Signature)
 	if err != nil {
 		return common.Hash{}, err
 	}

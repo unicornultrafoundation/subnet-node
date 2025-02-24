@@ -10,10 +10,11 @@ import (
 	"github.com/containerd/containerd/cio"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/oci"
+	atypes "github.com/unicornultrafoundation/subnet-node/core/apps/types"
 )
 
 // Starts a container for the specified app using containerd.
-func (s *Service) RunApp(ctx context.Context, appId *big.Int) (*App, error) {
+func (s *Service) RunApp(ctx context.Context, appId *big.Int) (*atypes.App, error) {
 	// Set the namespace for the container
 	ctx = namespaces.WithNamespace(ctx, NAMESPACE)
 
@@ -23,7 +24,7 @@ func (s *Service) RunApp(ctx context.Context, appId *big.Int) (*App, error) {
 		return nil, fmt.Errorf("failed to fetch app details: %w", err)
 	}
 
-	if app.Status != NotFound {
+	if app.Status != atypes.NotFound {
 		return app, nil
 	}
 

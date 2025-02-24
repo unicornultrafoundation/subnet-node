@@ -3,6 +3,7 @@ package stats
 import (
 	"context"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -23,7 +24,7 @@ type StatEntry struct {
 	UsedCpu           uint64
 	UsedMemory        uint64
 	UsedStorage       uint64
-	Duration          time.Duration
+	Duration          int64
 }
 
 // Stats manages the resource usage statistics for multiple containers.
@@ -213,7 +214,7 @@ func (s *Stats) updateStats(ctx context.Context, containerId string) error {
 		UsedGpu:           currentStats.UsedGpu,
 		UsedMemory:        s.memoryUsage[int32(pid)] / s.memorySampleCount[int32(pid)],
 		UsedStorage:       currentStats.UsedStorage,
-		Duration:          time.Since(s.startTimes[containerId]),
+		Duration:          int64(time.Since(s.startTimes[containerId]).Seconds()),
 	}
 
 	// Add final stats if they exist
@@ -323,7 +324,7 @@ func (s *Stats) GetAllFinalStats() (map[string]*StatEntry, error) {
 // Start starts the stats service and periodically updates stats for all running containers.
 func (s *Stats) Start() {
 	go func() {
-		ticker := time.NewTicker(30 * time.Second)
+		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
 
 		for {
@@ -349,7 +350,7 @@ func (s *Stats) updateAllRunningContainersStats() {
 	// Fetch all running containers
 	containers, err := s.containerdClient.Containers(ctx)
 	if err != nil {
-		fmt.Printf("failed to fetch running containers: %v\n", err)
+		log.Printf("failed to fetch running containers: %v\n", err)
 		return
 	}
 
@@ -357,7 +358,7 @@ func (s *Stats) updateAllRunningContainersStats() {
 	for _, container := range containers {
 		containerId := container.ID()
 		if err := s.updateStats(ctx, containerId); err != nil {
-			fmt.Printf("failed to update stats for container %s: %v\n", containerId, err)
+			log.Printf("failed to update stats for container %s: %v\n", containerId, err)
 		}
 	}
 }

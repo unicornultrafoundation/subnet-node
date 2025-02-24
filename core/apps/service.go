@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"math/big"
-	"strings"
 
 	"github.com/gogo/protobuf/proto"
 
@@ -12,19 +11,21 @@ import (
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/errdefs"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ipfs/go-datastore"
 	p2phost "github.com/libp2p/go-libp2p/core/host"
-	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/config"
 	"github.com/unicornultrafoundation/subnet-node/core/account"
+	"github.com/unicornultrafoundation/subnet-node/core/apps/verifier"
+
 	"github.com/unicornultrafoundation/subnet-node/core/apps/stats"
+	atypes "github.com/unicornultrafoundation/subnet-node/core/apps/types"
 	"github.com/unicornultrafoundation/subnet-node/p2p"
 	pbapp "github.com/unicornultrafoundation/subnet-node/proto/subnet/app"
+	pvtypes "github.com/unicornultrafoundation/subnet-node/proto/subnet/app/verifier"
 )
 
 var log = logrus.WithField("service", "apps")
@@ -34,41 +35,53 @@ const PROTOCOL_ID = protocol.ID("subnet-apps")
 const RESOURCE_USAGE_KEY = "resource-usage-v2"
 
 type Service struct {
-	peerId           peer.ID
-	IsProvider       bool
-	cfg              *config.C
-	ethClient        *ethclient.Client
-	containerdClient *containerd.Client
-	P2P              *p2p.P2P
-	PeerHost         p2phost.Host  `optional:"true"` // the network host (server+client)
-	stopChan         chan struct{} // Channel to stop background tasks
-	accountService   *account.AccountService
-	statService      *stats.Stats
-	Datastore        datastore.Datastore // Datastore for storing resource usage
+	peerId                peer.ID
+	IsProvider            bool
+	IsVerifier            bool
+	cfg                   *config.C
+	ethClient             *ethclient.Client
+	containerdClient      *containerd.Client
+	P2P                   *p2p.P2P
+	PeerHost              p2phost.Host  `optional:"true"` // the network host (server+client)
+	stopChan              chan struct{} // Channel to stop background tasks
+	accountService        *account.AccountService
+	statService           *stats.Stats
+	Datastore             datastore.Datastore // Datastore for storing resource usage
+	verifier              *verifier.Verifier  // Verifier for resource usage
+	pow                   *verifier.Pow       // Proof of Work for resource usage
+	signatureResponseChan chan *pvtypes.SignatureResponse
 }
 
 // Initializes the Service with Ethereum and containerd clients.
-func New(peerHost p2phost.Host, peerId peer.ID, cfg *config.C, P2P *p2p.P2P, dataStore datastore.Datastore, accountService *account.AccountService) *Service {
+func New(peerHost p2phost.Host, peerId peer.ID, cfg *config.C, P2P *p2p.P2P, ds datastore.Datastore, acc *account.AccountService) *Service {
 	return &Service{
-		peerId:         peerId,
-		PeerHost:       peerHost,
-		P2P:            P2P,
-		cfg:            cfg,
-		Datastore:      dataStore,
-		IsProvider:     cfg.GetBool("provider.enable", false),
-		stopChan:       make(chan struct{}),
-		accountService: accountService,
-		ethClient:      accountService.GetClient(),
+		peerId:                peerId,
+		PeerHost:              peerHost,
+		P2P:                   P2P,
+		cfg:                   cfg,
+		Datastore:             ds,
+		IsProvider:            cfg.GetBool("provider.enable", false),
+		IsVerifier:            cfg.GetBool("verifier.enable", false),
+		stopChan:              make(chan struct{}),
+		accountService:        acc,
+		ethClient:             acc.GetClient(),
+		verifier:              verifier.NewVerifier(ds, peerHost, P2P, acc),
+		signatureResponseChan: make(chan *pvtypes.SignatureResponse, 100),
 	}
 }
 
 func (s *Service) Start(ctx context.Context) error {
-	// Register the P2P protocol for signing
-	if err := s.RegisterSignProtocol(); err != nil {
-		return fmt.Errorf("failed to register signing protocol: %w", err)
+	if s.IsVerifier {
+		// Register the P2P protocol for signing
+		if err := s.verifier.Register(); err != nil {
+			return fmt.Errorf("failed to register signing protocol: %w", err)
+		}
 	}
 
 	if s.IsProvider {
+		s.pow = verifier.NewPow(verifier.NodeProvider, s.PeerHost, s.P2P)
+		s.PeerHost.SetStreamHandler(atypes.ProtocollAppSignatureReceive, s.onSignatureReceive)
+
 		// Connect to containerd daemon
 		var err error
 		s.containerdClient, err = containerd.New("/run/containerd/containerd.sock")
@@ -83,7 +96,8 @@ func (s *Service) Start(ctx context.Context) error {
 		// Start app sub-services
 		go s.startUpgradeAppVersion(ctx)
 		go s.statService.Start()
-		go s.startRewardClaimer(ctx)
+		go s.startReportLoop(ctx)
+		go s.handleSignatureResponses(ctx)
 	}
 
 	log.Info("Subnet Apps Service started successfully.")
@@ -107,6 +121,8 @@ func (s *Service) Stop(ctx context.Context) error {
 	// Close sub-services
 	s.statService.Stop()
 
+	close(s.signatureResponseChan)
+
 	log.Info("Subnet Apps Service stopped successfully.")
 	return nil
 }
@@ -115,40 +131,7 @@ func (s *Service) GetAppCount() (*big.Int, error) {
 	return s.accountService.AppStore().AppCount(nil)
 }
 
-func (s *Service) GetApp(ctx context.Context, appId *big.Int) (*App, error) {
-	subnetApp, err := s.accountService.AppStore().Apps(nil, appId)
-	if err != nil {
-		return nil, err
-	}
-
-	appStatus, err := s.GetContainerStatus(ctx, appId)
-	if err != nil {
-		return nil, err
-	}
-
-	app := convertToApp(subnetApp, appId, appStatus)
-
-	// Retrieve metadata from datastore if available
-	metadata, err := s.GetContainerConfigProto(ctx, appId)
-	if err == nil {
-		if app.Metadata == nil {
-			app.Metadata = new(AppMetadata)
-		}
-		app.Metadata.ContainerConfig.Env = metadata.ContainerConfig.Env
-	}
-
-	if appStatus == Running {
-		ip, err := s.GetContainerIP(ctx, appId)
-		if err != nil {
-			return nil, err
-		}
-		app.IP = ip
-	}
-
-	return app, nil
-}
-
-func (s *Service) GetContainerConfigProto(ctx context.Context, appId *big.Int) (*AppMetadata, error) {
+func (s *Service) GetContainerConfigProto(ctx context.Context, appId *big.Int) (*atypes.AppMetadata, error) {
 	configKey := datastore.NewKey(fmt.Sprintf("container-config-%s", appId.String()))
 	configData, err := s.Datastore.Get(ctx, configKey)
 	if err != nil {
@@ -160,342 +143,52 @@ func (s *Service) GetContainerConfigProto(ctx context.Context, appId *big.Int) (
 		return nil, fmt.Errorf("failed to unmarshal container config: %w", err)
 	}
 
-	return ProtoToAppMetadata(&protoConfig), nil
-}
-
-func (s *Service) GetUsage(ctx context.Context, appId *big.Int) (*ResourceUsage, error) {
-	containerId := getContainerIdFromAppId(appId)
-	providerId := big.NewInt(s.accountService.ProviderID())
-
-	// Get resource usage from stats
-	statUsage, _ := s.statService.GetStats(containerId)
-	if statUsage == nil {
-		statUsage, _ = s.statService.GetFinalStats(containerId)
-	}
-
-	// Get usage from smart contract
-	smcUsage, err := s.accountService.AppStore().GetDeployment(nil, appId, providerId)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get resource usage from smart contract for appId %s, providerId %s: %v", appId.String(), providerId.String(), err)
-	}
-
-	usage := convertToResourceUsage(smcUsage, appId, providerId)
-
-	if statUsage != nil {
-		// Override memory, storage & gpu value with stats data
-		usage.UsedMemory = big.NewInt(int64(statUsage.UsedMemory))
-		usage.UsedStorage = big.NewInt(int64(statUsage.UsedStorage))
-		usage.UsedGpu = big.NewInt(int64(statUsage.UsedGpu))
-
-		// Add bandwidth & cpu value from smart contract into stats data
-		usage.UsedUploadBytes.Add(usage.UsedUploadBytes, big.NewInt(int64(statUsage.UsedUploadBytes)))
-		usage.UsedDownloadBytes.Add(usage.UsedDownloadBytes, big.NewInt(int64(statUsage.UsedDownloadBytes)))
-		usage.UsedCpu.Add(usage.UsedCpu, big.NewInt(int64(statUsage.UsedCpu)))
-		usage.Duration.Add(usage.Duration, big.NewInt(int64(statUsage.Duration.Seconds())))
-	}
-
-	return usage, nil
-}
-
-func (s *Service) GetAllRunningContainersUsage(ctx context.Context) (*ResourceUsage, error) {
-	// Set the namespace for the containers
-	ctx = namespaces.WithNamespace(ctx, NAMESPACE)
-
-	// Fetch all running containers
-	containers, err := s.containerdClient.Containers(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch running containers: %w", err)
-	}
-
-	// Initialize a single ResourceUsage to aggregate all usage
-	totalUsage := &ResourceUsage{
-		UsedCpu:           big.NewInt(0),
-		UsedGpu:           big.NewInt(0),
-		UsedMemory:        big.NewInt(0),
-		UsedStorage:       big.NewInt(0),
-		UsedUploadBytes:   big.NewInt(0),
-		UsedDownloadBytes: big.NewInt(0),
-		Duration:          big.NewInt(0),
-	}
-
-	providerId := big.NewInt(s.accountService.ProviderID())
-
-	// Iterate over each container and aggregate its resource usage
-	for _, container := range containers {
-		containerId := container.ID()
-		appId, err := getAppIdFromContainerId(containerId)
-
-		if err != nil {
-			return nil, err
-		}
-
-		usage, err := s.GetUsage(ctx, appId)
-		if err != nil {
-			usage = &ResourceUsage{
-				AppId:             appId,
-				ProviderId:        providerId,
-				UsedCpu:           big.NewInt(0),
-				UsedGpu:           big.NewInt(0),
-				UsedMemory:        big.NewInt(0),
-				UsedStorage:       big.NewInt(0),
-				UsedUploadBytes:   big.NewInt(0),
-				UsedDownloadBytes: big.NewInt(0),
-				Duration:          big.NewInt(0),
-			}
-		}
-
-		// Aggregate the usage
-		totalUsage.UsedCpu.Add(totalUsage.UsedCpu, usage.UsedCpu)
-		totalUsage.UsedGpu.Add(totalUsage.UsedGpu, usage.UsedGpu)
-		totalUsage.UsedMemory.Add(totalUsage.UsedMemory, usage.UsedMemory)
-		totalUsage.UsedStorage.Add(totalUsage.UsedStorage, usage.UsedStorage)
-		totalUsage.UsedUploadBytes.Add(totalUsage.UsedUploadBytes, usage.UsedUploadBytes)
-		totalUsage.UsedDownloadBytes.Add(totalUsage.UsedDownloadBytes, usage.UsedDownloadBytes)
-		totalUsage.Duration.Add(totalUsage.Duration, usage.Duration)
-	}
-
-	return totalUsage, nil
-}
-
-// Stops and removes the container for the specified app.
-func (s *Service) RemoveApp(ctx context.Context, appId *big.Int) (*App, error) {
-	// Set the namespace for the container
-	ctx = namespaces.WithNamespace(ctx, NAMESPACE)
-
-	// Retrieve app details from the Ethereum contract
-	app, err := s.GetApp(ctx, appId)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch app details: %w", err)
-	}
-
-	// Load the container for the app
-	container, err := s.containerdClient.LoadContainer(ctx, app.ContainerId())
-	if err != nil {
-		return nil, fmt.Errorf("failed to load container: %w", err)
-	}
-
-	// Stop the container task
-	task, err := container.Task(ctx, nil)
-	taskNotFound := false
-	if err != nil {
-		if !errdefs.IsNotFound(err) {
-			return nil, fmt.Errorf("failed to get task: %w", err)
-		}
-		taskNotFound = true
-	}
-
-	if !taskNotFound {
-		_, err = task.Delete(ctx, containerd.WithProcessKill)
-		if err != nil {
-			return nil, fmt.Errorf("failed to delete task: %w", err)
-		}
-	}
-
-	// Remove the container and its snapshot
-	err = container.Delete(ctx, containerd.WithSnapshotCleanup)
-	if err != nil {
-		return nil, fmt.Errorf("failed to delete container: %w", err)
-	}
-
-	log.Printf("App %s removed successfully: Container ID: %s", app.Symbol, app.ContainerId())
-	app.Status = NotFound
-	return app, nil
+	return atypes.ProtoToAppMetadata(&protoConfig), nil
 }
 
 // Retrieves the status of a container associated with a specific app.
-func (s *Service) GetContainerStatus(ctx context.Context, appId *big.Int) (ProcessStatus, error) {
+func (s *Service) GetContainerStatus(ctx context.Context, appId *big.Int) (atypes.ProcessStatus, error) {
 	// Set the namespace for the container
 	ctx = namespaces.WithNamespace(ctx, NAMESPACE)
 
-	containerId := getContainerIdFromAppId(appId)
+	containerId := atypes.GetContainerIdFromAppId(appId)
 
 	// Load the container for the app
 	container, err := s.containerdClient.LoadContainer(ctx, containerId)
 	if err != nil {
 		if errdefs.IsNotFound(err) {
-			return NotFound, nil
+			return atypes.NotFound, nil
 		}
-		return Unknown, err
+		return atypes.Unknown, err
 	}
 
 	// Retrieve the task for the container
 	task, err := container.Task(ctx, nil)
 	if err != nil {
-		return Stopped, nil // Task does not exist
+		return atypes.Stopped, nil // Task does not exist
 	}
 
 	// Retrieve the status of the task
 	status, err := task.Status(ctx)
 	if err != nil {
-		return Stopped, fmt.Errorf("failed to get task status: %w", err)
+		return atypes.Stopped, fmt.Errorf("failed to get task status: %w", err)
 	}
 
 	switch status.Status {
 	case containerd.Created:
-		return Created, nil
+		return atypes.Created, nil
 	case containerd.Paused:
-		return Paused, nil
+		return atypes.Paused, nil
 	case containerd.Running:
-		return Running, nil
+		return atypes.Running, nil
 	case containerd.Stopped:
-		return Stopped, nil
+		return atypes.Stopped, nil
 	case containerd.Pausing:
-		return Pausing, nil
+		return atypes.Pausing, nil
 	default:
-		return Unknown, nil
+		return atypes.Unknown, nil
 	}
 }
-
-func (s *Service) RegisterSignProtocol() error {
-	// Define the signing logic
-	signHandler := func(stream network.Stream) ([]byte, error) {
-		signRequest, err := ReceiveSignRequest(stream)
-
-		if err != nil {
-			return []byte{}, fmt.Errorf("failed to receive sign request: %w", err)
-		}
-
-		var signature []byte
-		switch data := signRequest.Data.(type) {
-		case *pbapp.SignatureRequest_Usage:
-			usage := convertUsageFromProto(*data.Usage)
-			signature, err = s.SignResourceUsage(usage)
-
-			if err != nil {
-				return []byte{}, fmt.Errorf("failed to sign resource usage: %w", err)
-			}
-		default:
-			return []byte{}, fmt.Errorf("unsupport this signature request type: %w", err)
-		}
-
-		return signature, nil
-	}
-
-	// Create the listener for the signing protocol
-	listener := p2p.NewSignProtocolListener(PROTOCOL_ID, signHandler)
-
-	// Register the listener in the ListenersP2P
-	err := s.P2P.ListenersP2P.Register(listener)
-	if err != nil {
-		return err
-	}
-
-	log.Debugf("Registered signing protocol: %s", PROTOCOL_ID)
-	return nil
-}
-
-func (s *Service) RestartStoppedContainers(ctx context.Context) error {
-	// Set the namespace for the containers
-	ctx = namespaces.WithNamespace(ctx, NAMESPACE)
-
-	// Fetch all running containers
-	containers, err := s.containerdClient.Containers(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to fetch running containers: %w", err)
-	}
-
-	for _, container := range containers {
-		// Get container ID (assuming appID is same as container ID)
-		containerId := container.ID()
-		appId, err := getAppIdFromContainerId(containerId)
-
-		if err != nil {
-			log.Errorf("failed to get appId from containerId %s: %v", containerId, err)
-			continue
-		}
-
-		status, err := s.GetContainerStatus(ctx, appId)
-
-		if err != nil {
-			log.Errorf("failed to get status from containerId %s: %v", containerId, err)
-			continue
-		}
-
-		if status == Stopped {
-			err := s.RestartContainer(ctx, appId)
-
-			if err != nil {
-				log.Errorf("failed to restart containerId %s: %v", containerId, err)
-				continue
-			}
-		}
-	}
-
-	return nil
-}
-
-func (s *Service) RestartContainer(ctx context.Context, appId *big.Int) error {
-	_, err := s.RemoveApp(ctx, appId)
-
-	if err != nil {
-		return fmt.Errorf("failed to remove appId %v: %v", appId, err)
-	}
-
-	_, err = s.RunApp(ctx, appId)
-	if err != nil {
-		return fmt.Errorf("failed to run appId %v: %v", appId, err)
-	}
-
-	return nil
-}
-
-// // Calculate container duration
-// func (s *Service) CalculateContainerDuration(ctx context.Context, appId big.Int) (int64, error) {
-// 	// Load the container
-// 	container, err := s.containerdClient.LoadContainer(ctx, appId.String())
-// 	if err != nil {
-// 		return 0, err // Return 0 if container not found
-// 	}
-
-// 	// Get the task associated with the container
-// 	info, err := container.Info(ctx, nil)
-// 	if err != nil {
-// 		log.Errorf("Failed to get container task: %v", err)
-// 		return 0, err // Return 0 if task not found
-// 	}
-
-// 	// Calculate duration (current time - start time)
-// 	startTime := info.CreatedAt
-// 	if startTime.IsZero() {
-// 		return 0, nil // If no start time, duration is 0
-// 	}
-// 	duration := time.Since(startTime).Seconds()
-// 	return int64(duration), nil // Return duration in seconds
-// }
-
-// // GetAppNode retrieves the details of an AppNode by its ID or similar identifier.
-// func (s *Service) GetAppNode(ctx context.Context, appId big.Int, subnetId big.Int) (ResourceUsage, error) {
-// 	// Prepare input for the contract call to retrieve AppNode details
-// 	input, err := subnetABI.Pack("getAppNode", appId, subnetId)
-// 	if err != nil {
-// 		log.Errorf("Failed to pack input for getAppNode: %v", err)
-// 		return ResourceUsage{}, err
-// 	}
-
-// 	// Create the contract call message
-// 	msg := ethereum.CallMsg{
-// 		To:   &s.subnetAppRegistryContract,
-// 		Data: input,
-// 	}
-
-// 	// Execute the contract call
-// 	result, err := s.ethClient.CallContract(ctx, msg, nil)
-// 	if err != nil {
-// 		log.Errorf("Failed to call contract for AppNode details: %v", err)
-// 		return ResourceUsage{}, err
-// 	}
-
-// 	// Unpack the result into the AppNode structure
-// 	var usage ResourceUsage
-// 	err = subnetABI.UnpackIntoInterface(&usage, "getAppNode", result)
-// 	if err != nil {
-// 		log.Errorf("Failed to unpack AppNode details: %v", err)
-// 		return ResourceUsage{}, err
-// 	}
-
-// 	// Return the retrieved AppNode details
-// 	return usage, nil
-// }
 
 // Retrieves the IP address of a running container.
 func (s *Service) GetContainerIP(ctx context.Context, appId *big.Int) (string, error) {
@@ -506,8 +199,8 @@ func (s *Service) GetContainerIP(ctx context.Context, appId *big.Int) (string, e
 	return ip, nil
 }
 
-func (s *Service) SaveContainerConfigProto(ctx context.Context, appId *big.Int, config ContainerConfig) error {
-	protoConfig := AppMetadataToProto(&AppMetadata{ContainerConfig: config})
+func (s *Service) SaveContainerConfigProto(ctx context.Context, appId *big.Int, config atypes.ContainerConfig) error {
+	protoConfig := atypes.AppMetadataToProto(&atypes.AppMetadata{ContainerConfig: config})
 	configData, err := proto.Marshal(protoConfig)
 	if err != nil {
 		return fmt.Errorf("failed to marshal container config: %w", err)
@@ -519,38 +212,4 @@ func (s *Service) SaveContainerConfigProto(ctx context.Context, appId *big.Int, 
 	}
 
 	return nil
-}
-
-func (s *Service) RegisterProvider(providerName string, metadata string, website string) (common.Hash, error) {
-	// Create a new transactor
-	key, err := s.accountService.NewKeyedTransactor()
-	if err != nil {
-		return common.Hash{}, err
-	}
-
-	tx, err := s.accountService.Provider().RegisterProvider(key, providerName, metadata, s.accountService.GetAddress(), website)
-	if err != nil {
-		return common.Hash{}, err
-	}
-
-	return tx.Hash(), nil
-}
-
-// Extract appId from container ID
-func getAppIdFromContainerId(containerId string) (*big.Int, error) {
-	appIDStr := strings.TrimPrefix(containerId, "subnet-app-")
-	appID, ok := new(big.Int).SetString(appIDStr, 10)
-
-	if !ok {
-		return nil, fmt.Errorf("invalid container ID: %s", containerId)
-	}
-
-	return appID, nil
-}
-
-// Extract containerId from appId
-func getContainerIdFromAppId(appId *big.Int) string {
-	app := App{ID: appId}
-
-	return app.ContainerId()
 }

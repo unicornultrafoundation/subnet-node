@@ -3,7 +3,6 @@ package account
 import (
 	"context"
 	"crypto/ecdsa"
-	"crypto/rand"
 	"fmt"
 	"math/big"
 
@@ -13,25 +12,24 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/sirupsen/logrus"
+	signer "github.com/unicornultrafoundation/subnet-node/common/signer"
 	"github.com/unicornultrafoundation/subnet-node/config"
 	"github.com/unicornultrafoundation/subnet-node/core/contracts"
 	"go.uber.org/fx"
 )
 
-var log = logrus.New().WithField("service", "account")
+var log = logrus.WithField("service", "account")
 
 // AccountService is a service to handle Ethereum transactions
 type AccountService struct {
-	privateKey              *ecdsa.PrivateKey
-	client                  *ethclient.Client
-	chainID                 *big.Int
-	subnetProvider          *contracts.SubnetProvider
-	subnetProviderAddr      string
-	subnetAppStore          *contracts.SubnetAppStore
-	subnetAppStoreAddr      string
-	subnetProvierUptimeAddr string
-	subnetProvierUptime     *contracts.SubnetProviderUptime
-	providerID              int64
+	privateKey         *ecdsa.PrivateKey
+	client             *ethclient.Client
+	chainID            *big.Int
+	subnetProvider     *contracts.SubnetProvider
+	subnetProviderAddr string
+	subnetAppStore     *contracts.SubnetAppStore
+	subnetAppStoreAddr string
+	providerID         int64
 }
 
 // NewAccountService initializes a new AccountService
@@ -69,29 +67,17 @@ func NewAccountService(cfg *config.C) (*AccountService, error) {
 		return nil, err
 	}
 
-	subnetProviderUptimeAddr := cfg.GetString("apps.subnet_provider", config.DefaultSubnetProviderUptimeAddr)
-	subnetProviderUptime, err := contracts.NewSubnetProviderUptime(
-		common.HexToAddress(subnetProviderUptimeAddr),
-		client,
-	)
-
-	if err != nil {
-		return nil, err
-	}
-
 	providerId := int64(cfg.GetInt("provider.id", 0))
 
 	s := &AccountService{
-		privateKey:              privateKey,
-		client:                  client,
-		chainID:                 chainID,
-		subnetProvider:          subnetRegistry,
-		subnetProviderAddr:      subnetProviderAddr,
-		subnetAppStore:          subnetAppStore,
-		subnetAppStoreAddr:      subnetAppStoreAddr,
-		subnetProvierUptimeAddr: subnetProviderUptimeAddr,
-		subnetProvierUptime:     subnetProviderUptime,
-		providerID:              providerId,
+		privateKey:         privateKey,
+		client:             client,
+		chainID:            chainID,
+		subnetProvider:     subnetRegistry,
+		subnetProviderAddr: subnetProviderAddr,
+		subnetAppStore:     subnetAppStore,
+		subnetAppStoreAddr: subnetAppStoreAddr,
+		providerID:         providerId,
 	}
 	s.registerReloadCallback(cfg)
 	return s, nil
@@ -128,10 +114,6 @@ func (s *AccountService) AppStore() *contracts.SubnetAppStore {
 	return s.subnetAppStore
 }
 
-func (s *AccountService) Uptime() *contracts.SubnetProviderUptime {
-	return s.subnetProvierUptime
-}
-
 func (s *AccountService) GetChainID() *big.Int {
 	return s.chainID
 }
@@ -142,10 +124,6 @@ func (s *AccountService) AppStoreAddr() string {
 
 func (s *AccountService) ProviderAddr() string {
 	return s.subnetProviderAddr
-}
-
-func (s *AccountService) UptimeAddr() string {
-	return s.subnetProvierUptimeAddr
 }
 
 // GetAddress retrieves the Ethereum address from the private key
@@ -223,21 +201,19 @@ func EthereumService(lc fx.Lifecycle, cfg *config.C) (*AccountService, error) {
 
 // Sign the hash using ECDSA
 func (account *AccountService) Sign(hash []byte) ([]byte, error) {
-	r, s, err := ecdsa.Sign(rand.Reader, account.privateKey, hash)
+	signature, err := crypto.Sign(hash, account.privateKey)
 	if err != nil {
-		return nil, fmt.Errorf("failed to sign: %v", err)
+		return nil, err
 	}
-
-	// Ensure `s` is in the lower half-order
-	halfOrder := new(big.Int).Rsh(crypto.S256().Params().N, 1)
-	v := byte(27)
-	if s.Cmp(halfOrder) > 0 {
-		s.Sub(crypto.S256().Params().N, s)
-		v = 28
-	}
-
-	// Format signature: r (32 bytes) || s (32 bytes) || v (1 byte)
-	signature := append(r.Bytes(), append(s.Bytes(), v)...)
-
+	signature[64] += 27
 	return signature, nil
+}
+
+func (account *AccountService) SignTypedData(typedData *signer.TypedData) ([]byte, []byte, error) {
+	typedDataHash, _, err := signer.TypedDataAndHash(*typedData)
+	if err != nil {
+		return []byte{}, []byte{}, fmt.Errorf("failed to hash typed data: %v", err)
+	}
+	s, e := account.Sign(typedDataHash)
+	return typedDataHash, s, e
 }

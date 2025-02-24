@@ -26,6 +26,7 @@ func RelayService(enable bool, cfg *config.C) func() (opts Libp2pOpts, err error
 	return func() (opts Libp2pOpts, err error) {
 		if enable {
 			def := relay.DefaultResources()
+
 			// Real defaults live in go-libp2p.
 			// Here we apply any overrides from user config.
 			opts.Opts = append(opts.Opts, libp2p.EnableRelayService(relay.WithResources(relay.Resources{
@@ -100,7 +101,7 @@ func MaybeAutoRelay(cfg *config.C, enabled bool) fx.Option {
 						}()
 						return r
 					},
-					autorelay.WithMinInterval(0),
+					autorelay.WithBootDelay(0),
 				))
 			return
 		}),
@@ -111,7 +112,7 @@ func MaybeAutoRelay(cfg *config.C, enabled bool) fx.Option {
 func HolePunching(cfg *config.C, hasRelayClient bool) func() (opts Libp2pOpts, err error) {
 	return func() (opts Libp2pOpts, err error) {
 		if cfg.GetBool("swarm.enable_hole_punching", true) {
-			if !cfg.GetBool("swarm.relay_client.enabled", true) {
+			if !hasRelayClient {
 				log.Fatal("Failed to enable `swarm.enable_hole_punching`, it requires `swarm.relay_client.enabled` to be true.")
 				return
 			}

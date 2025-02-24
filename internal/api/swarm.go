@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/multiformats/go-multiaddr"
 	"github.com/unicornultrafoundation/subnet-node/core/coreiface"
 )
 
@@ -12,7 +13,7 @@ type SwarmAPI struct {
 	api coreiface.SwarmAPI
 }
 
-// NewAdminAPI creates a new instance of SwarmAPI.
+// NewSwarmAPI creates a new instance of SwarmAPI.
 func NewSwarmAPI(api coreiface.SwarmAPI) *SwarmAPI {
 	return &SwarmAPI{api: api}
 }
@@ -68,4 +69,20 @@ func (api *SwarmAPI) Peers(ctx context.Context) (*PeersResult, error) {
 	}
 
 	return peersResult, nil
+}
+
+func (api *SwarmAPI) Connect(ctx context.Context, addr string) error {
+	maddr, err := multiaddr.NewMultiaddr(addr)
+	if err != nil {
+		return err
+	}
+	return api.api.Connect(ctx, maddr)
+}
+
+func (api *SwarmAPI) Disconnect(ctx context.Context, addr string) error {
+	maddr, err := multiaddr.NewMultiaddr(addr)
+	if err != nil {
+		return err
+	}
+	return api.api.Disconnect(ctx, maddr)
 }

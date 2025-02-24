@@ -7,6 +7,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/unicornultrafoundation/subnet-node/core/apps"
+	atypes "github.com/unicornultrafoundation/subnet-node/core/apps/types"
 )
 
 type appResult struct {
@@ -29,8 +30,8 @@ type appResult struct {
 	PricePerMemoryGB     *hexutil.Big         `json:"price_per_memory_gb,omitempty"`
 	PricePerStorageGB    *hexutil.Big         `json:"price_per_storage_gb,omitempty"`
 	PricePerBandwidthGB  *hexutil.Big         `json:"price_per_bandwidth_gb,omitempty"`
-	Status               apps.ProcessStatus   `json:"status,omitempty"`
-	Metadata             *apps.AppMetadata    `json:"metadata,omitempty"`
+	Status               atypes.ProcessStatus `json:"status,omitempty"`
+	Metadata             *atypes.AppMetadata  `json:"metadata,omitempty"`
 	Usage                *resourceUsageResult `json:"usage,omitempty"`
 	IP                   string               `json:"ip"`
 }
@@ -45,7 +46,7 @@ type resourceUsageResult struct {
 	Duration          *hexutil.Big `json:"duration"`
 }
 
-func convertToUsageResult(usage *apps.ResourceUsage) *resourceUsageResult {
+func convertToUsageResult(usage *atypes.ResourceUsage) *resourceUsageResult {
 	if usage == nil {
 		return nil
 	}
@@ -60,7 +61,7 @@ func convertToUsageResult(usage *apps.ResourceUsage) *resourceUsageResult {
 	}
 }
 
-func convertToAppResult(app *apps.App) *appResult {
+func convertToAppResult(app *atypes.App) *appResult {
 	return &appResult{
 		ID:                   (*hexutil.Big)(app.ID),
 		Name:                 app.Name,
@@ -161,14 +162,6 @@ func (api *AppAPI) RemoveApp(ctx context.Context, appId hexutil.Big) (*appResult
 	return convertToAppResult(subnetApp), nil
 }
 
-func (api *AppAPI) RegisterProvider(_ctx context.Context, providerName string, metadata string, website string) (common.Hash, error) {
-	tx, err := api.appService.RegisterProvider(providerName, metadata, website)
-	if err != nil {
-		return common.Hash{}, err
-	}
-	return tx, nil
-}
-
 func (api *AppAPI) GetUsage(ctx context.Context, appId hexutil.Big) (*resourceUsageResult, error) {
 	usage, err := api.appService.GetUsage(ctx, appId.ToInt())
 	if err != nil {
@@ -193,6 +186,6 @@ func (api *AppAPI) GetAllUsage(ctx context.Context) (*resourceUsageResult, error
 	return convertToUsageResult(usage), nil
 }
 
-func (api *AppAPI) UpdateAppConfig(ctx context.Context, appId hexutil.Big, cfg apps.ContainerConfig) error {
+func (api *AppAPI) UpdateAppConfig(ctx context.Context, appId hexutil.Big, cfg atypes.ContainerConfig) error {
 	return api.appService.UpdateAppConfig(ctx, appId.ToInt(), cfg)
 }

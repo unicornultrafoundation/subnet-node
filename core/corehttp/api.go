@@ -28,7 +28,6 @@ func APIOption() ServeOption {
 		server.RegisterName("node", api.NewNodeAPI(capi.Resource(), n.Apps, n))
 		server.RegisterName("pubsub", api.NewPubsubAPI(capi.PubSub()))
 		server.RegisterName("app", api.NewAppAPI(n.Apps))
-		server.RegisterName("uptime", api.NewUptimeAPI(n.Uptime))
 		server.RegisterName("account", api.NewAccountAPI(n.Account))
 		server.RegisterName("config", api.NewConfigAPI(n.Repo))
 		smux.Handle(APIPath, WithCORSHeaders(cfg, WithAuth(cfg, server)))
