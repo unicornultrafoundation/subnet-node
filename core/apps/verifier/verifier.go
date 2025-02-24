@@ -33,28 +33,24 @@ const (
 
 // Verifier is a struct that provides methods to verify resource usage
 type Verifier struct {
-	ds              datastore.Datastore
-	p2p             *p2p.P2P
-	acc             *account.AccountService
-	fraudulentNodes map[string]bool
-	failureCounts   map[string]int
-	ps              p2phost.Host // the network host (server+client)
-	previousTimes   *lru.Cache
-	pow             *Pow
+	ds            datastore.Datastore
+	p2p           *p2p.P2P
+	acc           *account.AccountService
+	ps            p2phost.Host // the network host (server+client)
+	previousTimes *lru.Cache
+	pow           *Pow
 }
 
 // NewVerifier creates a new instance of Verifier
 func NewVerifier(ds datastore.Datastore, ps p2phost.Host, P2P *p2p.P2P, acc *account.AccountService) *Verifier {
 	cache, _ := lru.New(128)
 	v := &Verifier{
-		ds:              ds,
-		p2p:             P2P,
-		acc:             acc,
-		ps:              ps,
-		fraudulentNodes: make(map[string]bool),
-		failureCounts:   make(map[string]int),
-		previousTimes:   cache,
-		pow:             NewPow(NodeVerifier, ps, P2P),
+		ds:            ds,
+		p2p:           P2P,
+		acc:           acc,
+		ps:            ps,
+		previousTimes: cache,
+		pow:           NewPow(NodeVerifier, ps, P2P),
 	}
 	go v.periodicCheck(DefaultCheckInterval) // Pass the default check interval
 	return v
