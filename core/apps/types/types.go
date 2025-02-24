@@ -52,9 +52,14 @@ const (
 
 type App struct {
 	ID                   *big.Int
-	PeerId               string
+	PeerIds              []string
 	Owner                common.Address
 	Name                 string
+	Description          string
+	Logo                 string
+	BannerUrls           []string
+	DefaultBannerIndex   int64
+	Website              string
 	Symbol               string
 	Budget               *big.Int
 	SpentBudget          *big.Int
@@ -174,7 +179,7 @@ func ConvertToApp(subnetApp contracts.SubnetAppStoreApp, id *big.Int, status Pro
 
 	return &App{
 		ID:                  id,
-		PeerId:              subnetApp.PeerId,
+		PeerIds:             subnetApp.PeerIds,
 		Owner:               subnetApp.Owner,
 		Name:                subnetApp.Name,
 		Symbol:              subnetApp.Symbol,
@@ -321,7 +326,7 @@ func ProtoToApp(protoApp *pbapp.App) (*App, error) {
 
 	return &App{
 		ID:                   id,
-		PeerId:               protoApp.PeerId,
+		PeerIds:              protoApp.PeerIds,
 		Owner:                common.HexToAddress(protoApp.Owner),
 		Name:                 protoApp.Name,
 		Symbol:               protoApp.Symbol,
@@ -349,7 +354,7 @@ func ProtoToApp(protoApp *pbapp.App) (*App, error) {
 func AppToProto(app *App) *pbapp.App {
 	return &pbapp.App{
 		Id:                   app.ID.String(),
-		PeerId:               app.PeerId,
+		PeerIds:              app.PeerIds,
 		Owner:                app.Owner.Hex(),
 		Name:                 app.Name,
 		Symbol:               app.Symbol,

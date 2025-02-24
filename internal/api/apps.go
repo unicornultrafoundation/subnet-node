@@ -12,10 +12,14 @@ import (
 
 type appResult struct {
 	ID                   *hexutil.Big         `json:"id,omitempty"`
-	PeerId               string               `json:"peer_id,omitempty"`
+	PeerIds              []string             `json:"peer_ids,omitempty"`
 	Owner                common.Address       `json:"owner,omitempty"`
 	Name                 string               `json:"name,omitempty"`
 	Symbol               string               `json:"symbol,omitempty"`
+	Description          string               `json:"description,omitempty"`
+	Logo                 string               `json:"logo,omitempty"`
+	BannerUrls           []string             `json:"banners_urls,omitempty"`
+	DefaultBannerIndex   int64                `json:"default_banner_index,omitempty"`
 	Budget               *hexutil.Big         `json:"budget,omitempty"`
 	SpentBudget          *hexutil.Big         `json:"spent_budget,omitempty"`
 	MaxNodes             *hexutil.Big         `json:"max_nodes,omitempty"`
@@ -65,9 +69,13 @@ func convertToAppResult(app *atypes.App) *appResult {
 	return &appResult{
 		ID:                   (*hexutil.Big)(app.ID),
 		Name:                 app.Name,
-		PeerId:               app.PeerId,
+		PeerIds:              app.PeerIds,
 		Owner:                app.Owner,
 		Symbol:               app.Symbol,
+		Description:          app.Description,
+		Logo:                 app.Logo,
+		BannerUrls:           app.BannerUrls,
+		DefaultBannerIndex:   app.DefaultBannerIndex,
 		Budget:               (*hexutil.Big)(app.Budget),
 		SpentBudget:          (*hexutil.Big)(app.SpentBudget),
 		MaxNodes:             (*hexutil.Big)(app.MaxNodes),
