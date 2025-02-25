@@ -25,6 +25,7 @@ func (s *Service) startReportLoop(ctx context.Context) {
 		select {
 		case <-ticker.C:
 			log.Infof("Starting report for all running containers...")
+			time.Sleep(1 * time.Second)
 			s.reportAllRunningContainers(ctx)
 		case <-s.stopChan:
 			log.Infof("Stopping report for all containers")

@@ -146,7 +146,7 @@ func (v *Verifier) onUsageReport(s network.Stream) {
 	}
 
 	if msg.Timestamp-previousReportTime.(int64) < int64(ReportTimeThreshold.Seconds()) {
-		log.Warnf("Previous timestamp validation failed: previous report time %d is less than %s", previousReportTime, ReportTimeThreshold)
+		log.Warnf("Previous timestamp validation failed: previous report time %d is less than %s. Current report time: %d", previousReportTime, ReportTimeThreshold, msg.Timestamp)
 		return
 	}
 
