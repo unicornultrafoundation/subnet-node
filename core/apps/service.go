@@ -131,8 +131,10 @@ func (s *Service) Stop(ctx context.Context) error {
 		}
 	}
 
-	// Close sub-services
-	s.statService.Stop()
+	if s.statService != nil {
+		// Close sub-services
+		s.statService.Stop()
+	}
 
 	close(s.signatureResponseChan)
 

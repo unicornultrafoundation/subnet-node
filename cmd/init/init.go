@@ -69,6 +69,7 @@ func InitWithIdentity(identity Identity) (map[interface{}]interface{}, error) {
 		},
 		"bootstrap": []interface{}{
 			"/ip4/47.129.250.9/tcp/4001/p2p/12D3KooWDK63y6sxFi3dNqrS8yRetgbB81Tzszvs2yLoEtWtPCDa",
+			"/ip4/54.255.247.224/tcp/4001/p2p/12D3KooWQT4FPJiYSSRNk8qaWhHVSxAFmKzuCwDAJskZpxUnhcd2",
 		},
 	}, nil
 }
