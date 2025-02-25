@@ -3,9 +3,11 @@ package apps
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/containerd/containerd/namespaces"
+	ctypes "github.com/docker/docker/api/types/container"
 	atypes "github.com/unicornultrafoundation/subnet-node/core/apps/types"
 )
 
@@ -62,6 +64,42 @@ func (s *Service) upgradeAppVersion(ctx context.Context) error {
 
 		if runningImageVersion != latestImageVersion {
 			return s.RestartContainer(ctx, appId) // this will upgrade the container with the new image version
+		}
+	}
+
+	return nil
+}
+
+func (s *Service) upgradeAppVersionDocker(ctx context.Context) error {
+	// Fetch all running containers
+	ctx = namespaces.WithNamespace(ctx, NAMESPACE)
+	containers, err := s.dockerClient.ContainerList(ctx, ctypes.ListOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to fetch running containers: %v", err)
+	}
+
+	for _, container := range containers {
+		// Get container ID (assuming appID is same as container ID)
+		containerId := strings.TrimPrefix(container.Names[0], "/")
+		appId, err := atypes.GetAppIdFromContainerId(containerId)
+
+		if err != nil {
+			log.Errorf("Failed to get appId from containerId %s: %v", containerId, err)
+			continue
+		}
+
+		// Get running Container image version
+		runningImageVersion := container.Image
+
+		// Get latest App image version from smart contract
+		app, err := s.GetApp(ctx, appId)
+		if err != nil {
+			return fmt.Errorf("failed to fetch app details: %w", err)
+		}
+		latestImageVersion := app.Metadata.ContainerConfig.Image
+
+		if runningImageVersion != latestImageVersion {
+			return s.RestartContainerDocker(ctx, appId) // this will upgrade the container with the new image version
 		}
 	}
 

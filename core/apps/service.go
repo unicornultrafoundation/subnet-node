@@ -10,6 +10,7 @@ import (
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/errdefs"
+	dockerCli "github.com/docker/docker/client"
 
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ipfs/go-datastore"
@@ -41,6 +42,7 @@ type Service struct {
 	cfg                   *config.C
 	ethClient             *ethclient.Client
 	containerdClient      *containerd.Client
+	dockerClient          *dockerCli.Client
 	P2P                   *p2p.P2P
 	PeerHost              p2phost.Host  `optional:"true"` // the network host (server+client)
 	stopChan              chan struct{} // Channel to stop background tasks
@@ -88,9 +90,14 @@ func (s *Service) Start(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("error connecting to containerd: %v", err)
 		}
+		s.dockerClient, err = dockerCli.NewClientWithOpts(dockerCli.FromEnv, dockerCli.WithAPIVersionNegotiation())
+		if err != nil {
+			return fmt.Errorf("error connecting to docker: %v", err)
+		}
 		s.statService = stats.NewStats(s.containerdClient)
 
 		s.RestartStoppedContainers(ctx)
+		s.RestartStoppedContainersDocker(ctx)
 		s.upgradeAppVersion(ctx)
 
 		// Start app sub-services
@@ -185,6 +192,40 @@ func (s *Service) GetContainerStatus(ctx context.Context, appId *big.Int) (atype
 		return atypes.Stopped, nil
 	case containerd.Pausing:
 		return atypes.Pausing, nil
+	default:
+		return atypes.Unknown, nil
+	}
+}
+
+// Retrieves the status of a container associated with a specific app.
+func (s *Service) GetContainerStatusDocker(ctx context.Context, appId *big.Int) (atypes.ProcessStatus, error) {
+	// Set the namespace for the container
+	ctx = namespaces.WithNamespace(ctx, NAMESPACE)
+
+	containerId := atypes.GetContainerIdFromAppId(appId)
+
+	// Load the container for the app
+	container, err := s.dockerClient.ContainerInspect(ctx, containerId)
+	if err != nil {
+		if errdefs.IsNotFound(err) {
+			return atypes.NotFound, nil
+		}
+		return atypes.Unknown, err
+	}
+
+	// Retrieve the status of the container
+	status := container.State.Status
+
+	// TODO: Add other Docker statuses
+	switch status {
+	case atypes.DockerCreated:
+		return atypes.Created, nil
+	case atypes.DockerPaused:
+		return atypes.Paused, nil
+	case atypes.DockerRunning:
+		return atypes.Running, nil
+	case atypes.DockerExited:
+		return atypes.Stopped, nil
 	default:
 		return atypes.Unknown, nil
 	}

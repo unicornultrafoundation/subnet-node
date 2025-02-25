@@ -4,9 +4,11 @@ import (
 	"context"
 	"io"
 	"math/big"
+	"strings"
 	"time"
 
 	"github.com/containerd/containerd/namespaces"
+	ctypes "github.com/docker/docker/api/types/container"
 	ggio "github.com/gogo/protobuf/io"
 	"github.com/gogo/protobuf/proto"
 	"github.com/libp2p/go-libp2p/core/network"
@@ -49,6 +51,79 @@ func (s *Service) reportAllRunningContainers(ctx context.Context) {
 	for _, container := range containers {
 		// Get container ID (assuming appID is same as container ID)
 		containerId := container.ID()
+		appId, err := atypes.GetAppIdFromContainerId(containerId)
+		providerId := big.NewInt(s.accountService.ProviderID())
+
+		if err != nil {
+			log.Errorf("Failed to get appId from containerId %s: %v", containerId, err)
+			continue
+		}
+
+		// Get App owner's PeerID
+		app, err := s.GetApp(ctx, appId)
+		if err != nil {
+			log.Errorf("Failed to get app info from appId %s: %v", appId, err)
+			continue
+		}
+		veriferPeerID, err := peer.Decode(app.PeerId)
+		if err != nil {
+			log.Errorf("Failed to decode peerID %s: %v", app.PeerId, err)
+			continue
+		}
+
+		verifierPeerIDs = append(verifierPeerIDs, app.PeerId)
+
+		// Fetch resource usage
+		err = s.statService.FinalizeStats(containerId)
+		if err != nil {
+			log.Errorf("Failed to finalize stats from containerId %s: %v", containerId, err)
+			continue
+		}
+
+		usageEntry, err := s.statService.GetFinalStats(containerId)
+
+		if err != nil {
+			log.Errorf("Failed to get final stats from containerId %s: %v", containerId, err)
+			continue
+		}
+
+		usage := &pvtypes.UsageReport{
+			AppId:         appId.Int64(),
+			ProviderId:    providerId.Int64(),
+			PeerId:        s.peerId.String(),
+			Cpu:           int64(usageEntry.UsedCpu),
+			Gpu:           int64(usageEntry.UsedGpu),
+			Memory:        int64(usageEntry.UsedMemory),
+			Storage:       int64(usageEntry.UsedStorage),
+			UploadBytes:   int64(usageEntry.UsedUploadBytes),
+			DownloadBytes: int64(usageEntry.UsedDownloadBytes),
+			Timestamp:     time.Now().Unix(),
+		}
+
+		ok := s.sendProtoMessage(veriferPeerID, atypes.ProtocolAppVerifierUsageReport, usage)
+		if !ok {
+			log.Errorf("Failed to send usage report for app %d", appId)
+		}
+
+		s.statService.ClearFinalStats(containerId)
+	}
+
+	// Update verifier peers in Pow
+	s.pow.UpdateVerifierPeers(verifierPeerIDs)
+}
+
+func (s *Service) reportAllRunningContainersDocker(ctx context.Context) {
+	// Fetch all running containers
+	containers, err := s.dockerClient.ContainerList(ctx, ctypes.ListOptions{})
+	if err != nil {
+		return
+	}
+
+	verifierPeerIDs := make([]string, 0)
+
+	for _, container := range containers {
+		// Get container ID (assuming appID is same as container ID)
+		containerId := strings.TrimPrefix(container.Names[0], "/")
 		appId, err := atypes.GetAppIdFromContainerId(containerId)
 		providerId := big.NewInt(s.accountService.ProviderID())
 

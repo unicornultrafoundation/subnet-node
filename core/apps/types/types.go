@@ -50,6 +50,26 @@ const (
 	NotFound ProcessStatus = "notfound"
 )
 
+const (
+	// Running indicates the process is currently executing
+	DockerRunning string = "running"
+	// Created indicates the process has been created within Docker but the
+	// user's defined process has not started
+	DockerCreated string = "created"
+	// Exited indicates that the process has ran and exited
+	DockerExited string = "exited"
+	// Paused indicates that the process is currently paused
+	DockerPaused string = "paused"
+	// Restarting indicates that the process is currently stopping
+	// and will start again soon
+	DockerRestarting string = "restarting"
+	// Removing indicates that we could not determine the status from the runtime
+	DockerRemoving string = "removing"
+	DockerDead     string = "dead"
+	DockerUnknown  string = "unknown"
+	DockerNotFound string = "notfound"
+)
+
 type App struct {
 	ID                   *big.Int
 	PeerId               string
