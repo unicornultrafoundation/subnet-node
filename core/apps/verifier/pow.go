@@ -192,7 +192,7 @@ func (p *Pow) OnPoWResponse(s network.Stream) {
 	expectedMaxPoWTime := time.Duration(msg.Nonce/5000)*time.Millisecond + 500*time.Millisecond // Adjust this based on your requirements
 	log.Infof("Received PoW response from %s. Duration: %s, Nonce: %d, Hash: %s, Expected Max Time: %s", peerID, duration, msg.Nonce, msg.Hash, expectedMaxPoWTime)
 	// Verify PoW
-	if p.verifyPoW(msg.Id, peerID, int(msg.Nonce), msg.Hash, 6) {
+	if p.verifyPoW(msg.Id, p.ps.ID().String(), int(msg.Nonce), msg.Hash, 6) {
 		if duration <= expectedMaxPoWTime {
 			log.Infof("PoW verified successfully for peer %s", peerID)
 			p.qualifiedPeers[peerID] = true
