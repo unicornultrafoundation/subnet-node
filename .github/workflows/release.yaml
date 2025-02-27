@@ -31,7 +31,7 @@ jobs:
             OS=${PLATFORM%/*}
             ARCH=${PLATFORM#*/}
             OUTPUT="dist/${NAME}-${VERSION}-${OS}-${ARCH}"
-            GOOS=$OS GOARCH=$ARCH go build -o $OUTPUT ./cmd/subnet/main.go
+            GOOS=$OS GOARCH=$ARCH CGO_ENABLED=0 go build -o $OUTPUT ./cmd/subnet/main.go
           done
 
       - name: Upload Linux Artifacts
