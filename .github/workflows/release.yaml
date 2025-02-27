@@ -24,7 +24,7 @@ jobs:
 
       - name: Build for Linux
         run: |
-          NAME="myapp"
+          NAME="subnet"
           PLATFORMS=("linux/amd64" "linux/arm64")
           mkdir -p dist
           for PLATFORM in "${PLATFORMS[@]}"; do
