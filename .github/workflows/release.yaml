@@ -3,63 +3,51 @@ name: Build and Release
 on:
   push:
     tags:
-      - 'v*'  # Trigger this workflow when a tag starting with "v" is pushed (e.g., v1.0.0)
-  workflow_dispatch: # Allow manual trigger from the GitHub Actions interface
+      - 'v*'
+  workflow_dispatch:
 
 jobs:
-  build-and-release:
+  build-linux:
     runs-on: ubuntu-latest
-
     steps:
-      # Step 1: Check out the repository code
       - name: Checkout code
         uses: actions/checkout@v3
-
-      # Step 2: Set up Go environment with the specified version
+      
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: 1.23 # Specify the Go version to use (adjust as needed)
-
-      # Step 3: Extract the version from the pushed tag
+          go-version: 1.23
+      
       - name: Extract version
         id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+      
+      - name: Build for Linux
         run: |
-          echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
-          # The VERSION environment variable will contain the tag name (e.g., v1.0.0)
-
-      # Step 4: Build the application for multiple platforms and architectures
-      - name: Build binaries
-        run: |
-          NAME="myapp" # Replace this with your application name
-          PLATFORMS=("linux/amd64" "linux/arm64" "windows/amd64" "darwin/amd64")
-          for PLATFORM in "${PLATFORMS[@]}"; do
-            OS=${PLATFORM%/*}      # Extract the OS (e.g., linux, windows)
-            ARCH=${PLATFORM#*/}    # Extract the architecture (e.g., amd64, arm64)
-            OUTPUT="${NAME}-${VERSION}-${OS}-${ARCH}" # Construct output file name
-            if [ "$OS" = "windows" ]; then
-              OUTPUT="${OUTPUT}.exe" # Add .exe extension for Windows binaries
-            fi
-            GOOS=$OS GOARCH=$ARCH go build -o dist/$OUTPUT # Build the binary
-          done
-
-      # Step 5: Create a new GitHub release with the extracted version
+          GOOS=linux GOARCH=amd64 go build -o dist/myapp-${VERSION}-linux-amd64
+          GOOS=linux GOARCH=arm64 go build -o dist/myapp-${VERSION}-linux-arm64
+  release:
+    needs: [build-linux]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
       - name: Create Release
         uses: actions/create-release@v1
         with:
-          tag_name: ${{ env.VERSION }}           # Use the version from the pushed tag
-          release_name: Release ${{ env.VERSION }} # Name the release
-          draft: false                          # Publish the release immediately
-          prerelease: false                     # Mark the release as a stable release
+          tag_name: ${{ github.ref_name }}
+          release_name: Release ${{ github.ref_name }}
+          draft: false
+          prerelease: false
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # GitHub token for authentication
-
-      # Step 6: Upload the built binaries as assets to the release
+          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+      
       - name: Upload Release Assets
         uses: actions/upload-release-asset@v1
         with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}   # GitHub token for authentication
-          release_id: ${{ steps.create-release.outputs.id }} # Reference the created release
-          asset_path: ./dist/                      # Path to the folder containing binaries
-          asset_name: ${{ basename }}              # Keep the file name as is
-          asset_content_type: application/octet-stream # Use binary content type
+          repo_token: ${{ secrets.GH_PAT }}
+          release_id: ${{ steps.create-release.outputs.id }}
+          asset_path: ./dist/
+          asset_name: ${{ basename }}
+          asset_content_type: application/octet-stream
