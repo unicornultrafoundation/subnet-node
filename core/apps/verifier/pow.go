@@ -66,7 +66,7 @@ func NewPow(nodeType NodeType, ps p2phost.Host, P2P *p2p.P2P) *Pow {
 }
 
 // PerformPoW performs the Proof of Work by finding a nonce that satisfies the difficulty using multiple CPUs
-func (p *Pow) performPoW(data string, difficulty int) (string, int) {
+func (p *Pow) performPoW(data, peerID string, difficulty int) (string, int) {
 	var wg sync.WaitGroup
 	numCPU := runtime.NumCPU()
 	targetPrefix := strings.Repeat("0", difficulty)
@@ -87,7 +87,7 @@ func (p *Pow) performPoW(data string, difficulty int) (string, int) {
 				case <-stopChan:
 					return
 				default:
-					input := fmt.Sprintf("%s:%d", data, nonce)
+					input := fmt.Sprintf("%s:%s:%d", data, peerID, nonce)
 					hash := sha256.Sum256([]byte(input))
 					hashHex := hex.EncodeToString(hash[:])
 
@@ -118,8 +118,8 @@ func (p *Pow) performPoW(data string, difficulty int) (string, int) {
 }
 
 // VerifyPoW verifies the Proof of Work by checking the hash and nonce
-func (p *Pow) verifyPoW(data string, nonce int, hash string, difficulty int) bool {
-	input := fmt.Sprintf("%s:%d", data, nonce)
+func (p *Pow) verifyPoW(data, peerID string, nonce int, hash string, difficulty int) bool {
+	input := fmt.Sprintf("%s:%s:%d", data, peerID, nonce)
 	expectedHash := sha256.Sum256([]byte(input))
 	expectedHashHex := hex.EncodeToString(expectedHash[:])
 	targetPrefix := strings.Repeat("0", int(difficulty))
@@ -192,7 +192,7 @@ func (p *Pow) OnPoWResponse(s network.Stream) {
 	expectedMaxPoWTime := time.Duration(msg.Nonce/5000)*time.Millisecond + 500*time.Millisecond // Adjust this based on your requirements
 	log.Infof("Received PoW response from %s. Duration: %s, Nonce: %d, Hash: %s, Expected Max Time: %s", peerID, duration, msg.Nonce, msg.Hash, expectedMaxPoWTime)
 	// Verify PoW
-	if p.verifyPoW(msg.Id, int(msg.Nonce), msg.Hash, 6) {
+	if p.verifyPoW(msg.Id, p.ps.ID().String(), int(msg.Nonce), msg.Hash, 6) {
 		if duration <= expectedMaxPoWTime {
 			log.Infof("PoW verified successfully for peer %s", peerID)
 			p.qualifiedPeers[peerID] = true
@@ -231,7 +231,7 @@ func (p *Pow) OnPoWRequest(s network.Stream) {
 
 	log.Infof("Received PoW request from %s. Data: %s, Difficulty: %d", s.Conn().RemotePeer(), msg.Id, msg.Difficulty)
 
-	hash, nonce := p.performPoW(msg.Id, int(msg.Difficulty))
+	hash, nonce := p.performPoW(msg.Id, peerID, int(msg.Difficulty))
 
 	response := &pvtypes.PowResponse{
 		Id:    msg.Id,
