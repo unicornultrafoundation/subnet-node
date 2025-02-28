@@ -31,7 +31,7 @@ jobs:
             OS=${PLATFORM%/*}
             ARCH=${PLATFORM#*/}
             OUTPUT="dist/${NAME}-${VERSION}-${OS}-${ARCH}"
-            GOOS=$OS GOARCH=$ARCH CGO_ENABLED=0 go build -o $OUTPUT ./cmd/subnet/main.go
+            GOOS=$OS GOARCH=$ARCH CGO_ENABLED=0 go build -ldflags "-X 'github.com/unicornultrafoundation/subnet-node.CurrentCommit=$(git rev-parse HEAD)' -X 'github.com/unicornultrafoundation/subnet-node.CurrentVersionNumber=${VERSION}'" -o $OUTPUT ./cmd/subnet/main.go
           done
 
       - name: Upload Linux Artifacts
