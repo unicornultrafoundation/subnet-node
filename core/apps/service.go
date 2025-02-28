@@ -7,7 +7,6 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 
-	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/errdefs"
 	dockerCli "github.com/docker/docker/client"
@@ -41,7 +40,6 @@ type Service struct {
 	IsVerifier            bool
 	cfg                   *config.C
 	ethClient             *ethclient.Client
-	containerdClient      *containerd.Client
 	dockerClient          *dockerCli.Client
 	P2P                   *p2p.P2P
 	PeerHost              p2phost.Host  `optional:"true"` // the network host (server+client)
@@ -86,18 +84,13 @@ func (s *Service) Start(ctx context.Context) error {
 
 		// Connect to containerd daemon
 		var err error
-		s.containerdClient, err = containerd.New("/run/containerd/containerd.sock")
-		if err != nil {
-			return fmt.Errorf("error connecting to containerd: %v", err)
-		}
 		s.dockerClient, err = dockerCli.NewClientWithOpts(dockerCli.FromEnv, dockerCli.WithAPIVersionNegotiation())
 		if err != nil {
 			return fmt.Errorf("error connecting to docker: %v", err)
 		}
-		s.statService = stats.NewStats(s.containerdClient)
+		s.statService = stats.NewStats(s.dockerClient)
 
 		s.RestartStoppedContainers(ctx)
-		s.RestartStoppedContainersDocker(ctx)
 		s.upgradeAppVersion(ctx)
 
 		// Start app sub-services
@@ -117,11 +110,11 @@ func (s *Service) Stop(ctx context.Context) error {
 	// Close stopChan to stop all background tasks
 	close(s.stopChan)
 
-	// Close the containerd client
-	if s.containerdClient != nil {
-		err := s.containerdClient.Close()
+	// Close the docker client
+	if s.dockerClient != nil {
+		err := s.dockerClient.Close()
 		if err != nil {
-			return fmt.Errorf("failed to close containerd client: %w", err)
+			return fmt.Errorf("failed to close docker client: %w", err)
 		}
 	}
 
@@ -155,50 +148,6 @@ func (s *Service) GetContainerConfigProto(ctx context.Context, appId *big.Int) (
 
 // Retrieves the status of a container associated with a specific app.
 func (s *Service) GetContainerStatus(ctx context.Context, appId *big.Int) (atypes.ProcessStatus, error) {
-	// Set the namespace for the container
-	ctx = namespaces.WithNamespace(ctx, NAMESPACE)
-
-	containerId := atypes.GetContainerIdFromAppId(appId)
-
-	// Load the container for the app
-	container, err := s.containerdClient.LoadContainer(ctx, containerId)
-	if err != nil {
-		if errdefs.IsNotFound(err) {
-			return atypes.NotFound, nil
-		}
-		return atypes.Unknown, err
-	}
-
-	// Retrieve the task for the container
-	task, err := container.Task(ctx, nil)
-	if err != nil {
-		return atypes.Stopped, nil // Task does not exist
-	}
-
-	// Retrieve the status of the task
-	status, err := task.Status(ctx)
-	if err != nil {
-		return atypes.Stopped, fmt.Errorf("failed to get task status: %w", err)
-	}
-
-	switch status.Status {
-	case containerd.Created:
-		return atypes.Created, nil
-	case containerd.Paused:
-		return atypes.Paused, nil
-	case containerd.Running:
-		return atypes.Running, nil
-	case containerd.Stopped:
-		return atypes.Stopped, nil
-	case containerd.Pausing:
-		return atypes.Pausing, nil
-	default:
-		return atypes.Unknown, nil
-	}
-}
-
-// Retrieves the status of a container associated with a specific app.
-func (s *Service) GetContainerStatusDocker(ctx context.Context, appId *big.Int) (atypes.ProcessStatus, error) {
 	// Set the namespace for the container
 	ctx = namespaces.WithNamespace(ctx, NAMESPACE)
 

@@ -2,7 +2,6 @@ package stats
 
 import (
 	"fmt"
-	"log"
 	"sync"
 	"time"
 

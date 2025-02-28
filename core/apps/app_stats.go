@@ -43,66 +43,6 @@ func (s *Service) GetAllRunningContainersUsage(ctx context.Context) (*atypes.Res
 	ctx = namespaces.WithNamespace(ctx, NAMESPACE)
 
 	// Fetch all running containers
-	containers, err := s.containerdClient.Containers(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch running containers: %w", err)
-	}
-
-	// Initialize a single ResourceUsage to aggregate all usage
-	totalUsage := &atypes.ResourceUsage{
-		UsedCpu:           big.NewInt(0),
-		UsedGpu:           big.NewInt(0),
-		UsedMemory:        big.NewInt(0),
-		UsedStorage:       big.NewInt(0),
-		UsedUploadBytes:   big.NewInt(0),
-		UsedDownloadBytes: big.NewInt(0),
-		Duration:          big.NewInt(0),
-	}
-
-	providerId := big.NewInt(s.accountService.ProviderID())
-
-	// Iterate over each container and aggregate its resource usage
-	for _, container := range containers {
-		containerId := container.ID()
-		appId, err := atypes.GetAppIdFromContainerId(containerId)
-
-		if err != nil {
-			return nil, err
-		}
-
-		usage, err := s.GetUsage(ctx, appId)
-		if err != nil {
-			usage = &atypes.ResourceUsage{
-				AppId:             appId,
-				ProviderId:        providerId,
-				UsedCpu:           big.NewInt(0),
-				UsedGpu:           big.NewInt(0),
-				UsedMemory:        big.NewInt(0),
-				UsedStorage:       big.NewInt(0),
-				UsedUploadBytes:   big.NewInt(0),
-				UsedDownloadBytes: big.NewInt(0),
-				Duration:          big.NewInt(0),
-			}
-		}
-
-		// Aggregate the usage
-		totalUsage.UsedCpu.Add(totalUsage.UsedCpu, usage.UsedCpu)
-		totalUsage.UsedGpu.Add(totalUsage.UsedGpu, usage.UsedGpu)
-		totalUsage.UsedMemory.Add(totalUsage.UsedMemory, usage.UsedMemory)
-		totalUsage.UsedStorage.Add(totalUsage.UsedStorage, usage.UsedStorage)
-		totalUsage.UsedUploadBytes.Add(totalUsage.UsedUploadBytes, usage.UsedUploadBytes)
-		totalUsage.UsedDownloadBytes.Add(totalUsage.UsedDownloadBytes, usage.UsedDownloadBytes)
-		totalUsage.Duration.Add(totalUsage.Duration, usage.Duration)
-	}
-
-	return totalUsage, nil
-}
-
-func (s *Service) GetAllRunningContainersUsageDocker(ctx context.Context) (*atypes.ResourceUsage, error) {
-	// Set the namespace for the containers
-	ctx = namespaces.WithNamespace(ctx, NAMESPACE)
-
-	// Fetch all running containers
 	containers, err := s.dockerClient.ContainerList(ctx, ctypes.ListOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch running containers: %w", err)
