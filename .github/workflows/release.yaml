@@ -1,65 +1,62 @@
-name: Build and Release
+name: Build and Release (Linux)
 
 on:
   push:
     tags:
-      - 'v*'  # Trigger this workflow when a tag starting with "v" is pushed (e.g., v1.0.0)
-  workflow_dispatch: # Allow manual trigger from the GitHub Actions interface
+      - 'v*'
+  workflow_dispatch:
 
 jobs:
-  build-and-release:
+  build-linux:
     runs-on: ubuntu-latest
-
     steps:
-      # Step 1: Check out the repository code
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # Step 2: Set up Go environment with the specified version
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: 1.23 # Specify the Go version to use (adjust as needed)
+          go-version: 1.23
 
-      # Step 3: Extract the version from the pushed tag
       - name: Extract version
         id: version
-        run: |
-          echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
-          # The VERSION environment variable will contain the tag name (e.g., v1.0.0)
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
 
-      # Step 4: Build the application for multiple platforms and architectures
-      - name: Build binaries
+      - name: Build for Linux
         run: |
-          NAME="myapp" # Replace this with your application name
-          PLATFORMS=("linux/amd64" "linux/arm64" "windows/amd64" "darwin/amd64")
+          NAME="subnet"
+          PLATFORMS=("linux/amd64" "linux/arm64")
+          mkdir -p dist
           for PLATFORM in "${PLATFORMS[@]}"; do
-            OS=${PLATFORM%/*}      # Extract the OS (e.g., linux, windows)
-            ARCH=${PLATFORM#*/}    # Extract the architecture (e.g., amd64, arm64)
-            OUTPUT="${NAME}-${VERSION}-${OS}-${ARCH}" # Construct output file name
-            if [ "$OS" = "windows" ]; then
-              OUTPUT="${OUTPUT}.exe" # Add .exe extension for Windows binaries
-            fi
-            GOOS=$OS GOARCH=$ARCH go build -o dist/$OUTPUT # Build the binary
+            OS=${PLATFORM%/*}
+            ARCH=${PLATFORM#*/}
+            OUTPUT="dist/${NAME}-${VERSION}-${OS}-${ARCH}"
+            GOOS=$OS GOARCH=$ARCH CGO_ENABLED=0 go build -o $OUTPUT ./cmd/subnet/main.go
           done
 
-      # Step 5: Create a new GitHub release with the extracted version
-      - name: Create Release
-        uses: actions/create-release@v1
+      - name: Upload Linux Artifacts
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: ${{ env.VERSION }}           # Use the version from the pushed tag
-          release_name: Release ${{ env.VERSION }} # Name the release
-          draft: false                          # Publish the release immediately
-          prerelease: false                     # Mark the release as a stable release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # GitHub token for authentication
+          name: linux-binaries
+          path: dist/
 
-      # Step 6: Upload the built binaries as assets to the release
-      - name: Upload Release Assets
-        uses: actions/upload-release-asset@v1
+  release:
+    needs: [build-linux]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Linux Artifacts
+        uses: actions/download-artifact@v4
         with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}   # GitHub token for authentication
-          release_id: ${{ steps.create-release.outputs.id }} # Reference the created release
-          asset_path: ./dist/                      # Path to the folder containing binaries
-          asset_name: ${{ basename }}              # Keep the file name as is
-          asset_content_type: application/octet-stream # Use binary content type
+          name: linux-binaries
+          path: dist/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ env.VERSION }}
+          release_name: Release ${{ env.VERSION }}
+          draft: false
+          prerelease: false
+          files: dist/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
