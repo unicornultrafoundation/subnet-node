@@ -35,7 +35,7 @@ func APIOption() ServeOption {
 		// Handle public APIs without authentication
 		publicServer := rpc.NewServer()
 		publicServer.RegisterName("version", api.NewVersionAPI())
-		smux.Handle("/public", publicServer)
+		smux.Handle("/public", WithCORSHeaders(cfg, publicServer))
 
 		smux.Handle(APIPath, WithCORSHeaders(cfg, WithAuth(cfg, server)))
 		return smux, nil
