@@ -30,6 +30,13 @@ func APIOption() ServeOption {
 		server.RegisterName("app", api.NewAppAPI(n.Apps))
 		server.RegisterName("account", api.NewAccountAPI(n.Account))
 		server.RegisterName("config", api.NewConfigAPI(n.Repo))
+		server.RegisterName("version", api.NewVersionAPI()) // Register the VersionAPI
+
+		// Handle public APIs without authentication
+		publicServer := rpc.NewServer()
+		publicServer.RegisterName("version", api.NewVersionAPI())
+		smux.Handle("/public", publicServer)
+
 		smux.Handle(APIPath, WithCORSHeaders(cfg, WithAuth(cfg, server)))
 		return smux, nil
 	}
