@@ -8,9 +8,9 @@ import (
 var CurrentCommit string
 
 // CurrentVersionNumber is the current application's version literal.
-const CurrentVersionNumber = "0.0.1-dev"
+var CurrentVersionNumber string
 
-const ApiVersion = "/subnet/" + CurrentVersionNumber + "/" //nolint
+var ApiVersion = "/subnet/" + CurrentVersionNumber + "/" //nolint
 
 // Note: This will end in `/` when no commit is available. This is expected.
 func GetUserAgentVersion() string {
@@ -31,17 +31,17 @@ func SetUserAgentSuffix(suffix string) {
 }
 
 type VersionInfo struct {
-	Version string
-	Commit  string
-	System  string
-	Golang  string
+	Version string `json:"version"`
+	Commit  string `json:"commit"`
+	System  string `json:"system"`
+	Golang  string `json:"golang"`
 }
 
 func GetVersionInfo() *VersionInfo {
 	return &VersionInfo{
 		Version: CurrentVersionNumber,
 		Commit:  CurrentCommit,
-		System:  runtime.GOARCH + "/" + runtime.GOOS, // TODO: Precise version here
+		System:  runtime.GOARCH + "/" + runtime.GOOS,
 		Golang:  runtime.Version(),
 	}
 }
