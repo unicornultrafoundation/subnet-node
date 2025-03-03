@@ -103,6 +103,7 @@ func (v *Verifier) onSignatureRequest(s network.Stream) {
 }
 
 func (v *Verifier) onUsageReport(s network.Stream) {
+	currentTime := time.Now().Unix()
 	msg := &pvtypes.UsageReport{}
 	buf, err := io.ReadAll(s)
 	if err != nil {
@@ -120,10 +121,9 @@ func (v *Verifier) onUsageReport(s network.Stream) {
 	}
 
 	// Validate timestamp
-	currentTime := time.Now().Unix()
 	reportTime := msg.Timestamp
-	if abs(currentTime-reportTime) > 1 {
-		log.Warnf("Timestamp validation failed: report time %d is not within 1 second of current time %d", reportTime, currentTime)
+	if abs(currentTime-reportTime) > 2 {
+		log.Warnf("Timestamp validation failed: report time %d is not within 2 second of current time %d", reportTime, currentTime)
 		return
 	}
 
@@ -145,8 +145,8 @@ func (v *Verifier) onUsageReport(s network.Stream) {
 		v.previousTimes.Add(cacheKey, previousReportTime)
 	}
 
-	if time.Since(time.Unix(previousReportTime.(int64), 0)) < ReportTimeThreshold {
-		log.Warnf("Previous timestamp validation failed: previous report time %d is less than %s", previousReportTime, ReportTimeThreshold)
+	if msg.Timestamp-previousReportTime.(int64) < int64(ReportTimeThreshold.Seconds()) {
+		log.Warnf("Previous timestamp validation failed: previous report time %d is less than %s. Current report time: %d", previousReportTime, ReportTimeThreshold, msg.Timestamp)
 		return
 	}
 
@@ -261,6 +261,10 @@ func (v *Verifier) processUsageReports(usagesByAppId map[int64][]*pvtypes.UsageR
 			}
 		}
 		for peerId, peerLogs := range usagesByPeer {
+			if len(peerLogs) == 0 {
+				continue
+			}
+
 			// Check if peerLogs come from different providers
 			providerSet := make(map[int64]struct{})
 			for _, peerlog := range peerLogs {
@@ -275,22 +279,26 @@ func (v *Verifier) processUsageReports(usagesByAppId map[int64][]*pvtypes.UsageR
 			for _, peerlog := range peerLogs {
 				signedUsage.Cpu += peerlog.Cpu
 				signedUsage.Gpu += peerlog.Gpu
-				signedUsage.Memory = +peerlog.Memory
-				signedUsage.UploadBytes = +peerlog.UploadBytes
-				signedUsage.DownloadBytes = +peerlog.DownloadBytes
-				signedUsage.Storage = +peerlog.Storage
+				signedUsage.Memory += peerlog.Memory
+				signedUsage.UploadBytes += peerlog.UploadBytes
+				signedUsage.DownloadBytes += peerlog.DownloadBytes
+				signedUsage.Storage += peerlog.Storage
 				signedUsage.PeerId = peerlog.PeerId
 				signedUsage.AppId = peerlog.AppId
 				signedUsage.ProviderId = peerlog.ProviderId
 				signedUsage.Duration += int64(ReportTimeThreshold.Seconds())
 			}
 			peerlognum := int64(len(peerLogs))
-			signedUsage.Cpu /= peerlognum
-			signedUsage.Gpu /= peerlognum
-			signedUsage.Memory /= peerlognum
-			signedUsage.UploadBytes /= peerlognum
-			signedUsage.DownloadBytes /= peerlognum
-			signedUsage.Storage /= peerlognum
+
+			if peerlognum > 0 {
+				signedUsage.Cpu /= peerlognum
+				signedUsage.Gpu /= peerlognum
+				signedUsage.Memory /= peerlognum
+				signedUsage.UploadBytes /= peerlognum
+				signedUsage.DownloadBytes /= peerlognum
+				signedUsage.Storage /= peerlognum
+			}
+
 			signedUsage.Timestamp = time.Now().Unix()
 			if err := v.signResourceUsage(signedUsage); err != nil {
 				return nil, fmt.Errorf("failed to sign resource usage: %v", err)

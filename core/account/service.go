@@ -8,6 +8,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -36,7 +37,7 @@ type AccountService struct {
 func NewAccountService(cfg *config.C) (*AccountService, error) {
 	privateKeyHex := cfg.GetString("account.private_key", "")
 	rpcURL := cfg.GetString("account.rpc", config.DefaultRPC)
-	chainID := big.NewInt(int64(cfg.GetInt("account.chainid", 2484)))
+	chainID := big.NewInt(int64(cfg.GetInt("account.chainid", config.DefaultChainID)))
 	privateKey, err := crypto.HexToECDSA(privateKeyHex)
 	if err != nil {
 		return nil, err
@@ -67,8 +68,6 @@ func NewAccountService(cfg *config.C) (*AccountService, error) {
 		return nil, err
 	}
 
-	providerId := int64(cfg.GetInt("provider.id", 0))
-
 	s := &AccountService{
 		privateKey:         privateKey,
 		client:             client,
@@ -77,8 +76,8 @@ func NewAccountService(cfg *config.C) (*AccountService, error) {
 		subnetProviderAddr: subnetProviderAddr,
 		subnetAppStore:     subnetAppStore,
 		subnetAppStoreAddr: subnetAppStoreAddr,
-		providerID:         providerId,
 	}
+	s.updateProviderID(cfg)
 	s.registerReloadCallback(cfg)
 	return s, nil
 }
@@ -96,9 +95,16 @@ func (s *AccountService) registerReloadCallback(cfg *config.C) {
 		}
 
 		if cfg.HasChanged("provider.id") {
-			s.providerID = int64(cfg.GetInt("provider.id", 0))
+			s.updateProviderID(cfg)
 		}
 	})
+}
+
+func (s *AccountService) updateProviderID(cfg *config.C) {
+	providerIdHex := cfg.GetString("provider.id", "")
+	if providerIdHex != "" {
+		s.providerID = int64(hexutil.MustDecodeUint64(providerIdHex))
+	}
 }
 
 // GetClient retrieves the ethclient instance

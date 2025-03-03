@@ -6,7 +6,7 @@ import "google/protobuf/wrappers.proto";
 
 message App {
   string id = 1;
-  string peer_id = 2;
+  repeated string peer_ids = 2;
   string owner = 3;
   string name = 4;
   string symbol = 5;

@@ -31,7 +31,7 @@ var (
 
 // SubnetAppStoreApp is an auto generated low-level Go binding around an user-defined struct.
 type SubnetAppStoreApp struct {
-	PeerId              string
+	PeerIds             []string
 	Owner               common.Address
 	Operator            common.Address
 	Verifier            common.Address
@@ -48,16 +48,16 @@ type SubnetAppStoreApp struct {
 	PaymentToken        common.Address
 }
 
-// SubnetAppStoreDeployment is an auto generated low-level Go binding around an user-defined struct.
-type SubnetAppStoreDeployment struct {
-	IsRegistered  bool
-	LastClaimTime *big.Int
-	PendingReward *big.Int
+// SubnetAppStoreLockedReward is an auto generated low-level Go binding around an user-defined struct.
+type SubnetAppStoreLockedReward struct {
+	Reward     *big.Int
+	UnlockTime *big.Int
+	Verifier   common.Address
 }
 
 // SubnetAppStoreMetaData contains all meta data concerning the SubnetAppStore contract.
 var SubnetAppStoreMetaData = &bind.MetaData{
-	ABI: "[{\"inputs\":[{\"internalType\":\"address\",\"name\":\"target\",\"type\":\"address\"}],\"name\":\"AddressEmptyCode\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"account\",\"type\":\"address\"}],\"name\":\"AddressInsufficientBalance\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ECDSAInvalidSignature\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"length\",\"type\":\"uint256\"}],\"name\":\"ECDSAInvalidSignatureLength\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"s\",\"type\":\"bytes32\"}],\"name\":\"ECDSAInvalidSignatureS\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"FailedInnerCall\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"InvalidInitialization\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"NotInitializing\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"}],\"name\":\"OwnableInvalidOwner\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"account\",\"type\":\"address\"}],\"name\":\"OwnableUnauthorizedAccount\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"token\",\"type\":\"address\"}],\"name\":\"SafeERC20FailedOperation\",\"type\":\"error\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"symbol\",\"type\":\"string\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"budget\",\"type\":\"uint256\"}],\"name\":\"AppCreated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"}],\"name\":\"AppUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"BudgetDeposited\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"BudgetRefunded\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"}],\"name\":\"DeploymentClosed\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"}],\"name\":\"DeploymentCreated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[],\"name\":\"EIP712DomainChanged\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint64\",\"name\":\"version\",\"type\":\"uint64\"}],\"name\":\"Initialized\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"previousOwner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"OwnershipTransferred\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"ProviderRefunded\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"reward\",\"type\":\"uint256\"}],\"name\":\"RewardClaimed\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"peerId\",\"type\":\"string\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"usedCpu\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"usedGpu\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"usedMemory\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"usedStorage\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"usedUploadBytes\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"usedDownloadBytes\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"duration\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"timestamp\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"reward\",\"type\":\"uint256\"}],\"name\":\"UsageReported\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"verifier\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"reward\",\"type\":\"uint256\"}],\"name\":\"VerifierRewardClaimed\",\"type\":\"event\"},{\"inputs\":[],\"name\":\"appCount\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"name\":\"apps\",\"outputs\":[{\"internalType\":\"string\",\"name\":\"peerId\",\"type\":\"string\"},{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"verifier\",\"type\":\"address\"},{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"symbol\",\"type\":\"string\"},{\"internalType\":\"uint256\",\"name\":\"budget\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"spentBudget\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerCpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerGpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerMemoryGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerStorageGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerBandwidthGB\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"metadata\",\"type\":\"string\"},{\"internalType\":\"address\",\"name\":\"paymentToken\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedCpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedGpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedMemory\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedStorage\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedUploadBytes\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedDownloadBytes\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"duration\",\"type\":\"uint256\"}],\"name\":\"calculateReward\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"reward\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"}],\"name\":\"claimReward\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"symbol\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"peerId\",\"type\":\"string\"},{\"internalType\":\"uint256\",\"name\":\"budget\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerCpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerGpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerMemoryGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerStorageGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerBandwidthGB\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"metadata\",\"type\":\"string\"},{\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"verifier\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"paymentToken\",\"type\":\"address\"}],\"name\":\"createApp\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"name\":\"deployments\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"isRegistered\",\"type\":\"bool\"},{\"internalType\":\"uint256\",\"name\":\"lastClaimTime\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pendingReward\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"deposit\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"eip712Domain\",\"outputs\":[{\"internalType\":\"bytes1\",\"name\":\"fields\",\"type\":\"bytes1\"},{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"version\",\"type\":\"string\"},{\"internalType\":\"uint256\",\"name\":\"chainId\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"verifyingContract\",\"type\":\"address\"},{\"internalType\":\"bytes32\",\"name\":\"salt\",\"type\":\"bytes32\"},{\"internalType\":\"uint256[]\",\"name\":\"extensions\",\"type\":\"uint256[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"feeRate\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"}],\"name\":\"getApp\",\"outputs\":[{\"components\":[{\"internalType\":\"string\",\"name\":\"peerId\",\"type\":\"string\"},{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"verifier\",\"type\":\"address\"},{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"symbol\",\"type\":\"string\"},{\"internalType\":\"uint256\",\"name\":\"budget\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"spentBudget\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerCpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerGpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerMemoryGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerStorageGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerBandwidthGB\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"metadata\",\"type\":\"string\"},{\"internalType\":\"address\",\"name\":\"paymentToken\",\"type\":\"address\"}],\"internalType\":\"structSubnetAppStore.App\",\"name\":\"app\",\"type\":\"tuple\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"}],\"name\":\"getDeployment\",\"outputs\":[{\"components\":[{\"internalType\":\"bool\",\"name\":\"isRegistered\",\"type\":\"bool\"},{\"internalType\":\"uint256\",\"name\":\"lastClaimTime\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pendingReward\",\"type\":\"uint256\"}],\"internalType\":\"structSubnetAppStore.Deployment\",\"name\":\"deployment\",\"type\":\"tuple\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_subnetProvider\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"initialOwner\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"_treasury\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"_feeRate\",\"type\":\"uint256\"}],\"name\":\"initialize\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"start\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"end\",\"type\":\"uint256\"}],\"name\":\"listApps\",\"outputs\":[{\"components\":[{\"internalType\":\"string\",\"name\":\"peerId\",\"type\":\"string\"},{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"verifier\",\"type\":\"address\"},{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"symbol\",\"type\":\"string\"},{\"internalType\":\"uint256\",\"name\":\"budget\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"spentBudget\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerCpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerGpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerMemoryGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerStorageGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerBandwidthGB\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"metadata\",\"type\":\"string\"},{\"internalType\":\"address\",\"name\":\"paymentToken\",\"type\":\"address\"}],\"internalType\":\"structSubnetAppStore.App[]\",\"name\":\"\",\"type\":\"tuple[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"owner\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"}],\"name\":\"refund\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"}],\"name\":\"refundProvider\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"renounceOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"peerId\",\"type\":\"string\"},{\"internalType\":\"uint256\",\"name\":\"usedCpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedGpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedMemory\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedStorage\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedUploadBytes\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedDownloadBytes\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"duration\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"timestamp\",\"type\":\"uint256\"},{\"internalType\":\"bytes\",\"name\":\"signature\",\"type\":\"bytes\"}],\"name\":\"reportUsage\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"_feeRate\",\"type\":\"uint256\"}],\"name\":\"setFeeRate\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_treasury\",\"type\":\"address\"}],\"name\":\"setTreasury\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"_verifierRewardRate\",\"type\":\"uint256\"}],\"name\":\"setVerifierRewardRate\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"subnetProvider\",\"outputs\":[{\"internalType\":\"contractSubnetProvider\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"string\",\"name\":\"\",\"type\":\"string\"}],\"name\":\"symbolToAppId\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"transferOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"treasury\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerCpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerGpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerMemoryGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerStorageGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerBandwidthGB\",\"type\":\"uint256\"}],\"name\":\"updateApp\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"metadata\",\"type\":\"string\"}],\"name\":\"updateMetadata\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"}],\"name\":\"updateName\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"}],\"name\":\"updateOperator\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"peerId\",\"type\":\"string\"}],\"name\":\"updatePeerId\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"verifier\",\"type\":\"address\"}],\"name\":\"updateVerifier\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"name\":\"usedMessageHashes\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"verifierRewardRate\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"version\",\"outputs\":[{\"internalType\":\"string\",\"name\":\"\",\"type\":\"string\"}],\"stateMutability\":\"pure\",\"type\":\"function\"}]",
+	ABI: "[{\"inputs\":[{\"internalType\":\"address\",\"name\":\"target\",\"type\":\"address\"}],\"name\":\"AddressEmptyCode\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"account\",\"type\":\"address\"}],\"name\":\"AddressInsufficientBalance\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ECDSAInvalidSignature\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"length\",\"type\":\"uint256\"}],\"name\":\"ECDSAInvalidSignatureLength\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"s\",\"type\":\"bytes32\"}],\"name\":\"ECDSAInvalidSignatureS\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"FailedInnerCall\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"InvalidInitialization\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"NotInitializing\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"}],\"name\":\"OwnableInvalidOwner\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"account\",\"type\":\"address\"}],\"name\":\"OwnableUnauthorizedAccount\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"token\",\"type\":\"address\"}],\"name\":\"SafeERC20FailedOperation\",\"type\":\"error\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"symbol\",\"type\":\"string\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"budget\",\"type\":\"uint256\"}],\"name\":\"AppCreated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"}],\"name\":\"AppUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"BudgetDeposited\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"BudgetRefunded\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"}],\"name\":\"DeploymentClosed\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"}],\"name\":\"DeploymentCreated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[],\"name\":\"EIP712DomainChanged\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint64\",\"name\":\"version\",\"type\":\"uint64\"}],\"name\":\"Initialized\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"reward\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"protocolFees\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"verifierFees\",\"type\":\"uint256\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"provider\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"verifier\",\"type\":\"address\"}],\"name\":\"LockedRewardPaid\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"previousOwner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"OwnershipTransferred\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"ProviderRefunded\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"reward\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"unlockTime\",\"type\":\"uint256\"}],\"name\":\"RewardClaimed\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"peerId\",\"type\":\"string\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"usedCpu\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"usedGpu\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"usedMemory\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"usedStorage\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"usedUploadBytes\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"usedDownloadBytes\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"duration\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"timestamp\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"reward\",\"type\":\"uint256\"}],\"name\":\"UsageReported\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"verifier\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"reward\",\"type\":\"uint256\"}],\"name\":\"VerifierRewardClaimed\",\"type\":\"event\"},{\"inputs\":[],\"name\":\"appCount\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"name\":\"apps\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"verifier\",\"type\":\"address\"},{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"symbol\",\"type\":\"string\"},{\"internalType\":\"uint256\",\"name\":\"budget\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"spentBudget\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerCpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerGpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerMemoryGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerStorageGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerBandwidthGB\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"metadata\",\"type\":\"string\"},{\"internalType\":\"address\",\"name\":\"paymentToken\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedCpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedGpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedMemory\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedStorage\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedUploadBytes\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedDownloadBytes\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"duration\",\"type\":\"uint256\"}],\"name\":\"calculateReward\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"reward\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"}],\"name\":\"claimReward\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"symbol\",\"type\":\"string\"},{\"internalType\":\"string[]\",\"name\":\"peerIds\",\"type\":\"string[]\"},{\"internalType\":\"uint256\",\"name\":\"budget\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerCpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerGpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerMemoryGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerStorageGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerBandwidthGB\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"metadata\",\"type\":\"string\"},{\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"verifier\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"paymentToken\",\"type\":\"address\"}],\"name\":\"createApp\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"deposit\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"eip712Domain\",\"outputs\":[{\"internalType\":\"bytes1\",\"name\":\"fields\",\"type\":\"bytes1\"},{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"version\",\"type\":\"string\"},{\"internalType\":\"uint256\",\"name\":\"chainId\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"verifyingContract\",\"type\":\"address\"},{\"internalType\":\"bytes32\",\"name\":\"salt\",\"type\":\"bytes32\"},{\"internalType\":\"uint256[]\",\"name\":\"extensions\",\"type\":\"uint256[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"feeRate\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"}],\"name\":\"getApp\",\"outputs\":[{\"components\":[{\"internalType\":\"string[]\",\"name\":\"peerIds\",\"type\":\"string[]\"},{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"verifier\",\"type\":\"address\"},{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"symbol\",\"type\":\"string\"},{\"internalType\":\"uint256\",\"name\":\"budget\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"spentBudget\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerCpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerGpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerMemoryGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerStorageGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerBandwidthGB\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"metadata\",\"type\":\"string\"},{\"internalType\":\"address\",\"name\":\"paymentToken\",\"type\":\"address\"}],\"internalType\":\"structSubnetAppStore.App\",\"name\":\"app\",\"type\":\"tuple\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"}],\"name\":\"getLockedReward\",\"outputs\":[{\"components\":[{\"internalType\":\"uint256\",\"name\":\"reward\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"unlockTime\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"verifier\",\"type\":\"address\"}],\"internalType\":\"structSubnetAppStore.LockedReward\",\"name\":\"\",\"type\":\"tuple\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"}],\"name\":\"getPendingReward\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_subnetProvider\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"initialOwner\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"_treasury\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"_feeRate\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"_rewardLockDuration\",\"type\":\"uint256\"}],\"name\":\"initialize\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"start\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"end\",\"type\":\"uint256\"}],\"name\":\"listApps\",\"outputs\":[{\"components\":[{\"internalType\":\"string[]\",\"name\":\"peerIds\",\"type\":\"string[]\"},{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"verifier\",\"type\":\"address\"},{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"symbol\",\"type\":\"string\"},{\"internalType\":\"uint256\",\"name\":\"budget\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"spentBudget\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerCpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerGpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerMemoryGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerStorageGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerBandwidthGB\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"metadata\",\"type\":\"string\"},{\"internalType\":\"address\",\"name\":\"paymentToken\",\"type\":\"address\"}],\"internalType\":\"structSubnetAppStore.App[]\",\"name\":\"\",\"type\":\"tuple[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"name\":\"lockedRewards\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"reward\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"unlockTime\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"verifier\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"owner\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"name\":\"pendingRewards\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"}],\"name\":\"refund\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"}],\"name\":\"refundProvider\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"renounceOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"peerId\",\"type\":\"string\"},{\"internalType\":\"uint256\",\"name\":\"usedCpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedGpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedMemory\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedStorage\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedUploadBytes\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"usedDownloadBytes\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"duration\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"timestamp\",\"type\":\"uint256\"},{\"internalType\":\"bytes\",\"name\":\"signature\",\"type\":\"bytes\"}],\"name\":\"reportUsage\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"rewardLockDuration\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"_feeRate\",\"type\":\"uint256\"}],\"name\":\"setFeeRate\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"_rewardLockDuration\",\"type\":\"uint256\"}],\"name\":\"setRewardLockDuration\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_treasury\",\"type\":\"address\"}],\"name\":\"setTreasury\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"_verifierRewardRate\",\"type\":\"uint256\"}],\"name\":\"setVerifierRewardRate\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"subnetProvider\",\"outputs\":[{\"internalType\":\"contractSubnetProvider\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"string\",\"name\":\"\",\"type\":\"string\"}],\"name\":\"symbolToAppId\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"transferOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"treasury\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerCpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerGpu\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerMemoryGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerStorageGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerBandwidthGB\",\"type\":\"uint256\"}],\"name\":\"updateApp\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"metadata\",\"type\":\"string\"}],\"name\":\"updateMetadata\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"}],\"name\":\"updateName\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"}],\"name\":\"updateOperator\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"internalType\":\"string[]\",\"name\":\"peerIds\",\"type\":\"string[]\"}],\"name\":\"updatePeerId\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"appId\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"verifier\",\"type\":\"address\"}],\"name\":\"updateVerifier\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"name\":\"usedMessageHashes\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"verifierRewardRate\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"}]",
 }
 
 // SubnetAppStoreABI is the input ABI used to generate the binding from.
@@ -239,9 +239,8 @@ func (_SubnetAppStore *SubnetAppStoreCallerSession) AppCount() (*big.Int, error)
 
 // Apps is a free data retrieval call binding the contract method 0x61acc37e.
 //
-// Solidity: function apps(uint256 ) view returns(string peerId, address owner, address operator, address verifier, string name, string symbol, uint256 budget, uint256 spentBudget, uint256 pricePerCpu, uint256 pricePerGpu, uint256 pricePerMemoryGB, uint256 pricePerStorageGB, uint256 pricePerBandwidthGB, string metadata, address paymentToken)
+// Solidity: function apps(uint256 ) view returns(address owner, address operator, address verifier, string name, string symbol, uint256 budget, uint256 spentBudget, uint256 pricePerCpu, uint256 pricePerGpu, uint256 pricePerMemoryGB, uint256 pricePerStorageGB, uint256 pricePerBandwidthGB, string metadata, address paymentToken)
 func (_SubnetAppStore *SubnetAppStoreCaller) Apps(opts *bind.CallOpts, arg0 *big.Int) (struct {
-	PeerId              string
 	Owner               common.Address
 	Operator            common.Address
 	Verifier            common.Address
@@ -261,7 +260,6 @@ func (_SubnetAppStore *SubnetAppStoreCaller) Apps(opts *bind.CallOpts, arg0 *big
 	err := _SubnetAppStore.contract.Call(opts, &out, "apps", arg0)
 
 	outstruct := new(struct {
-		PeerId              string
 		Owner               common.Address
 		Operator            common.Address
 		Verifier            common.Address
@@ -281,21 +279,20 @@ func (_SubnetAppStore *SubnetAppStoreCaller) Apps(opts *bind.CallOpts, arg0 *big
 		return *outstruct, err
 	}
 
-	outstruct.PeerId = *abi.ConvertType(out[0], new(string)).(*string)
-	outstruct.Owner = *abi.ConvertType(out[1], new(common.Address)).(*common.Address)
-	outstruct.Operator = *abi.ConvertType(out[2], new(common.Address)).(*common.Address)
-	outstruct.Verifier = *abi.ConvertType(out[3], new(common.Address)).(*common.Address)
-	outstruct.Name = *abi.ConvertType(out[4], new(string)).(*string)
-	outstruct.Symbol = *abi.ConvertType(out[5], new(string)).(*string)
-	outstruct.Budget = *abi.ConvertType(out[6], new(*big.Int)).(**big.Int)
-	outstruct.SpentBudget = *abi.ConvertType(out[7], new(*big.Int)).(**big.Int)
-	outstruct.PricePerCpu = *abi.ConvertType(out[8], new(*big.Int)).(**big.Int)
-	outstruct.PricePerGpu = *abi.ConvertType(out[9], new(*big.Int)).(**big.Int)
-	outstruct.PricePerMemoryGB = *abi.ConvertType(out[10], new(*big.Int)).(**big.Int)
-	outstruct.PricePerStorageGB = *abi.ConvertType(out[11], new(*big.Int)).(**big.Int)
-	outstruct.PricePerBandwidthGB = *abi.ConvertType(out[12], new(*big.Int)).(**big.Int)
-	outstruct.Metadata = *abi.ConvertType(out[13], new(string)).(*string)
-	outstruct.PaymentToken = *abi.ConvertType(out[14], new(common.Address)).(*common.Address)
+	outstruct.Owner = *abi.ConvertType(out[0], new(common.Address)).(*common.Address)
+	outstruct.Operator = *abi.ConvertType(out[1], new(common.Address)).(*common.Address)
+	outstruct.Verifier = *abi.ConvertType(out[2], new(common.Address)).(*common.Address)
+	outstruct.Name = *abi.ConvertType(out[3], new(string)).(*string)
+	outstruct.Symbol = *abi.ConvertType(out[4], new(string)).(*string)
+	outstruct.Budget = *abi.ConvertType(out[5], new(*big.Int)).(**big.Int)
+	outstruct.SpentBudget = *abi.ConvertType(out[6], new(*big.Int)).(**big.Int)
+	outstruct.PricePerCpu = *abi.ConvertType(out[7], new(*big.Int)).(**big.Int)
+	outstruct.PricePerGpu = *abi.ConvertType(out[8], new(*big.Int)).(**big.Int)
+	outstruct.PricePerMemoryGB = *abi.ConvertType(out[9], new(*big.Int)).(**big.Int)
+	outstruct.PricePerStorageGB = *abi.ConvertType(out[10], new(*big.Int)).(**big.Int)
+	outstruct.PricePerBandwidthGB = *abi.ConvertType(out[11], new(*big.Int)).(**big.Int)
+	outstruct.Metadata = *abi.ConvertType(out[12], new(string)).(*string)
+	outstruct.PaymentToken = *abi.ConvertType(out[13], new(common.Address)).(*common.Address)
 
 	return *outstruct, err
 
@@ -303,9 +300,8 @@ func (_SubnetAppStore *SubnetAppStoreCaller) Apps(opts *bind.CallOpts, arg0 *big
 
 // Apps is a free data retrieval call binding the contract method 0x61acc37e.
 //
-// Solidity: function apps(uint256 ) view returns(string peerId, address owner, address operator, address verifier, string name, string symbol, uint256 budget, uint256 spentBudget, uint256 pricePerCpu, uint256 pricePerGpu, uint256 pricePerMemoryGB, uint256 pricePerStorageGB, uint256 pricePerBandwidthGB, string metadata, address paymentToken)
+// Solidity: function apps(uint256 ) view returns(address owner, address operator, address verifier, string name, string symbol, uint256 budget, uint256 spentBudget, uint256 pricePerCpu, uint256 pricePerGpu, uint256 pricePerMemoryGB, uint256 pricePerStorageGB, uint256 pricePerBandwidthGB, string metadata, address paymentToken)
 func (_SubnetAppStore *SubnetAppStoreSession) Apps(arg0 *big.Int) (struct {
-	PeerId              string
 	Owner               common.Address
 	Operator            common.Address
 	Verifier            common.Address
@@ -326,9 +322,8 @@ func (_SubnetAppStore *SubnetAppStoreSession) Apps(arg0 *big.Int) (struct {
 
 // Apps is a free data retrieval call binding the contract method 0x61acc37e.
 //
-// Solidity: function apps(uint256 ) view returns(string peerId, address owner, address operator, address verifier, string name, string symbol, uint256 budget, uint256 spentBudget, uint256 pricePerCpu, uint256 pricePerGpu, uint256 pricePerMemoryGB, uint256 pricePerStorageGB, uint256 pricePerBandwidthGB, string metadata, address paymentToken)
+// Solidity: function apps(uint256 ) view returns(address owner, address operator, address verifier, string name, string symbol, uint256 budget, uint256 spentBudget, uint256 pricePerCpu, uint256 pricePerGpu, uint256 pricePerMemoryGB, uint256 pricePerStorageGB, uint256 pricePerBandwidthGB, string metadata, address paymentToken)
 func (_SubnetAppStore *SubnetAppStoreCallerSession) Apps(arg0 *big.Int) (struct {
-	PeerId              string
 	Owner               common.Address
 	Operator            common.Address
 	Verifier            common.Address
@@ -376,56 +371,6 @@ func (_SubnetAppStore *SubnetAppStoreSession) CalculateReward(appId *big.Int, us
 // Solidity: function calculateReward(uint256 appId, uint256 usedCpu, uint256 usedGpu, uint256 usedMemory, uint256 usedStorage, uint256 usedUploadBytes, uint256 usedDownloadBytes, uint256 duration) view returns(uint256 reward)
 func (_SubnetAppStore *SubnetAppStoreCallerSession) CalculateReward(appId *big.Int, usedCpu *big.Int, usedGpu *big.Int, usedMemory *big.Int, usedStorage *big.Int, usedUploadBytes *big.Int, usedDownloadBytes *big.Int, duration *big.Int) (*big.Int, error) {
 	return _SubnetAppStore.Contract.CalculateReward(&_SubnetAppStore.CallOpts, appId, usedCpu, usedGpu, usedMemory, usedStorage, usedUploadBytes, usedDownloadBytes, duration)
-}
-
-// Deployments is a free data retrieval call binding the contract method 0x20df8a23.
-//
-// Solidity: function deployments(uint256 , uint256 ) view returns(bool isRegistered, uint256 lastClaimTime, uint256 pendingReward)
-func (_SubnetAppStore *SubnetAppStoreCaller) Deployments(opts *bind.CallOpts, arg0 *big.Int, arg1 *big.Int) (struct {
-	IsRegistered  bool
-	LastClaimTime *big.Int
-	PendingReward *big.Int
-}, error) {
-	var out []interface{}
-	err := _SubnetAppStore.contract.Call(opts, &out, "deployments", arg0, arg1)
-
-	outstruct := new(struct {
-		IsRegistered  bool
-		LastClaimTime *big.Int
-		PendingReward *big.Int
-	})
-	if err != nil {
-		return *outstruct, err
-	}
-
-	outstruct.IsRegistered = *abi.ConvertType(out[0], new(bool)).(*bool)
-	outstruct.LastClaimTime = *abi.ConvertType(out[1], new(*big.Int)).(**big.Int)
-	outstruct.PendingReward = *abi.ConvertType(out[2], new(*big.Int)).(**big.Int)
-
-	return *outstruct, err
-
-}
-
-// Deployments is a free data retrieval call binding the contract method 0x20df8a23.
-//
-// Solidity: function deployments(uint256 , uint256 ) view returns(bool isRegistered, uint256 lastClaimTime, uint256 pendingReward)
-func (_SubnetAppStore *SubnetAppStoreSession) Deployments(arg0 *big.Int, arg1 *big.Int) (struct {
-	IsRegistered  bool
-	LastClaimTime *big.Int
-	PendingReward *big.Int
-}, error) {
-	return _SubnetAppStore.Contract.Deployments(&_SubnetAppStore.CallOpts, arg0, arg1)
-}
-
-// Deployments is a free data retrieval call binding the contract method 0x20df8a23.
-//
-// Solidity: function deployments(uint256 , uint256 ) view returns(bool isRegistered, uint256 lastClaimTime, uint256 pendingReward)
-func (_SubnetAppStore *SubnetAppStoreCallerSession) Deployments(arg0 *big.Int, arg1 *big.Int) (struct {
-	IsRegistered  bool
-	LastClaimTime *big.Int
-	PendingReward *big.Int
-}, error) {
-	return _SubnetAppStore.Contract.Deployments(&_SubnetAppStore.CallOpts, arg0, arg1)
 }
 
 // Eip712Domain is a free data retrieval call binding the contract method 0x84b0196e.
@@ -531,7 +476,7 @@ func (_SubnetAppStore *SubnetAppStoreCallerSession) FeeRate() (*big.Int, error) 
 
 // GetApp is a free data retrieval call binding the contract method 0x24f3a51b.
 //
-// Solidity: function getApp(uint256 appId) view returns((string,address,address,address,string,string,uint256,uint256,uint256,uint256,uint256,uint256,uint256,string,address) app)
+// Solidity: function getApp(uint256 appId) view returns((string[],address,address,address,string,string,uint256,uint256,uint256,uint256,uint256,uint256,uint256,string,address) app)
 func (_SubnetAppStore *SubnetAppStoreCaller) GetApp(opts *bind.CallOpts, appId *big.Int) (SubnetAppStoreApp, error) {
 	var out []interface{}
 	err := _SubnetAppStore.contract.Call(opts, &out, "getApp", appId)
@@ -548,52 +493,83 @@ func (_SubnetAppStore *SubnetAppStoreCaller) GetApp(opts *bind.CallOpts, appId *
 
 // GetApp is a free data retrieval call binding the contract method 0x24f3a51b.
 //
-// Solidity: function getApp(uint256 appId) view returns((string,address,address,address,string,string,uint256,uint256,uint256,uint256,uint256,uint256,uint256,string,address) app)
+// Solidity: function getApp(uint256 appId) view returns((string[],address,address,address,string,string,uint256,uint256,uint256,uint256,uint256,uint256,uint256,string,address) app)
 func (_SubnetAppStore *SubnetAppStoreSession) GetApp(appId *big.Int) (SubnetAppStoreApp, error) {
 	return _SubnetAppStore.Contract.GetApp(&_SubnetAppStore.CallOpts, appId)
 }
 
 // GetApp is a free data retrieval call binding the contract method 0x24f3a51b.
 //
-// Solidity: function getApp(uint256 appId) view returns((string,address,address,address,string,string,uint256,uint256,uint256,uint256,uint256,uint256,uint256,string,address) app)
+// Solidity: function getApp(uint256 appId) view returns((string[],address,address,address,string,string,uint256,uint256,uint256,uint256,uint256,uint256,uint256,string,address) app)
 func (_SubnetAppStore *SubnetAppStoreCallerSession) GetApp(appId *big.Int) (SubnetAppStoreApp, error) {
 	return _SubnetAppStore.Contract.GetApp(&_SubnetAppStore.CallOpts, appId)
 }
 
-// GetDeployment is a free data retrieval call binding the contract method 0x8b10fed6.
+// GetLockedReward is a free data retrieval call binding the contract method 0xc8f2e3bb.
 //
-// Solidity: function getDeployment(uint256 appId, uint256 providerId) view returns((bool,uint256,uint256) deployment)
-func (_SubnetAppStore *SubnetAppStoreCaller) GetDeployment(opts *bind.CallOpts, appId *big.Int, providerId *big.Int) (SubnetAppStoreDeployment, error) {
+// Solidity: function getLockedReward(uint256 appId, uint256 providerId) view returns((uint256,uint256,address))
+func (_SubnetAppStore *SubnetAppStoreCaller) GetLockedReward(opts *bind.CallOpts, appId *big.Int, providerId *big.Int) (SubnetAppStoreLockedReward, error) {
 	var out []interface{}
-	err := _SubnetAppStore.contract.Call(opts, &out, "getDeployment", appId, providerId)
+	err := _SubnetAppStore.contract.Call(opts, &out, "getLockedReward", appId, providerId)
 
 	if err != nil {
-		return *new(SubnetAppStoreDeployment), err
+		return *new(SubnetAppStoreLockedReward), err
 	}
 
-	out0 := *abi.ConvertType(out[0], new(SubnetAppStoreDeployment)).(*SubnetAppStoreDeployment)
+	out0 := *abi.ConvertType(out[0], new(SubnetAppStoreLockedReward)).(*SubnetAppStoreLockedReward)
 
 	return out0, err
 
 }
 
-// GetDeployment is a free data retrieval call binding the contract method 0x8b10fed6.
+// GetLockedReward is a free data retrieval call binding the contract method 0xc8f2e3bb.
 //
-// Solidity: function getDeployment(uint256 appId, uint256 providerId) view returns((bool,uint256,uint256) deployment)
-func (_SubnetAppStore *SubnetAppStoreSession) GetDeployment(appId *big.Int, providerId *big.Int) (SubnetAppStoreDeployment, error) {
-	return _SubnetAppStore.Contract.GetDeployment(&_SubnetAppStore.CallOpts, appId, providerId)
+// Solidity: function getLockedReward(uint256 appId, uint256 providerId) view returns((uint256,uint256,address))
+func (_SubnetAppStore *SubnetAppStoreSession) GetLockedReward(appId *big.Int, providerId *big.Int) (SubnetAppStoreLockedReward, error) {
+	return _SubnetAppStore.Contract.GetLockedReward(&_SubnetAppStore.CallOpts, appId, providerId)
 }
 
-// GetDeployment is a free data retrieval call binding the contract method 0x8b10fed6.
+// GetLockedReward is a free data retrieval call binding the contract method 0xc8f2e3bb.
 //
-// Solidity: function getDeployment(uint256 appId, uint256 providerId) view returns((bool,uint256,uint256) deployment)
-func (_SubnetAppStore *SubnetAppStoreCallerSession) GetDeployment(appId *big.Int, providerId *big.Int) (SubnetAppStoreDeployment, error) {
-	return _SubnetAppStore.Contract.GetDeployment(&_SubnetAppStore.CallOpts, appId, providerId)
+// Solidity: function getLockedReward(uint256 appId, uint256 providerId) view returns((uint256,uint256,address))
+func (_SubnetAppStore *SubnetAppStoreCallerSession) GetLockedReward(appId *big.Int, providerId *big.Int) (SubnetAppStoreLockedReward, error) {
+	return _SubnetAppStore.Contract.GetLockedReward(&_SubnetAppStore.CallOpts, appId, providerId)
+}
+
+// GetPendingReward is a free data retrieval call binding the contract method 0xb64fe5c3.
+//
+// Solidity: function getPendingReward(uint256 appId, uint256 providerId) view returns(uint256)
+func (_SubnetAppStore *SubnetAppStoreCaller) GetPendingReward(opts *bind.CallOpts, appId *big.Int, providerId *big.Int) (*big.Int, error) {
+	var out []interface{}
+	err := _SubnetAppStore.contract.Call(opts, &out, "getPendingReward", appId, providerId)
+
+	if err != nil {
+		return *new(*big.Int), err
+	}
+
+	out0 := *abi.ConvertType(out[0], new(*big.Int)).(**big.Int)
+
+	return out0, err
+
+}
+
+// GetPendingReward is a free data retrieval call binding the contract method 0xb64fe5c3.
+//
+// Solidity: function getPendingReward(uint256 appId, uint256 providerId) view returns(uint256)
+func (_SubnetAppStore *SubnetAppStoreSession) GetPendingReward(appId *big.Int, providerId *big.Int) (*big.Int, error) {
+	return _SubnetAppStore.Contract.GetPendingReward(&_SubnetAppStore.CallOpts, appId, providerId)
+}
+
+// GetPendingReward is a free data retrieval call binding the contract method 0xb64fe5c3.
+//
+// Solidity: function getPendingReward(uint256 appId, uint256 providerId) view returns(uint256)
+func (_SubnetAppStore *SubnetAppStoreCallerSession) GetPendingReward(appId *big.Int, providerId *big.Int) (*big.Int, error) {
+	return _SubnetAppStore.Contract.GetPendingReward(&_SubnetAppStore.CallOpts, appId, providerId)
 }
 
 // ListApps is a free data retrieval call binding the contract method 0x3d205559.
 //
-// Solidity: function listApps(uint256 start, uint256 end) view returns((string,address,address,address,string,string,uint256,uint256,uint256,uint256,uint256,uint256,uint256,string,address)[])
+// Solidity: function listApps(uint256 start, uint256 end) view returns((string[],address,address,address,string,string,uint256,uint256,uint256,uint256,uint256,uint256,uint256,string,address)[])
 func (_SubnetAppStore *SubnetAppStoreCaller) ListApps(opts *bind.CallOpts, start *big.Int, end *big.Int) ([]SubnetAppStoreApp, error) {
 	var out []interface{}
 	err := _SubnetAppStore.contract.Call(opts, &out, "listApps", start, end)
@@ -610,16 +586,66 @@ func (_SubnetAppStore *SubnetAppStoreCaller) ListApps(opts *bind.CallOpts, start
 
 // ListApps is a free data retrieval call binding the contract method 0x3d205559.
 //
-// Solidity: function listApps(uint256 start, uint256 end) view returns((string,address,address,address,string,string,uint256,uint256,uint256,uint256,uint256,uint256,uint256,string,address)[])
+// Solidity: function listApps(uint256 start, uint256 end) view returns((string[],address,address,address,string,string,uint256,uint256,uint256,uint256,uint256,uint256,uint256,string,address)[])
 func (_SubnetAppStore *SubnetAppStoreSession) ListApps(start *big.Int, end *big.Int) ([]SubnetAppStoreApp, error) {
 	return _SubnetAppStore.Contract.ListApps(&_SubnetAppStore.CallOpts, start, end)
 }
 
 // ListApps is a free data retrieval call binding the contract method 0x3d205559.
 //
-// Solidity: function listApps(uint256 start, uint256 end) view returns((string,address,address,address,string,string,uint256,uint256,uint256,uint256,uint256,uint256,uint256,string,address)[])
+// Solidity: function listApps(uint256 start, uint256 end) view returns((string[],address,address,address,string,string,uint256,uint256,uint256,uint256,uint256,uint256,uint256,string,address)[])
 func (_SubnetAppStore *SubnetAppStoreCallerSession) ListApps(start *big.Int, end *big.Int) ([]SubnetAppStoreApp, error) {
 	return _SubnetAppStore.Contract.ListApps(&_SubnetAppStore.CallOpts, start, end)
+}
+
+// LockedRewards is a free data retrieval call binding the contract method 0x3b81eefc.
+//
+// Solidity: function lockedRewards(uint256 , uint256 ) view returns(uint256 reward, uint256 unlockTime, address verifier)
+func (_SubnetAppStore *SubnetAppStoreCaller) LockedRewards(opts *bind.CallOpts, arg0 *big.Int, arg1 *big.Int) (struct {
+	Reward     *big.Int
+	UnlockTime *big.Int
+	Verifier   common.Address
+}, error) {
+	var out []interface{}
+	err := _SubnetAppStore.contract.Call(opts, &out, "lockedRewards", arg0, arg1)
+
+	outstruct := new(struct {
+		Reward     *big.Int
+		UnlockTime *big.Int
+		Verifier   common.Address
+	})
+	if err != nil {
+		return *outstruct, err
+	}
+
+	outstruct.Reward = *abi.ConvertType(out[0], new(*big.Int)).(**big.Int)
+	outstruct.UnlockTime = *abi.ConvertType(out[1], new(*big.Int)).(**big.Int)
+	outstruct.Verifier = *abi.ConvertType(out[2], new(common.Address)).(*common.Address)
+
+	return *outstruct, err
+
+}
+
+// LockedRewards is a free data retrieval call binding the contract method 0x3b81eefc.
+//
+// Solidity: function lockedRewards(uint256 , uint256 ) view returns(uint256 reward, uint256 unlockTime, address verifier)
+func (_SubnetAppStore *SubnetAppStoreSession) LockedRewards(arg0 *big.Int, arg1 *big.Int) (struct {
+	Reward     *big.Int
+	UnlockTime *big.Int
+	Verifier   common.Address
+}, error) {
+	return _SubnetAppStore.Contract.LockedRewards(&_SubnetAppStore.CallOpts, arg0, arg1)
+}
+
+// LockedRewards is a free data retrieval call binding the contract method 0x3b81eefc.
+//
+// Solidity: function lockedRewards(uint256 , uint256 ) view returns(uint256 reward, uint256 unlockTime, address verifier)
+func (_SubnetAppStore *SubnetAppStoreCallerSession) LockedRewards(arg0 *big.Int, arg1 *big.Int) (struct {
+	Reward     *big.Int
+	UnlockTime *big.Int
+	Verifier   common.Address
+}, error) {
+	return _SubnetAppStore.Contract.LockedRewards(&_SubnetAppStore.CallOpts, arg0, arg1)
 }
 
 // Owner is a free data retrieval call binding the contract method 0x8da5cb5b.
@@ -651,6 +677,68 @@ func (_SubnetAppStore *SubnetAppStoreSession) Owner() (common.Address, error) {
 // Solidity: function owner() view returns(address)
 func (_SubnetAppStore *SubnetAppStoreCallerSession) Owner() (common.Address, error) {
 	return _SubnetAppStore.Contract.Owner(&_SubnetAppStore.CallOpts)
+}
+
+// PendingRewards is a free data retrieval call binding the contract method 0x5ef819ce.
+//
+// Solidity: function pendingRewards(uint256 , uint256 ) view returns(uint256)
+func (_SubnetAppStore *SubnetAppStoreCaller) PendingRewards(opts *bind.CallOpts, arg0 *big.Int, arg1 *big.Int) (*big.Int, error) {
+	var out []interface{}
+	err := _SubnetAppStore.contract.Call(opts, &out, "pendingRewards", arg0, arg1)
+
+	if err != nil {
+		return *new(*big.Int), err
+	}
+
+	out0 := *abi.ConvertType(out[0], new(*big.Int)).(**big.Int)
+
+	return out0, err
+
+}
+
+// PendingRewards is a free data retrieval call binding the contract method 0x5ef819ce.
+//
+// Solidity: function pendingRewards(uint256 , uint256 ) view returns(uint256)
+func (_SubnetAppStore *SubnetAppStoreSession) PendingRewards(arg0 *big.Int, arg1 *big.Int) (*big.Int, error) {
+	return _SubnetAppStore.Contract.PendingRewards(&_SubnetAppStore.CallOpts, arg0, arg1)
+}
+
+// PendingRewards is a free data retrieval call binding the contract method 0x5ef819ce.
+//
+// Solidity: function pendingRewards(uint256 , uint256 ) view returns(uint256)
+func (_SubnetAppStore *SubnetAppStoreCallerSession) PendingRewards(arg0 *big.Int, arg1 *big.Int) (*big.Int, error) {
+	return _SubnetAppStore.Contract.PendingRewards(&_SubnetAppStore.CallOpts, arg0, arg1)
+}
+
+// RewardLockDuration is a free data retrieval call binding the contract method 0xc7f626c8.
+//
+// Solidity: function rewardLockDuration() view returns(uint256)
+func (_SubnetAppStore *SubnetAppStoreCaller) RewardLockDuration(opts *bind.CallOpts) (*big.Int, error) {
+	var out []interface{}
+	err := _SubnetAppStore.contract.Call(opts, &out, "rewardLockDuration")
+
+	if err != nil {
+		return *new(*big.Int), err
+	}
+
+	out0 := *abi.ConvertType(out[0], new(*big.Int)).(**big.Int)
+
+	return out0, err
+
+}
+
+// RewardLockDuration is a free data retrieval call binding the contract method 0xc7f626c8.
+//
+// Solidity: function rewardLockDuration() view returns(uint256)
+func (_SubnetAppStore *SubnetAppStoreSession) RewardLockDuration() (*big.Int, error) {
+	return _SubnetAppStore.Contract.RewardLockDuration(&_SubnetAppStore.CallOpts)
+}
+
+// RewardLockDuration is a free data retrieval call binding the contract method 0xc7f626c8.
+//
+// Solidity: function rewardLockDuration() view returns(uint256)
+func (_SubnetAppStore *SubnetAppStoreCallerSession) RewardLockDuration() (*big.Int, error) {
+	return _SubnetAppStore.Contract.RewardLockDuration(&_SubnetAppStore.CallOpts)
 }
 
 // SubnetProvider is a free data retrieval call binding the contract method 0x6a46dc8c.
@@ -808,37 +896,6 @@ func (_SubnetAppStore *SubnetAppStoreCallerSession) VerifierRewardRate() (*big.I
 	return _SubnetAppStore.Contract.VerifierRewardRate(&_SubnetAppStore.CallOpts)
 }
 
-// Version is a free data retrieval call binding the contract method 0x54fd4d50.
-//
-// Solidity: function version() pure returns(string)
-func (_SubnetAppStore *SubnetAppStoreCaller) Version(opts *bind.CallOpts) (string, error) {
-	var out []interface{}
-	err := _SubnetAppStore.contract.Call(opts, &out, "version")
-
-	if err != nil {
-		return *new(string), err
-	}
-
-	out0 := *abi.ConvertType(out[0], new(string)).(*string)
-
-	return out0, err
-
-}
-
-// Version is a free data retrieval call binding the contract method 0x54fd4d50.
-//
-// Solidity: function version() pure returns(string)
-func (_SubnetAppStore *SubnetAppStoreSession) Version() (string, error) {
-	return _SubnetAppStore.Contract.Version(&_SubnetAppStore.CallOpts)
-}
-
-// Version is a free data retrieval call binding the contract method 0x54fd4d50.
-//
-// Solidity: function version() pure returns(string)
-func (_SubnetAppStore *SubnetAppStoreCallerSession) Version() (string, error) {
-	return _SubnetAppStore.Contract.Version(&_SubnetAppStore.CallOpts)
-}
-
 // ClaimReward is a paid mutator transaction binding the contract method 0x86bb8f37.
 //
 // Solidity: function claimReward(uint256 providerId, uint256 appId) returns()
@@ -860,25 +917,25 @@ func (_SubnetAppStore *SubnetAppStoreTransactorSession) ClaimReward(providerId *
 	return _SubnetAppStore.Contract.ClaimReward(&_SubnetAppStore.TransactOpts, providerId, appId)
 }
 
-// CreateApp is a paid mutator transaction binding the contract method 0xf93579cc.
+// CreateApp is a paid mutator transaction binding the contract method 0x4deab039.
 //
-// Solidity: function createApp(string name, string symbol, string peerId, uint256 budget, uint256 pricePerCpu, uint256 pricePerGpu, uint256 pricePerMemoryGB, uint256 pricePerStorageGB, uint256 pricePerBandwidthGB, string metadata, address operator, address verifier, address paymentToken) returns(uint256)
-func (_SubnetAppStore *SubnetAppStoreTransactor) CreateApp(opts *bind.TransactOpts, name string, symbol string, peerId string, budget *big.Int, pricePerCpu *big.Int, pricePerGpu *big.Int, pricePerMemoryGB *big.Int, pricePerStorageGB *big.Int, pricePerBandwidthGB *big.Int, metadata string, operator common.Address, verifier common.Address, paymentToken common.Address) (*types.Transaction, error) {
-	return _SubnetAppStore.contract.Transact(opts, "createApp", name, symbol, peerId, budget, pricePerCpu, pricePerGpu, pricePerMemoryGB, pricePerStorageGB, pricePerBandwidthGB, metadata, operator, verifier, paymentToken)
+// Solidity: function createApp(string name, string symbol, string[] peerIds, uint256 budget, uint256 pricePerCpu, uint256 pricePerGpu, uint256 pricePerMemoryGB, uint256 pricePerStorageGB, uint256 pricePerBandwidthGB, string metadata, address operator, address verifier, address paymentToken) returns(uint256)
+func (_SubnetAppStore *SubnetAppStoreTransactor) CreateApp(opts *bind.TransactOpts, name string, symbol string, peerIds []string, budget *big.Int, pricePerCpu *big.Int, pricePerGpu *big.Int, pricePerMemoryGB *big.Int, pricePerStorageGB *big.Int, pricePerBandwidthGB *big.Int, metadata string, operator common.Address, verifier common.Address, paymentToken common.Address) (*types.Transaction, error) {
+	return _SubnetAppStore.contract.Transact(opts, "createApp", name, symbol, peerIds, budget, pricePerCpu, pricePerGpu, pricePerMemoryGB, pricePerStorageGB, pricePerBandwidthGB, metadata, operator, verifier, paymentToken)
 }
 
-// CreateApp is a paid mutator transaction binding the contract method 0xf93579cc.
+// CreateApp is a paid mutator transaction binding the contract method 0x4deab039.
 //
-// Solidity: function createApp(string name, string symbol, string peerId, uint256 budget, uint256 pricePerCpu, uint256 pricePerGpu, uint256 pricePerMemoryGB, uint256 pricePerStorageGB, uint256 pricePerBandwidthGB, string metadata, address operator, address verifier, address paymentToken) returns(uint256)
-func (_SubnetAppStore *SubnetAppStoreSession) CreateApp(name string, symbol string, peerId string, budget *big.Int, pricePerCpu *big.Int, pricePerGpu *big.Int, pricePerMemoryGB *big.Int, pricePerStorageGB *big.Int, pricePerBandwidthGB *big.Int, metadata string, operator common.Address, verifier common.Address, paymentToken common.Address) (*types.Transaction, error) {
-	return _SubnetAppStore.Contract.CreateApp(&_SubnetAppStore.TransactOpts, name, symbol, peerId, budget, pricePerCpu, pricePerGpu, pricePerMemoryGB, pricePerStorageGB, pricePerBandwidthGB, metadata, operator, verifier, paymentToken)
+// Solidity: function createApp(string name, string symbol, string[] peerIds, uint256 budget, uint256 pricePerCpu, uint256 pricePerGpu, uint256 pricePerMemoryGB, uint256 pricePerStorageGB, uint256 pricePerBandwidthGB, string metadata, address operator, address verifier, address paymentToken) returns(uint256)
+func (_SubnetAppStore *SubnetAppStoreSession) CreateApp(name string, symbol string, peerIds []string, budget *big.Int, pricePerCpu *big.Int, pricePerGpu *big.Int, pricePerMemoryGB *big.Int, pricePerStorageGB *big.Int, pricePerBandwidthGB *big.Int, metadata string, operator common.Address, verifier common.Address, paymentToken common.Address) (*types.Transaction, error) {
+	return _SubnetAppStore.Contract.CreateApp(&_SubnetAppStore.TransactOpts, name, symbol, peerIds, budget, pricePerCpu, pricePerGpu, pricePerMemoryGB, pricePerStorageGB, pricePerBandwidthGB, metadata, operator, verifier, paymentToken)
 }
 
-// CreateApp is a paid mutator transaction binding the contract method 0xf93579cc.
+// CreateApp is a paid mutator transaction binding the contract method 0x4deab039.
 //
-// Solidity: function createApp(string name, string symbol, string peerId, uint256 budget, uint256 pricePerCpu, uint256 pricePerGpu, uint256 pricePerMemoryGB, uint256 pricePerStorageGB, uint256 pricePerBandwidthGB, string metadata, address operator, address verifier, address paymentToken) returns(uint256)
-func (_SubnetAppStore *SubnetAppStoreTransactorSession) CreateApp(name string, symbol string, peerId string, budget *big.Int, pricePerCpu *big.Int, pricePerGpu *big.Int, pricePerMemoryGB *big.Int, pricePerStorageGB *big.Int, pricePerBandwidthGB *big.Int, metadata string, operator common.Address, verifier common.Address, paymentToken common.Address) (*types.Transaction, error) {
-	return _SubnetAppStore.Contract.CreateApp(&_SubnetAppStore.TransactOpts, name, symbol, peerId, budget, pricePerCpu, pricePerGpu, pricePerMemoryGB, pricePerStorageGB, pricePerBandwidthGB, metadata, operator, verifier, paymentToken)
+// Solidity: function createApp(string name, string symbol, string[] peerIds, uint256 budget, uint256 pricePerCpu, uint256 pricePerGpu, uint256 pricePerMemoryGB, uint256 pricePerStorageGB, uint256 pricePerBandwidthGB, string metadata, address operator, address verifier, address paymentToken) returns(uint256)
+func (_SubnetAppStore *SubnetAppStoreTransactorSession) CreateApp(name string, symbol string, peerIds []string, budget *big.Int, pricePerCpu *big.Int, pricePerGpu *big.Int, pricePerMemoryGB *big.Int, pricePerStorageGB *big.Int, pricePerBandwidthGB *big.Int, metadata string, operator common.Address, verifier common.Address, paymentToken common.Address) (*types.Transaction, error) {
+	return _SubnetAppStore.Contract.CreateApp(&_SubnetAppStore.TransactOpts, name, symbol, peerIds, budget, pricePerCpu, pricePerGpu, pricePerMemoryGB, pricePerStorageGB, pricePerBandwidthGB, metadata, operator, verifier, paymentToken)
 }
 
 // Deposit is a paid mutator transaction binding the contract method 0xe2bbb158.
@@ -902,25 +959,25 @@ func (_SubnetAppStore *SubnetAppStoreTransactorSession) Deposit(appId *big.Int, 
 	return _SubnetAppStore.Contract.Deposit(&_SubnetAppStore.TransactOpts, appId, amount)
 }
 
-// Initialize is a paid mutator transaction binding the contract method 0xcf756fdf.
+// Initialize is a paid mutator transaction binding the contract method 0xa6b63eb8.
 //
-// Solidity: function initialize(address _subnetProvider, address initialOwner, address _treasury, uint256 _feeRate) returns()
-func (_SubnetAppStore *SubnetAppStoreTransactor) Initialize(opts *bind.TransactOpts, _subnetProvider common.Address, initialOwner common.Address, _treasury common.Address, _feeRate *big.Int) (*types.Transaction, error) {
-	return _SubnetAppStore.contract.Transact(opts, "initialize", _subnetProvider, initialOwner, _treasury, _feeRate)
+// Solidity: function initialize(address _subnetProvider, address initialOwner, address _treasury, uint256 _feeRate, uint256 _rewardLockDuration) returns()
+func (_SubnetAppStore *SubnetAppStoreTransactor) Initialize(opts *bind.TransactOpts, _subnetProvider common.Address, initialOwner common.Address, _treasury common.Address, _feeRate *big.Int, _rewardLockDuration *big.Int) (*types.Transaction, error) {
+	return _SubnetAppStore.contract.Transact(opts, "initialize", _subnetProvider, initialOwner, _treasury, _feeRate, _rewardLockDuration)
 }
 
-// Initialize is a paid mutator transaction binding the contract method 0xcf756fdf.
+// Initialize is a paid mutator transaction binding the contract method 0xa6b63eb8.
 //
-// Solidity: function initialize(address _subnetProvider, address initialOwner, address _treasury, uint256 _feeRate) returns()
-func (_SubnetAppStore *SubnetAppStoreSession) Initialize(_subnetProvider common.Address, initialOwner common.Address, _treasury common.Address, _feeRate *big.Int) (*types.Transaction, error) {
-	return _SubnetAppStore.Contract.Initialize(&_SubnetAppStore.TransactOpts, _subnetProvider, initialOwner, _treasury, _feeRate)
+// Solidity: function initialize(address _subnetProvider, address initialOwner, address _treasury, uint256 _feeRate, uint256 _rewardLockDuration) returns()
+func (_SubnetAppStore *SubnetAppStoreSession) Initialize(_subnetProvider common.Address, initialOwner common.Address, _treasury common.Address, _feeRate *big.Int, _rewardLockDuration *big.Int) (*types.Transaction, error) {
+	return _SubnetAppStore.Contract.Initialize(&_SubnetAppStore.TransactOpts, _subnetProvider, initialOwner, _treasury, _feeRate, _rewardLockDuration)
 }
 
-// Initialize is a paid mutator transaction binding the contract method 0xcf756fdf.
+// Initialize is a paid mutator transaction binding the contract method 0xa6b63eb8.
 //
-// Solidity: function initialize(address _subnetProvider, address initialOwner, address _treasury, uint256 _feeRate) returns()
-func (_SubnetAppStore *SubnetAppStoreTransactorSession) Initialize(_subnetProvider common.Address, initialOwner common.Address, _treasury common.Address, _feeRate *big.Int) (*types.Transaction, error) {
-	return _SubnetAppStore.Contract.Initialize(&_SubnetAppStore.TransactOpts, _subnetProvider, initialOwner, _treasury, _feeRate)
+// Solidity: function initialize(address _subnetProvider, address initialOwner, address _treasury, uint256 _feeRate, uint256 _rewardLockDuration) returns()
+func (_SubnetAppStore *SubnetAppStoreTransactorSession) Initialize(_subnetProvider common.Address, initialOwner common.Address, _treasury common.Address, _feeRate *big.Int, _rewardLockDuration *big.Int) (*types.Transaction, error) {
+	return _SubnetAppStore.Contract.Initialize(&_SubnetAppStore.TransactOpts, _subnetProvider, initialOwner, _treasury, _feeRate, _rewardLockDuration)
 }
 
 // Refund is a paid mutator transaction binding the contract method 0x278ecde1.
@@ -1026,6 +1083,27 @@ func (_SubnetAppStore *SubnetAppStoreSession) SetFeeRate(_feeRate *big.Int) (*ty
 // Solidity: function setFeeRate(uint256 _feeRate) returns()
 func (_SubnetAppStore *SubnetAppStoreTransactorSession) SetFeeRate(_feeRate *big.Int) (*types.Transaction, error) {
 	return _SubnetAppStore.Contract.SetFeeRate(&_SubnetAppStore.TransactOpts, _feeRate)
+}
+
+// SetRewardLockDuration is a paid mutator transaction binding the contract method 0x0e269c6b.
+//
+// Solidity: function setRewardLockDuration(uint256 _rewardLockDuration) returns()
+func (_SubnetAppStore *SubnetAppStoreTransactor) SetRewardLockDuration(opts *bind.TransactOpts, _rewardLockDuration *big.Int) (*types.Transaction, error) {
+	return _SubnetAppStore.contract.Transact(opts, "setRewardLockDuration", _rewardLockDuration)
+}
+
+// SetRewardLockDuration is a paid mutator transaction binding the contract method 0x0e269c6b.
+//
+// Solidity: function setRewardLockDuration(uint256 _rewardLockDuration) returns()
+func (_SubnetAppStore *SubnetAppStoreSession) SetRewardLockDuration(_rewardLockDuration *big.Int) (*types.Transaction, error) {
+	return _SubnetAppStore.Contract.SetRewardLockDuration(&_SubnetAppStore.TransactOpts, _rewardLockDuration)
+}
+
+// SetRewardLockDuration is a paid mutator transaction binding the contract method 0x0e269c6b.
+//
+// Solidity: function setRewardLockDuration(uint256 _rewardLockDuration) returns()
+func (_SubnetAppStore *SubnetAppStoreTransactorSession) SetRewardLockDuration(_rewardLockDuration *big.Int) (*types.Transaction, error) {
+	return _SubnetAppStore.Contract.SetRewardLockDuration(&_SubnetAppStore.TransactOpts, _rewardLockDuration)
 }
 
 // SetTreasury is a paid mutator transaction binding the contract method 0xf0f44260.
@@ -1175,25 +1253,25 @@ func (_SubnetAppStore *SubnetAppStoreTransactorSession) UpdateOperator(appId *bi
 	return _SubnetAppStore.Contract.UpdateOperator(&_SubnetAppStore.TransactOpts, appId, operator)
 }
 
-// UpdatePeerId is a paid mutator transaction binding the contract method 0xe89c7408.
+// UpdatePeerId is a paid mutator transaction binding the contract method 0x259e6d16.
 //
-// Solidity: function updatePeerId(uint256 appId, string peerId) returns()
-func (_SubnetAppStore *SubnetAppStoreTransactor) UpdatePeerId(opts *bind.TransactOpts, appId *big.Int, peerId string) (*types.Transaction, error) {
-	return _SubnetAppStore.contract.Transact(opts, "updatePeerId", appId, peerId)
+// Solidity: function updatePeerId(uint256 appId, string[] peerIds) returns()
+func (_SubnetAppStore *SubnetAppStoreTransactor) UpdatePeerId(opts *bind.TransactOpts, appId *big.Int, peerIds []string) (*types.Transaction, error) {
+	return _SubnetAppStore.contract.Transact(opts, "updatePeerId", appId, peerIds)
 }
 
-// UpdatePeerId is a paid mutator transaction binding the contract method 0xe89c7408.
+// UpdatePeerId is a paid mutator transaction binding the contract method 0x259e6d16.
 //
-// Solidity: function updatePeerId(uint256 appId, string peerId) returns()
-func (_SubnetAppStore *SubnetAppStoreSession) UpdatePeerId(appId *big.Int, peerId string) (*types.Transaction, error) {
-	return _SubnetAppStore.Contract.UpdatePeerId(&_SubnetAppStore.TransactOpts, appId, peerId)
+// Solidity: function updatePeerId(uint256 appId, string[] peerIds) returns()
+func (_SubnetAppStore *SubnetAppStoreSession) UpdatePeerId(appId *big.Int, peerIds []string) (*types.Transaction, error) {
+	return _SubnetAppStore.Contract.UpdatePeerId(&_SubnetAppStore.TransactOpts, appId, peerIds)
 }
 
-// UpdatePeerId is a paid mutator transaction binding the contract method 0xe89c7408.
+// UpdatePeerId is a paid mutator transaction binding the contract method 0x259e6d16.
 //
-// Solidity: function updatePeerId(uint256 appId, string peerId) returns()
-func (_SubnetAppStore *SubnetAppStoreTransactorSession) UpdatePeerId(appId *big.Int, peerId string) (*types.Transaction, error) {
-	return _SubnetAppStore.Contract.UpdatePeerId(&_SubnetAppStore.TransactOpts, appId, peerId)
+// Solidity: function updatePeerId(uint256 appId, string[] peerIds) returns()
+func (_SubnetAppStore *SubnetAppStoreTransactorSession) UpdatePeerId(appId *big.Int, peerIds []string) (*types.Transaction, error) {
+	return _SubnetAppStore.Contract.UpdatePeerId(&_SubnetAppStore.TransactOpts, appId, peerIds)
 }
 
 // UpdateVerifier is a paid mutator transaction binding the contract method 0x293de354.
@@ -2372,6 +2450,173 @@ func (_SubnetAppStore *SubnetAppStoreFilterer) ParseInitialized(log types.Log) (
 	return event, nil
 }
 
+// SubnetAppStoreLockedRewardPaidIterator is returned from FilterLockedRewardPaid and is used to iterate over the raw logs and unpacked data for LockedRewardPaid events raised by the SubnetAppStore contract.
+type SubnetAppStoreLockedRewardPaidIterator struct {
+	Event *SubnetAppStoreLockedRewardPaid // Event containing the contract specifics and raw log
+
+	contract *bind.BoundContract // Generic contract to use for unpacking event data
+	event    string              // Event name to use for unpacking event data
+
+	logs chan types.Log        // Log channel receiving the found contract events
+	sub  ethereum.Subscription // Subscription for errors, completion and termination
+	done bool                  // Whether the subscription completed delivering logs
+	fail error                 // Occurred error to stop iteration
+}
+
+// Next advances the iterator to the subsequent event, returning whether there
+// are any more events found. In case of a retrieval or parsing error, false is
+// returned and Error() can be queried for the exact failure.
+func (it *SubnetAppStoreLockedRewardPaidIterator) Next() bool {
+	// If the iterator failed, stop iterating
+	if it.fail != nil {
+		return false
+	}
+	// If the iterator completed, deliver directly whatever's available
+	if it.done {
+		select {
+		case log := <-it.logs:
+			it.Event = new(SubnetAppStoreLockedRewardPaid)
+			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+				it.fail = err
+				return false
+			}
+			it.Event.Raw = log
+			return true
+
+		default:
+			return false
+		}
+	}
+	// Iterator still in progress, wait for either a data or an error event
+	select {
+	case log := <-it.logs:
+		it.Event = new(SubnetAppStoreLockedRewardPaid)
+		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+			it.fail = err
+			return false
+		}
+		it.Event.Raw = log
+		return true
+
+	case err := <-it.sub.Err():
+		it.done = true
+		it.fail = err
+		return it.Next()
+	}
+}
+
+// Error returns any retrieval or parsing error occurred during filtering.
+func (it *SubnetAppStoreLockedRewardPaidIterator) Error() error {
+	return it.fail
+}
+
+// Close terminates the iteration process, releasing any pending underlying
+// resources.
+func (it *SubnetAppStoreLockedRewardPaidIterator) Close() error {
+	it.sub.Unsubscribe()
+	return nil
+}
+
+// SubnetAppStoreLockedRewardPaid represents a LockedRewardPaid event raised by the SubnetAppStore contract.
+type SubnetAppStoreLockedRewardPaid struct {
+	AppId        *big.Int
+	Reward       *big.Int
+	ProtocolFees *big.Int
+	VerifierFees *big.Int
+	Provider     common.Address
+	Verifier     common.Address
+	Raw          types.Log // Blockchain specific contextual infos
+}
+
+// FilterLockedRewardPaid is a free log retrieval operation binding the contract event 0xe40666cfdde2893cc0954ef6f89e80ff06b7f462050503098b3329a1d3daaa0b.
+//
+// Solidity: event LockedRewardPaid(uint256 indexed appId, uint256 reward, uint256 protocolFees, uint256 verifierFees, address indexed provider, address indexed verifier)
+func (_SubnetAppStore *SubnetAppStoreFilterer) FilterLockedRewardPaid(opts *bind.FilterOpts, appId []*big.Int, provider []common.Address, verifier []common.Address) (*SubnetAppStoreLockedRewardPaidIterator, error) {
+
+	var appIdRule []interface{}
+	for _, appIdItem := range appId {
+		appIdRule = append(appIdRule, appIdItem)
+	}
+
+	var providerRule []interface{}
+	for _, providerItem := range provider {
+		providerRule = append(providerRule, providerItem)
+	}
+	var verifierRule []interface{}
+	for _, verifierItem := range verifier {
+		verifierRule = append(verifierRule, verifierItem)
+	}
+
+	logs, sub, err := _SubnetAppStore.contract.FilterLogs(opts, "LockedRewardPaid", appIdRule, providerRule, verifierRule)
+	if err != nil {
+		return nil, err
+	}
+	return &SubnetAppStoreLockedRewardPaidIterator{contract: _SubnetAppStore.contract, event: "LockedRewardPaid", logs: logs, sub: sub}, nil
+}
+
+// WatchLockedRewardPaid is a free log subscription operation binding the contract event 0xe40666cfdde2893cc0954ef6f89e80ff06b7f462050503098b3329a1d3daaa0b.
+//
+// Solidity: event LockedRewardPaid(uint256 indexed appId, uint256 reward, uint256 protocolFees, uint256 verifierFees, address indexed provider, address indexed verifier)
+func (_SubnetAppStore *SubnetAppStoreFilterer) WatchLockedRewardPaid(opts *bind.WatchOpts, sink chan<- *SubnetAppStoreLockedRewardPaid, appId []*big.Int, provider []common.Address, verifier []common.Address) (event.Subscription, error) {
+
+	var appIdRule []interface{}
+	for _, appIdItem := range appId {
+		appIdRule = append(appIdRule, appIdItem)
+	}
+
+	var providerRule []interface{}
+	for _, providerItem := range provider {
+		providerRule = append(providerRule, providerItem)
+	}
+	var verifierRule []interface{}
+	for _, verifierItem := range verifier {
+		verifierRule = append(verifierRule, verifierItem)
+	}
+
+	logs, sub, err := _SubnetAppStore.contract.WatchLogs(opts, "LockedRewardPaid", appIdRule, providerRule, verifierRule)
+	if err != nil {
+		return nil, err
+	}
+	return event.NewSubscription(func(quit <-chan struct{}) error {
+		defer sub.Unsubscribe()
+		for {
+			select {
+			case log := <-logs:
+				// New log arrived, parse the event and forward to the user
+				event := new(SubnetAppStoreLockedRewardPaid)
+				if err := _SubnetAppStore.contract.UnpackLog(event, "LockedRewardPaid", log); err != nil {
+					return err
+				}
+				event.Raw = log
+
+				select {
+				case sink <- event:
+				case err := <-sub.Err():
+					return err
+				case <-quit:
+					return nil
+				}
+			case err := <-sub.Err():
+				return err
+			case <-quit:
+				return nil
+			}
+		}
+	}), nil
+}
+
+// ParseLockedRewardPaid is a log parse operation binding the contract event 0xe40666cfdde2893cc0954ef6f89e80ff06b7f462050503098b3329a1d3daaa0b.
+//
+// Solidity: event LockedRewardPaid(uint256 indexed appId, uint256 reward, uint256 protocolFees, uint256 verifierFees, address indexed provider, address indexed verifier)
+func (_SubnetAppStore *SubnetAppStoreFilterer) ParseLockedRewardPaid(log types.Log) (*SubnetAppStoreLockedRewardPaid, error) {
+	event := new(SubnetAppStoreLockedRewardPaid)
+	if err := _SubnetAppStore.contract.UnpackLog(event, "LockedRewardPaid", log); err != nil {
+		return nil, err
+	}
+	event.Raw = log
+	return event, nil
+}
+
 // SubnetAppStoreOwnershipTransferredIterator is returned from FilterOwnershipTransferred and is used to iterate over the raw logs and unpacked data for OwnershipTransferred events raised by the SubnetAppStore contract.
 type SubnetAppStoreOwnershipTransferredIterator struct {
 	Event *SubnetAppStoreOwnershipTransferred // Event containing the contract specifics and raw log
@@ -2751,12 +2996,13 @@ type SubnetAppStoreRewardClaimed struct {
 	AppId      *big.Int
 	ProviderId *big.Int
 	Reward     *big.Int
+	UnlockTime *big.Int
 	Raw        types.Log // Blockchain specific contextual infos
 }
 
-// FilterRewardClaimed is a free log retrieval operation binding the contract event 0x64bc8e516eb66c9bd33c0d0f80b0e16a5bac9eb2bce20d6fdf7698a0d7ab6eba.
+// FilterRewardClaimed is a free log retrieval operation binding the contract event 0x9a6343db5a6c68f88297e55b18a3f7a7bcd59a51ff0afacab4843b54936c817a.
 //
-// Solidity: event RewardClaimed(uint256 indexed appId, uint256 indexed providerId, uint256 reward)
+// Solidity: event RewardClaimed(uint256 indexed appId, uint256 indexed providerId, uint256 reward, uint256 unlockTime)
 func (_SubnetAppStore *SubnetAppStoreFilterer) FilterRewardClaimed(opts *bind.FilterOpts, appId []*big.Int, providerId []*big.Int) (*SubnetAppStoreRewardClaimedIterator, error) {
 
 	var appIdRule []interface{}
@@ -2775,9 +3021,9 @@ func (_SubnetAppStore *SubnetAppStoreFilterer) FilterRewardClaimed(opts *bind.Fi
 	return &SubnetAppStoreRewardClaimedIterator{contract: _SubnetAppStore.contract, event: "RewardClaimed", logs: logs, sub: sub}, nil
 }
 
-// WatchRewardClaimed is a free log subscription operation binding the contract event 0x64bc8e516eb66c9bd33c0d0f80b0e16a5bac9eb2bce20d6fdf7698a0d7ab6eba.
+// WatchRewardClaimed is a free log subscription operation binding the contract event 0x9a6343db5a6c68f88297e55b18a3f7a7bcd59a51ff0afacab4843b54936c817a.
 //
-// Solidity: event RewardClaimed(uint256 indexed appId, uint256 indexed providerId, uint256 reward)
+// Solidity: event RewardClaimed(uint256 indexed appId, uint256 indexed providerId, uint256 reward, uint256 unlockTime)
 func (_SubnetAppStore *SubnetAppStoreFilterer) WatchRewardClaimed(opts *bind.WatchOpts, sink chan<- *SubnetAppStoreRewardClaimed, appId []*big.Int, providerId []*big.Int) (event.Subscription, error) {
 
 	var appIdRule []interface{}
@@ -2821,9 +3067,9 @@ func (_SubnetAppStore *SubnetAppStoreFilterer) WatchRewardClaimed(opts *bind.Wat
 	}), nil
 }
 
-// ParseRewardClaimed is a log parse operation binding the contract event 0x64bc8e516eb66c9bd33c0d0f80b0e16a5bac9eb2bce20d6fdf7698a0d7ab6eba.
+// ParseRewardClaimed is a log parse operation binding the contract event 0x9a6343db5a6c68f88297e55b18a3f7a7bcd59a51ff0afacab4843b54936c817a.
 //
-// Solidity: event RewardClaimed(uint256 indexed appId, uint256 indexed providerId, uint256 reward)
+// Solidity: event RewardClaimed(uint256 indexed appId, uint256 indexed providerId, uint256 reward, uint256 unlockTime)
 func (_SubnetAppStore *SubnetAppStoreFilterer) ParseRewardClaimed(log types.Log) (*SubnetAppStoreRewardClaimed, error) {
 	event := new(SubnetAppStoreRewardClaimed)
 	if err := _SubnetAppStore.contract.UnpackLog(event, "RewardClaimed", log); err != nil {

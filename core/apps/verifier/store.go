@@ -48,7 +48,7 @@ func (v *Verifier) getUsageInfoFromDB(appId int64, peerId string) (*pvtypes.Usag
 	key := datastore.NewKey(fmt.Sprintf("/usage_info/%d/%s", appId, peerId))
 	data, err := v.ds.Get(context.Background(), key)
 	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve usage info from datastore: %v", err)
+		return nil, err
 	}
 
 	usageInfo := &pvtypes.UsageInfo{}
