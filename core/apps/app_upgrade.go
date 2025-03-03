@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/containerd/containerd/namespaces"
 	ctypes "github.com/docker/docker/api/types/container"
 	atypes "github.com/unicornultrafoundation/subnet-node/core/apps/types"
 )
@@ -31,8 +30,6 @@ func (s *Service) startUpgradeAppVersion(ctx context.Context) {
 }
 
 func (s *Service) upgradeAppVersion(ctx context.Context) error {
-	// Fetch all running containers
-	ctx = namespaces.WithNamespace(ctx, NAMESPACE)
 	containers, err := s.dockerClient.ContainerList(ctx, ctypes.ListOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to fetch running containers: %v", err)

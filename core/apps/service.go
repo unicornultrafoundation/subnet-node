@@ -7,20 +7,18 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 
-	"github.com/containerd/containerd/namespaces"
-	"github.com/containerd/errdefs"
 	dockerCli "github.com/docker/docker/client"
 
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ipfs/go-datastore"
 	p2phost "github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/config"
 	"github.com/unicornultrafoundation/subnet-node/core/account"
 	"github.com/unicornultrafoundation/subnet-node/core/apps/verifier"
 
+	"github.com/moby/moby/errdefs"
 	"github.com/unicornultrafoundation/subnet-node/core/apps/stats"
 	atypes "github.com/unicornultrafoundation/subnet-node/core/apps/types"
 	"github.com/unicornultrafoundation/subnet-node/p2p"
@@ -29,10 +27,6 @@ import (
 )
 
 var log = logrus.WithField("service", "apps")
-
-const NAMESPACE = "subnet-apps"
-const PROTOCOL_ID = protocol.ID("subnet-apps")
-const RESOURCE_USAGE_KEY = "resource-usage-v2"
 
 type Service struct {
 	peerId                peer.ID
@@ -52,7 +46,7 @@ type Service struct {
 	signatureResponseChan chan *pvtypes.SignatureResponse
 }
 
-// Initializes the Service with Ethereum and containerd clients.
+// Initializes the Service with Ethereum and docker clients.
 func New(peerHost p2phost.Host, peerId peer.ID, cfg *config.C, P2P *p2p.P2P, ds datastore.Datastore, acc *account.AccountService) *Service {
 	return &Service{
 		peerId:                peerId,
@@ -82,7 +76,7 @@ func (s *Service) Start(ctx context.Context) error {
 		s.pow = verifier.NewPow(verifier.NodeProvider, s.PeerHost, s.P2P)
 		s.PeerHost.SetStreamHandler(atypes.ProtocollAppSignatureReceive, s.onSignatureReceive)
 
-		// Connect to containerd daemon
+		// Connect to docker daemon
 		var err error
 		s.dockerClient, err = dockerCli.NewClientWithOpts(dockerCli.FromEnv, dockerCli.WithAPIVersionNegotiation())
 		if err != nil {
@@ -148,9 +142,6 @@ func (s *Service) GetContainerConfigProto(ctx context.Context, appId *big.Int) (
 
 // Retrieves the status of a container associated with a specific app.
 func (s *Service) GetContainerStatus(ctx context.Context, appId *big.Int) (atypes.ProcessStatus, error) {
-	// Set the namespace for the container
-	ctx = namespaces.WithNamespace(ctx, NAMESPACE)
-
 	containerId := atypes.GetContainerIdFromAppId(appId)
 
 	// Load the container for the app

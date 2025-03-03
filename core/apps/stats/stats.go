@@ -4,10 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
-	"github.com/containerd/containerd/namespaces"
 	ctypes "github.com/docker/docker/api/types/container"
 	dockerCli "github.com/docker/docker/client"
 	"github.com/sirupsen/logrus"
@@ -75,8 +75,6 @@ func (s *Stats) ClearUsageData() {
 
 // UpdateStats updates the stats for a given container ID.
 func (s *Stats) updateStats(ctx context.Context, containerId string) error {
-	ctx = namespaces.WithNamespace(ctx, "subnet-apps")
-
 	// Load the container
 	container, err := s.dockerClient.ContainerInspect(ctx, containerId)
 	if err != nil {
@@ -136,6 +134,12 @@ func (s *Stats) updateStats(ctx context.Context, containerId string) error {
 	s.memorySampleCount[int32(pid)]++
 	s.mu.Unlock()
 
+	// Get Storage usage
+	usedStorage := int64(0)
+	if container.SizeRw != nil {
+		usedStorage = *container.SizeRw
+	}
+
 	// Create current stats entry
 	currentStats := &StatEntry{
 		UsedUploadBytes:   totalTxBytes,
@@ -143,7 +147,7 @@ func (s *Stats) updateStats(ctx context.Context, containerId string) error {
 		UsedGpu:           usedGpu,
 		UsedCpu:           uint64(usedCpu),
 		UsedMemory:        usedMemory,
-		UsedStorage:       uint64(*container.SizeRw),
+		UsedStorage:       uint64(usedStorage),
 	}
 
 	// Lock the map for writing
@@ -296,8 +300,7 @@ func (s *Stats) Stop() {
 
 // updateAllRunningContainersStats updates stats for all running containers.
 func (s *Stats) updateAllRunningContainersStats() {
-	ctx := namespaces.WithNamespace(context.Background(), "subnet-apps")
-
+	ctx := context.Background()
 	// Fetch all running containers
 	containers, err := s.dockerClient.ContainerList(ctx, ctypes.ListOptions{})
 	if err != nil {
@@ -308,7 +311,7 @@ func (s *Stats) updateAllRunningContainersStats() {
 	// Iterate over each container and update its stats
 	for _, container := range containers {
 		// Get container ID (assuming appID is same as container ID)
-		containerId := container.ID
+		containerId := strings.TrimPrefix(container.Names[0], "/")
 
 		if err := s.updateStats(ctx, containerId); err != nil {
 			log.Errorf("failed to update stats for container %s: %v\n", containerId, err)

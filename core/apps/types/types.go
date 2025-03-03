@@ -35,7 +35,7 @@ type ProcessStatus string
 const (
 	// Running indicates the process is currently executing
 	Running ProcessStatus = "running"
-	// Created indicates the process has been created within containerd but the
+	// Created indicates the process has been created but the
 	// user's defined process has not started
 	Created ProcessStatus = "created"
 	// Stopped indicates that the process has ran and exited

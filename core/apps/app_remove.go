@@ -5,16 +5,12 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/containerd/containerd/namespaces"
 	ctypes "github.com/docker/docker/api/types/container"
 	atypes "github.com/unicornultrafoundation/subnet-node/core/apps/types"
 )
 
 // Stops and removes the container for the specified app.
 func (s *Service) RemoveApp(ctx context.Context, appId *big.Int) (*atypes.App, error) {
-	// Set the namespace for the container
-	ctx = namespaces.WithNamespace(ctx, NAMESPACE)
-
 	// Retrieve app details from the Ethereum contract
 	app, err := s.GetApp(ctx, appId)
 	if err != nil {

@@ -154,24 +154,8 @@ func (api *AppAPI) RunApp(ctx context.Context, appId hexutil.Big) (*appResult, e
 	return convertToAppResult(subnetApp), nil
 }
 
-func (api *AppAPI) RunAppDocker(ctx context.Context, appId hexutil.Big) (*appResult, error) {
-	subnetApp, err := api.appService.RunAppDocker(ctx, appId.ToInt())
-	if err != nil {
-		return nil, err
-	}
-	return convertToAppResult(subnetApp), nil
-}
-
 func (api *AppAPI) RemoveApp(ctx context.Context, appId hexutil.Big) (*appResult, error) {
 	subnetApp, err := api.appService.RemoveApp(ctx, appId.ToInt())
-	if err != nil {
-		return nil, err
-	}
-	return convertToAppResult(subnetApp), nil
-}
-
-func (api *AppAPI) RemoveAppDocker(ctx context.Context, appId hexutil.Big) (*appResult, error) {
-	subnetApp, err := api.appService.RemoveAppDocker(ctx, appId.ToInt())
 	if err != nil {
 		return nil, err
 	}

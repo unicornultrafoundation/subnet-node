@@ -6,7 +6,6 @@ import (
 	"math/big"
 	"strings"
 
-	"github.com/containerd/containerd/namespaces"
 	ctypes "github.com/docker/docker/api/types/container"
 	"github.com/unicornultrafoundation/subnet-node/core/apps/stats"
 	atypes "github.com/unicornultrafoundation/subnet-node/core/apps/types"
@@ -39,9 +38,6 @@ func (s *Service) GetUsage(ctx context.Context, appId *big.Int) (*atypes.Resourc
 }
 
 func (s *Service) GetAllRunningContainersUsage(ctx context.Context) (*atypes.ResourceUsage, error) {
-	// Set the namespace for the containers
-	ctx = namespaces.WithNamespace(ctx, NAMESPACE)
-
 	// Fetch all running containers
 	containers, err := s.dockerClient.ContainerList(ctx, ctypes.ListOptions{})
 	if err != nil {
