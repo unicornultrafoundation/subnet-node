@@ -3,9 +3,10 @@ package apps
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
-	"github.com/containerd/containerd/namespaces"
+	ctypes "github.com/docker/docker/api/types/container"
 	atypes "github.com/unicornultrafoundation/subnet-node/core/apps/types"
 )
 
@@ -29,16 +30,14 @@ func (s *Service) startUpgradeAppVersion(ctx context.Context) {
 }
 
 func (s *Service) upgradeAppVersion(ctx context.Context) error {
-	// Fetch all running containers
-	ctx = namespaces.WithNamespace(ctx, NAMESPACE)
-	containers, err := s.containerdClient.Containers(ctx)
+	containers, err := s.dockerClient.ContainerList(ctx, ctypes.ListOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to fetch running containers: %v", err)
 	}
 
 	for _, container := range containers {
 		// Get container ID (assuming appID is same as container ID)
-		containerId := container.ID()
+		containerId := strings.TrimPrefix(container.Names[0], "/")
 		appId, err := atypes.GetAppIdFromContainerId(containerId)
 
 		if err != nil {
@@ -47,11 +46,7 @@ func (s *Service) upgradeAppVersion(ctx context.Context) error {
 		}
 
 		// Get running Container image version
-		containerInfo, err := container.Info(ctx)
-		if err != nil {
-			return fmt.Errorf("failed to fetch container info: %w", err)
-		}
-		runningImageVersion := containerInfo.Image
+		runningImageVersion := container.Image
 
 		// Get latest App image version from smart contract
 		app, err := s.GetApp(ctx, appId)

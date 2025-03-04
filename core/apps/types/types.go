@@ -35,7 +35,7 @@ type ProcessStatus string
 const (
 	// Running indicates the process is currently executing
 	Running ProcessStatus = "running"
-	// Created indicates the process has been created within containerd but the
+	// Created indicates the process has been created but the
 	// user's defined process has not started
 	Created ProcessStatus = "created"
 	// Stopped indicates that the process has ran and exited
@@ -48,6 +48,26 @@ const (
 	// Unknown indicates that we could not determine the status from the runtime
 	Unknown  ProcessStatus = "unknown"
 	NotFound ProcessStatus = "notfound"
+)
+
+const (
+	// Running indicates the process is currently executing
+	DockerRunning string = "running"
+	// Created indicates the process has been created within Docker but the
+	// user's defined process has not started
+	DockerCreated string = "created"
+	// Exited indicates that the process has ran and exited
+	DockerExited string = "exited"
+	// Paused indicates that the process is currently paused
+	DockerPaused string = "paused"
+	// Restarting indicates that the process is currently stopping
+	// and will start again soon
+	DockerRestarting string = "restarting"
+	// Removing indicates that we could not determine the status from the runtime
+	DockerRemoving string = "removing"
+	DockerDead     string = "dead"
+	DockerUnknown  string = "unknown"
+	DockerNotFound string = "notfound"
 )
 
 type App struct {

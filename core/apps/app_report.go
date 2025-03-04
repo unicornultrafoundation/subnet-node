@@ -5,10 +5,11 @@ import (
 	"io"
 	"math/big"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
-	"github.com/containerd/containerd/namespaces"
+	ctypes "github.com/docker/docker/api/types/container"
 	ggio "github.com/gogo/protobuf/io"
 	"github.com/gogo/protobuf/proto"
 	"github.com/libp2p/go-libp2p/core/network"
@@ -41,9 +42,8 @@ func (s *Service) startReportLoop(ctx context.Context) {
 
 func (s *Service) reportAllRunningContainers(ctx context.Context) {
 	// Fetch all running containers
-	containers, err := s.containerdClient.Containers(namespaces.WithNamespace(ctx, NAMESPACE))
+	containers, err := s.dockerClient.ContainerList(ctx, ctypes.ListOptions{})
 	if err != nil {
-		log.Errorf("Failed to fetch running containers: %v", err)
 		return
 	}
 
@@ -54,7 +54,8 @@ func (s *Service) reportAllRunningContainers(ctx context.Context) {
 	containerChan := make(chan string, len(containers))
 
 	for _, container := range containers {
-		containerChan <- container.ID()
+		containerId := strings.TrimPrefix(container.Names[0], "/")
+		containerChan <- containerId
 	}
 	close(containerChan)
 

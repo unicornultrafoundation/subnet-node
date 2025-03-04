@@ -4,24 +4,22 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"strings"
 
-	"github.com/containerd/containerd/namespaces"
+	ctypes "github.com/docker/docker/api/types/container"
 	atypes "github.com/unicornultrafoundation/subnet-node/core/apps/types"
 )
 
 func (s *Service) RestartStoppedContainers(ctx context.Context) error {
-	// Set the namespace for the containers
-	ctx = namespaces.WithNamespace(ctx, NAMESPACE)
-
 	// Fetch all running containers
-	containers, err := s.containerdClient.Containers(ctx)
+	containers, err := s.dockerClient.ContainerList(ctx, ctypes.ListOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to fetch running containers: %w", err)
 	}
 
 	for _, container := range containers {
 		// Get container ID (assuming appID is same as container ID)
-		containerId := container.ID()
+		containerId := strings.TrimPrefix(container.Names[0], "/")
 		appId, err := atypes.GetAppIdFromContainerId(containerId)
 
 		if err != nil {
