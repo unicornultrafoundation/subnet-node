@@ -188,11 +188,11 @@ func (s *Service) GetContainerStatus(ctx context.Context, appId *big.Int) (atype
 
 // Retrieves the IP address of a running container.
 func (s *Service) GetContainerIP(ctx context.Context, appId *big.Int) (string, error) {
-	// Use the netns package to enter the network namespace and get the IP address
-	// This is a placeholder for the actual implementation
-	ip := "127.0.0.1" // Replace with actual logic to retrieve the IP address
-
-	return ip, nil
+	container, err := s.ContainerInspect(ctx, appId)
+	if err != nil {
+		return "", err
+	}
+	return container.NetworkSettings.IPAddress, nil
 }
 
 func (s *Service) SaveContainerConfigProto(ctx context.Context, appId *big.Int, config atypes.ContainerConfig) error {

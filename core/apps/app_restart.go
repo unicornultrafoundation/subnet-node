@@ -20,10 +20,15 @@ func (s *Service) RestartStoppedContainers(ctx context.Context) error {
 	for _, container := range containers {
 		// Get container ID (assuming appID is same as container ID)
 		containerId := strings.TrimPrefix(container.Names[0], "/")
+
+		if !strings.HasPrefix(containerId, "subnet-") {
+			continue
+		}
+
 		appId, err := atypes.GetAppIdFromContainerId(containerId)
 
 		if err != nil {
-			log.Errorf("failed to get appId from containerId %s: %v", containerId, err)
+			log.Debugf("failed to get appId from containerId %s: %v", containerId, err)
 			continue
 		}
 

@@ -111,10 +111,7 @@ func (s *Stats) updateStats(ctx context.Context, containerId string) error {
 	}
 
 	// Calculate CPU usage
-	cpuDelta := float64(containerStats.CPUStats.CPUUsage.TotalUsage - containerStats.PreCPUStats.CPUUsage.TotalUsage)
-	systemDelta := float64(containerStats.CPUStats.SystemUsage - containerStats.PreCPUStats.SystemUsage)
-	usedCpu := (cpuDelta / systemDelta) * float64(len(containerStats.CPUStats.CPUUsage.PercpuUsage)) * 100.0
-
+	usedCpu := containerStats.CPUStats.CPUUsage.TotalUsage
 	// Get memory usage in bytes
 	usedMemory := containerStats.MemoryStats.Usage
 
@@ -139,13 +136,12 @@ func (s *Stats) updateStats(ctx context.Context, containerId string) error {
 	if container.SizeRw != nil {
 		usedStorage = *container.SizeRw
 	}
-
 	// Create current stats entry
 	currentStats := &StatEntry{
 		UsedUploadBytes:   totalTxBytes,
 		UsedDownloadBytes: totalRxBytes,
 		UsedGpu:           usedGpu,
-		UsedCpu:           uint64(usedCpu),
+		UsedCpu:           usedCpu,
 		UsedMemory:        usedMemory,
 		UsedStorage:       uint64(usedStorage),
 	}
@@ -158,10 +154,11 @@ func (s *Stats) updateStats(ctx context.Context, containerId string) error {
 	if _, exists := s.firstStats[containerId]; !exists {
 		s.firstStats[containerId] = currentStats
 		s.startTimes[containerId] = time.Now()
-	}
 
+	}
 	// Calculate the used stats by subtracting the initial stats
 	initialStats := s.firstStats[containerId]
+
 	usedStats := &StatEntry{
 		UsedUploadBytes:   currentStats.UsedUploadBytes - initialStats.UsedUploadBytes,
 		UsedDownloadBytes: currentStats.UsedDownloadBytes - initialStats.UsedDownloadBytes,
@@ -180,7 +177,6 @@ func (s *Stats) updateStats(ctx context.Context, containerId string) error {
 	}
 
 	s.entries[containerId] = usedStats
-
 	return nil
 }
 
@@ -312,6 +308,10 @@ func (s *Stats) updateAllRunningContainersStats() {
 	for _, container := range containers {
 		// Get container ID (assuming appID is same as container ID)
 		containerId := strings.TrimPrefix(container.Names[0], "/")
+
+		if !strings.HasPrefix(containerId, "subnet-") {
+			continue
+		}
 
 		if err := s.updateStats(ctx, containerId); err != nil {
 			log.Errorf("failed to update stats for container %s: %v\n", containerId, err)

@@ -38,10 +38,15 @@ func (s *Service) upgradeAppVersion(ctx context.Context) error {
 	for _, container := range containers {
 		// Get container ID (assuming appID is same as container ID)
 		containerId := strings.TrimPrefix(container.Names[0], "/")
+
+		if !strings.HasPrefix(containerId, "subnet-") {
+			continue
+		}
+
 		appId, err := atypes.GetAppIdFromContainerId(containerId)
 
 		if err != nil {
-			log.Errorf("Failed to get appId from containerId %s: %v", containerId, err)
+			log.Debugf("Failed to get appId from containerId %s: %v", containerId, err)
 			continue
 		}
 

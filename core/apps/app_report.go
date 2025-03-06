@@ -55,6 +55,9 @@ func (s *Service) reportAllRunningContainers(ctx context.Context) {
 
 	for _, container := range containers {
 		containerId := strings.TrimPrefix(container.Names[0], "/")
+		if !strings.HasPrefix(containerId, "subnet-") {
+			continue
+		}
 		containerChan <- containerId
 	}
 	close(containerChan)
@@ -81,7 +84,7 @@ func (s *Service) processReportContainer(ctx context.Context, containerId string
 	providerId := big.NewInt(s.accountService.ProviderID())
 
 	if err != nil {
-		log.Errorf("Failed to get appId from containerId %s: %v", containerId, err)
+		log.Debugf("Failed to get appId from containerId %s: %v", containerId, err)
 		return
 	}
 

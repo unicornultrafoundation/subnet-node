@@ -3,8 +3,8 @@ package apps
 import (
 	"context"
 	"fmt"
+	"io"
 	"math/big"
-	"strings"
 
 	ctypes "github.com/docker/docker/api/types/container"
 	itypes "github.com/docker/docker/api/types/image"
@@ -24,15 +24,16 @@ func (s *Service) RunApp(ctx context.Context, appId *big.Int) (*atypes.App, erro
 	}
 
 	imageName := app.Metadata.ContainerConfig.Image
-	if !strings.Contains(imageName, "/") {
-		imageName = "docker.io/" + imageName
-	}
 
 	// Pull the image for the app
-	_, err = s.dockerClient.ImagePull(ctx, imageName, itypes.PullOptions{})
+	out, err := s.dockerClient.ImagePull(ctx, imageName, itypes.PullOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to pull image: %w", err)
 	}
+
+	defer out.Close()
+
+	io.Copy(io.Discard, out)
 
 	// Add environment variables to the container spec
 	envs := []string{}
