@@ -12,20 +12,18 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/patrickmn/go-cache"
 
-	"github.com/containerd/containerd"
-	"github.com/containerd/containerd/namespaces"
-	"github.com/containerd/errdefs"
+	dockerCli "github.com/docker/docker/client"
 
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ipfs/go-datastore"
 	p2phost "github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/config"
 	"github.com/unicornultrafoundation/subnet-node/core/account"
 	"github.com/unicornultrafoundation/subnet-node/core/apps/verifier"
 
+	"github.com/moby/moby/errdefs"
 	"github.com/unicornultrafoundation/subnet-node/core/apps/stats"
 	atypes "github.com/unicornultrafoundation/subnet-node/core/apps/types"
 	"github.com/unicornultrafoundation/subnet-node/p2p"
@@ -35,17 +33,13 @@ import (
 
 var log = logrus.WithField("service", "apps")
 
-const NAMESPACE = "subnet-apps"
-const PROTOCOL_ID = protocol.ID("subnet-apps")
-const RESOURCE_USAGE_KEY = "resource-usage-v2"
-
 type Service struct {
 	peerId                peer.ID
 	IsProvider            bool
 	IsVerifier            bool
 	cfg                   *config.C
 	ethClient             *ethclient.Client
-	containerdClient      *containerd.Client
+	dockerClient          *dockerCli.Client
 	P2P                   *p2p.P2P
 	PeerHost              p2phost.Host  `optional:"true"` // the network host (server+client)
 	stopChan              chan struct{} // Channel to stop background tasks
@@ -62,7 +56,7 @@ type Service struct {
 	gitHubAppsCache *cache.Cache
 }
 
-// Initializes the Service with Ethereum and containerd clients.
+// Initializes the Service with Ethereum and docker clients.
 func New(peerHost p2phost.Host, peerId peer.ID, cfg *config.C, P2P *p2p.P2P, ds datastore.Datastore, acc *account.AccountService) *Service {
 	return &Service{
 		peerId:                peerId,
@@ -95,13 +89,13 @@ func (s *Service) Start(ctx context.Context) error {
 		s.pow = verifier.NewPow(verifier.NodeProvider, s.PeerHost, s.P2P)
 		s.PeerHost.SetStreamHandler(atypes.ProtocollAppSignatureReceive, s.onSignatureReceive)
 
-		// Connect to containerd daemon
+		// Connect to docker daemon
 		var err error
-		s.containerdClient, err = containerd.New("/run/containerd/containerd.sock")
+		s.dockerClient, err = dockerCli.NewClientWithOpts(dockerCli.FromEnv, dockerCli.WithAPIVersionNegotiation())
 		if err != nil {
-			return fmt.Errorf("error connecting to containerd: %v", err)
+			return fmt.Errorf("error connecting to docker: %v", err)
 		}
-		s.statService = stats.NewStats(s.containerdClient)
+		s.statService = stats.NewStats(s.dockerClient)
 
 		s.RestartStoppedContainers(ctx)
 		s.upgradeAppVersion(ctx)
@@ -123,11 +117,11 @@ func (s *Service) Stop(ctx context.Context) error {
 	// Close stopChan to stop all background tasks
 	close(s.stopChan)
 
-	// Close the containerd client
-	if s.containerdClient != nil {
-		err := s.containerdClient.Close()
+	// Close the docker client
+	if s.dockerClient != nil {
+		err := s.dockerClient.Close()
 		if err != nil {
-			return fmt.Errorf("failed to close containerd client: %w", err)
+			return fmt.Errorf("failed to close docker client: %w", err)
 		}
 	}
 
@@ -163,13 +157,10 @@ func (s *Service) GetContainerConfigProto(ctx context.Context, appId *big.Int) (
 
 // Retrieves the status of a container associated with a specific app.
 func (s *Service) GetContainerStatus(ctx context.Context, appId *big.Int) (atypes.ProcessStatus, error) {
-	// Set the namespace for the container
-	ctx = namespaces.WithNamespace(ctx, NAMESPACE)
-
 	containerId := atypes.GetContainerIdFromAppId(appId)
 
 	// Load the container for the app
-	container, err := s.containerdClient.LoadContainer(ctx, containerId)
+	container, err := s.dockerClient.ContainerInspect(ctx, containerId)
 	if err != nil {
 		if errdefs.IsNotFound(err) {
 			return atypes.NotFound, nil
@@ -177,29 +168,19 @@ func (s *Service) GetContainerStatus(ctx context.Context, appId *big.Int) (atype
 		return atypes.Unknown, err
 	}
 
-	// Retrieve the task for the container
-	task, err := container.Task(ctx, nil)
-	if err != nil {
-		return atypes.Stopped, nil // Task does not exist
-	}
+	// Retrieve the status of the container
+	status := container.State.Status
 
-	// Retrieve the status of the task
-	status, err := task.Status(ctx)
-	if err != nil {
-		return atypes.Stopped, fmt.Errorf("failed to get task status: %w", err)
-	}
-
-	switch status.Status {
-	case containerd.Created:
+	// TODO: Add other Docker statuses
+	switch status {
+	case atypes.DockerCreated:
 		return atypes.Created, nil
-	case containerd.Paused:
+	case atypes.DockerPaused:
 		return atypes.Paused, nil
-	case containerd.Running:
+	case atypes.DockerRunning:
 		return atypes.Running, nil
-	case containerd.Stopped:
+	case atypes.DockerExited:
 		return atypes.Stopped, nil
-	case containerd.Pausing:
-		return atypes.Pausing, nil
 	default:
 		return atypes.Unknown, nil
 	}
@@ -207,11 +188,11 @@ func (s *Service) GetContainerStatus(ctx context.Context, appId *big.Int) (atype
 
 // Retrieves the IP address of a running container.
 func (s *Service) GetContainerIP(ctx context.Context, appId *big.Int) (string, error) {
-	// Use the netns package to enter the network namespace and get the IP address
-	// This is a placeholder for the actual implementation
-	ip := "127.0.0.1" // Replace with actual logic to retrieve the IP address
-
-	return ip, nil
+	container, err := s.ContainerInspect(ctx, appId)
+	if err != nil {
+		return "", err
+	}
+	return container.NetworkSettings.IPAddress, nil
 }
 
 func (s *Service) SaveContainerConfigProto(ctx context.Context, appId *big.Int, config atypes.ContainerConfig) error {
