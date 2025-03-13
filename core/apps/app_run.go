@@ -15,17 +15,38 @@ import (
 
 // Starts a container for the specified app using containerd.
 func (s *Service) RunApp(ctx context.Context, appId *big.Int) (*atypes.App, error) {
+
 	// Set the namespace for the container
 	ctx = namespaces.WithNamespace(ctx, NAMESPACE)
 
 	// Retrieve app details from the Ethereum contract
 	app, err := s.GetApp(ctx, appId)
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch app details: %w", err)
 	}
 
+	// Return if found app
 	if app.Status != atypes.NotFound {
 		return app, nil
+	}
+
+	// Fetch the machine's hardware and software capabilities
+	deviceCap, err := s.getDeviceCapability()
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch app details: %w", err)
+	}
+
+	// Check if the machine's hardware and software capabilities can run this app.
+	resourceUsage, err := s.getNodeResourceUsage()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get node resource usage: %w", err)
+	}
+
+	requestCPU, requestMemory, err := s.validateNodeCompatibility(resourceUsage, app.Metadata.ContainerConfig.Resources.Requests, deviceCap)
+	// Return if validation fails
+	if err != nil {
+		return nil, fmt.Errorf("failed to validate node compatibility: %w", err)
 	}
 
 	imageName := app.Metadata.ContainerConfig.Image
@@ -98,6 +119,17 @@ func (s *Service) RunApp(ctx context.Context, appId *big.Int) (*atypes.App, erro
 	app.Status, err = s.GetContainerStatus(ctx, appId)
 	if err != nil {
 		return nil, err
+	}
+
+	// Store new resource usage into cache
+	if app.Status == atypes.Running {
+		// calculate new resource usage equal to resourceUsage + app request
+		newResourceUsage := atypes.ResourceUsage{
+			UsedCpu:    new(big.Int).Add(resourceUsage.UsedCpu, requestCPU),
+			UsedMemory: new(big.Int).Add(resourceUsage.UsedMemory, requestMemory),
+		}
+
+		s.setNodeResourceUsage(newResourceUsage)
 	}
 
 	return app, nil

@@ -136,6 +136,10 @@ type ContainerConfig struct {
 }
 
 type Resources struct {
+	Requests Requests `json:"requests"`
+}
+
+type Requests struct {
 	CPU     string `json:"cpu"`
 	Memory  string `json:"memory"`
 	Storage string `json:"storage"`
@@ -149,6 +153,12 @@ type Port struct {
 type Volume struct {
 	Name      string `json:"name"`
 	MountPath string `json:"mountPath"`
+}
+
+// DeviceCapability represents the hardware capabilities of the device
+type DeviceCapability struct {
+	AvailableCPU    *big.Int `json:"availableCpu"`    // Available CPU cores
+	AvailableMemory *big.Int `json:"availableMemory"` // Available memory in bytes
 }
 
 func decodeAndParseMetadata(encodedMetadata string) (*AppMetadata, error) {
@@ -424,9 +434,11 @@ func ProtoToAppMetadata(protoMetadata *pbapp.AppMetadata) *AppMetadata {
 			Command: protoMetadata.ContainerConfig.Command,
 			Env:     protoMetadata.ContainerConfig.Env,
 			Resources: Resources{
-				CPU:     protoMetadata.ContainerConfig.Resources.Cpu,
-				Memory:  protoMetadata.ContainerConfig.Resources.Memory,
-				Storage: protoMetadata.ContainerConfig.Resources.Storage,
+				Requests: Requests{
+					CPU:     protoMetadata.ContainerConfig.Resources.Requests.Cpu,
+					Memory:  protoMetadata.ContainerConfig.Resources.Requests.Memory,
+					Storage: protoMetadata.ContainerConfig.Resources.Requests.Storage,
+				},
 			},
 			Ports:   ProtoToPorts(protoMetadata.ContainerConfig.Ports),
 			Volumes: ProtoToVolumes(protoMetadata.ContainerConfig.Volumes),
@@ -453,9 +465,11 @@ func AppMetadataToProto(metadata *AppMetadata) *pbapp.AppMetadata {
 			Command: metadata.ContainerConfig.Command,
 			Env:     metadata.ContainerConfig.Env,
 			Resources: &pbapp.Resources{
-				Cpu:     metadata.ContainerConfig.Resources.CPU,
-				Memory:  metadata.ContainerConfig.Resources.Memory,
-				Storage: metadata.ContainerConfig.Resources.Storage,
+				Requests: &pbapp.Requests{
+					Cpu:     metadata.ContainerConfig.Resources.Requests.CPU,
+					Memory:  metadata.ContainerConfig.Resources.Requests.Memory,
+					Storage: metadata.ContainerConfig.Resources.Requests.Storage,
+				},
 			},
 			Ports:   PortsToProto(metadata.ContainerConfig.Ports),
 			Volumes: VolumesToProto(metadata.ContainerConfig.Volumes),
