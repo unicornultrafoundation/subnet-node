@@ -95,6 +95,12 @@ func (s *Service) Start(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("error connecting to docker: %v", err)
 		}
+
+		enableProxy := s.cfg.GetBool("provider.proxy", false)
+		if enableProxy {
+			s.PeerHost.SetStreamHandler(atypes.ProtocolProxyReverse, s.onReverseRequestReceive)
+		}
+
 		s.statService = stats.NewStats(s.dockerClient)
 
 		s.RestartStoppedContainers(ctx)
@@ -253,7 +259,8 @@ func (s *Service) getGitHubAppByID(id int64) (*GitHubApp, error) {
 		return cachedApp.(*GitHubApp), nil
 	}
 
-	gitHubApps, err := s.getGitHubApps(gitHubAppsURL)
+	githubAppsURL := s.cfg.GetString("apps.github_apps", DefaultGithubAppsURL)
+	gitHubApps, err := s.getGitHubApps(githubAppsURL)
 	if err != nil {
 		return nil, err
 	}
