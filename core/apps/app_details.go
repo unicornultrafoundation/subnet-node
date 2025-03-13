@@ -4,6 +4,7 @@ import (
 	"context"
 	"math/big"
 
+	dtypes "github.com/docker/docker/api/types"
 	atypes "github.com/unicornultrafoundation/subnet-node/core/apps/types"
 )
 
@@ -53,4 +54,9 @@ func (s *Service) GetApp(ctx context.Context, appId *big.Int) (*atypes.App, erro
 	}
 
 	return app, nil
+}
+
+func (s *Service) ContainerInspect(ctx context.Context, appId *big.Int) (dtypes.ContainerJSON, error) {
+	containerId := atypes.GetContainerIdFromAppId(appId)
+	return s.dockerClient.ContainerInspect(ctx, containerId)
 }
