@@ -16,6 +16,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/patrickmn/go-cache"
 	"github.com/shirou/gopsutil/cpu"
+	"github.com/shirou/gopsutil/disk"
 	"github.com/shirou/gopsutil/mem"
 
 	"github.com/containerd/containerd"
@@ -309,17 +310,19 @@ func (s *Service) getSubnetAppByID(_ context.Context, appId *big.Int) (*atypes.A
 	return app, nil
 }
 
-// getDeviceCapability retrieves the CPU and memory capabilities of the machine.
+// getDeviceCapability retrieves the CPU, memory, and storage capabilities of the machine.
 // It uses the gopsutil library to fetch detailed system information.
 // If gopsutil fails, it falls back to using the runtime package for CPU count.
 
 func (s *Service) getDeviceCapability() (atypes.DeviceCapability, error) {
+	// Get CPU info
 	cpuInfo, err := cpu.Info()
 	if err != nil {
 		// Fallback to runtime.NumCPU() if gopsutil fails
 		return atypes.DeviceCapability{
-			AvailableCPU:    big.NewInt(int64(runtime.NumCPU())),
-			AvailableMemory: big.NewInt(0),
+			AvailableCPU:     big.NewInt(int64(runtime.NumCPU())),
+			AvailableMemory:  big.NewInt(0),
+			AvailableStorage: big.NewInt(0),
 		}, fmt.Errorf("failed to get CPU info: %w", err)
 	}
 
@@ -327,8 +330,6 @@ func (s *Service) getDeviceCapability() (atypes.DeviceCapability, error) {
 	for _, cpu := range cpuInfo {
 		totalCores += int64(cpu.Cores)
 	}
-
-	// If gopsutil returns 0 cores, fallback to runtime.NumCPU()
 	if totalCores == 0 {
 		totalCores = int64(runtime.NumCPU())
 	}
@@ -337,48 +338,88 @@ func (s *Service) getDeviceCapability() (atypes.DeviceCapability, error) {
 	vmStat, err := mem.VirtualMemory()
 	if err != nil {
 		return atypes.DeviceCapability{
-			AvailableCPU:    big.NewInt(int64(totalCores)),
-			AvailableMemory: big.NewInt(0),
+			AvailableCPU:     big.NewInt(totalCores),
+			AvailableMemory:  big.NewInt(0),
+			AvailableStorage: big.NewInt(0),
 		}, fmt.Errorf("failed to get memory info: %w", err)
 	}
 
+	// Get storage information
+	var availableStorage uint64
+	partitions, err := disk.Partitions(false) // false means only physical partitions
+	if err == nil {
+		for _, partition := range partitions {
+			usage, err := disk.Usage(partition.Mountpoint)
+			if err == nil {
+				availableStorage += usage.Free
+			}
+		}
+	}
+
+	// Print system information for debugging
+	fmt.Printf("System Capabilities:\n")
+	fmt.Printf("CPU Cores: %d\n", totalCores)
+	fmt.Printf("Available Memory: %.2f GB\n", float64(vmStat.Available)/(1024*1024*1024))
+	fmt.Printf("Available Storage: %.2f GB\n", float64(availableStorage)/(1024*1024*1024))
+
 	return atypes.DeviceCapability{
-		AvailableCPU:    big.NewInt(int64(totalCores)),
-		AvailableMemory: big.NewInt(int64(vmStat.Available)),
+		AvailableCPU:     big.NewInt(totalCores),
+		AvailableMemory:  big.NewInt(int64(vmStat.Available)),
+		AvailableStorage: big.NewInt(int64(availableStorage)),
 	}, nil
 }
 
-func (s *Service) validateNodeCompatibility(resourceUsage atypes.ResourceUsage, appResourceRequest atypes.Requests, deviceCapability atypes.DeviceCapability) (*big.Int, *big.Int, error) { // requestCPU, requestMemory
+func (s *Service) validateNodeCompatibility(resourceUsage atypes.ResourceUsage, appResourceRequest atypes.Requests, deviceCapability atypes.DeviceCapability) (*big.Int, *big.Int, *big.Int, error) { // requestCPU, requestMemory, requestStorage
 	// calculate remain CPU and memory
 	remainCpu := new(big.Int).Sub(deviceCapability.AvailableCPU, resourceUsage.UsedCpu)
 	remainMemory := new(big.Int).Sub(deviceCapability.AvailableMemory, resourceUsage.UsedMemory)
+	remainStorage := new(big.Int).Sub(deviceCapability.AvailableStorage, resourceUsage.UsedStorage)
 
-	// convert resource request to big.Int
+	// CONVERT RESOURCE REQUEST TO BIGINT
+	// request CPU
 	cpuInt, err := strconv.ParseInt(appResourceRequest.CPU, 10, 64)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to parse CPU request: %w", err)
+		return nil, nil, nil, fmt.Errorf("failed to parse CPU request: %w", err)
 	}
 	requestCPU := new(big.Int).SetInt64(cpuInt)
 
-	// convert resource memory to big.Int
+	// request memory
 	memoryStr := appResourceRequest.Memory
 	memoryValue := strings.TrimRight(memoryStr, "GB")
 	memoryInt, err := strconv.ParseFloat(memoryValue, 64)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to parse memory request: %w", err)
+		return nil, nil, nil, fmt.Errorf("failed to parse memory request: %w", err)
 	}
 	requestMemory := new(big.Int).SetInt64(int64(memoryInt * 1024 * 1024 * 1024))
 
-	// compare remain CPU and memory with request
-	if remainCpu.Cmp(requestCPU) <= 0 {
-		return nil, nil, errors.New("insufficient CPU")
+	// request storage
+	storageStr := appResourceRequest.Storage
+	storageValue := strings.TrimRight(storageStr, "GB")
+	var storageInt float64
+	if storageValue == "" {
+		storageInt = 0
+	} else {
+		storageInt, err = strconv.ParseFloat(storageValue, 64)
+	}
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to parse storage request: %w", err)
+	}
+	requestStorage := new(big.Int).SetInt64(int64(storageInt * 1024 * 1024 * 1024))
+
+	// compare remain CPU, memory, storage with request
+	if remainCpu.Cmp(requestCPU) < 0 {
+		return nil, nil, nil, errors.New("insufficient CPU")
 	}
 
-	if remainMemory.Cmp(requestMemory) <= 0 {
-		return nil, nil, errors.New("insufficient memory")
+	if remainMemory.Cmp(requestMemory) < 0 {
+		return nil, nil, nil, errors.New("insufficient memory")
 	}
 
-	return requestCPU, requestMemory, nil
+	if remainStorage.Cmp(requestStorage) < 0 {
+		return nil, nil, nil, errors.New("insufficient storage")
+	}
+
+	return requestCPU, requestMemory, requestStorage, nil
 }
 
 func (s *Service) setNodeResourceUsage(resourceUsage atypes.ResourceUsage) {
@@ -391,7 +432,8 @@ func (s *Service) getNodeResourceUsage() (atypes.ResourceUsage, error) {
 	}
 
 	return atypes.ResourceUsage{
-		UsedCpu:    big.NewInt(0),
-		UsedMemory: big.NewInt(0),
+		UsedCpu:     big.NewInt(0),
+		UsedMemory:  big.NewInt(0),
+		UsedStorage: big.NewInt(0),
 	}, nil
 }

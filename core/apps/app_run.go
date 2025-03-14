@@ -33,6 +33,7 @@ func (s *Service) RunApp(ctx context.Context, appId *big.Int) (*atypes.App, erro
 
 	// Fetch the machine's hardware and software capabilities
 	deviceCap, err := s.getDeviceCapability()
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch app details: %w", err)
 	}
@@ -43,7 +44,7 @@ func (s *Service) RunApp(ctx context.Context, appId *big.Int) (*atypes.App, erro
 		return nil, fmt.Errorf("failed to get node resource usage: %w", err)
 	}
 
-	requestCPU, requestMemory, err := s.validateNodeCompatibility(resourceUsage, app.Metadata.ContainerConfig.Resources.Requests, deviceCap)
+	requestCPU, requestMemory, requestStorage, err := s.validateNodeCompatibility(resourceUsage, app.Metadata.ContainerConfig.Resources.Requests, deviceCap)
 	// Return if validation fails
 	if err != nil {
 		return nil, fmt.Errorf("failed to validate node compatibility: %w", err)
@@ -125,8 +126,9 @@ func (s *Service) RunApp(ctx context.Context, appId *big.Int) (*atypes.App, erro
 	if app.Status == atypes.Running {
 		// calculate new resource usage equal to resourceUsage + app request
 		newResourceUsage := atypes.ResourceUsage{
-			UsedCpu:    new(big.Int).Add(resourceUsage.UsedCpu, requestCPU),
-			UsedMemory: new(big.Int).Add(resourceUsage.UsedMemory, requestMemory),
+			UsedCpu:     new(big.Int).Add(resourceUsage.UsedCpu, requestCPU),
+			UsedMemory:  new(big.Int).Add(resourceUsage.UsedMemory, requestMemory),
+			UsedStorage: new(big.Int).Add(resourceUsage.UsedStorage, requestStorage),
 		}
 
 		s.setNodeResourceUsage(newResourceUsage)

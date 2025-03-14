@@ -157,8 +157,9 @@ type Volume struct {
 
 // DeviceCapability represents the hardware capabilities of the device
 type DeviceCapability struct {
-	AvailableCPU    *big.Int `json:"availableCpu"`    // Available CPU cores
-	AvailableMemory *big.Int `json:"availableMemory"` // Available memory in bytes
+	AvailableCPU     *big.Int `json:"availableCpu"`     // Available CPU cores
+	AvailableMemory  *big.Int `json:"availableMemory"`  // Available memory in bytes
+	AvailableStorage *big.Int `json:"availableStorage"` // Available storage in bytes
 }
 
 func decodeAndParseMetadata(encodedMetadata string) (*AppMetadata, error) {
