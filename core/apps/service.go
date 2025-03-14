@@ -10,9 +10,9 @@ import (
 	"net/http"
 	"runtime"
 	"strconv"
-	"strings"
 	"time"
 
+	"github.com/dustin/go-humanize"
 	"github.com/gogo/protobuf/proto"
 	"github.com/patrickmn/go-cache"
 	"github.com/shirou/gopsutil/cpu"
@@ -346,13 +346,8 @@ func (s *Service) getDeviceCapability() (atypes.DeviceCapability, error) {
 	}, nil
 }
 
-func (s *Service) validateNodeCompatibility(resourceUsage atypes.ResourceUsage, appResourceRequest atypes.Requests, deviceCapability atypes.DeviceCapability) (*big.Int, *big.Int, *big.Int, error) { // requestCPU, requestMemory, requestStorage
-	// calculate remain CPU and memory
-	remainCpu := new(big.Int).Sub(deviceCapability.AvailableCPU, resourceUsage.UsedCpu)
-	remainMemory := new(big.Int).Sub(deviceCapability.AvailableMemory, resourceUsage.UsedMemory)
-	remainStorage := new(big.Int).Sub(deviceCapability.AvailableStorage, resourceUsage.UsedStorage)
-
-	// CONVERT RESOURCE REQUEST TO BIGINT
+// Parsing resource request from human reading to big.Int
+func (s *Service) parseResourceRequest(appResourceRequest atypes.Requests) (*big.Int, *big.Int, *big.Int, error) {
 	// request CPU
 	cpuInt, err := strconv.ParseInt(appResourceRequest.CPU, 10, 64)
 	if err != nil {
@@ -362,26 +357,36 @@ func (s *Service) validateNodeCompatibility(resourceUsage atypes.ResourceUsage, 
 
 	// request memory
 	memoryStr := appResourceRequest.Memory
-	memoryValue := strings.TrimRight(memoryStr, "GB")
-	memoryInt, err := strconv.ParseFloat(memoryValue, 64)
+	memoryValue, err := humanize.ParseBytes(memoryStr)
+
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to parse memory request: %w", err)
 	}
-	requestMemory := new(big.Int).SetInt64(int64(memoryInt * 1024 * 1024 * 1024))
+	requestMemory := new(big.Int).SetInt64(int64(memoryValue))
 
 	// request storage
+	var storageValue uint64
 	storageStr := appResourceRequest.Storage
-	storageValue := strings.TrimRight(storageStr, "GB")
-	var storageInt float64
-	if storageValue == "" {
-		storageInt = 0
-	} else {
-		storageInt, err = strconv.ParseFloat(storageValue, 64)
+	if storageStr != "" {
+		storageValue, err = humanize.ParseBytes(storageStr)
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("failed to parse storage request: %w", err)
+		}
 	}
+	requestStorage := new(big.Int).SetInt64(int64(storageValue))
+	return requestCPU, requestMemory, requestStorage, nil
+}
+
+func (s *Service) validateNodeCompatibility(resourceUsage atypes.ResourceUsage, appResourceRequest atypes.Requests, deviceCapability atypes.DeviceCapability) (*big.Int, *big.Int, *big.Int, error) { // requestCPU, requestMemory, requestStorage
+	// calculate remain CPU and memory
+	remainCpu := new(big.Int).Sub(deviceCapability.AvailableCPU, resourceUsage.UsedCpu)
+	remainMemory := new(big.Int).Sub(deviceCapability.AvailableMemory, resourceUsage.UsedMemory)
+	remainStorage := new(big.Int).Sub(deviceCapability.AvailableStorage, resourceUsage.UsedStorage)
+
+	requestCPU, requestMemory, requestStorage, err := s.parseResourceRequest(appResourceRequest)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to parse storage request: %w", err)
+		return nil, nil, nil, err
 	}
-	requestStorage := new(big.Int).SetInt64(int64(storageInt * 1024 * 1024 * 1024))
 
 	// compare remain CPU, memory, storage with request
 	if remainCpu.Cmp(requestCPU) < 0 {
