@@ -66,12 +66,17 @@ func (s *Service) RunApp(ctx context.Context, appId *big.Int) (*atypes.App, erro
 		envs = append(envs, fmt.Sprintf("%s=%s", key, value))
 	}
 
+	hostConfig, err := s.containerHostConfig(app.Metadata.ContainerConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create container host config: %w", err)
+	}
+
 	// Create a new container for the app
 	container, err := s.dockerClient.ContainerCreate(ctx, &ctypes.Config{
 		Image: imageName,
 		Cmd:   app.Metadata.ContainerConfig.Command,
 		Env:   envs,
-	}, nil, nil, nil, app.ContainerId())
+	}, hostConfig, nil, nil, app.ContainerId())
 	if err != nil {
 		return nil, fmt.Errorf("failed to create container: %w", err)
 	}

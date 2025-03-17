@@ -9,6 +9,7 @@ import (
 	"time"
 
 	ctypes "github.com/docker/docker/api/types/container"
+	mtypes "github.com/docker/docker/api/types/mount"
 	dockerCli "github.com/docker/docker/client"
 	"github.com/sirupsen/logrus"
 )
@@ -131,6 +132,12 @@ func (s *Stats) updateStats(ctx context.Context, containerId string) error {
 	s.memorySampleCount[int32(pid)]++
 	s.mu.Unlock()
 
+	// get mount storage
+	mountStorage, err := s.getTotalContainerMountVolume(ctx, containerId)
+	if err != nil {
+		log.Errorf("failed to get total container volume size: %v", err)
+	}
+
 	// Get Storage usage
 	usedStorage := int64(0)
 	if container.SizeRw != nil {
@@ -143,7 +150,7 @@ func (s *Stats) updateStats(ctx context.Context, containerId string) error {
 		UsedGpu:           usedGpu,
 		UsedCpu:           usedCpu,
 		UsedMemory:        usedMemory,
-		UsedStorage:       uint64(usedStorage),
+		UsedStorage:       uint64(usedStorage) + uint64(mountStorage),
 	}
 
 	// Lock the map for writing
@@ -317,4 +324,34 @@ func (s *Stats) updateAllRunningContainersStats() {
 			log.Errorf("failed to update stats for container %s: %v\n", containerId, err)
 		}
 	}
+}
+
+func (s *Stats) getTotalContainerMountVolume(ctx context.Context, containerId string) (int64, error) {
+	// Inspect the container to get mount information
+	containerInfo, err := s.dockerClient.ContainerInspect(ctx, containerId)
+
+	if err != nil {
+		return 0, fmt.Errorf("failed to inspect container: %w", err)
+	}
+
+	var totalSize int64
+
+	// Iterate through all mounts
+	for _, mount := range containerInfo.Mounts {
+		if mount.Type == mtypes.TypeVolume {
+			// Inspect the volume to get usage data
+			volume, err := s.dockerClient.VolumeInspect(ctx, mount.Name)
+			if err != nil {
+
+				log.Warnf("Failed to inspect volume %s: %v", mount.Name, err)
+				continue
+			}
+
+			// Add volume size if available
+			if volume.UsageData != nil {
+				totalSize += volume.UsageData.Size
+			}
+		}
+	}
+	return totalSize, nil
 }
