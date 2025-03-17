@@ -66,7 +66,7 @@ func (s *Service) RunApp(ctx context.Context, appId *big.Int) (*atypes.App, erro
 		envs = append(envs, fmt.Sprintf("%s=%s", key, value))
 	}
 
-	hostConfig, err := s.containerHostConfig(app.Metadata.ContainerConfig)
+	hostConfig, err := s.containerHostConfig(appId, app.Metadata.ContainerConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create container host config: %w", err)
 	}

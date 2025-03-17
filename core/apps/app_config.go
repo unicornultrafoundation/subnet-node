@@ -30,7 +30,7 @@ func (s *Service) UpdateAppConfig(ctx context.Context, appId *big.Int, cfg atype
 	return nil
 }
 
-func (s *Service) containerHostConfig(containerConfig atypes.ContainerConfig) (*ctypes.HostConfig, error) {
+func (s *Service) containerHostConfig(appId *big.Int, containerConfig atypes.ContainerConfig) (*ctypes.HostConfig, error) {
 	//
 	// HANDLE MOUNT VOLUME
 	//
@@ -41,9 +41,11 @@ func (s *Service) containerHostConfig(containerConfig atypes.ContainerConfig) (*
 
 	for _, volume := range volumes {
 
+		volumeName := fmt.Sprintf("%s_%s", appId.String(), volume.Name)
+
 		// Create the volume using Docker CLI
 		_, err := s.dockerClient.VolumeCreate(context.Background(), vtypes.CreateOptions{
-			Name: volume.Name,
+			Name: volumeName,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to create docker volume: %w", err)
@@ -51,7 +53,7 @@ func (s *Service) containerHostConfig(containerConfig atypes.ContainerConfig) (*
 
 		mounts = append(mounts, mount.Mount{
 			Type:   mount.TypeVolume,
-			Source: volume.Name,
+			Source: volumeName,
 			Target: volume.MountPath,
 		})
 	}
