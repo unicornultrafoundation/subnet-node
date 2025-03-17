@@ -172,6 +172,7 @@ func Storage(bcfg *BuildCfg) fx.Option {
 func Core(cfg *config.C) fx.Option {
 	return fx.Options(
 		fx.Provide(ResourceService),
+		fx.Provide(ProxyService),
 		fx.Provide(AppService),
 		fx.Provide(account.EthereumService),
 	)

@@ -4,13 +4,11 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"strings"
 
 	logging "github.com/ipfs/go-log/v2"
 
 	"github.com/sirupsen/logrus"
 	ninit "github.com/unicornultrafoundation/subnet-node/cmd/init"
-	"github.com/unicornultrafoundation/subnet-node/connect"
 	"github.com/unicornultrafoundation/subnet-node/subnet"
 )
 
@@ -21,33 +19,7 @@ import (
 // at compile-time.
 var Build string
 
-type arrayFlags []string
-
-func (i *arrayFlags) String() string {
-	return "[" + strings.Join(*i, ", ") + "]"
-}
-
-func (i *arrayFlags) Set(value string) error {
-	*i = append(*i, value)
-	return nil
-}
-
 func main() {
-	connectCmd := flag.NewFlagSet("connect", flag.ExitOnError)
-	connectPeer := connectCmd.String("peer", "", "The peer address connect to")
-	connectApp := connectCmd.String("appId", "", "The ID of application want to connect to")
-	var ports arrayFlags
-	connectCmd.Var(&ports, "port", "Proxy mapping ports with format: {local port}:{app port}")
-
-	if len(os.Args) > 1 {
-		switch os.Args[1] {
-		case "connect":
-			connectCmd.Parse(os.Args[2:])
-			connect.Main(*connectPeer, *connectApp, ports)
-			os.Exit(0)
-		}
-	}
-
 	configPath := flag.String("config", "", "Path to either a file or directory to load configuration from")
 	dataPath := flag.String("datadir", "~/.subnet-node", "Path to either a file or directory to load configuration from")
 	initFlag := flag.Bool("init", false, "Init")
