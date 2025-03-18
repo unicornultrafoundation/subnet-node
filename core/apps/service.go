@@ -96,7 +96,7 @@ func (s *Service) Start(ctx context.Context) error {
 			return fmt.Errorf("error connecting to docker: %v", err)
 		}
 
-		enableProxy := s.cfg.GetBool("provider.proxy", false)
+		enableProxy := s.cfg.GetBool("provider.proxy", true)
 		if enableProxy {
 			s.PeerHost.SetStreamHandler(atypes.ProtocolProxyReverse, s.onReverseRequestReceive)
 		}
