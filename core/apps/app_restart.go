@@ -59,15 +59,17 @@ func (s *Service) RestartStoppedContainers(ctx context.Context) error {
 }
 
 func (s *Service) RestartContainer(ctx context.Context, appId *big.Int) error {
-	_, err := s.RemoveApp(ctx, appId)
-
+	// Retrieve app details from the Ethereum contract
+	app, err := s.GetApp(ctx, appId)
 	if err != nil {
-		return fmt.Errorf("failed to remove appId %v: %v", appId, err)
+		return fmt.Errorf("failed to fetch app details: %w", err)
 	}
 
-	_, err = s.RunApp(ctx, appId)
-	if err != nil {
-		return fmt.Errorf("failed to run appId %v: %v", appId, err)
+	containerId := app.ContainerId()
+
+	// Restart the container
+	if err := s.dockerClient.ContainerRestart(ctx, containerId, ctypes.StopOptions{}); err != nil {
+		return fmt.Errorf("failed to restart container %s: %w", containerId, err)
 	}
 
 	return nil

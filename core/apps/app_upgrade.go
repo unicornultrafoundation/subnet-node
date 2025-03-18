@@ -3,10 +3,12 @@ package apps
 import (
 	"context"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
 	ctypes "github.com/docker/docker/api/types/container"
+	itypes "github.com/docker/docker/api/types/image"
 	atypes "github.com/unicornultrafoundation/subnet-node/core/apps/types"
 )
 
@@ -58,10 +60,23 @@ func (s *Service) upgradeAppVersion(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("failed to fetch app details: %w", err)
 		}
+
 		latestImageVersion := app.Metadata.ContainerConfig.Image
 
 		if runningImageVersion != latestImageVersion {
-			return s.RestartContainer(ctx, appId) // this will upgrade the container with the new image version
+			// 1. Pull the latest image first
+			out, err := s.dockerClient.ImagePull(ctx, latestImageVersion, itypes.PullOptions{})
+			if err != nil {
+				return fmt.Errorf("failed to pull image %v: %w", latestImageVersion, err)
+			}
+			defer out.Close()
+			io.Copy(io.Discard, out)
+
+			// 2. Then restart the container (which will use the new image)
+			err = s.RestartContainer(ctx, appId)
+			if err != nil {
+				return fmt.Errorf("failed to upgrade container %v: %w", appId, err)
+			}
 		}
 	}
 
