@@ -7,12 +7,18 @@ import (
 	"strings"
 
 	ctypes "github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/filters"
 	atypes "github.com/unicornultrafoundation/subnet-node/core/apps/types"
 )
 
+// RestartStoppedContainers restarts all stopped containers
 func (s *Service) RestartStoppedContainers(ctx context.Context) error {
+
+	filter := filters.NewArgs()
+	filter.Add("status", "exited") // Docker uses "exited" status for stopped containers
+
 	// Fetch all running containers
-	containers, err := s.dockerClient.ContainerList(ctx, ctypes.ListOptions{})
+	containers, err := s.dockerClient.ContainerList(ctx, ctypes.ListOptions{Filters: filter})
 	if err != nil {
 		return fmt.Errorf("failed to fetch running containers: %w", err)
 	}
