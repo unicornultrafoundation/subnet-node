@@ -9,8 +9,8 @@ import (
 	"time"
 
 	ctypes "github.com/docker/docker/api/types/container"
-	dockerCli "github.com/docker/docker/client"
 	"github.com/sirupsen/logrus"
+	"github.com/unicornultrafoundation/subnet-node/core/docker"
 )
 
 var log = logrus.WithField("service", "apps")
@@ -32,7 +32,7 @@ type Stats struct {
 	entries           map[string]*StatEntry
 	firstStats        map[string]*StatEntry
 	finalStats        map[string]*StatEntry
-	dockerClient      *dockerCli.Client
+	dockerClient      docker.DockerClient
 	stopChan          chan struct{}
 	gpu               *GpuMonitor
 	containerToPid    map[string]int32
@@ -42,7 +42,7 @@ type Stats struct {
 }
 
 // NewStats creates a new Stats instance.
-func NewStats(dockerClient *dockerCli.Client) *Stats {
+func NewStats(dockerClient docker.DockerClient) *Stats {
 	return &Stats{
 		entries:           make(map[string]*StatEntry),
 		firstStats:        make(map[string]*StatEntry),

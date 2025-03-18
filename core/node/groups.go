@@ -174,6 +174,7 @@ func Core(cfg *config.C) fx.Option {
 		fx.Provide(ResourceService),
 		fx.Invoke(ProxyService),
 		fx.Provide(AppService),
+		fx.Provide(DockerService),
 		fx.Provide(account.EthereumService),
 	)
 }
