@@ -57,13 +57,9 @@ func (s *Service) RunApp(ctx context.Context, appId *big.Int) (*atypes.App, erro
 	io.Copy(io.Discard, out)
 
 	// Add environment variables to the container spec
-	envs := []string{}
-	for key, value := range app.Metadata.ContainerConfig.Env {
-		envs = append(envs, fmt.Sprintf("%s=%s", key, value))
-	}
-
-	for key, value := range app.Metadata.ContainerConfig.Env {
-		envs = append(envs, fmt.Sprintf("%s=%s", key, value))
+	envs, err := s.containerEnvConfig(app.Metadata.ContainerConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create container env config: %w", err)
 	}
 
 	hostConfig, err := s.containerHostConfig(appId, app.Metadata.ContainerConfig)

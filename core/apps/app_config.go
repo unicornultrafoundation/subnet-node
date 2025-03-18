@@ -61,3 +61,14 @@ func (s *Service) containerHostConfig(appId *big.Int, containerConfig atypes.Con
 
 	return hostConfig, nil
 }
+
+func (s *Service) containerEnvConfig(containerConfig atypes.ContainerConfig) ([]string, error) {
+	containerEnvs := containerConfig.Env
+	// Add environment variables to the container spec
+	envs := []string{}
+	for key, value := range containerEnvs {
+		envs = append(envs, fmt.Sprintf("%s=%s", key, value))
+	}
+
+	return envs, nil
+}
