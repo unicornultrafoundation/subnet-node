@@ -142,5 +142,5 @@ func (s *Service) validatePorts() bool {
 		portMap[localPort] = true
 	}
 
-	return hasDuplicate || hasInvalidPort
+	return !(hasDuplicate || hasInvalidPort)
 }
