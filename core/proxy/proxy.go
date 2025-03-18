@@ -10,15 +10,15 @@ import (
 	atypes "github.com/unicornultrafoundation/subnet-node/core/apps/types"
 )
 
-// forwardTraffic listens on localPort and forwards traffic to target node
-func (s *Service) forwardTraffic(localPort, appName, appPort string) {
+// forwardTraffic listens on localPort and forwards traffic to target appPort
+func (s *Service) forwardTraffic(localPort, appId, appPort string) {
 	listener, err := net.Listen("tcp", "127.0.0.1:"+localPort)
 	if err != nil {
 		log.Fatalf("Failed to listen on port %s: %v", localPort, err)
 	}
 	defer listener.Close()
 
-	log.Printf("Forwarding local port %s of peer %s to peer %s (App: %s, Port: %s)\n", localPort, s.peerId, s.RemotePeerId, appName, appPort)
+	log.Printf("Forwarding local port %s of peer %s to peer %s (AppId: %s, Port: %s)\n", localPort, s.peerId, s.RemotePeerId, appId, appPort)
 
 	for {
 		conn, err := listener.Accept()
@@ -26,7 +26,7 @@ func (s *Service) forwardTraffic(localPort, appName, appPort string) {
 			log.Println("Error accepting connection:", err)
 			continue
 		}
-		go s.handleConnection(conn, appName, appPort)
+		go s.handleConnection(conn, appId, appPort)
 	}
 }
 
@@ -36,7 +36,7 @@ func (s *Service) handleConnection(conn net.Conn, appId, appPort string) {
 
 	stream, err := s.PeerHost.NewStream(context.Background(), s.RemotePeerId, atypes.ProtocolProxyReverse)
 	if err != nil {
-		log.Println("Failed to create stream:", err)
+		log.Errorln("Failed to create stream:", err)
 		return
 	}
 	defer stream.Close()
@@ -45,7 +45,7 @@ func (s *Service) handleConnection(conn net.Conn, appId, appPort string) {
 	reader := bufio.NewReader(conn)
 	req, err := http.ReadRequest(reader)
 	if err != nil {
-		log.Println("❌ Failed to read request:", err)
+		log.Errorln("Failed to read request:", err)
 		return
 	}
 
@@ -56,7 +56,7 @@ func (s *Service) handleConnection(conn net.Conn, appId, appPort string) {
 	// Write the modified request to the P2P stream
 	err = req.Write(stream)
 	if err != nil {
-		log.Println("❌ Failed to send request over P2P stream:", err)
+		log.Errorln("Failed to send request over P2P stream:", err)
 		return
 	}
 

@@ -20,39 +20,38 @@ func (s *Service) onReverseRequestReceive(stream network.Stream) {
 	// Read HTTP request from P2P stream
 	req, err := http.ReadRequest(bufio.NewReader(stream))
 	if err != nil {
-		log.Println("Failed to read request:", err)
+		writeErrorResponse(stream, http.StatusBadRequest, "Failed to read request: "+err.Error())
 		return
 	}
 
-	// Extract target container and port from headers
+	// Extract target AppId and AppPort from headers
 	appIdStr := req.Header.Get("X-App-Id")
 	appPort := req.Header.Get("X-App-Port")
 
 	if appIdStr == "" || appPort == "" {
-		log.Println("Missing container or port in request headers")
-		writeErrorResponse(stream, http.StatusBadRequest, "Missing container or port headers")
+		writeErrorResponse(stream, http.StatusBadRequest, "Missing AppId or AppPort in request headers")
+		return
+	}
+
+	// Parse AppId
+	appId := new(big.Int)
+	appId, ok := appId.SetString(appIdStr, 16)
+	if !ok {
+		writeErrorResponse(stream, http.StatusBadRequest, "Failed to parse appId")
 		return
 	}
 
 	// Check if container is running
-	ctx := context.Background()
-	appId := new(big.Int)
-	appId, ok := appId.SetString(appIdStr, 16)
-	if !ok {
-		log.Println("Failed to parse appId")
-		return
-	}
-
-	container, err := s.ContainerInspect(ctx, appId)
+	container, err := s.ContainerInspect(context.Background(), appId)
 	if err != nil {
-		log.Println("Failed to read container:", err)
+		writeErrorResponse(stream, http.StatusBadRequest, "Failed to read container:"+err.Error())
 		return
 	}
 
 	containerIP := container.NetworkSettings.IPAddress
 
 	targetURL := "http://" + containerIP + ":" + appPort
-	log.Println("Forwarding request to", targetURL)
+	log.Debugln("Forwarding request to", targetURL)
 
 	// Reverse proxy to the selected container
 	target, _ := url.Parse(targetURL)
@@ -94,6 +93,7 @@ func writeResponse(stream network.Stream, rec *responseRecorder) {
 
 // Utility function to write an error response
 func writeErrorResponse(stream network.Stream, statusCode int, message string) {
+	log.Debugln(message)
 	writer := bufio.NewWriter(stream)
 	fmt.Fprintf(writer, "HTTP/1.1 %d %s\r\n", statusCode, http.StatusText(statusCode))
 	fmt.Fprintf(writer, "Content-Length: %d\r\n", len(message))
