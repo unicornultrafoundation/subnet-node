@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/docker/docker/api/types"
 	ctypes "github.com/docker/docker/api/types/container"
 	mtypes "github.com/docker/docker/api/types/mount"
 	dockerCli "github.com/docker/docker/client"
@@ -336,22 +337,26 @@ func (s *Stats) getTotalContainerMountVolume(ctx context.Context, containerId st
 
 	var totalSize int64
 
-	// Iterate through all mounts
+	// Get disk usage information for all Docker objects
+	dfStats, err := s.dockerClient.DiskUsage(ctx, types.DiskUsageOptions{})
+	if err != nil {
+		return 0, fmt.Errorf("failed to get disk usage: %w", err)
+	}
+
+	// Create a map of volume names to their sizes
+	volumeSizes := make(map[string]int64)
+	for _, v := range dfStats.Volumes {
+		volumeSizes[v.Name] = v.UsageData.Size
+	}
+
+	// Sum up sizes of mounted volumes
 	for _, mount := range containerInfo.Mounts {
 		if mount.Type == mtypes.TypeVolume {
-			// Inspect the volume to get usage data
-			volume, err := s.dockerClient.VolumeInspect(ctx, mount.Name)
-			if err != nil {
-
-				log.Warnf("Failed to inspect volume %s: %v", mount.Name, err)
-				continue
-			}
-
-			// Add volume size if available
-			if volume.UsageData != nil {
-				totalSize += volume.UsageData.Size
+			if size, exists := volumeSizes[mount.Name]; exists {
+				totalSize += size
 			}
 		}
 	}
+
 	return totalSize, nil
 }
