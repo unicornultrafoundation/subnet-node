@@ -3,8 +3,6 @@ package docker
 import (
 	"context"
 	"io"
-	"math/big"
-	"time"
 
 	dtypes "github.com/docker/docker/api/types"
 	ctypes "github.com/docker/docker/api/types/container"
@@ -70,6 +68,9 @@ func (r *RealDockerClient) Close() error {
 type MockDockerClient struct {
 	InspectResponse dtypes.ContainerJSON
 	InspectError    error
+	CreateResponse  ctypes.CreateResponse
+	CreateError     error
+	StartError      error
 	StopError       error
 	RemoveError     error
 	ListResponse    []dtypes.Container
@@ -81,37 +82,47 @@ type MockDockerClient struct {
 	CloseError      error
 }
 
-// ContainerInspect returns a mock container inspection result.
-func (m *MockDockerClient) ContainerInspect(ctx context.Context, appId *big.Int) (dtypes.ContainerJSON, error) {
+// ContainerInspect mocks container inspection.
+func (m *MockDockerClient) ContainerInspect(ctx context.Context, containerID string) (dtypes.ContainerJSON, error) {
 	return m.InspectResponse, m.InspectError
 }
 
-// ContainerStop simulates stopping a container.
-func (m *MockDockerClient) ContainerStop(ctx context.Context, containerID string, timeout *time.Duration) error {
+// ContainerCreate mocks container creation.
+func (m *MockDockerClient) ContainerCreate(ctx context.Context, config *ctypes.Config, hostConfig *ctypes.HostConfig, networkingConfig *network.NetworkingConfig, platform *v1.Platform, containerName string) (ctypes.CreateResponse, error) {
+	return m.CreateResponse, m.CreateError
+}
+
+// ContainerStart mocks starting a container.
+func (m *MockDockerClient) ContainerStart(ctx context.Context, containerID string, options ctypes.StartOptions) error {
+	return m.StartError
+}
+
+// ContainerStop mocks stopping a container.
+func (m *MockDockerClient) ContainerStop(ctx context.Context, containerID string, options ctypes.StopOptions) error {
 	return m.StopError
 }
 
-// ContainerRemove simulates removing a container.
+// ContainerRemove mocks removing a container.
 func (m *MockDockerClient) ContainerRemove(ctx context.Context, containerID string, options ctypes.RemoveOptions) error {
 	return m.RemoveError
 }
 
-// ContainerList returns a mock list of containers.
+// ContainerList mocks listing containers.
 func (m *MockDockerClient) ContainerList(ctx context.Context, options ctypes.ListOptions) ([]dtypes.Container, error) {
 	return m.ListResponse, m.ListError
 }
 
-// ImagePull simulates pulling an image.
+// ImagePull mocks pulling an image.
 func (m *MockDockerClient) ImagePull(ctx context.Context, ref string, options itypes.PullOptions) (io.ReadCloser, error) {
 	return m.PullResponse, m.PullError
 }
 
-// ContainerStats returns mock container stats.
+// ContainerStats mocks getting container stats.
 func (m *MockDockerClient) ContainerStats(ctx context.Context, containerID string, stream bool) (dtypes.ContainerStats, error) {
 	return m.StatsResponse, m.StatsError
 }
 
-// Close simulates closing the client.
+// Close mocks closing the Docker client.
 func (m *MockDockerClient) Close() error {
 	return m.CloseError
 }

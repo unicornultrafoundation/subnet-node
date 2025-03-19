@@ -1,4 +1,4 @@
-package proxy
+package apps
 
 import (
 	"context"
@@ -7,33 +7,54 @@ import (
 	"testing"
 	"time"
 
+	dtypes "github.com/docker/docker/api/types"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/assert"
-	"github.com/unicornultrafoundation/subnet-node/core/apps"
+	"github.com/unicornultrafoundation/subnet-node/config"
 	atypes "github.com/unicornultrafoundation/subnet-node/core/apps/types"
+	"github.com/unicornultrafoundation/subnet-node/core/docker"
+	"github.com/unicornultrafoundation/subnet-node/core/proxy"
 )
 
 // **Setup P2P Nodes with Real Service**
-func setupRealP2P(t *testing.T) (*Service, *apps.Service) {
-	h1, err := libp2p.New()
-	assert.NoError(t, err)
-
-	h2, err := libp2p.New()
-	assert.NoError(t, err)
-
-	sender := &Service{
-		PeerHost: h1,
+func setupRealP2P(t *testing.T) (*proxy.Service, *Service) {
+	networkSetting := &dtypes.NetworkSettings{}
+	networkSetting.IPAddress = "127.0.0.1"
+	dockerClientMock := &docker.MockDockerClient{
+		InspectResponse: dtypes.ContainerJSON{
+			NetworkSettings: networkSetting,
+		},
+		InspectError: nil,
 	}
-	receiver := &apps.Service{
-		PeerHost: h2,
+
+	senderPeer, err := libp2p.New()
+	assert.NoError(t, err)
+
+	receiverPeer, err := libp2p.New()
+	assert.NoError(t, err)
+
+	senderCfg := &config.C{
+		Settings: map[interface{}]interface{}{
+			"proxy": map[interface{}]interface{}{
+				"enable":  true,
+				"peer_id": receiverPeer.ID().String(),
+				"app_id":  1,
+				"ports":   []string{"5001:9999/tcp", "5002:9998/udp"},
+			},
+		}}
+	sender := proxy.New(senderPeer, senderPeer.ID(), senderCfg)
+
+	receiver := &Service{
+		PeerHost:     receiverPeer,
+		dockerClient: dockerClientMock,
 	}
 
 	// Register real receiver handler
 	receiver.PeerHost.SetStreamHandler(atypes.ProtocolProxyReverse, receiver.OnReverseRequestReceive)
 
 	// **Manually Connect Peers**
-	err = sender.PeerHost.Connect(context.Background(), peer.AddrInfo{
+	err = senderPeer.Connect(context.Background(), peer.AddrInfo{
 		ID:    receiver.PeerHost.ID(),
 		Addrs: receiver.PeerHost.Addrs(),
 	})
@@ -47,7 +68,10 @@ func setupRealP2P(t *testing.T) (*Service, *apps.Service) {
 
 // **Test Real TCP Forwarding**
 func TestRealTCPForwarding(t *testing.T) {
-	sender, receiver := setupRealP2P(t)
+	sender, _ := setupRealP2P(t)
+
+	err := sender.Start(context.Background())
+	assert.NoError(t, err)
 
 	// Start a TCP echo server
 	listener, err := net.Listen("tcp", "127.0.0.1:9999")
@@ -60,31 +84,33 @@ func TestRealTCPForwarding(t *testing.T) {
 		io.Copy(conn, conn) // Echo server
 	}()
 
-	// Open a real P2P stream
-	stream, err := sender.PeerHost.NewStream(context.Background(), receiver.PeerHost.ID(), atypes.ProtocolProxyReverse)
+	// Connect to sender proxy at 127.0.0.1:5001
+	conn, err := net.Dial("tcp", "127.0.0.1:5001")
 	assert.NoError(t, err)
-	defer stream.Close()
+	defer conn.Close()
 
-	// Send TCP metadata
-	meta := "tcp:test-app:9999\n"
-	_, err = stream.Write([]byte(meta))
+	// Send metadata
+	meta := "tcp:1:9999\n"
+	_, err = conn.Write([]byte(meta))
 	assert.NoError(t, err)
 
 	// Send test data
 	testData := "Hello, Real P2P TCP!"
-	_, err = stream.Write([]byte(testData))
+	_, err = conn.Write([]byte(testData))
 	assert.NoError(t, err)
 
 	// Read response
 	buf := make([]byte, len(testData))
-	_, err = stream.Read(buf)
+	_, err = conn.Read(buf)
 	assert.NoError(t, err)
 	assert.Equal(t, testData, string(buf))
 }
 
 // **Test Real UDP Forwarding**
 func TestRealUDPForwarding(t *testing.T) {
-	sender, receiver := setupRealP2P(t)
+	sender, _ := setupRealP2P(t)
+	err := sender.Start(context.Background())
+	assert.NoError(t, err)
 
 	// Start a UDP echo server
 	udpAddr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:9998")
@@ -100,24 +126,21 @@ func TestRealUDPForwarding(t *testing.T) {
 		}
 	}()
 
-	// Open a real P2P stream
-	stream, err := sender.PeerHost.NewStream(context.Background(), receiver.PeerHost.ID(), atypes.ProtocolProxyReverse)
+	// Send UDP metadata and request
+	udpClient, err := net.Dial("udp", "127.0.0.1:5002")
 	assert.NoError(t, err)
-	defer stream.Close()
+	defer udpClient.Close()
 
-	// Send UDP metadata
-	meta := "udp:test-app:9998\n"
-	_, err = stream.Write([]byte(meta))
+	meta := "udp:1:9998\n"
+	_, err = udpClient.Write([]byte(meta))
 	assert.NoError(t, err)
 
-	// Send test data
 	testData := "Hello, Real P2P UDP!"
-	_, err = stream.Write([]byte(testData))
+	_, err = udpClient.Write([]byte(testData))
 	assert.NoError(t, err)
 
-	// Read response
 	buf := make([]byte, len(testData))
-	_, err = stream.Read(buf)
+	n, err := udpClient.Read(buf)
 	assert.NoError(t, err)
-	assert.Equal(t, testData, string(buf))
+	assert.Equal(t, testData, string(buf[:n]))
 }
