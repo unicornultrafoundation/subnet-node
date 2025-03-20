@@ -31,5 +31,39 @@ func (s *Service) RemoveApp(ctx context.Context, appId *big.Int) (*atypes.App, e
 
 	log.Printf("App %s removed successfully: Container ID: %s", app.Symbol, app.ContainerId())
 	app.Status = atypes.NotFound
+
+	//
+	// Update NodeResourceUsage
+	//
+	requestCPU, requestMemory, requestStorage, err := s.parseResourceRequest(app.Metadata.ContainerConfig.Resources.Requests)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse resource request: %w", err)
+	}
+
+	resourceUsage, err := s.getNodeResourceUsage()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get node resource usage: %w", err)
+	}
+
+	// Subtract resource usage from NodeResourceUsage
+	newResourceUsage := atypes.ResourceUsage{
+		UsedCpu:     new(big.Int).Sub(resourceUsage.UsedCpu, requestCPU),
+		UsedMemory:  new(big.Int).Sub(resourceUsage.UsedMemory, requestMemory),
+		UsedStorage: new(big.Int).Sub(resourceUsage.UsedStorage, requestStorage),
+	}
+
+	// Ensure values are not less than zero
+	if newResourceUsage.UsedCpu.Cmp(big.NewInt(0)) < 0 {
+		newResourceUsage.UsedCpu.SetInt64(0)
+	}
+	if newResourceUsage.UsedMemory.Cmp(big.NewInt(0)) < 0 {
+		newResourceUsage.UsedMemory.SetInt64(0)
+	}
+	if newResourceUsage.UsedStorage.Cmp(big.NewInt(0)) < 0 {
+		newResourceUsage.UsedStorage.SetInt64(0)
+	}
+
+	s.setNodeResourceUsage(newResourceUsage)
+
 	return app, nil
 }

@@ -72,6 +72,10 @@ message ContainerConfig {
 }
 
 message Resources {
+  Requests requests = 1;
+}
+
+message Requests {
   string cpu = 1;
   string memory = 2;
   string storage = 3;
