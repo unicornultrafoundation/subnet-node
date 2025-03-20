@@ -58,6 +58,7 @@ func (s *Service) upgradeAppVersion(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("failed to fetch app details: %w", err)
 		}
+
 		latestImageVersion := app.Metadata.ContainerConfig.Image
 
 		if runningImageVersion != latestImageVersion {

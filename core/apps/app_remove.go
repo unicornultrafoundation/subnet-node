@@ -6,6 +6,7 @@ import (
 	"math/big"
 
 	ctypes "github.com/docker/docker/api/types/container"
+	mtypes "github.com/docker/docker/api/types/mount"
 	atypes "github.com/unicornultrafoundation/subnet-node/core/apps/types"
 )
 
@@ -19,14 +20,31 @@ func (s *Service) RemoveApp(ctx context.Context, appId *big.Int) (*atypes.App, e
 
 	containerID := app.ContainerId()
 
-	// Stop container
+	// 1. Get container info before removing
+	containerInfo, err := s.dockerClient.ContainerInspect(ctx, containerID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to inspect container: %w", err)
+	}
+
+	// 2. Stop container
 	if err := s.dockerClient.ContainerStop(ctx, containerID, ctypes.StopOptions{}); err != nil {
 		return nil, fmt.Errorf("failed to stop docker container: %w", err)
 	}
 
-	// Remove container
-	if err := s.dockerClient.ContainerRemove(ctx, containerID, ctypes.RemoveOptions{}); err != nil {
+	// 3. Remove container and its volumes
+	if err := s.dockerClient.ContainerRemove(ctx, containerID, ctypes.RemoveOptions{
+		RemoveVolumes: true, // Let Docker handle volume cleanup
+	}); err != nil {
 		return nil, fmt.Errorf("failed to remove docker container: %w", err)
+	}
+
+	// 4. Remove volumes
+	for _, mount := range containerInfo.Mounts {
+		if mount.Type == mtypes.TypeVolume {
+			if err := s.dockerClient.VolumeRemove(ctx, mount.Name, true); err != nil {
+				log.Printf("Failed to remove volume %s: %v", mount.Name, err)
+			}
+		}
 	}
 
 	log.Printf("App %s removed successfully: Container ID: %s", app.Symbol, app.ContainerId())
@@ -66,4 +84,5 @@ func (s *Service) RemoveApp(ctx context.Context, appId *big.Int) (*atypes.App, e
 	s.setNodeResourceUsage(newResourceUsage)
 
 	return app, nil
+
 }
