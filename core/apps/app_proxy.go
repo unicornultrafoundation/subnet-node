@@ -73,7 +73,7 @@ func (s *Service) handleReverseTCP(stream network.Stream, targetAddr string) {
 	go func() {
 		_, err := io.Copy(targetConn, stream)
 		if err != nil {
-			log.Println("TCP forward error (stream to target):", err)
+			writeErrorToStream(stream, "TCP forward error (stream to target):"+err.Error())
 		}
 		targetConn.Close()
 		stream.Close()
@@ -81,48 +81,13 @@ func (s *Service) handleReverseTCP(stream network.Stream, targetAddr string) {
 
 	_, err = io.Copy(stream, targetConn)
 	if err != nil {
-		log.Println("TCP forward error (target to stream):", err)
+		writeErrorToStream(stream, "TCP forward error (target to stream):"+err.Error())
 	}
 }
 
-func (s *Service) handleReverseUDP(stream network.Stream, targetAddr string) {
-	targetConn, err := net.Dial("udp", targetAddr)
-	if err != nil {
-		writeErrorToStream(stream, "Failed to connect to target (UDP): "+err.Error())
-		return
-	}
-	defer targetConn.Close()
-
-	buf := make([]byte, 4096)
-
-	for {
-		n, err := stream.Read(buf)
-		if err != nil {
-			log.Println("UDP Stream Read error:", err)
-			return
-		}
-
-		// Send to target container
-		_, err = targetConn.Write(buf[:n])
-		if err != nil {
-			writeErrorToStream(stream, "Failed to send UDP packet: "+err.Error())
-			return
-		}
-
-		// Read response
-		n, err = targetConn.Read(buf)
-		if err != nil {
-			writeErrorToStream(stream, "UDP Read response error: "+err.Error())
-			return
-		}
-
-		// Forward back to sender
-		_, err = stream.Write(buf[:n])
-		if err != nil {
-			log.Println("Failed to forward UDP response:", err)
-			return
-		}
-	}
+func (s *Service) handleReverseUDP(stream network.Stream, _ string) {
+	// TODO: handleReverseUDP
+	writeErrorToStream(stream, "Unsupported udp protocol yet")
 }
 
 func writeErrorToStream(stream network.Stream, errorMessage string) {

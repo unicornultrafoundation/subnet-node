@@ -2,6 +2,7 @@ package apps
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net"
 	"testing"
@@ -10,15 +11,24 @@ import (
 	dtypes "github.com/docker/docker/api/types"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/stretchr/testify/assert"
 	"github.com/unicornultrafoundation/subnet-node/config"
 	atypes "github.com/unicornultrafoundation/subnet-node/core/apps/types"
 	"github.com/unicornultrafoundation/subnet-node/core/docker"
 	"github.com/unicornultrafoundation/subnet-node/core/proxy"
 )
 
-// **Setup P2P Nodes with Real Service**
-func setupRealP2P(t *testing.T) (*proxy.Service, *Service) {
+// **Find Available Port**
+func findAvailablePort() int {
+	listener, err := net.Listen("tcp", ":0")
+	if err != nil {
+		panic(err)
+	}
+	defer listener.Close()
+	return listener.Addr().(*net.TCPAddr).Port
+}
+
+// **Setup P2P Nodes with Multiple Ports**
+func setupRealP2P(t *testing.T, portMappings []string) (*proxy.Service, *Service) {
 	networkSetting := &dtypes.NetworkSettings{}
 	networkSetting.IPAddress = "127.0.0.1"
 	dockerClientMock := &docker.MockDockerClient{
@@ -29,10 +39,14 @@ func setupRealP2P(t *testing.T) (*proxy.Service, *Service) {
 	}
 
 	senderPeer, err := libp2p.New()
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	receiverPeer, err := libp2p.New()
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	senderCfg := &config.C{
 		Settings: map[interface{}]interface{}{
@@ -40,9 +54,10 @@ func setupRealP2P(t *testing.T) (*proxy.Service, *Service) {
 				"enable":  true,
 				"peer_id": receiverPeer.ID().String(),
 				"app_id":  1,
-				"ports":   []string{"5001:9999/tcp", "5002:9998/udp"},
+				"ports":   portMappings,
 			},
-		}}
+		},
+	}
 	sender := proxy.New(senderPeer, senderPeer.ID(), senderCfg)
 
 	receiver := &Service{
@@ -50,97 +65,176 @@ func setupRealP2P(t *testing.T) (*proxy.Service, *Service) {
 		dockerClient: dockerClientMock,
 	}
 
-	// Register real receiver handler
 	receiver.PeerHost.SetStreamHandler(atypes.ProtocolProxyReverse, receiver.OnReverseRequestReceive)
 
-	// **Manually Connect Peers**
 	err = senderPeer.Connect(context.Background(), peer.AddrInfo{
 		ID:    receiver.PeerHost.ID(),
 		Addrs: receiver.PeerHost.Addrs(),
 	})
-	assert.NoError(t, err)
-
-	// Wait for connection establishment
+	if err != nil {
+		t.Fatal(err)
+	}
 	time.Sleep(500 * time.Millisecond)
 
 	return sender, receiver
 }
 
-// **Test Real TCP Forwarding**
-func TestRealTCPForwarding(t *testing.T) {
-	sender, _ := setupRealP2P(t)
+// **Test: Multiple TCP Forwarding Cases**
+func TestMultipleTCPForwarding(t *testing.T) {
+	portMappings := []string{
+		fmt.Sprintf("%d:%d/tcp", findAvailablePort(), findAvailablePort()),
+		// fmt.Sprintf("%d:%d/tcp", findAvailablePort(), findAvailablePort()),
+		// fmt.Sprintf("%d:%d/tcp", findAvailablePort(), findAvailablePort()),
+	}
 
-	err := sender.Start(context.Background())
-	assert.NoError(t, err)
+	sender, _ := setupRealP2P(t, portMappings)
+	ctx := context.Background()
+	if err := sender.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	defer sender.Stop(ctx)
 
-	// Start a TCP echo server
-	listener, err := net.Listen("tcp", "127.0.0.1:9999")
-	assert.NoError(t, err)
-	defer listener.Close()
+	// var wg sync.WaitGroup
 
-	go func() {
-		conn, _ := listener.Accept()
-		defer conn.Close()
-		io.Copy(conn, conn) // Echo server
-	}()
+	for _, mapping := range portMappings {
+		parts := parsePortMapping(mapping)
 
-	// Connect to sender proxy at 127.0.0.1:5001
-	conn, err := net.Dial("tcp", "127.0.0.1:5001")
-	assert.NoError(t, err)
-	defer conn.Close()
-
-	// Send metadata
-	meta := "tcp:1:9999\n"
-	_, err = conn.Write([]byte(meta))
-	assert.NoError(t, err)
-
-	// Send test data
-	testData := "Hello, Real P2P TCP!"
-	_, err = conn.Write([]byte(testData))
-	assert.NoError(t, err)
-
-	// Read response
-	buf := make([]byte, len(testData))
-	_, err = conn.Read(buf)
-	assert.NoError(t, err)
-	assert.Equal(t, testData, string(buf))
+		// wg.Add(1)
+		// go func(proxyPort, targetPort int) {
+		// 	defer wg.Done()
+		testTCPEcho(t, parts.proxyPort, parts.targetPort)
+		// 	}(parts.proxyPort, parts.targetPort)
+		// }
+	}
+	// wg.Wait()
 }
 
-// **Test Real UDP Forwarding**
-func TestRealUDPForwarding(t *testing.T) {
-	sender, _ := setupRealP2P(t)
-	err := sender.Start(context.Background())
-	assert.NoError(t, err)
+// **Helper function to test TCP Echo**
+func testTCPEcho(t *testing.T, proxyPort, targetPort int) {
+	// Start the echo server
+	listener, err := startTCPEchoServer(targetPort)
+	if err != nil {
+		t.Fatalf("Failed to start echo server: %v", err)
+	}
+	defer listener.Close()
 
-	// Start a UDP echo server
-	udpAddr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:9998")
-	udpConn, err := net.ListenUDP("udp", udpAddr)
-	assert.NoError(t, err)
-	defer udpConn.Close()
+	// Wait until the server is ready
+	if !waitForPort("127.0.0.1", targetPort, 5*time.Second) {
+		t.Fatalf("Echo server did not start on port %d", targetPort)
+	}
+	if !waitForPort("127.0.0.1", proxyPort, 5*time.Second) {
+		t.Fatalf("Proxy server did not start on port %d", proxyPort)
+	}
+
+	conn, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", proxyPort))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+
+	testData := "Hello, P2P!"
+	// ✅ Check if connection is fully established before writing
+	log.Println("Connected to proxy, waiting for readiness...")
+
+	time.Sleep(1 * time.Second) // Temporary delay, we’ll replace this
+
+	log.Println("Proxy should be ready, sending data...")
+	if _, err := conn.Write([]byte(testData)); err != nil {
+		t.Fatal(err)
+	}
+
+	// **Ensure we wait for a response before closing**
+	response, err := waitForResponse(conn, len(testData), 5*time.Second)
+	if err != nil {
+		t.Fatalf("Failed to read response: %v", err)
+	}
+
+	if string(response) != testData {
+		t.Fatalf("Expected %s, got %s", testData, string(response))
+	}
+}
+
+// Reads full response before closing connection
+func waitForResponse(conn net.Conn, expectedLen int, timeout time.Duration) ([]byte, error) {
+	deadline := time.Now().Add(timeout)
+	conn.SetReadDeadline(deadline) // Prevent indefinite blocking
+
+	buf := make([]byte, expectedLen)
+	totalRead := 0
+
+	for totalRead < expectedLen {
+		n, err := conn.Read(buf[totalRead:])
+		if err != nil {
+			return nil, err // Handle read errors
+		}
+		totalRead += n
+	}
+	return buf, nil
+}
+
+// StartEchoServer initializes an echo server on the given port.
+func startTCPEchoServer(port int) (net.Listener, error) {
+	listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+	if err != nil {
+		return nil, err
+	}
 
 	go func() {
-		buf := make([]byte, 4096)
 		for {
-			n, addr, _ := udpConn.ReadFromUDP(buf)
-			udpConn.WriteToUDP(buf[:n], addr) // Echo back
+			conn, err := listener.Accept()
+			if err != nil {
+				if ne, ok := err.(net.Error); ok && ne.Temporary() {
+					continue
+				}
+				return // Exit if the listener is closed
+			}
+			go handleConnection(conn)
 		}
 	}()
+	return listener, nil
+}
 
-	// Send UDP metadata and request
-	udpClient, err := net.Dial("udp", "127.0.0.1:5002")
-	assert.NoError(t, err)
-	defer udpClient.Close()
+func handleConnection(conn net.Conn) {
+	defer conn.Close()
+	buf := make([]byte, 1024) // Buffer to read data
 
-	meta := "udp:1:9998\n"
-	_, err = udpClient.Write([]byte(meta))
-	assert.NoError(t, err)
+	for {
+		n, err := conn.Read(buf)
+		if err != nil {
+			if err == io.EOF {
+				break // Client closed connection
+			}
+			return // Handle other errors
+		}
+		conn.Write(buf[:n]) // Echo back the received data
+	}
+}
 
-	testData := "Hello, Real P2P UDP!"
-	_, err = udpClient.Write([]byte(testData))
-	assert.NoError(t, err)
+// **Helper function to parse "proxyPort:targetPort/protocol"**
+type portMapping struct {
+	proxyPort  int
+	targetPort int
+	protocol   string
+}
 
-	buf := make([]byte, len(testData))
-	n, err := udpClient.Read(buf)
-	assert.NoError(t, err)
-	assert.Equal(t, testData, string(buf[:n]))
+func parsePortMapping(mapping string) portMapping {
+	var p portMapping
+	fmt.Sscanf(mapping, "%d:%d/%s", &p.proxyPort, &p.targetPort, &p.protocol)
+	return p
+}
+
+// **Helper function to wait for a port to be available**
+func waitForPort(host string, port int, timeout time.Duration) bool {
+	address := fmt.Sprintf("%s:%d", host, port)
+	deadline := time.Now().Add(timeout)
+
+	for time.Now().Before(deadline) {
+		conn, err := net.DialTimeout("tcp", address, 500*time.Millisecond)
+		if err == nil {
+			conn.Close()
+			return true
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	return false
 }
