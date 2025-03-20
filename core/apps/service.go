@@ -104,7 +104,7 @@ func (s *Service) Start(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("error connecting to docker: %v", err)
 		}
-		s.statService = stats.NewStats(s.dockerClient)
+		s.statService = stats.NewStats(ctx, s.dockerClient)
 
 		s.RestartStoppedContainers(ctx)
 		s.upgradeAppVersion(ctx)

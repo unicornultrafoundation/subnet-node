@@ -30,22 +30,25 @@ type StatEntry struct {
 
 // Stats manages the resource usage statistics for multiple containers.
 type Stats struct {
-	mu                sync.Mutex
-	entries           map[string]*StatEntry
-	firstStats        map[string]*StatEntry
-	finalStats        map[string]*StatEntry
-	dockerClient      *dockerCli.Client
-	stopChan          chan struct{}
-	gpu               *GpuMonitor
-	containerToPid    map[string]int32
-	startTimes        map[string]time.Time
-	memoryUsage       map[int32]uint64
-	memorySampleCount map[int32]uint64
+	mu                 sync.Mutex
+	entries            map[string]*StatEntry
+	firstStats         map[string]*StatEntry
+	finalStats         map[string]*StatEntry
+	dockerClient       *dockerCli.Client
+	stopChan           chan struct{}
+	gpu                *GpuMonitor
+	containerToPid     map[string]int32
+	startTimes         map[string]time.Time
+	memoryUsage        map[int32]uint64
+	memorySampleCount  map[int32]uint64
+	volumeSizeCache    map[string]int64
+	volumeSizeCacheMux sync.RWMutex
 }
 
 // NewStats creates a new Stats instance.
-func NewStats(dockerClient *dockerCli.Client) *Stats {
-	return &Stats{
+func NewStats(ctx context.Context, dockerClient *dockerCli.Client) *Stats {
+
+	stats := &Stats{
 		entries:           make(map[string]*StatEntry),
 		firstStats:        make(map[string]*StatEntry),
 		finalStats:        make(map[string]*StatEntry),
@@ -56,7 +59,12 @@ func NewStats(dockerClient *dockerCli.Client) *Stats {
 		startTimes:        make(map[string]time.Time),
 		memoryUsage:       make(map[int32]uint64),
 		memorySampleCount: make(map[int32]uint64),
+		volumeSizeCache:   make(map[string]int64),
 	}
+
+	stats.startVolumeSizeCacheJob(ctx)
+
+	return stats
 }
 
 // ClearUsageData clears all usage data before the service starts tracking.
@@ -337,26 +345,77 @@ func (s *Stats) getTotalContainerMountVolume(ctx context.Context, containerId st
 
 	var totalSize int64
 
-	// Get disk usage information for all Docker objects
-	dfStats, err := s.dockerClient.DiskUsage(ctx, types.DiskUsageOptions{})
-	if err != nil {
-		return 0, fmt.Errorf("failed to get disk usage: %w", err)
-	}
-
-	// Create a map of volume names to their sizes
-	volumeSizes := make(map[string]int64)
-	for _, v := range dfStats.Volumes {
-		volumeSizes[v.Name] = v.UsageData.Size
-	}
-
-	// Sum up sizes of mounted volumes
 	for _, mount := range containerInfo.Mounts {
 		if mount.Type == mtypes.TypeVolume {
-			if size, exists := volumeSizes[mount.Name]; exists {
+			// Try to get size from cache
+			if size, exists := s.getVolumeSizeFromCache(mount.Name); exists {
+				totalSize += size
+				continue
+			}
+
+			// If not in cache, trigger a cache update
+			if err := s.updateVolumeSizeCache(ctx); err != nil {
+				log.Warnf("Failed to update volume size cache: %v", err)
+				continue
+			}
+
+			// Try again from cache
+			if size, exists := s.getVolumeSizeFromCache(mount.Name); exists {
 				totalSize += size
 			}
 		}
 	}
 
 	return totalSize, nil
+}
+
+// CACHE VOLUME SIZE
+
+// updateVolumeSizeCache updates the cache with current volume sizes
+func (s *Stats) updateVolumeSizeCache(ctx context.Context) error {
+	dfStats, err := s.dockerClient.DiskUsage(ctx, types.DiskUsageOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to get disk usage: %w", err)
+	}
+
+	// Create new map of volume sizes
+	newCache := make(map[string]int64)
+	for _, v := range dfStats.Volumes {
+		if v.UsageData != nil {
+			newCache[v.Name] = v.UsageData.Size
+		}
+	}
+
+	// Update cache thread-safely
+	s.volumeSizeCacheMux.Lock()
+	s.volumeSizeCache = newCache
+	s.volumeSizeCacheMux.Unlock()
+
+	return nil
+}
+
+// getVolumeSizeFromCache gets a volume size from cache
+func (s *Stats) getVolumeSizeFromCache(volumeName string) (int64, bool) {
+	s.volumeSizeCacheMux.RLock()
+	defer s.volumeSizeCacheMux.RUnlock()
+	size, exists := s.volumeSizeCache[volumeName]
+	return size, exists
+}
+
+// startVolumeSizeCacheJob starts the periodic cache update job
+func (s *Stats) startVolumeSizeCacheJob(ctx context.Context) {
+	cacheTicker := time.NewTicker(15 * time.Minute)
+	defer cacheTicker.Stop()
+	go func() {
+		for {
+			select {
+			case <-s.stopChan:
+				return
+			case <-cacheTicker.C:
+				if err := s.updateVolumeSizeCache(ctx); err != nil {
+					log.Errorf("Failed to update volume size cache: %v", err)
+				}
+			}
+		}
+	}()
 }
