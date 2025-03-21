@@ -15,12 +15,33 @@ import (
 func (s *Service) RunApp(ctx context.Context, appId *big.Int) (*atypes.App, error) {
 	// Retrieve app details from the Ethereum contract
 	app, err := s.GetApp(ctx, appId)
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch app details: %w", err)
 	}
 
+	// Return if found app
 	if app.Status != atypes.NotFound {
 		return app, nil
+	}
+
+	// Fetch the machine's hardware and software capabilities
+	deviceCap, err := s.getDeviceCapability()
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch app details: %w", err)
+	}
+
+	// Check if the machine's hardware and software capabilities can run this app.
+	resourceUsage, err := s.getNodeResourceUsage()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get node resource usage: %w", err)
+	}
+
+	requestCPU, requestMemory, requestStorage, err := s.validateNodeCompatibility(resourceUsage, app.Metadata.ContainerConfig.Resources.Requests, deviceCap)
+	// Return if validation fails
+	if err != nil {
+		return nil, fmt.Errorf("failed to validate node compatibility: %w", err)
 	}
 
 	imageName := app.Metadata.ContainerConfig.Image
@@ -36,13 +57,14 @@ func (s *Service) RunApp(ctx context.Context, appId *big.Int) (*atypes.App, erro
 	io.Copy(io.Discard, out)
 
 	// Add environment variables to the container spec
-	envs := []string{}
-	for key, value := range app.Metadata.ContainerConfig.Env {
-		envs = append(envs, fmt.Sprintf("%s=%s", key, value))
+	envs, err := s.containerEnvConfig(app.Metadata.ContainerConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create container env config: %w", err)
 	}
 
-	for key, value := range app.Metadata.ContainerConfig.Env {
-		envs = append(envs, fmt.Sprintf("%s=%s", key, value))
+	hostConfig, err := s.containerHostConfig(appId, app.Metadata.ContainerConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create container host config: %w", err)
 	}
 
 	// Create a new container for the app
@@ -50,7 +72,7 @@ func (s *Service) RunApp(ctx context.Context, appId *big.Int) (*atypes.App, erro
 		Image: imageName,
 		Cmd:   app.Metadata.ContainerConfig.Command,
 		Env:   envs,
-	}, nil, nil, nil, app.ContainerId())
+	}, hostConfig, nil, nil, app.ContainerId())
 	if err != nil {
 		return nil, fmt.Errorf("failed to create container: %w", err)
 	}
@@ -74,6 +96,18 @@ func (s *Service) RunApp(ctx context.Context, appId *big.Int) (*atypes.App, erro
 	app.Status, err = s.GetContainerStatus(ctx, appId)
 	if err != nil {
 		return nil, err
+	}
+
+	// Store new resource usage into cache
+	if app.Status == atypes.Running {
+		// calculate new resource usage equal to resourceUsage + app request
+		newResourceUsage := atypes.ResourceUsage{
+			UsedCpu:     new(big.Int).Add(resourceUsage.UsedCpu, requestCPU),
+			UsedMemory:  new(big.Int).Add(resourceUsage.UsedMemory, requestMemory),
+			UsedStorage: new(big.Int).Add(resourceUsage.UsedStorage, requestStorage),
+		}
+
+		s.setNodeResourceUsage(newResourceUsage)
 	}
 
 	return app, nil

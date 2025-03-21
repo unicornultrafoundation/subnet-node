@@ -8,6 +8,7 @@ import (
 	ctypes "github.com/docker/docker/api/types/container"
 	itypes "github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/network"
+	vtypes "github.com/docker/docker/api/types/volume"
 	dockerCli "github.com/docker/docker/client"
 	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 )
@@ -21,6 +22,9 @@ type DockerClient interface {
 	ContainerList(ctx context.Context, options ctypes.ListOptions) ([]dtypes.Container, error)
 	ImagePull(ctx context.Context, ref string, options itypes.PullOptions) (io.ReadCloser, error)
 	ContainerStats(ctx context.Context, containerID string, stream bool) (dtypes.ContainerStats, error)
+	VolumeCreate(ctx context.Context, options vtypes.CreateOptions) (vtypes.Volume, error)
+	VolumeRemove(ctx context.Context, volumeID string, force bool) error
+	DiskUsage(ctx context.Context, options dtypes.DiskUsageOptions) (dtypes.DiskUsage, error)
 	Close() error
 }
 
@@ -60,26 +64,42 @@ func (r *RealDockerClient) ContainerStats(ctx context.Context, containerID strin
 	return r.client.ContainerStats(ctx, containerID, stream)
 }
 
+func (r *RealDockerClient) VolumeCreate(ctx context.Context, options vtypes.CreateOptions) (vtypes.Volume, error) {
+	return r.client.VolumeCreate(ctx, options)
+}
+
+func (r *RealDockerClient) VolumeRemove(ctx context.Context, volumeID string, force bool) error {
+	return r.client.VolumeRemove(ctx, volumeID, force)
+}
+
+func (r *RealDockerClient) DiskUsage(ctx context.Context, options dtypes.DiskUsageOptions) (dtypes.DiskUsage, error) {
+	return r.client.DiskUsage(ctx, options)
+}
+
 func (r *RealDockerClient) Close() error {
 	return r.client.Close()
 }
 
 // MockDockerClient is a mock implementation of DockerClient for testing.
 type MockDockerClient struct {
-	InspectResponse dtypes.ContainerJSON
-	InspectError    error
-	CreateResponse  ctypes.CreateResponse
-	CreateError     error
-	StartError      error
-	StopError       error
-	RemoveError     error
-	ListResponse    []dtypes.Container
-	ListError       error
-	PullResponse    io.ReadCloser
-	PullError       error
-	StatsResponse   dtypes.ContainerStats
-	StatsError      error
-	CloseError      error
+	InspectResponse   dtypes.ContainerJSON
+	InspectError      error
+	CreateResponse    ctypes.CreateResponse
+	CreateError       error
+	StartError        error
+	StopError         error
+	RemoveError       error
+	ListResponse      []dtypes.Container
+	ListError         error
+	PullResponse      io.ReadCloser
+	PullError         error
+	StatsResponse     dtypes.ContainerStats
+	VolumeResponse    vtypes.Volume
+	VolumeError       error
+	StatsError        error
+	CloseError        error
+	DiskUsageResponse dtypes.DiskUsage
+	DiskUsageError    error
 }
 
 // ContainerInspect mocks container inspection.
@@ -120,6 +140,18 @@ func (m *MockDockerClient) ImagePull(ctx context.Context, ref string, options it
 // ContainerStats mocks getting container stats.
 func (m *MockDockerClient) ContainerStats(ctx context.Context, containerID string, stream bool) (dtypes.ContainerStats, error) {
 	return m.StatsResponse, m.StatsError
+}
+
+func (m *MockDockerClient) VolumeCreate(ctx context.Context, options vtypes.CreateOptions) (vtypes.Volume, error) {
+	return m.VolumeResponse, m.VolumeError
+}
+
+func (m *MockDockerClient) VolumeRemove(ctx context.Context, volumeID string, force bool) error {
+	return m.VolumeError
+}
+
+func (m *MockDockerClient) DiskUsage(ctx context.Context, options dtypes.DiskUsageOptions) (dtypes.DiskUsage, error) {
+	return m.DiskUsageResponse, m.DiskUsageError
 }
 
 // Close mocks closing the Docker client.

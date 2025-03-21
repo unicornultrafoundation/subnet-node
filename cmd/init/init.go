@@ -62,6 +62,13 @@ func InitWithIdentity(identity Identity) (map[interface{}]interface{}, error) {
 		"addresses": map[interface{}]interface{}{
 			"swarm": []interface{}{
 				"/ip4/0.0.0.0/tcp/4001",
+				"/ip6/::/tcp/4001",
+				"/ip4/0.0.0.0/udp/4001/webrtc-direct",
+				"/ip4/0.0.0.0/udp/4001/quic-v1",
+				"/ip4/0.0.0.0/udp/4001/quic-v1/webtransport",
+				"/ip6/::/udp/4001/webrtc-direct",
+				"/ip6/::/udp/4001/quic-v1",
+				"/ip6/::/udp/4001/quic-v1/webtransport",
 			},
 			"api": []interface{}{
 				"/ip4/127.0.0.1/tcp/8080",

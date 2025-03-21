@@ -2,7 +2,6 @@ package node
 
 import (
 	"context"
-	"log"
 
 	"github.com/unicornultrafoundation/subnet-node/config"
 	"github.com/unicornultrafoundation/subnet-node/core/docker"

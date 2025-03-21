@@ -3,14 +3,21 @@ package apps
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math/big"
 	"net/http"
+	"runtime"
+	"strconv"
 	"time"
 
+	"github.com/dustin/go-humanize"
 	"github.com/gogo/protobuf/proto"
 	"github.com/patrickmn/go-cache"
+	"github.com/shirou/gopsutil/cpu"
+	"github.com/shirou/gopsutil/disk"
+	"github.com/shirou/gopsutil/mem"
 
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ipfs/go-datastore"
@@ -31,6 +38,8 @@ import (
 )
 
 var log = logrus.WithField("service", "apps")
+
+const RESOURCE_USAGE_KEY = "resource-usage-v2"
 
 type Service struct {
 	peerId                peer.ID
@@ -95,8 +104,7 @@ func (s *Service) Start(ctx context.Context) error {
 		if enableProxy {
 			s.PeerHost.SetStreamHandler(atypes.ProtocolProxyReverse, s.OnReverseRequestReceive)
 		}
-
-		s.statService = stats.NewStats(s.dockerClient)
+		s.statService = stats.NewStats(ctx, s.dockerClient)
 
 		s.RestartStoppedContainers(ctx)
 		s.upgradeAppVersion(ctx)
@@ -284,4 +292,131 @@ func (s *Service) getSubnetAppByID(_ context.Context, appId *big.Int) (*atypes.A
 	app := atypes.ConvertToApp(subnetApp, appId, atypes.Unknown)
 	s.subnetAppCache.Set(appId.String(), app, cache.DefaultExpiration)
 	return app, nil
+}
+
+// getDeviceCapability retrieves the CPU, memory, and storage capabilities of the machine.
+// It uses the gopsutil library to fetch detailed system information.
+// If gopsutil fails, it falls back to using the runtime package for CPU count.
+
+func (s *Service) getDeviceCapability() (atypes.DeviceCapability, error) {
+	// Get CPU info
+	cpuInfo, err := cpu.Info()
+	if err != nil {
+		// Fallback to runtime.NumCPU() if gopsutil fails
+		return atypes.DeviceCapability{
+			AvailableCPU:     big.NewInt(int64(runtime.NumCPU())),
+			AvailableMemory:  big.NewInt(0),
+			AvailableStorage: big.NewInt(0),
+		}, fmt.Errorf("failed to get CPU info: %w", err)
+	}
+
+	var totalCores int64
+	for _, cpu := range cpuInfo {
+		totalCores += int64(cpu.Cores)
+	}
+	if totalCores == 0 {
+		totalCores = int64(runtime.NumCPU())
+	}
+
+	// Get memory information
+	vmStat, err := mem.VirtualMemory()
+	if err != nil {
+		return atypes.DeviceCapability{
+			AvailableCPU:     big.NewInt(totalCores),
+			AvailableMemory:  big.NewInt(0),
+			AvailableStorage: big.NewInt(0),
+		}, fmt.Errorf("failed to get memory info: %w", err)
+	}
+
+	// Get storage information
+	var availableStorage uint64
+	partitions, err := disk.Partitions(false) // false means only physical partitions
+	if err == nil {
+		for _, partition := range partitions {
+			usage, err := disk.Usage(partition.Mountpoint)
+			if err == nil {
+				availableStorage += usage.Free
+			}
+		}
+	}
+
+	return atypes.DeviceCapability{
+		AvailableCPU:     big.NewInt(totalCores),
+		AvailableMemory:  big.NewInt(int64(vmStat.Available)),
+		AvailableStorage: big.NewInt(int64(availableStorage)),
+	}, nil
+}
+
+// Parsing resource request from human reading to big.Int
+func (s *Service) parseResourceRequest(appResourceRequest atypes.Requests) (*big.Int, *big.Int, *big.Int, error) {
+	// request CPU
+	cpuInt, err := strconv.ParseInt(appResourceRequest.CPU, 10, 64)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to parse CPU request: %w", err)
+	}
+	requestCPU := new(big.Int).SetInt64(cpuInt)
+
+	// request memory
+	memoryStr := appResourceRequest.Memory
+	memoryValue, err := humanize.ParseBytes(memoryStr)
+
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to parse memory request: %w", err)
+	}
+	requestMemory := new(big.Int).SetInt64(int64(memoryValue))
+
+	// request storage
+	var storageValue uint64
+	storageStr := appResourceRequest.Storage
+	if storageStr != "" {
+		storageValue, err = humanize.ParseBytes(storageStr)
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("failed to parse storage request: %w", err)
+		}
+	}
+	requestStorage := new(big.Int).SetInt64(int64(storageValue))
+	return requestCPU, requestMemory, requestStorage, nil
+}
+
+func (s *Service) validateNodeCompatibility(resourceUsage atypes.ResourceUsage, appResourceRequest atypes.Requests, deviceCapability atypes.DeviceCapability) (*big.Int, *big.Int, *big.Int, error) { // requestCPU, requestMemory, requestStorage
+	// calculate remain CPU and memory
+	remainCpu := new(big.Int).Sub(deviceCapability.AvailableCPU, resourceUsage.UsedCpu)
+	remainMemory := new(big.Int).Sub(deviceCapability.AvailableMemory, resourceUsage.UsedMemory)
+	remainStorage := new(big.Int).Sub(deviceCapability.AvailableStorage, resourceUsage.UsedStorage)
+
+	requestCPU, requestMemory, requestStorage, err := s.parseResourceRequest(appResourceRequest)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	// compare remain CPU, memory, storage with request
+	if remainCpu.Cmp(requestCPU) < 0 {
+		return nil, nil, nil, errors.New("insufficient CPU")
+	}
+
+	if remainMemory.Cmp(requestMemory) < 0 {
+		return nil, nil, nil, errors.New("insufficient memory")
+	}
+
+	if remainStorage.Cmp(requestStorage) < 0 {
+		return nil, nil, nil, errors.New("insufficient storage")
+	}
+
+	return requestCPU, requestMemory, requestStorage, nil
+}
+
+func (s *Service) setNodeResourceUsage(resourceUsage atypes.ResourceUsage) {
+	s.subnetAppCache.Set(RESOURCE_USAGE_KEY, resourceUsage, cache.DefaultExpiration)
+}
+
+func (s *Service) getNodeResourceUsage() (atypes.ResourceUsage, error) {
+	if cachedUsage, found := s.subnetAppCache.Get(RESOURCE_USAGE_KEY); found {
+		return cachedUsage.(atypes.ResourceUsage), nil
+	}
+
+	return atypes.ResourceUsage{
+		UsedCpu:     big.NewInt(0),
+		UsedMemory:  big.NewInt(0),
+		UsedStorage: big.NewInt(0),
+	}, nil
 }
