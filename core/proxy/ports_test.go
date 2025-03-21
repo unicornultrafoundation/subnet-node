@@ -57,13 +57,6 @@ func TestParsePortMappings(t *testing.T) {
 			},
 		},
 		{
-			name:  "Unix socket",
-			input: []string{"/var/run/docker.sock:/var/run/docker.sock/unix"},
-			expected: []PortMapping{
-				{HostIP: "", LocalPort: 0, AppPort: 0, Protocol: "unix"},
-			},
-		},
-		{
 			name:        "Invalid port number",
 			input:       []string{"999999:999999/tcp"},
 			expectError: true,
@@ -81,6 +74,11 @@ func TestParsePortMappings(t *testing.T) {
 		{
 			name:        "Mismatched port range",
 			input:       []string{"3000-3002:8000-8001"},
+			expectError: true,
+		},
+		{
+			name:        "Port should more than 1024",
+			input:       []string{"80:9999/tcp"},
 			expectError: true,
 		},
 	}

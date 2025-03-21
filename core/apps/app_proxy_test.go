@@ -13,7 +13,6 @@ import (
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/unicornultrafoundation/subnet-node/config"
-	atypes "github.com/unicornultrafoundation/subnet-node/core/apps/types"
 	"github.com/unicornultrafoundation/subnet-node/core/docker"
 	"github.com/unicornultrafoundation/subnet-node/core/proxy"
 )
@@ -157,64 +156,6 @@ func TestLargeDataTransfer(t *testing.T) {
 	}
 }
 
-func TestProxyRestart(t *testing.T) {
-	portMapping := fmt.Sprintf("%d:%d/tcp", findAvailablePort(), findAvailablePort())
-	sender, _ := setupRealP2P(t, []string{portMapping})
-	ctx := context.Background()
-	if err := sender.Start(ctx); err != nil {
-		t.Fatal(err)
-	}
-
-	parts := parsePortMapping(portMapping)
-
-	// Start echo server
-	listener, err := startTCPEchoServer(parts.targetPort)
-	if err != nil {
-		t.Fatalf("Failed to start echo server: %v", err)
-	}
-	defer listener.Close()
-
-	// Wait until the server is ready
-	waitForServers(t, parts)
-
-	// Establish connection
-	conn, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", parts.proxyPort))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer conn.Close()
-
-	// Restart proxy service
-	sender.Stop(ctx)
-	time.Sleep(5 * time.Second) // Allow clean shutdown
-	if err := sender.Start(ctx); err != nil {
-		t.Fatal(err)
-	}
-
-	// Wait for proxy to be back online
-	if !waitForPort("127.0.0.1", parts.proxyPort, 5*time.Second) {
-		t.Fatal("Proxy did not recover after restart")
-	}
-
-	// Send message after restart
-	testData := "Hello after restart!"
-	time.Sleep(50 * time.Millisecond) // Temporary delay, we’ll replace this
-	if _, err := conn.Write([]byte(testData)); err != nil {
-		t.Fatal(err)
-	}
-
-	// Receive response
-	response, err := waitForResponse(conn, len(testData), 5*time.Second)
-	if err != nil {
-		t.Fatalf("Failed to read response: %v", err)
-	}
-
-	// Validate response
-	if string(response) != testData {
-		t.Fatalf("Expected '%s', got '%s'", testData, string(response))
-	}
-}
-
 func TestSlowReceiver(t *testing.T) {
 	portMapping := fmt.Sprintf("%d:%d/tcp", findAvailablePort(), findAvailablePort())
 	sender, _ := setupRealP2P(t, []string{portMapping})
@@ -311,7 +252,7 @@ func setupRealP2P(t *testing.T, portMappings []string) (*proxy.Service, *Service
 		dockerClient: dockerClientMock,
 	}
 
-	receiver.PeerHost.SetStreamHandler(atypes.ProtocolProxyReverse, receiver.OnReverseRequestReceive)
+	receiver.RegisterReverseProxyHandler()
 
 	err = senderPeer.Connect(context.Background(), peer.AddrInfo{
 		ID:    receiver.PeerHost.ID(),

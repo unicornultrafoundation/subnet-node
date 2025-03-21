@@ -122,8 +122,12 @@ func parsePortRange(portStr string) ([]int, error) {
 	}
 
 	port, err := strconv.Atoi(portStr)
-	if err != nil || port < 1 || port > 65535 {
+	if err != nil || port > 65535 {
 		return nil, fmt.Errorf("invalid port number: %s", portStr)
+	}
+
+	if port < 1024 {
+		return nil, fmt.Errorf("port should not less than 1024, some system/kernel services will use that. You want to use port %s", portStr)
 	}
 
 	return []int{port}, nil

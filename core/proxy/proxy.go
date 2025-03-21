@@ -7,6 +7,7 @@ import (
 	"net"
 	"strings"
 
+	"github.com/libp2p/go-libp2p/core/protocol"
 	atypes "github.com/unicornultrafoundation/subnet-node/core/apps/types"
 )
 
@@ -50,18 +51,14 @@ func (s *Service) forwardTraffic(m PortMapping) {
 func (s *Service) handleTCPConnection(conn net.Conn, m PortMapping) {
 	defer conn.Close()
 
-	stream, err := s.PeerHost.NewStream(context.Background(), s.RemotePeerId, atypes.ProtocolProxyReverse)
+	// Encode metadata in the protocol name
+	protocolWithMeta := protocol.ID(fmt.Sprintf("%s/tcp/%s/%d", atypes.ProtocolProxyReverse, s.AppId, m.AppPort))
+	stream, err := s.PeerHost.NewStream(context.Background(), s.RemotePeerId, protocolWithMeta)
 	if err != nil {
 		log.Debugf("TCP: Failed to create P2P stream to peer %s (AppId: %s, AppPort: %d): %v", s.RemotePeerId.String(), s.AppId, m.AppPort, err)
 		return
 	}
 	defer stream.Close()
-
-	meta := fmt.Sprintf("tcp:%s:%d\n", s.AppId, m.AppPort)
-	if _, err := stream.Write([]byte(meta)); err != nil {
-		log.Debugf("TCP: Failed to send metadata to peer %s (AppId: %s, AppPort: %d): %v", s.RemotePeerId.String(), s.AppId, m.AppPort, err)
-		return
-	}
 
 	// Forward bidirectional TCP traffic
 	go io.Copy(stream, conn) // Client → P2P

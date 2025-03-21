@@ -102,7 +102,7 @@ func (s *Service) Start(ctx context.Context) error {
 		// Connect to docker daemon
 		enableProxy := s.cfg.GetBool("provider.proxy", true)
 		if enableProxy {
-			s.PeerHost.SetStreamHandler(atypes.ProtocolProxyReverse, s.OnReverseRequestReceive)
+			s.RegisterReverseProxyHandler()
 		}
 		s.statService = stats.NewStats(ctx, s.dockerClient)
 

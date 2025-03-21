@@ -1,7 +1,6 @@
 package apps
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"io"
@@ -10,27 +9,35 @@ import (
 	"strings"
 
 	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/protocol"
+	atypes "github.com/unicornultrafoundation/subnet-node/core/apps/types"
 )
+
+// Register a handler with a prefix matcher
+func (s *Service) RegisterReverseProxyHandler() {
+	s.PeerHost.SetStreamHandlerMatch(atypes.ProtocolProxyReverse, matchPrefix, s.OnReverseRequestReceive)
+}
+
+// Custom function to match protocol prefixes
+func matchPrefix(proto protocol.ID) bool {
+	parts := strings.Split(string(proto), "/")
+	return len(parts) >= 4 && strings.HasPrefix(string(proto), string(atypes.ProtocolProxyReverse)+"/")
+}
 
 // Reverse request to specific port inside an app in Docker container
 func (s *Service) OnReverseRequestReceive(stream network.Stream) {
 	defer stream.Close()
-	reader := bufio.NewReader(stream)
 
-	// Read metadata (protocol:AppId:AppPort)
-	metaLine, err := reader.ReadString('\n')
-	if err != nil {
-		writeErrorToStream(stream, "Failed to read metadata: "+err.Error())
+	// Extract metadata from protocol name
+	protocolParts := strings.Split(string(stream.Protocol()), "/")
+	if len(protocolParts) < 4 { // At least 4 parts for /{p2pPrefixProtocol}/{requestProtocol}/{appId}/{appPort}
+		writeErrorToStream(stream, "Invalid protocol format")
 		return
 	}
 
-	metaParts := strings.Split(strings.TrimSpace(metaLine), ":")
-	if len(metaParts) != 3 {
-		writeErrorToStream(stream, "Invalid metadata format")
-		return
-	}
-
-	protocol, appIdStr, appPort := metaParts[0], metaParts[1], metaParts[2]
+	protocol := protocolParts[len(protocolParts)-3]
+	appIdStr := protocolParts[len(protocolParts)-2]
+	appPort := protocolParts[len(protocolParts)-1]
 
 	// Parse AppId
 	appId := new(big.Int)
