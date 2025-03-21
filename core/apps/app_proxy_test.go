@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"sync"
 	"testing"
 	"time"
 
@@ -16,6 +17,251 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/core/docker"
 	"github.com/unicornultrafoundation/subnet-node/core/proxy"
 )
+
+// **Test: Multiple TCP Forwarding Cases**
+func TestMultipleTCPForwarding(t *testing.T) {
+	portMappings := []string{
+		fmt.Sprintf("%d:%d/tcp", findAvailablePort(), findAvailablePort()),
+		fmt.Sprintf("%d:%d/tcp", findAvailablePort(), findAvailablePort()),
+		fmt.Sprintf("%d:%d/tcp", findAvailablePort(), findAvailablePort()),
+	}
+
+	sender, _ := setupRealP2P(t, portMappings)
+	ctx := context.Background()
+	if err := sender.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	defer sender.Stop(ctx)
+
+	var wg sync.WaitGroup
+
+	for _, mapping := range portMappings {
+		parts := parsePortMapping(mapping)
+
+		wg.Add(1)
+		go func(proxyPort, targetPort int) {
+			defer wg.Done()
+			testTCPEcho(t, parts)
+		}(parts.proxyPort, parts.targetPort)
+	}
+
+	wg.Wait()
+}
+
+func TestMultipleClients(t *testing.T) {
+	// Start Proxy server
+	portMapping := fmt.Sprintf("%d:%d/tcp", findAvailablePort(), findAvailablePort())
+	sender, _ := setupRealP2P(t, []string{portMapping})
+	ctx := context.Background()
+	if err := sender.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	defer sender.Stop(ctx)
+
+	parts := parsePortMapping(portMapping)
+	numClients := 10
+	var wg sync.WaitGroup
+
+	// Start echo server
+	listener, err := startTCPEchoServer(parts.targetPort)
+	if err != nil {
+		t.Fatalf("Failed to start echo server: %v", err)
+	}
+	defer listener.Close()
+
+	// Wait until the server is ready
+	waitForServers(t, parts)
+
+	for i := 0; i < numClients; i++ {
+		wg.Add(1)
+		go func(clientID int) {
+			defer wg.Done()
+			testData := fmt.Sprintf("Client %d: Hello!", clientID)
+			conn, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", parts.proxyPort))
+			if err != nil {
+				t.Fatalf("Client %d failed to connect: %v", clientID, err)
+			}
+			defer conn.Close()
+
+			// Send data
+			time.Sleep(50 * time.Millisecond) // Temporary delay, we’ll replace this
+			if _, err := conn.Write([]byte(testData)); err != nil {
+				t.Fatalf("Client %d failed to send data: %v", clientID, err)
+			}
+
+			// Receive response
+			response, err := waitForResponse(conn, len(testData), 5*time.Second)
+			if err != nil {
+				t.Fatalf("Client %d failed to receive response: %v", clientID, err)
+			}
+
+			// Validate response
+			if string(response) != testData {
+				t.Fatalf("Client %d: expected '%s', got '%s'", clientID, testData, string(response))
+			}
+		}(i)
+	}
+
+	wg.Wait()
+}
+
+func TestLargeDataTransfer(t *testing.T) {
+	// Start Proxy server
+	portMapping := fmt.Sprintf("%d:%d/tcp", findAvailablePort(), findAvailablePort())
+	sender, _ := setupRealP2P(t, []string{portMapping})
+	ctx := context.Background()
+	if err := sender.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	defer sender.Stop(ctx)
+
+	parts := parsePortMapping(portMapping)
+
+	// Start Echo server
+	listener, err := startTCPEchoServer(parts.targetPort)
+	if err != nil {
+		t.Fatalf("Failed to start echo server: %v", err)
+	}
+	defer listener.Close()
+
+	// Wait until the server is ready
+	waitForServers(t, parts)
+
+	conn, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", parts.proxyPort))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+
+	// Generate a large payload (1MB)
+	largeData := make([]byte, 1024*1024)
+	for i := range largeData {
+		largeData[i] = byte(i % 256) // Fill with repeating byte pattern
+	}
+
+	// Send large data
+	time.Sleep(50 * time.Millisecond) // Temporary delay, we’ll replace this
+	if _, err := conn.Write(largeData); err != nil {
+		t.Fatal(err)
+	}
+
+	// Receive large response
+	response, err := waitForResponse(conn, len(largeData), 10*time.Second)
+	if err != nil {
+		t.Fatalf("Failed to read response: %v", err)
+	}
+
+	// Validate response integrity
+	if string(response) != string(largeData) {
+		t.Fatalf("Data mismatch: expected %d bytes, got %d bytes", len(largeData), len(response))
+	}
+}
+
+func TestProxyRestart(t *testing.T) {
+	portMapping := fmt.Sprintf("%d:%d/tcp", findAvailablePort(), findAvailablePort())
+	sender, _ := setupRealP2P(t, []string{portMapping})
+	ctx := context.Background()
+	if err := sender.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	parts := parsePortMapping(portMapping)
+
+	// Start echo server
+	listener, err := startTCPEchoServer(parts.targetPort)
+	if err != nil {
+		t.Fatalf("Failed to start echo server: %v", err)
+	}
+	defer listener.Close()
+
+	// Wait until the server is ready
+	waitForServers(t, parts)
+
+	// Establish connection
+	conn, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", parts.proxyPort))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+
+	// Restart proxy service
+	sender.Stop(ctx)
+	time.Sleep(5 * time.Second) // Allow clean shutdown
+	if err := sender.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait for proxy to be back online
+	if !waitForPort("127.0.0.1", parts.proxyPort, 5*time.Second) {
+		t.Fatal("Proxy did not recover after restart")
+	}
+
+	// Send message after restart
+	testData := "Hello after restart!"
+	time.Sleep(50 * time.Millisecond) // Temporary delay, we’ll replace this
+	if _, err := conn.Write([]byte(testData)); err != nil {
+		t.Fatal(err)
+	}
+
+	// Receive response
+	response, err := waitForResponse(conn, len(testData), 5*time.Second)
+	if err != nil {
+		t.Fatalf("Failed to read response: %v", err)
+	}
+
+	// Validate response
+	if string(response) != testData {
+		t.Fatalf("Expected '%s', got '%s'", testData, string(response))
+	}
+}
+
+func TestSlowReceiver(t *testing.T) {
+	portMapping := fmt.Sprintf("%d:%d/tcp", findAvailablePort(), findAvailablePort())
+	sender, _ := setupRealP2P(t, []string{portMapping})
+	ctx := context.Background()
+	if err := sender.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	defer sender.Stop(ctx)
+
+	parts := parsePortMapping(portMapping)
+
+	// Start a slow echo server
+	listener, err := startTCPEchoServer(parts.targetPort)
+	if err != nil {
+		t.Fatalf("Failed to start echo server: %v", err)
+	}
+	defer listener.Close()
+
+	// Wait until the server is ready
+	waitForServers(t, parts)
+
+	conn, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", parts.proxyPort))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+
+	testData := "Slow test!"
+	time.Sleep(50 * time.Millisecond) // Temporary delay, we’ll replace this
+	if _, err := conn.Write([]byte(testData)); err != nil {
+		t.Fatal(err)
+	}
+
+	// Simulate slow response
+	time.Sleep(3 * time.Second)
+
+	// Receive response
+	response, err := waitForResponse(conn, len(testData), 10*time.Second)
+	if err != nil {
+		t.Fatalf("Failed to read response: %v", err)
+	}
+
+	// Validate response
+	if string(response) != testData {
+		t.Fatalf("Expected '%s', got '%s'", testData, string(response))
+	}
+}
 
 // **Find Available Port**
 func findAvailablePort() int {
@@ -79,38 +325,11 @@ func setupRealP2P(t *testing.T, portMappings []string) (*proxy.Service, *Service
 	return sender, receiver
 }
 
-// **Test: Multiple TCP Forwarding Cases**
-func TestMultipleTCPForwarding(t *testing.T) {
-	portMappings := []string{
-		fmt.Sprintf("%d:%d/tcp", findAvailablePort(), findAvailablePort()),
-		// fmt.Sprintf("%d:%d/tcp", findAvailablePort(), findAvailablePort()),
-		// fmt.Sprintf("%d:%d/tcp", findAvailablePort(), findAvailablePort()),
-	}
-
-	sender, _ := setupRealP2P(t, portMappings)
-	ctx := context.Background()
-	if err := sender.Start(ctx); err != nil {
-		t.Fatal(err)
-	}
-	defer sender.Stop(ctx)
-
-	// var wg sync.WaitGroup
-
-	for _, mapping := range portMappings {
-		parts := parsePortMapping(mapping)
-
-		// wg.Add(1)
-		// go func(proxyPort, targetPort int) {
-		// 	defer wg.Done()
-		testTCPEcho(t, parts.proxyPort, parts.targetPort)
-		// 	}(parts.proxyPort, parts.targetPort)
-		// }
-	}
-	// wg.Wait()
-}
-
 // **Helper function to test TCP Echo**
-func testTCPEcho(t *testing.T, proxyPort, targetPort int) {
+func testTCPEcho(t *testing.T, parts portMapping) {
+	proxyPort := parts.proxyPort
+	targetPort := parts.targetPort
+
 	// Start the echo server
 	listener, err := startTCPEchoServer(targetPort)
 	if err != nil {
@@ -119,12 +338,7 @@ func testTCPEcho(t *testing.T, proxyPort, targetPort int) {
 	defer listener.Close()
 
 	// Wait until the server is ready
-	if !waitForPort("127.0.0.1", targetPort, 5*time.Second) {
-		t.Fatalf("Echo server did not start on port %d", targetPort)
-	}
-	if !waitForPort("127.0.0.1", proxyPort, 5*time.Second) {
-		t.Fatalf("Proxy server did not start on port %d", proxyPort)
-	}
+	waitForServers(t, parts)
 
 	conn, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", proxyPort))
 	if err != nil {
@@ -132,13 +346,8 @@ func testTCPEcho(t *testing.T, proxyPort, targetPort int) {
 	}
 	defer conn.Close()
 
+	time.Sleep(50 * time.Millisecond) // Temporary delay, we’ll replace this
 	testData := "Hello, P2P!"
-	// ✅ Check if connection is fully established before writing
-	log.Println("Connected to proxy, waiting for readiness...")
-
-	time.Sleep(1 * time.Second) // Temporary delay, we’ll replace this
-
-	log.Println("Proxy should be ready, sending data...")
 	if _, err := conn.Write([]byte(testData)); err != nil {
 		t.Fatal(err)
 	}
@@ -237,4 +446,13 @@ func waitForPort(host string, port int, timeout time.Duration) bool {
 		time.Sleep(200 * time.Millisecond)
 	}
 	return false
+}
+
+func waitForServers(t *testing.T, parts portMapping) {
+	if !waitForPort("127.0.0.1", parts.targetPort, 5*time.Second) {
+		t.Fatalf("Echo server did not start on port %d", parts.targetPort)
+	}
+	if !waitForPort("127.0.0.1", parts.proxyPort, 5*time.Second) {
+		t.Fatalf("Proxy server did not start on port %d", parts.proxyPort)
+	}
 }
