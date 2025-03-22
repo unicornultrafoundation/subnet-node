@@ -71,6 +71,8 @@ func TestMultipleClients(t *testing.T) {
 	// Wait until the server is ready
 	waitForServers(t, parts)
 
+	// Start multiple clients
+	errChan := make(chan error, numClients)
 	for i := 0; i < numClients; i++ {
 		wg.Add(1)
 		go func(clientID int) {
@@ -78,30 +80,38 @@ func TestMultipleClients(t *testing.T) {
 			testData := fmt.Sprintf("Client %d: Hello!", clientID)
 			conn, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", parts.proxyPort))
 			if err != nil {
-				t.Fatalf("Client %d failed to connect: %v", clientID, err)
+				errChan <- fmt.Errorf("Client %d failed to connect: %v", clientID, err)
 			}
 			defer conn.Close()
 
 			// Send data
 			time.Sleep(50 * time.Millisecond) // Temporary delay, we’ll replace this
 			if _, err := conn.Write([]byte(testData)); err != nil {
-				t.Fatalf("Client %d failed to send data: %v", clientID, err)
+				errChan <- fmt.Errorf("Client %d failed to send data: %v", clientID, err)
 			}
 
 			// Receive response
 			response, err := waitForResponse(conn, len(testData), 5*time.Second)
 			if err != nil {
-				t.Fatalf("Client %d failed to receive response: %v", clientID, err)
+				errChan <- fmt.Errorf("Client %d failed to receive response: %v", clientID, err)
 			}
 
 			// Validate response
 			if string(response) != testData {
-				t.Fatalf("Client %d: expected '%s', got '%s'", clientID, testData, string(response))
+				errChan <- fmt.Errorf("Client %d: expected '%s', got '%s'", clientID, testData, string(response))
 			}
 		}(i)
 	}
 
-	wg.Wait()
+	// Wait for all goroutines to finish, then close errChan
+	go func() {
+		wg.Wait()
+		close(errChan)
+	}()
+
+	if err := <-errChan; err != nil {
+		t.Fatalf("Test failed: %v", err)
+	}
 }
 
 func TestLargeDataTransfer(t *testing.T) {
@@ -238,14 +248,25 @@ func setupRealP2P(t *testing.T, portMappings []string) (*proxy.Service, *Service
 	senderCfg := &config.C{
 		Settings: map[interface{}]interface{}{
 			"proxy": map[interface{}]interface{}{
-				"enable":  true,
-				"peer_id": receiverPeer.ID().String(),
-				"app_id":  1,
-				"ports":   portMappings,
+				"enable": true,
+				"peers": []interface{}{
+					map[interface{}]interface{}{
+						"id": receiverPeer.ID().String(),
+						"apps": []interface{}{
+							map[interface{}]interface{}{
+								"id":    "1",
+								"ports": toInterfaceSlice(portMappings),
+							},
+						},
+					},
+				},
 			},
 		},
 	}
-	sender := proxy.New(senderPeer, senderPeer.ID(), senderCfg)
+	sender, err := proxy.New(senderPeer, senderPeer.ID(), senderCfg)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	receiver := &Service{
 		PeerHost:     receiverPeer,
@@ -396,4 +417,12 @@ func waitForServers(t *testing.T, parts portMapping) {
 	if !waitForPort("127.0.0.1", parts.proxyPort, 5*time.Second) {
 		t.Fatalf("Proxy server did not start on port %d", parts.proxyPort)
 	}
+}
+
+func toInterfaceSlice[T any](input []T) []interface{} {
+	result := make([]interface{}, len(input))
+	for i, v := range input {
+		result[i] = v
+	}
+	return result
 }

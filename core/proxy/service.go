@@ -14,62 +14,45 @@ import (
 var log = logrus.WithField("service", "proxy")
 
 type Service struct {
-	PeerId       peer.ID
-	Cfg          *config.C
-	PeerHost     p2phost.Host `optional:"true"` // the network host (server+client)
-	IsEnable     bool
-	Ports        []PortMapping
-	RemotePeerId peer.ID
-	AppId        string
+	PeerId   peer.ID
+	Cfg      *config.C
+	PeerHost p2phost.Host // the network host (server+client)
+	IsEnable bool
+	ProxyCfg ProxyConfig
 
 	stopChan chan struct{} // Channel to stop background tasks
 }
 
 // Initializes the Peer Service.
-func New(peerHost p2phost.Host, peerId peer.ID, cfg *config.C) *Service {
+func New(peerHost p2phost.Host, peerId peer.ID, cfg *config.C) (*Service, error) {
+	parsedConfig, err := ParseProxyConfig(cfg.GetMap("proxy", map[interface{}]interface{}{}))
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse proxy config: %v", err)
+	}
+
 	return &Service{
 		PeerId:   peerId,
 		PeerHost: peerHost,
 		Cfg:      cfg,
 		IsEnable: cfg.GetBool("proxy.enable", false),
-		AppId:    cfg.GetString("proxy.app_id", ""),
+		ProxyCfg: parsedConfig,
 		stopChan: make(chan struct{}),
-	}
+	}, nil
 }
 
 func (s *Service) Start(ctx context.Context) error {
-	if !s.IsEnable {
+	if !s.IsEnable || len(s.ProxyCfg.Peers) == 0 {
 		return nil
 	}
 
-	encodedPeerId := s.Cfg.GetString("proxy.peer_id", "")
-	if encodedPeerId == "" || len(encodedPeerId) == 0 {
-		return fmt.Errorf("proxy.peer_id was not set in config")
-	}
-	peerId, err := peer.Decode(encodedPeerId)
-	if err != nil {
-		return fmt.Errorf("failed to decode peerID %s: %v", encodedPeerId, err)
-	}
-	s.RemotePeerId = peerId
-
-	if s.AppId == "" || len(s.AppId) == 0 {
-		return fmt.Errorf("proxy.app_id was not set in config")
-	}
-
-	// Valdiate port mapping
-	portMappings := s.Cfg.GetStrings("proxy.ports", []string{})
-	if len(portMappings) == 0 {
-		return fmt.Errorf("proxy.ports was not set in config")
-	}
-	s.Ports, err = ParsePortMappings(portMappings)
-
-	if err != nil {
-		return fmt.Errorf("failed to parse port mapping from Proxy Service config: %v", err)
-	}
-
 	// Start forwarding traffic for each mapping
-	for _, mapping := range s.Ports {
-		go s.forwardTraffic(mapping)
+	for _, peer := range s.ProxyCfg.Peers {
+		for _, app := range peer.Apps {
+			for _, ports := range app.ParsedPorts {
+				go s.forwardTraffic(peer.ParsedId, app.ID, ports)
+			}
+		}
 	}
 
 	log.Info("Proxy Service started successfully.")
@@ -77,7 +60,7 @@ func (s *Service) Start(ctx context.Context) error {
 }
 
 func (s *Service) Stop(ctx context.Context) error {
-	if !s.IsEnable {
+	if !s.IsEnable || len(s.ProxyCfg.Peers) == 0 {
 		return nil
 	}
 

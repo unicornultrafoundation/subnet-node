@@ -6,14 +6,6 @@ import (
 	"strings"
 )
 
-// PortMapping represents a parsed port mapping
-type PortMapping struct {
-	HostIP    string
-	LocalPort int
-	AppPort   int
-	Protocol  string
-}
-
 // List of valid network protocols based on net/dial.go
 var validProtocols = map[string]bool{
 	"tcp": true, "tcp4": true, "tcp6": true,
