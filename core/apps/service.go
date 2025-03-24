@@ -19,8 +19,6 @@ import (
 	"github.com/shirou/gopsutil/disk"
 	"github.com/shirou/gopsutil/mem"
 
-	dockerCli "github.com/docker/docker/client"
-
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ipfs/go-datastore"
 	p2phost "github.com/libp2p/go-libp2p/core/host"
@@ -29,6 +27,7 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/config"
 	"github.com/unicornultrafoundation/subnet-node/core/account"
 	"github.com/unicornultrafoundation/subnet-node/core/apps/verifier"
+	"github.com/unicornultrafoundation/subnet-node/core/docker"
 
 	"github.com/moby/moby/errdefs"
 	"github.com/unicornultrafoundation/subnet-node/core/apps/stats"
@@ -48,7 +47,8 @@ type Service struct {
 	IsVerifier            bool
 	cfg                   *config.C
 	ethClient             *ethclient.Client
-	dockerClient          *dockerCli.Client
+	dockerClient          docker.DockerClient
+	dockerService         *docker.Service
 	P2P                   *p2p.P2P
 	PeerHost              p2phost.Host  `optional:"true"` // the network host (server+client)
 	stopChan              chan struct{} // Channel to stop background tasks
@@ -66,7 +66,7 @@ type Service struct {
 }
 
 // Initializes the Service with Ethereum and docker clients.
-func New(peerHost p2phost.Host, peerId peer.ID, cfg *config.C, P2P *p2p.P2P, ds datastore.Datastore, acc *account.AccountService) *Service {
+func New(peerHost p2phost.Host, peerId peer.ID, cfg *config.C, P2P *p2p.P2P, ds datastore.Datastore, acc *account.AccountService, docker *docker.Service) *Service {
 	return &Service{
 		peerId:                peerId,
 		PeerHost:              peerHost,
@@ -78,6 +78,7 @@ func New(peerHost p2phost.Host, peerId peer.ID, cfg *config.C, P2P *p2p.P2P, ds 
 		stopChan:              make(chan struct{}),
 		accountService:        acc,
 		ethClient:             acc.GetClient(),
+		dockerClient:          *docker.GetClient(),
 		signatureResponseChan: make(chan *pvtypes.SignatureResponse, 100),
 		gitHubAppCache:        cache.New(1*time.Minute, 2*time.Minute),
 		subnetAppCache:        cache.New(1*time.Minute, 2*time.Minute),
@@ -99,10 +100,9 @@ func (s *Service) Start(ctx context.Context) error {
 		s.PeerHost.SetStreamHandler(atypes.ProtocollAppSignatureReceive, s.onSignatureReceive)
 
 		// Connect to docker daemon
-		var err error
-		s.dockerClient, err = dockerCli.NewClientWithOpts(dockerCli.FromEnv, dockerCli.WithAPIVersionNegotiation())
-		if err != nil {
-			return fmt.Errorf("error connecting to docker: %v", err)
+		enableProxy := s.cfg.GetBool("provider.proxy", true)
+		if enableProxy {
+			s.RegisterReverseProxyHandler()
 		}
 		s.statService = stats.NewStats(ctx, s.dockerClient)
 
@@ -262,7 +262,8 @@ func (s *Service) getGitHubAppByID(id int64) (*GitHubApp, error) {
 		return cachedApp.(*GitHubApp), nil
 	}
 
-	gitHubApps, err := s.getGitHubApps(gitHubAppsURL)
+	githubAppsURL := s.cfg.GetString("apps.github_apps", DefaultGithubAppsURL)
+	gitHubApps, err := s.getGitHubApps(githubAppsURL)
 	if err != nil {
 		return nil, err
 	}
