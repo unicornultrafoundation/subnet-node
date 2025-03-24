@@ -3,11 +3,8 @@ package apps
 import (
 	"context"
 	"fmt"
-	"strings"
+	"math/big"
 	"time"
-
-	ctypes "github.com/docker/docker/api/types/container"
-	atypes "github.com/unicornultrafoundation/subnet-node/core/apps/types"
 )
 
 func (s *Service) startUpgradeAppVersion(ctx context.Context) {
@@ -30,23 +27,17 @@ func (s *Service) startUpgradeAppVersion(ctx context.Context) {
 }
 
 func (s *Service) upgradeAppVersion(ctx context.Context) error {
-	containers, err := s.dockerClient.ContainerList(ctx, ctypes.ListOptions{})
+	runningAppList, err := s.GetRunningAppListProto(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to fetch running containers: %v", err)
+		return fmt.Errorf("failed to fetch running app list for upgrading: %v", err)
 	}
 
-	for _, container := range containers {
-		// Get container ID (assuming appID is same as container ID)
-		containerId := strings.TrimPrefix(container.Names[0], "/")
+	for _, appIdBytes := range runningAppList.AppIds {
+		appId := new(big.Int).SetBytes(appIdBytes)
 
-		if !strings.HasPrefix(containerId, "subnet-") {
-			continue
-		}
-
-		appId, err := atypes.GetAppIdFromContainerId(containerId)
-
+		container, err := s.ContainerInspect(ctx, appId)
 		if err != nil {
-			log.Debugf("Failed to get appId from containerId %s: %v", containerId, err)
+			log.Debugf("Failed to get container from appId %s: %v", appId, err)
 			continue
 		}
 

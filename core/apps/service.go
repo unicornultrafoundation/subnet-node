@@ -106,7 +106,7 @@ func (s *Service) Start(ctx context.Context) error {
 		}
 		s.statService = stats.NewStats(ctx, s.dockerClient)
 
-		s.RestartStoppedContainers(ctx)
+		s.RestartInactiveApps(ctx)
 		s.upgradeAppVersion(ctx)
 
 		// Start app sub-services

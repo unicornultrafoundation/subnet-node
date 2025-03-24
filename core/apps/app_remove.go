@@ -83,6 +83,8 @@ func (s *Service) RemoveApp(ctx context.Context, appId *big.Int) (*atypes.App, e
 
 	s.setNodeResourceUsage(newResourceUsage)
 
+	s.RemoveRunningApp(ctx, appId)
+
 	return app, nil
 
 }
