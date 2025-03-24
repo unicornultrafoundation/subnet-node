@@ -15,6 +15,12 @@ import (
 const RUNNING_APP_LIST_KEY = "running-apps"
 
 func (s *Service) GetRunningAppListProto(ctx context.Context) (*pbapp.AppRunningList, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.getRunningAppListProto(ctx)
+}
+
+func (s *Service) getRunningAppListProto(ctx context.Context) (*pbapp.AppRunningList, error) {
 	runningAppListKey := datastore.NewKey(RUNNING_APP_LIST_KEY)
 	runningAppListData, err := s.Datastore.Get(ctx, runningAppListKey)
 	if err != nil {
@@ -34,6 +40,13 @@ func (s *Service) GetRunningAppListProto(ctx context.Context) (*pbapp.AppRunning
 }
 
 func (s *Service) SaveRunningAppListProto(ctx context.Context, appList *pbapp.AppRunningList) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return s.saveRunningAppListProto(ctx, appList)
+}
+
+func (s *Service) saveRunningAppListProto(ctx context.Context, appList *pbapp.AppRunningList) error {
 	runningAppList, err := proto.Marshal(appList)
 	if err != nil {
 		return fmt.Errorf("failed to marshal running app list: %w", err)
@@ -48,7 +61,9 @@ func (s *Service) SaveRunningAppListProto(ctx context.Context, appList *pbapp.Ap
 }
 
 func (s *Service) AddNewRunningApp(ctx context.Context, appId *big.Int) error {
-	runningAppList, err := s.GetRunningAppListProto(ctx)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	runningAppList, err := s.getRunningAppListProto(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to add new running app: %v", appId)
 	}
@@ -63,7 +78,7 @@ func (s *Service) AddNewRunningApp(ctx context.Context, appId *big.Int) error {
 	runningAppList.AppIds = append(runningAppList.AppIds, appIdBytes)
 
 	// Save the updated list
-	err = s.SaveRunningAppListProto(ctx, runningAppList)
+	err = s.saveRunningAppListProto(ctx, runningAppList)
 	if err != nil {
 		return fmt.Errorf("failed to update running app list: %w", err)
 	}
@@ -72,7 +87,9 @@ func (s *Service) AddNewRunningApp(ctx context.Context, appId *big.Int) error {
 }
 
 func (s *Service) RemoveRunningApp(ctx context.Context, appId *big.Int) error {
-	runningAppList, err := s.GetRunningAppListProto(ctx)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	runningAppList, err := s.getRunningAppListProto(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to add new running app: %v", appId)
 	}
@@ -95,7 +112,7 @@ func (s *Service) RemoveRunningApp(ctx context.Context, appId *big.Int) error {
 	runningAppList.AppIds = newAppIds
 
 	// Save the updated list
-	err = s.SaveRunningAppListProto(ctx, runningAppList)
+	err = s.saveRunningAppListProto(ctx, runningAppList)
 	if err != nil {
 		return fmt.Errorf("failed to update running app list: %w", err)
 	}

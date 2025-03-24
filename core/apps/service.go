@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"runtime"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/dustin/go-humanize"
@@ -42,6 +43,7 @@ var log = logrus.WithField("service", "apps")
 const RESOURCE_USAGE_KEY = "resource-usage-v2"
 
 type Service struct {
+	mu                    sync.Mutex
 	peerId                peer.ID
 	IsProvider            bool
 	IsVerifier            bool
