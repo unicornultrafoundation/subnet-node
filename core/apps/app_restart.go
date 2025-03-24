@@ -27,6 +27,7 @@ func (s *Service) RestartInactiveApps(ctx context.Context) error {
 		}
 
 		if status != atypes.Running {
+			log.Infof("AppId %v is somehow not running as expected. Restarting...", appId)
 			err := s.RestartContainer(ctx, appId)
 
 			if err != nil {

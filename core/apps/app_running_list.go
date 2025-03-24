@@ -3,6 +3,7 @@ package apps
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"math/big"
 
@@ -17,6 +18,10 @@ func (s *Service) GetRunningAppListProto(ctx context.Context) (*pbapp.AppRunning
 	runningAppListKey := datastore.NewKey(RUNNING_APP_LIST_KEY)
 	runningAppListData, err := s.Datastore.Get(ctx, runningAppListKey)
 	if err != nil {
+		if errors.Is(err, datastore.ErrNotFound) {
+			// Return an empty list instead of an error
+			return &pbapp.AppRunningList{AppIds: [][]byte{}}, nil
+		}
 		return nil, err
 	}
 
