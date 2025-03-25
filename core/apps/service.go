@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"runtime"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/dustin/go-humanize"
@@ -42,6 +43,7 @@ var log = logrus.WithField("service", "apps")
 const RESOURCE_USAGE_KEY = "resource-usage-v2"
 
 type Service struct {
+	mu                    sync.Mutex
 	peerId                peer.ID
 	IsProvider            bool
 	IsVerifier            bool
@@ -106,7 +108,7 @@ func (s *Service) Start(ctx context.Context) error {
 		}
 		s.statService = stats.NewStats(ctx, s.dockerClient)
 
-		s.RestartStoppedContainers(ctx)
+		s.RestartInactiveApps(ctx)
 		s.upgradeAppVersion(ctx)
 
 		// Start app sub-services
