@@ -21,6 +21,7 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/core/account"
 	"github.com/unicornultrafoundation/subnet-node/core/apps"
 	"github.com/unicornultrafoundation/subnet-node/core/node/resource"
+	"github.com/unicornultrafoundation/subnet-node/core/peers"
 	"github.com/unicornultrafoundation/subnet-node/p2p"
 	"github.com/unicornultrafoundation/subnet-node/repo"
 	irouting "github.com/unicornultrafoundation/subnet-node/routing"
@@ -46,6 +47,7 @@ type SubnetNode struct {
 	Resource        *resource.Service       `optional:"true"`
 	Apps            *apps.Service           `optional:"true"`
 	Account         *account.AccountService `optional:"true"`
+	Peers           *peers.Service          `optional:"true"`
 
 	// Online
 	PeerHost     p2phost.Host               `optional:"true"` // the network host (server+client)
