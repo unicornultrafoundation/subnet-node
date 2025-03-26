@@ -1,0 +1,7 @@
+query GetAppPeers($id: ID!) {
+  appPeers(where: { app: $id }) {
+    peer {
+      peerId
+    }
+  }
+}

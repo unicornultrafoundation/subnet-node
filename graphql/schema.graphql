@@ -1,0 +1,101 @@
+scalar Bytes
+scalar BigInt
+directive @derivedFrom(field: String!) on FIELD_DEFINITION
+directive @entity on OBJECT
+
+type Query {
+  appPeers(where: AppPeerFilter!): [AppPeer!]!
+}
+
+input AppPeerFilter {
+  app: ID!
+}
+
+type Provider @entity {
+  id: ID!
+  providerName: String!
+  metadata: String!
+  operator: Bytes!
+  website: String!
+  owner: Owner!
+  deleted: Boolean!
+  usages: [Usage!]! @derivedFrom(field: "provider")
+  peerNodes: [PeerNode!]! @derivedFrom(field: "provider")
+  apps: [AppProvider!]! @derivedFrom(field: "provider")
+}
+
+type PeerNode @entity {
+  id: ID!
+  peerId: String!
+  provider: Provider!
+  metadata: String!
+  usages: [Usage!]! @derivedFrom(field: "peer")
+  apps: [AppPeer!]! @derivedFrom(field: "peer")
+}
+
+type Owner @entity {
+  id: ID!
+  address: Bytes!
+  providers: [Provider!]! @derivedFrom(field: "owner")
+}
+
+type Usage @entity {
+  id: ID!
+  provider: Provider!
+  app: App!
+  peer: PeerNode!
+  duration: BigInt!
+  usedCpu: BigInt!
+  usedGpu: BigInt!
+  usedMemory: BigInt!
+  usedStorage: BigInt!
+  usedDownloadBytes: BigInt!
+  usedUploadBytes: BigInt!
+  timestamp: BigInt!
+  reward: BigInt!
+}
+
+type App @entity {
+  id: ID!
+  name: String!
+  symbol: String!
+  owner: Bytes!
+  budget: BigInt!
+  spentBudget: BigInt!
+  paymentToken: Bytes!
+  peerCount: BigInt!
+  providerCount: BigInt!
+  usages: [Usage!]! @derivedFrom(field: "app")
+  providers: [AppProvider!]! @derivedFrom(field: "app")
+  peers: [AppPeer!]! @derivedFrom(field: "app")
+}
+
+type AppProvider @entity {
+  id: ID!
+  provider: Provider!
+  app: App!
+  pendingReward: BigInt!
+  lockedReward: BigInt!
+  claimedReward: BigInt!
+  unlockTime: BigInt!
+}
+
+type AppPeer @entity {
+  id: ID!
+  peer: PeerNode!
+  app: App!
+  reward: BigInt!
+}
+
+type TotalUsage @entity {
+  id: ID!
+  totalCpu: BigInt!
+  totalGpu: BigInt!
+  totalMemory: BigInt!
+  totalStorage: BigInt!
+  totalDownloadBytes: BigInt!
+  totalUploadBytes: BigInt!
+  totalDuration: BigInt!
+  totalPeerCount: BigInt!
+  totalProviderCount: BigInt!
+}
