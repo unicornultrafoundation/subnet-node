@@ -2,8 +2,6 @@ syntax = "proto3";
 
 package subnet.app;
 
-import "google/protobuf/wrappers.proto";
-
 message App {
   string id = 1;
   repeated string peer_ids = 2;
@@ -72,6 +70,10 @@ message ContainerConfig {
 }
 
 message Resources {
+  Requests requests = 1;
+}
+
+message Requests {
   string cpu = 1;
   string memory = 2;
   string storage = 3;
@@ -100,4 +102,8 @@ message SignatureRequest {
 
 message SignatureResponse {
   bytes signature = 1;
+}
+
+message AppRunningList {
+  repeated bytes app_ids = 1;
 }

@@ -22,6 +22,7 @@ import (
 
 var log = logrus.WithField("service", "apps")
 
+const ProtocolProxyReverse = protocol.ID("/x/proxy/reverse/0.0.1")
 const ProtocolAppVerifierUsageReport = protocol.ID("/x/app/verifier/usagereport/0.0.1")
 const ProtocolAppSignatureRequest = protocol.ID("/x/app/verifier/signreq/0.0.1")
 const ProtocollAppSignatureReceive = protocol.ID("/x/app/verifier/signrev/0.0.1")
@@ -35,7 +36,7 @@ type ProcessStatus string
 const (
 	// Running indicates the process is currently executing
 	Running ProcessStatus = "running"
-	// Created indicates the process has been created within containerd but the
+	// Created indicates the process has been created but the
 	// user's defined process has not started
 	Created ProcessStatus = "created"
 	// Stopped indicates that the process has ran and exited
@@ -48,6 +49,26 @@ const (
 	// Unknown indicates that we could not determine the status from the runtime
 	Unknown  ProcessStatus = "unknown"
 	NotFound ProcessStatus = "notfound"
+)
+
+const (
+	// Running indicates the process is currently executing
+	DockerRunning string = "running"
+	// Created indicates the process has been created within Docker but the
+	// user's defined process has not started
+	DockerCreated string = "created"
+	// Exited indicates that the process has ran and exited
+	DockerExited string = "exited"
+	// Paused indicates that the process is currently paused
+	DockerPaused string = "paused"
+	// Restarting indicates that the process is currently stopping
+	// and will start again soon
+	DockerRestarting string = "restarting"
+	// Removing indicates that we could not determine the status from the runtime
+	DockerRemoving string = "removing"
+	DockerDead     string = "dead"
+	DockerUnknown  string = "unknown"
+	DockerNotFound string = "notfound"
 )
 
 type App struct {
@@ -136,6 +157,10 @@ type ContainerConfig struct {
 }
 
 type Resources struct {
+	Requests Requests `json:"requests"`
+}
+
+type Requests struct {
 	CPU     string `json:"cpu"`
 	Memory  string `json:"memory"`
 	Storage string `json:"storage"`
@@ -149,6 +174,13 @@ type Port struct {
 type Volume struct {
 	Name      string `json:"name"`
 	MountPath string `json:"mountPath"`
+}
+
+// DeviceCapability represents the hardware capabilities of the device
+type DeviceCapability struct {
+	AvailableCPU     *big.Int `json:"availableCpu"`     // Available CPU cores
+	AvailableMemory  *big.Int `json:"availableMemory"`  // Available memory in bytes
+	AvailableStorage *big.Int `json:"availableStorage"` // Available storage in bytes
 }
 
 func decodeAndParseMetadata(encodedMetadata string) (*AppMetadata, error) {
@@ -424,9 +456,11 @@ func ProtoToAppMetadata(protoMetadata *pbapp.AppMetadata) *AppMetadata {
 			Command: protoMetadata.ContainerConfig.Command,
 			Env:     protoMetadata.ContainerConfig.Env,
 			Resources: Resources{
-				CPU:     protoMetadata.ContainerConfig.Resources.Cpu,
-				Memory:  protoMetadata.ContainerConfig.Resources.Memory,
-				Storage: protoMetadata.ContainerConfig.Resources.Storage,
+				Requests: Requests{
+					CPU:     protoMetadata.ContainerConfig.Resources.Requests.Cpu,
+					Memory:  protoMetadata.ContainerConfig.Resources.Requests.Memory,
+					Storage: protoMetadata.ContainerConfig.Resources.Requests.Storage,
+				},
 			},
 			Ports:   ProtoToPorts(protoMetadata.ContainerConfig.Ports),
 			Volumes: ProtoToVolumes(protoMetadata.ContainerConfig.Volumes),
@@ -453,9 +487,11 @@ func AppMetadataToProto(metadata *AppMetadata) *pbapp.AppMetadata {
 			Command: metadata.ContainerConfig.Command,
 			Env:     metadata.ContainerConfig.Env,
 			Resources: &pbapp.Resources{
-				Cpu:     metadata.ContainerConfig.Resources.CPU,
-				Memory:  metadata.ContainerConfig.Resources.Memory,
-				Storage: metadata.ContainerConfig.Resources.Storage,
+				Requests: &pbapp.Requests{
+					Cpu:     metadata.ContainerConfig.Resources.Requests.CPU,
+					Memory:  metadata.ContainerConfig.Resources.Requests.Memory,
+					Storage: metadata.ContainerConfig.Resources.Requests.Storage,
+				},
 			},
 			Ports:   PortsToProto(metadata.ContainerConfig.Ports),
 			Volumes: VolumesToProto(metadata.ContainerConfig.Volumes),

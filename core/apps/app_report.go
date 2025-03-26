@@ -5,10 +5,11 @@ import (
 	"io"
 	"math/big"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
-	"github.com/containerd/containerd/namespaces"
+	ctypes "github.com/docker/docker/api/types/container"
 	ggio "github.com/gogo/protobuf/io"
 	"github.com/gogo/protobuf/proto"
 	"github.com/libp2p/go-libp2p/core/network"
@@ -41,9 +42,8 @@ func (s *Service) startReportLoop(ctx context.Context) {
 
 func (s *Service) reportAllRunningContainers(ctx context.Context) {
 	// Fetch all running containers
-	containers, err := s.containerdClient.Containers(namespaces.WithNamespace(ctx, NAMESPACE))
+	containers, err := s.dockerClient.ContainerList(ctx, ctypes.ListOptions{})
 	if err != nil {
-		log.Errorf("Failed to fetch running containers: %v", err)
 		return
 	}
 
@@ -54,7 +54,11 @@ func (s *Service) reportAllRunningContainers(ctx context.Context) {
 	containerChan := make(chan string, len(containers))
 
 	for _, container := range containers {
-		containerChan <- container.ID()
+		containerId := strings.TrimPrefix(container.Names[0], "/")
+		if !strings.HasPrefix(containerId, "subnet-") {
+			continue
+		}
+		containerChan <- containerId
 	}
 	close(containerChan)
 
@@ -80,7 +84,7 @@ func (s *Service) processReportContainer(ctx context.Context, containerId string
 	providerId := big.NewInt(s.accountService.ProviderID())
 
 	if err != nil {
-		log.Errorf("Failed to get appId from containerId %s: %v", containerId, err)
+		log.Debugf("Failed to get appId from containerId %s: %v", containerId, err)
 		return
 	}
 

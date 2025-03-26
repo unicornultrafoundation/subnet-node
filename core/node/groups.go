@@ -8,12 +8,15 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p-pubsub/timecache"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/config"
 	"github.com/unicornultrafoundation/subnet-node/core/account"
 	"github.com/unicornultrafoundation/subnet-node/core/node/libp2p"
 	"github.com/unicornultrafoundation/subnet-node/p2p"
 	"go.uber.org/fx"
 )
+
+var log = logrus.WithField("core", "node")
 
 var BaseLibP2P = fx.Options(
 	fx.Provide(libp2p.PNet),
@@ -66,10 +69,72 @@ func LibP2P(bcfg *BuildCfg, cfg *config.C) fx.Option {
 		}
 	}
 
-	enableAutoTLS := cfg.GetBool("autotls.enabled", false)
+	enableAutoTLS := cfg.GetBool("autotls.enabled", true)
+	enableWebsocketTransport := cfg.GetBool("swarm.network.websocket", true)
+	enableTCPTransport := cfg.GetBool("swarm.network.tcp", true)
 	enableRelayTransport := cfg.GetBool("swarm.transports.network.relay", true)
 	enableRelayService := cfg.GetBool("swarm.relay_service.enabled", enableRelayTransport)
 	enableRelayClient := cfg.GetBool("swarm.relay_client.enabled", enableRelayService)
+	//enableAutoWSS := cfg.GetBool("autotls.auto_wss", true)
+	swarm := cfg.GetStringSlice("addresses.swarm", []string{})
+
+	switch {
+	case enableAutoTLS && enableTCPTransport && enableWebsocketTransport:
+		// cfg.GetString("autotls.domain_suffix", p2pforge.DefaultForgeDomain)
+		// // AutoTLS for Secure WebSockets: ensure WSS listeners are in place (manual or automatic)
+		// wssWildcard := fmt.Sprintf("/tls/sni/*.%s/ws", cfg.GetString("autotls.domain_suffix", p2pforge.DefaultForgeDomain))
+		// wssWildcardPresent := false
+		// customWsPresent := false
+		// customWsRegex := regexp.MustCompile(`/wss?$`)
+		// tcpRegex := regexp.MustCompile(`/tcp/\d+$`)
+
+		// // inspect listeners defined in config at Addresses.Swarm
+		// var tcpListeners []string
+		// for _, listener := range swarm {
+		// 	// detect if user manually added /tls/sni/.../ws listener matching AutoTLS.DomainSuffix
+		// 	if strings.Contains(listener, wssWildcard) {
+		// 		log.Infof("found compatible wildcard listener in Addresses.Swarm. AutoTLS will be used on %s", listener)
+		// 		wssWildcardPresent = true
+		// 		break
+		// 	}
+		// 	// detect if user manually added own /ws or /wss listener that is
+		// 	// not related to AutoTLS feature
+		// 	if customWsRegex.MatchString(listener) {
+		// 		log.Infof("found custom /ws listener set by user in Addresses.Swarm. AutoTLS will not be used on %s.", listener)
+		// 		customWsPresent = true
+		// 		break
+		// 	}
+		// 	// else, remember /tcp listeners that can be reused for /tls/sni/../ws
+		// 	if tcpRegex.MatchString(listener) {
+		// 		tcpListeners = append(tcpListeners, listener)
+		// 	}
+		// }
+
+		// // Append AutoTLS's wildcard listener
+		// // if no manual /ws listener was set by the user
+		// if enableAutoWSS && !wssWildcardPresent && !customWsPresent {
+		// 	if len(tcpListeners) == 0 {
+		// 		log.Error("Invalid configuration, AutoTLS will be disabled: AutoTLS.AutoWSS=true requires at least one /tcp listener present in Addresses.Swarm, see https://github.com/ipfs/kubo/blob/master/docs/config.md#autotls")
+		// 		enableAutoTLS = false
+		// 	}
+		// 	for _, tcpListener := range tcpListeners {
+		// 		wssListener := tcpListener + wssWildcard
+		// 		swarm = append(swarm, wssListener)
+		// 		log.Infof("appended AutoWSS listener: %s", wssListener)
+		// 	}
+		// }
+
+		// if !wssWildcardPresent && !enableAutoWSS {
+		// 	log.Error(fmt.Sprintf("Invalid configuration, AutoTLS will be disabled: AutoTLS.Enabled=true requires a /tcp listener ending with %q to be present in Addresses.Swarm or AutoTLS.AutoWSS=true, see https://github.com/ipfs/kubo/blob/master/docs/config.md#autotls", wssWildcard))
+		// 	enableAutoTLS = false
+		// }
+	case enableAutoTLS && !enableTCPTransport:
+		log.Errorf("Invalid configuration: AutoTLS.Enabled=true requires swarm.network.tcp to be true as well. AutoTLS will be disabled.")
+		enableAutoTLS = false
+	case enableAutoTLS && !enableWebsocketTransport:
+		log.Errorf("Invalid configuration: AutoTLS.Enabled=true requires swarm.network.websocket to be true as well. AutoTLS will be disabled.")
+		enableAutoTLS = false
+	}
 
 	// Gather all the options
 	opts := fx.Options(
@@ -83,7 +148,7 @@ func LibP2P(bcfg *BuildCfg, cfg *config.C) fx.Option {
 		fx.Provide(libp2p.RelayTransport(enableRelayTransport)),
 		fx.Provide(libp2p.RelayService(enableRelayService, cfg)),
 		fx.Provide(libp2p.Transports(cfg)),
-		fx.Provide(libp2p.ListenOn(cfg)),
+		fx.Provide(libp2p.ListenOn(swarm)),
 		fx.Invoke(libp2p.SetupDiscovery(cfg.GetBool("discovery.mdns.enabled", true))),
 		fx.Provide(libp2p.ForceReachability(cfg)),
 		fx.Provide(libp2p.HolePunching(cfg, enableRelayClient)),
@@ -172,7 +237,10 @@ func Storage(bcfg *BuildCfg) fx.Option {
 func Core(cfg *config.C) fx.Option {
 	return fx.Options(
 		fx.Provide(ResourceService),
+		fx.Invoke(ProxyService),
+		fx.Provide(PeerService),
 		fx.Provide(AppService),
+		fx.Provide(DockerService),
 		fx.Provide(account.EthereumService),
 	)
 }

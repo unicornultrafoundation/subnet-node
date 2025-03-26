@@ -8,7 +8,7 @@ import (
 	atypes "github.com/unicornultrafoundation/subnet-node/core/apps/types"
 )
 
-const gitHubAppsURL = "https://raw.githubusercontent.com/unicornultrafoundation/subnet-apps/refs/heads/main/index.json"
+const DefaultGithubAppsURL = "https://raw.githubusercontent.com/unicornultrafoundation/subnet-apps/refs/heads/main/index.json"
 
 type AppFilter struct {
 	Status atypes.ProcessStatus `json:"status"`
@@ -37,7 +37,8 @@ func appMatchesFilter(app GitHubApp, status atypes.ProcessStatus, filter AppFilt
 // Retrieves a list of apps from the Ethereum contract and checks their container status.
 func (s *Service) GetApps(ctx context.Context, start *big.Int, end *big.Int, filter AppFilter) ([]*atypes.App, int, error) {
 	// Fetch JSON file from GitHub
-	gitHubApps, err := s.getGitHubApps(gitHubAppsURL)
+	githubAppsURL := s.cfg.GetString("apps.github_apps", DefaultGithubAppsURL)
+	gitHubApps, err := s.getGitHubApps(githubAppsURL)
 	if err != nil {
 		return nil, 0, err
 	}

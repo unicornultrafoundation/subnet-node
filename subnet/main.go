@@ -140,7 +140,7 @@ func printLibp2pPorts(node *core.SubnetNode) {
 		sort.Strings(protocols)
 		log.Printf("Swarm listening on %s (%s)\n", host, strings.Join(protocols, "+"))
 	}
-	log.Printf("Run 'subnet id' to inspect announced and discovered multiaddrs of this node.\n")
+	//log.Printf("Run 'subnet id' to inspect announced and discovered multiaddrs of this node.\n")
 }
 
 func serveHTTPApi(cfg *config.C, node *core.SubnetNode) (<-chan error, error) {

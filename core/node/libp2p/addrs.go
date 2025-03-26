@@ -126,8 +126,7 @@ func AddrsFactory(cfg *config.C) interface{} {
 	}
 }
 
-func ListenOn(cfg *config.C) interface{} {
-	addresses := cfg.GetStringSlice("addresses.swarm", []string{})
+func ListenOn(addresses []string) interface{} {
 	return func() (opts Libp2pOpts) {
 		return Libp2pOpts{
 			Opts: []libp2p.Option{
