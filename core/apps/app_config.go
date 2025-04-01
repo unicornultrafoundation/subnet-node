@@ -36,7 +36,11 @@ func (s *Service) containerHostConfig(appId *big.Int, containerConfig atypes.Con
 	//
 	volumes := containerConfig.Volumes
 
-	hostConfig := &ctypes.HostConfig{}
+	hostConfig := &ctypes.HostConfig{
+		RestartPolicy: ctypes.RestartPolicy{
+			Name: "unless-stopped",
+		},
+	}
 	mounts := []mount.Mount{}
 
 	for _, volume := range volumes {
