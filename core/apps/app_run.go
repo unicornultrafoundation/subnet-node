@@ -110,5 +110,7 @@ func (s *Service) RunApp(ctx context.Context, appId *big.Int) (*atypes.App, erro
 		s.setNodeResourceUsage(newResourceUsage)
 	}
 
+	s.AddNewRunningApp(ctx, appId)
+
 	return app, nil
 }

@@ -5,53 +5,33 @@ import (
 	"fmt"
 	"io"
 	"math/big"
-	"strings"
 
 	ctypes "github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/filters"
 	itypes "github.com/docker/docker/api/types/image"
 	atypes "github.com/unicornultrafoundation/subnet-node/core/apps/types"
 )
 
-// RestartStoppedContainers restarts all stopped containers
-func (s *Service) RestartStoppedContainers(ctx context.Context) error {
-
-	filter := filters.NewArgs()
-	filter.Add("status", "exited") // Docker uses "exited" status for stopped containers
-
-	// Fetch all running containers
-	containers, err := s.dockerClient.ContainerList(ctx, ctypes.ListOptions{Filters: filter})
+// RestartInactiveApps restarts all running apps in db which are not currently running in Docker
+func (s *Service) RestartInactiveApps(ctx context.Context) error {
+	runningAppList, err := s.GetRunningAppListProto(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to fetch running containers: %w", err)
+		return fmt.Errorf("failed to fetch running app list for restarting: %v", err)
 	}
 
-	for _, container := range containers {
-		// Get container ID (assuming appID is same as container ID)
-		containerId := strings.TrimPrefix(container.Names[0], "/")
-
-		if !strings.HasPrefix(containerId, "subnet-") {
-			continue
-		}
-
-		appId, err := atypes.GetAppIdFromContainerId(containerId)
-
-		if err != nil {
-			log.Debugf("failed to get appId from containerId %s: %v", containerId, err)
-			continue
-		}
-
+	for _, appIdBytes := range runningAppList.AppIds {
+		appId := new(big.Int).SetBytes(appIdBytes)
 		status, err := s.GetContainerStatus(ctx, appId)
-
 		if err != nil {
-			log.Errorf("failed to get status from containerId %s: %v", containerId, err)
+			log.Errorf("failed to get container status from appId %s: %v", appId, err)
 			continue
 		}
 
-		if status == atypes.Stopped {
+		if status != atypes.Running {
+			log.Infof("AppId %v is somehow not running as expected. Restarting...", appId)
 			err := s.RestartContainer(ctx, appId)
 
 			if err != nil {
-				log.Errorf("failed to restart containerId %s: %v", containerId, err)
+				log.Errorf("failed to restart appId %s: %v", appId, err)
 				continue
 			}
 		}

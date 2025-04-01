@@ -31,6 +31,9 @@ func APIOption() ServeOption {
 		server.RegisterName("account", api.NewAccountAPI(n.Account))
 		server.RegisterName("config", api.NewConfigAPI(n.Repo))
 		server.RegisterName("version", api.NewVersionAPI()) // Register the VersionAPI
+		if cfg.GetBool("subgraph.enable", false) {
+			server.RegisterName("peers", api.NewPeersAPI(n.Peers))
+		}
 
 		// Handle public APIs without authentication
 		publicServer := rpc.NewServer()
