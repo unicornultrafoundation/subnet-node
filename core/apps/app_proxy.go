@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
 	atypes "github.com/unicornultrafoundation/subnet-node/core/apps/types"
 )
@@ -18,10 +19,21 @@ func (s *Service) RegisterReverseProxyHandler() {
 	s.PeerHost.SetStreamHandlerMatch(atypes.ProtocolProxyReverse, matchPrefix, s.OnReverseRequestReceive)
 }
 
+// Register a handler with a prefix matcher
+func (s *Service) RegisterRelayProxyHandler() {
+	s.PeerHost.SetStreamHandlerMatch(atypes.ProtocolProxyRelay, matchRelayProxyPrefix, s.OnRelayRequestReceive)
+}
+
 // Custom function to match protocol prefixes
 func matchPrefix(proto protocol.ID) bool {
 	parts := strings.Split(string(proto), "/")
 	return len(parts) >= 4 && strings.HasPrefix(string(proto), string(atypes.ProtocolProxyReverse)+"/")
+}
+
+// Custom function to match protocol prefixes
+func matchRelayProxyPrefix(proto protocol.ID) bool {
+	parts := strings.Split(string(proto), "/")
+	return len(parts) >= 4 && strings.HasPrefix(string(proto), string(atypes.ProtocolProxyRelay)+"/")
 }
 
 // Reverse request to specific port inside an app in Docker container
@@ -66,6 +78,61 @@ func (s *Service) OnReverseRequestReceive(stream network.Stream) {
 	default:
 		writeErrorToStream(stream, "Unsupported protocol: "+protocol)
 	}
+}
+
+// Relay request to specific peer
+func (s *Service) OnRelayRequestReceive(stream network.Stream) {
+	defer stream.Close()
+
+	// Parse protocol to extract target peer ID and service
+	protoStr := string(stream.Protocol())
+	parts := strings.Split(protoStr, "/")
+	if len(parts) < 6 {
+		writeErrorToStream(stream, "Invalid protocol format")
+		return
+	}
+
+	// Extract target peer ID from protocol
+	targetPeerID, err := peer.Decode(parts[4])
+	if err != nil {
+		writeErrorToStream(stream, "Invalid peer ID: "+err.Error())
+		return
+	}
+
+	// Extract service name (if needed)
+	serviceName := parts[5]
+
+	// Create protocol ID for target peer
+	targetProto := protocol.ID(fmt.Sprintf("%s/%s", atypes.ProtocolProxyRelay, serviceName))
+
+	// Open stream to target peer
+	ctx := context.Background()
+	targetStream, err := s.PeerHost.NewStream(ctx, targetPeerID, targetProto)
+	if err != nil {
+		writeErrorToStream(stream, "Failed to connect to target peer: "+err.Error())
+		return
+	}
+	defer targetStream.Close()
+
+	// Create bidirectional pipe between streams
+	errChan := make(chan error, 2)
+
+	// Forward from source to target
+	go func() {
+		_, err := io.Copy(targetStream, stream)
+		targetStream.Close()
+		errChan <- err
+	}()
+
+	// Forward from target to source
+	go func() {
+		_, err := io.Copy(stream, targetStream)
+		stream.Close()
+		errChan <- err
+	}()
+
+	// Wait for either copy to finish
+	<-errChan
 }
 
 func (s *Service) handleReverseTCP(stream network.Stream, targetAddr string) {
