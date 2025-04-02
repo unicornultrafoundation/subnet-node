@@ -30,7 +30,7 @@ type Service struct {
 // Start initializes the service and begins periodic updates
 func (s *Service) Start() error {
 	if s.UpdateFreq == 0 {
-		s.UpdateFreq = 3 * time.Minute // Default to 3 minutes
+		s.UpdateFreq = 24 * time.Hour * 30 // Default to 30 days
 	}
 	s.stopChan = make(chan struct{})
 
