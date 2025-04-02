@@ -152,7 +152,7 @@ func (s *Service) GetResource() (*ResourceInfo, error) {
 
 	// Check the last update timestamp
 	lastUpdate := resource.LastUpdate
-	if time.Since(lastUpdate) > 30*24*time.Hour {
+	if time.Since(lastUpdate) >= 30*24*time.Hour {
 		log.Debugf("Resource is older than 30 days, deleting and fetching new resource.")
 		if err := s.DS.Delete(context.Background(), key); err != nil {
 			return nil, fmt.Errorf("failed to delete old resource from datastore: %w", err)
