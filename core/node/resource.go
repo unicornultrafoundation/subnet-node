@@ -13,12 +13,17 @@ import (
 )
 
 func ResourceService(lc fx.Lifecycle, id peer.ID, pubsub *pubsub.PubSub, DHT *ddht.DHT, cfg *config.C) *resource.Service {
+	isProvider := cfg.GetBool("provider.enable", false)
+
+	if !isProvider {
+		return nil
+	}
+
 	srv := &resource.Service{
 		Identity:   id,
 		PubSub:     pubsub,
 		DHT:        DHT,
 		UpdateFreq: 1 * time.Minute,
-		IsProvider: cfg.GetBool("provider.enable", false),
 	}
 	lc.Append(fx.Hook{
 		OnStop: func(ctx context.Context) error {

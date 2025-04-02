@@ -18,7 +18,6 @@ type Service struct {
 	DHT      *ddht.DHT
 
 	UpdateFreq time.Duration
-	IsProvider bool
 
 	resource *ResourceInfo
 
@@ -77,10 +76,8 @@ func (s *Service) updateLoop() {
 				log.Debugf("Failed to update resource: %v\n", err)
 			}
 
-			if s.IsProvider {
-				if err := s.updateDHTLoop(); err != nil {
-					log.Debugf("Failed to update dht: %v\n", err)
-				}
+			if err := s.updateDHTLoop(); err != nil {
+				log.Debugf("Failed to update dht: %v\n", err)
 			}
 		}
 	}

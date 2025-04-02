@@ -15,6 +15,10 @@ import (
 )
 
 func AppService(lc fx.Lifecycle, cfg *config.C, P2P *p2p.P2P, dataStore datastore.Datastore, acc *account.AccountService, peerId peer.ID, peerHost p2phost.Host, docker *docker.Service) *apps.Service {
+	if !cfg.GetBool("provider.enable", false) {
+		return nil
+	}
+
 	srv := apps.New(peerHost, peerId, cfg, P2P, dataStore, acc, docker)
 	lc.Append(fx.Hook{
 		OnStop: func(ctx context.Context) error {

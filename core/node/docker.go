@@ -10,6 +10,10 @@ import (
 
 // DockerService provides a lifecycle-managed Docker service
 func DockerService(lc fx.Lifecycle, cfg *config.C) (*docker.Service, error) {
+	if !cfg.GetBool("provider.enable", false) {
+		return nil, nil
+	}
+
 	service, err := docker.NewDockerService(cfg)
 	if err != nil {
 		return nil, err

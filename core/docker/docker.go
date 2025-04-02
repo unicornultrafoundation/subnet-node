@@ -3,6 +3,7 @@ package docker
 import (
 	"context"
 	"io"
+	"strings"
 
 	dtypes "github.com/docker/docker/api/types"
 	ctypes "github.com/docker/docker/api/types/container"
@@ -53,7 +54,22 @@ func (r *RealDockerClient) ContainerRemove(ctx context.Context, containerID stri
 }
 
 func (r *RealDockerClient) ContainerList(ctx context.Context, options ctypes.ListOptions) ([]dtypes.Container, error) {
-	return r.client.ContainerList(ctx, options)
+	containers, err := r.client.ContainerList(ctx, options)
+	if err != nil {
+		return nil, err
+	}
+
+	var filteredContainers []dtypes.Container
+	for _, container := range containers {
+		for _, name := range container.Names {
+			if strings.HasPrefix(name, "subnet-") {
+				filteredContainers = append(filteredContainers, container)
+				break
+			}
+		}
+	}
+
+	return filteredContainers, nil
 }
 
 func (r *RealDockerClient) ImagePull(ctx context.Context, ref string, options itypes.PullOptions) (io.ReadCloser, error) {

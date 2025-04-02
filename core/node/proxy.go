@@ -11,6 +11,10 @@ import (
 )
 
 func ProxyService(lc fx.Lifecycle, cfg *config.C, peerId peer.ID, peerHost p2phost.Host) (*proxy.Service, error) {
+	if !cfg.GetBool("provider.enable", false) {
+		return nil, nil
+	}
+
 	srv, err := proxy.New(peerHost, peerId, cfg)
 	if err != nil {
 		return nil, err

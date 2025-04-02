@@ -55,9 +55,6 @@ func (s *Service) reportAllRunningContainers(ctx context.Context) {
 
 	for _, container := range containers {
 		containerId := strings.TrimPrefix(container.Names[0], "/")
-		if !strings.HasPrefix(containerId, "subnet-") {
-			continue
-		}
 		containerChan <- containerId
 	}
 	close(containerChan)
