@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
 	"time"
 
+	"github.com/ipfs/go-datastore"
 	ddht "github.com/libp2p/go-libp2p-kad-dht/dual"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -17,20 +19,16 @@ type Service struct {
 	PubSub   *pubsub.PubSub
 	DHT      *ddht.DHT
 
-	UpdateFreq time.Duration
-
-	resource *ResourceInfo
-
+	UpdateFreq  time.Duration
 	stopChan    chan struct{}
 	pubsubTopic *pubsub.Topic // Reuse the PubSub topic
-
+	DS          datastore.Datastore
+	mu          sync.Mutex // Add a mutex for thread-safe access
 }
 
 // Start initializes the service and begins periodic updates
 func (s *Service) Start() error {
-	if s.UpdateFreq == 0 {
-		s.UpdateFreq = 24 * time.Hour * 30 // Default to 30 days
-	}
+	s.UpdateFreq = 24 * time.Hour * 30 // Default to 30 days
 	s.stopChan = make(chan struct{})
 
 	// Launch the periodic update loop
@@ -59,7 +57,7 @@ func (s *Service) updateLoop() {
 	ticker := time.NewTicker(s.UpdateFreq)
 	defer ticker.Stop()
 
-	if err := s.updateResourceLoop(); err != nil {
+	if err := s.updateDHTLoop(); err != nil {
 		log.Debugf("Failed to update resource: %v\n", err)
 	}
 
@@ -72,10 +70,6 @@ func (s *Service) updateLoop() {
 		case <-s.stopChan:
 			return
 		case <-ticker.C:
-			if err := s.updateResourceLoop(); err != nil {
-				log.Debugf("Failed to update resource: %v\n", err)
-			}
-
 			if err := s.updateDHTLoop(); err != nil {
 				log.Debugf("Failed to update dht: %v\n", err)
 			}
@@ -83,26 +77,17 @@ func (s *Service) updateLoop() {
 	}
 }
 
-func (s *Service) updateResourceLoop() error {
-	res, err := GetResource()
-	if err != nil {
-		log.Errorf("failed to get resource info: %s", err.Error())
-	}
-
-	s.resource = res
-	return nil
-}
-
-func (s *Service) GetResource() *ResourceInfo {
-	return s.resource
-}
-
 // Updates resource information to DHT and PubSub
 func (s *Service) updateDHTLoop() error {
 	ctx := context.Background()
 
+	res, err := s.GetResource()
+	if err != nil {
+		return fmt.Errorf("failed to get resource: %w", err)
+	}
+
 	// Serialize ResourceInfo into JSON
-	data, err := json.Marshal(s.resource)
+	data, err := json.Marshal(res)
 	if err != nil {
 		return fmt.Errorf("failed to marshal resource info: %w", err)
 	}
@@ -122,4 +107,74 @@ func (s *Service) updateDHTLoop() error {
 	// log.Debug("Published resource info to PubSub.")
 
 	return nil
+}
+
+func (s *Service) saveResource(resource *ResourceInfo) error {
+	// Serialize ResourceInfo into JSON
+	data, err := json.Marshal(resource)
+	if err != nil {
+		return fmt.Errorf("failed to marshal resource info: %w", err)
+	}
+
+	// Create a datastore key using the peer ID
+	key := datastore.NewKey(fmt.Sprintf("resource/%s", s.Identity.String()))
+
+	// Save the serialized data to the datastore
+	if err := s.DS.Put(context.Background(), key, data); err != nil {
+		return fmt.Errorf("failed to save resource to datastore: %w", err)
+	}
+
+	log.Debugf("Saved resource to datastore with key: %s", key.String())
+	return nil
+}
+
+func (s *Service) GetResource() (*ResourceInfo, error) {
+	s.mu.Lock()         // Lock before accessing the datastore
+	defer s.mu.Unlock() // Unlock after the operation is complete
+
+	// Create a datastore key using the peer ID
+	key := datastore.NewKey(fmt.Sprintf("resource/%s", s.Identity.String()))
+
+	// Check if the resource exists in the datastore
+	data, err := s.DS.Get(context.Background(), key)
+	if err == datastore.ErrNotFound {
+		log.Debugf("Resource not found in datastore, fetching new resource.")
+		return s.fetchAndSaveResource()
+	} else if err != nil {
+		return nil, fmt.Errorf("failed to get resource from datastore: %w", err)
+	}
+
+	// Deserialize the resource
+	var resource ResourceInfo
+	if err := json.Unmarshal(data, &resource); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal resource info: %w", err)
+	}
+
+	// Check the last update timestamp
+	lastUpdate := resource.LastUpdate
+	if time.Since(lastUpdate) > 30*24*time.Hour {
+		log.Debugf("Resource is older than 30 days, deleting and fetching new resource.")
+		if err := s.DS.Delete(context.Background(), key); err != nil {
+			return nil, fmt.Errorf("failed to delete old resource from datastore: %w", err)
+		}
+		return s.fetchAndSaveResource()
+	}
+
+	log.Debugf("Resource retrieved from datastore.")
+	return &resource, nil
+}
+
+func (s *Service) fetchAndSaveResource() (*ResourceInfo, error) {
+	// Fetch the resource
+	res, err := GetResource()
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch resource: %w", err)
+	}
+
+	// Save the resource to the datastore
+	if err := s.saveResource(res); err != nil {
+		return nil, fmt.Errorf("failed to save resource to datastore: %w", err)
+	}
+
+	return res, nil
 }

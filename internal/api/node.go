@@ -29,7 +29,7 @@ func (api *NodeAPI) GetResource(ctx context.Context) (*resource.ResourceInfo, er
 	if api.resource == nil {
 		return nil, fmt.Errorf("api.resource is not supported")
 	}
-	return api.resource.GetResource(), nil
+	return api.resource.GetResource()
 }
 
 func (api *NodeAPI) Restart(ctx context.Context) error {
