@@ -237,6 +237,7 @@ func Storage(bcfg *BuildCfg) fx.Option {
 func Core(cfg *config.C) fx.Option {
 	return fx.Options(
 		fx.Provide(ResourceService),
+		fx.Invoke(VPNService),
 		fx.Invoke(ProxyService),
 		fx.Provide(PeerService),
 		fx.Provide(AppService),
