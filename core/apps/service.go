@@ -23,9 +23,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ipfs/go-datastore"
 	p2phost "github.com/libp2p/go-libp2p/core/host"
-	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/config"
 	"github.com/unicornultrafoundation/subnet-node/core/account"
@@ -107,7 +105,6 @@ func (s *Service) Start(ctx context.Context) error {
 		enableProxy := s.cfg.GetBool("provider.proxy", true)
 		if enableProxy {
 			s.RegisterReverseProxyHandler()
-			s.RegisterRelayProxyHandler()
 		}
 		s.statService = stats.NewStats(ctx, s.dockerClient)
 
@@ -424,18 +421,4 @@ func (s *Service) getNodeResourceUsage() (atypes.ResourceUsage, error) {
 		UsedMemory:  big.NewInt(0),
 		UsedStorage: big.NewInt(0),
 	}, nil
-}
-
-// Client code to use the relay
-func connectThroughRelay(ctx context.Context, host p2phost.Host, relayPeerID peer.ID, targetPeerID peer.ID, targetService string) (network.Stream, error) {
-	// Format protocol ID with target peer embedded in it
-	protocolID := protocol.ID(fmt.Sprintf("%s/%s/%s", atypes.ProtocolProxyRelay, targetPeerID.String(), targetService))
-
-	// Connect to relay node
-	stream, err := host.NewStream(ctx, relayPeerID, protocolID)
-	if err != nil {
-		return nil, fmt.Errorf("error creating stream to relay: %w", err)
-	}
-
-	return stream, nil
 }
