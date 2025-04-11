@@ -14,13 +14,10 @@ import (
 	"go.uber.org/fx"
 )
 
-// DockerACLFilter implements the relay.ACLFilter interface to only allow connections
-// from Docker container IP ranges.
+// DockerACLFilter implements the relay.ACLFilter interface to only allow connections from Docker container IP ranges.
 type DockerACLFilter struct {
-	// Supported networks
 	supportedNets []*net.IPNet
-	// Whether to allow all connections (bypass ACL)
-	allowAll bool
+	allowAll      bool
 }
 
 // NewDockerACLFilter creates a new ACL filter that only allows connections from Docker container IPs.
@@ -33,14 +30,13 @@ func NewDockerACLFilter(cfg *config.C) *DockerACLFilter {
 	_, privateNet2, _ := net.ParseCIDR("172.16.0.0/12")
 	_, privateNet3, _ := net.ParseCIDR("192.168.0.0/16")
 
-	// Default networks to check
-	defaultNets := []*net.IPNet{defaultBridgeNet, privateNet1, privateNet2, privateNet3}
+	supportedNets := []*net.IPNet{defaultBridgeNet, privateNet1, privateNet2, privateNet3}
 
 	// Check if we should allow all connections
 	allowAll := cfg.GetBool("swarm.relay_service.allow_all", false)
 
 	return &DockerACLFilter{
-		supportedNets: defaultNets,
+		supportedNets: supportedNets,
 		allowAll:      allowAll,
 	}
 }
@@ -52,13 +48,10 @@ func (f *DockerACLFilter) AllowReserve(p peer.ID, addr ma.Multiaddr) bool {
 		return true
 	}
 
-	// Extract IP from multiaddr
 	ip := extractIPFromMultiaddr(addr)
 	if ip == nil {
 		return false
 	}
-
-	// Check if IP is in Docker networks
 	return f.isDockerIP(ip)
 }
 
@@ -69,26 +62,15 @@ func (f *DockerACLFilter) AllowConnect(src peer.ID, srcAddr ma.Multiaddr, dest p
 		return true
 	}
 
-	// Extract IP from multiaddr
 	ip := extractIPFromMultiaddr(srcAddr)
-
 	if ip == nil {
 		return false
 	}
-
-	// Check if IP is in Docker networks
-	for _, net := range f.supportedNets {
-		if net.Contains(ip) {
-			return true
-		}
-	}
-
-	return false
+	return f.isDockerIP(ip)
 }
 
 // isDockerIP checks if the given IP is within Docker container IP ranges.
 func (f *DockerACLFilter) isDockerIP(ip net.IP) bool {
-	// Check default Docker bridge network
 	for _, net := range f.supportedNets {
 		if net.Contains(ip) {
 			return true
@@ -145,12 +127,12 @@ func RelayService(enable bool, cfg *config.C) func() (opts Libp2pOpts, err error
 			def := relay.DefaultResources()
 
 			// Create a Docker ACL filter
-			dockerACL := NewDockerACLFilter(cfg)
+			dockerACLFilter := NewDockerACLFilter(cfg)
 
 			// Real defaults live in go-libp2p.
 			// Here we apply any overrides from user config.
 			opts.Opts = append(opts.Opts, libp2p.EnableRelayService(
-				relay.WithACL(dockerACL),
+				relay.WithACL(dockerACLFilter),
 				relay.WithResources(relay.Resources{
 					Limit: &relay.RelayLimit{
 						Data:     int64(cfg.GetInt("swarm.relay_service.limit.data", int(def.Limit.Data))),
