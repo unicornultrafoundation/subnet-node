@@ -3,6 +3,7 @@ package vpn
 import (
 	"context"
 	"fmt"
+	"net"
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/songgao/water"
@@ -10,7 +11,7 @@ import (
 )
 
 // CreateTUN initializes a TUN device using water package
-func (s *Service) CreateTUN(ip string, subnet string) (*water.Interface, error) {
+func (s *Service) SetupTUN() (*water.Interface, error) {
 	config := water.Config{DeviceType: water.TUN}
 	iface, err := water.New(config)
 	if err != nil {
@@ -22,8 +23,13 @@ func (s *Service) CreateTUN(ip string, subnet string) (*water.Interface, error) 
 		return nil, fmt.Errorf("failed to find interface: %w", err)
 	}
 
+	// Set MTU
+	if err := netlink.LinkSetMTU(link, s.mtu); err != nil {
+		return nil, fmt.Errorf("failed to set MTU: %w", err)
+	}
+
 	// Assign IP address
-	addr, err := netlink.ParseAddr(ip + "/" + subnet)
+	addr, err := netlink.ParseAddr(fmt.Sprintf("%s/%d", s.virtualIP, s.subnet))
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse IP: %w", err)
 	}
@@ -36,14 +42,32 @@ func (s *Service) CreateTUN(ip string, subnet string) (*water.Interface, error) 
 		return nil, fmt.Errorf("failed to bring up interface: %w", err)
 	}
 
-	fmt.Println("TUN interface created:", iface.Name())
+	// Add after iface creation
+	for _, r := range s.routes {
+		_, dst, err := net.ParseCIDR(r)
+		if err != nil {
+			log.Errorf("Invalid route: %s", r)
+			continue
+		}
+
+		route := &netlink.Route{
+			LinkIndex: link.Attrs().Index,
+			Dst:       dst,
+		}
+
+		if err := netlink.RouteReplace(route); err != nil {
+			log.Errorf("Failed to add route %s: %v", dst, err)
+		}
+	}
+
+	log.Infof("TUN interface created with name %s, address %s", iface.Name(), addr.String())
 
 	return iface, nil
 }
 
 // Listen from TUN Interface & redirect requests/packets to Peer via p2p stream
-func (s *Service) listenFromTUN(iface *water.Interface) error {
-	buf := make([]byte, 1500)
+func (s *Service) listenFromTUN(ctx context.Context, iface *water.Interface) error {
+	buf := make([]byte, s.mtu)
 
 	for {
 		select {
@@ -52,50 +76,53 @@ func (s *Service) listenFromTUN(iface *water.Interface) error {
 		default:
 			n, err := iface.Read(buf)
 			if err != nil {
-				log.Fatalf("Error reading from TUN: %v", err)
+				log.Fatalf("error reading from TUN interface: %v", err)
 			}
 
-			destIP, srcIP, err := ExtractDestAndSrcIP(buf[:n])
-			log.Println("Received packet for IP: ", destIP)
+			packet := buf[:n]
+			packetInfo, err := ExtractIPAndPorts(packet)
 			if err != nil {
-				log.Errorf("failed to parse the addresses: %v", err)
+				log.Debugf("failed to parse the packet info: %v", err)
 				continue
 			}
 
-			if destPeerID, exists := s.requestMap[srcIP]; exists {
-				s.SendTrafficToPeer(destPeerID, buf[:n])
-			} else if len(s.ConnectingPeerID) != 0 {
-				s.SendTrafficToPeer(s.ConnectingPeerID, buf[:n])
-			}
+			go func() {
+				err = s.SendTrafficToPeer(ctx, packetInfo.DstIP.String(), packet)
+				if err != nil {
+					log.Debugf("failed to send traffic to peer: %v", err)
+				}
+			}()
 		}
 	}
 }
 
 // SendTrafficToPeer forwards packets over P2P
-func (s *Service) SendTrafficToPeer(destPeer peer.ID, data []byte) error {
-	// peerID, err := s.GetPeerID(destIP)
-	// if err != nil {
-	// 	return fmt.Errorf("no peer mapping found for IP %s: %v", destIP, err)
-	// }
-	// parsedPeerID, err := peer.Decode(peerID)
-	// if err != nil {
-	// 	return fmt.Errorf("failed to parse peerid %s: %v", peerID, err)
-	// }
-
-	parsedPeerID := destPeer
-
-	ctx := context.Background()
-	stream, err := s.PeerHost.NewStream(ctx, parsedPeerID, VPNProtocol)
+func (s *Service) SendTrafficToPeer(ctx context.Context, destIP string, data []byte) error {
+	peerID, err := s.GetPeerID(ctx, destIP)
 	if err != nil {
-		return fmt.Errorf("failed to create P2P stream: %v", err)
+		return fmt.Errorf("no peer mapping found for IP %s: %v", destIP, err)
 	}
-	defer stream.Close()
+
+	parsedPeerID, err := peer.Decode(peerID)
+	if err != nil {
+		return fmt.Errorf("failed to parse peerid %s: %v", peerID, err)
+	}
+
+	stream, exist := s.streamCache[peerID]
+	if !exist {
+		stream, err = s.PeerHost.NewStream(ctx, parsedPeerID, VPNProtocol)
+		if err != nil {
+			return fmt.Errorf("failed to create P2P stream: %v", err)
+		}
+		s.streamCache[peerID] = stream
+	}
 
 	_, err = stream.Write(data)
 	if err != nil {
-		log.Println("Error writing to P2P stream:", err)
+		stream.Close()
+		delete(s.streamCache, peerID)
+		return fmt.Errorf("error writing to P2P stream: %v", err)
 	}
-	fmt.Println("Sent P2P traffic to:", parsedPeerID.String())
 
 	return nil
 }
