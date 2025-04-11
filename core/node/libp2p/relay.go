@@ -22,15 +22,12 @@ type DockerACLFilter struct {
 
 // NewDockerACLFilter creates a new ACL filter that only allows connections from Docker container IPs.
 func NewDockerACLFilter(cfg *config.C) *DockerACLFilter {
-	// Default Docker bridge network is 172.17.0.0/16
-	_, defaultBridgeNet, _ := net.ParseCIDR("172.17.0.0/16")
-
 	// Add common private network ranges
 	_, privateNet1, _ := net.ParseCIDR("10.0.0.0/8")
 	_, privateNet2, _ := net.ParseCIDR("172.16.0.0/12")
 	_, privateNet3, _ := net.ParseCIDR("192.168.0.0/16")
 
-	supportedNets := []*net.IPNet{defaultBridgeNet, privateNet1, privateNet2, privateNet3}
+	supportedNets := []*net.IPNet{privateNet1, privateNet2, privateNet3}
 
 	// Check if we should allow all connections
 	allowAll := cfg.GetBool("swarm.relay_service.allow_all", false)
@@ -52,32 +49,22 @@ func (f *DockerACLFilter) AllowReserve(p peer.ID, addr ma.Multiaddr) bool {
 	if ip == nil {
 		return false
 	}
-	return f.isDockerIP(ip)
-}
 
-// AllowConnect returns true if a source peer with a given multiaddr is allowed to connect
-// to a destination peer. We check if the source IP is within Docker container IP ranges.
-func (f *DockerACLFilter) AllowConnect(src peer.ID, srcAddr ma.Multiaddr, dest peer.ID) bool {
-	if f.allowAll {
+	// check valid IP
+	if ip.IsLoopback() {
 		return true
 	}
 
-	ip := extractIPFromMultiaddr(srcAddr)
-	if ip == nil {
-		return false
-	}
-	return f.isDockerIP(ip)
-}
-
-// isDockerIP checks if the given IP is within Docker container IP ranges.
-func (f *DockerACLFilter) isDockerIP(ip net.IP) bool {
 	for _, net := range f.supportedNets {
 		if net.Contains(ip) {
 			return true
 		}
 	}
-
 	return false
+}
+
+func (f *DockerACLFilter) AllowConnect(src peer.ID, srcAddr ma.Multiaddr, dest peer.ID) bool {
+	return true
 }
 
 // extractIPFromMultiaddr extracts the IP address from a multiaddr.
