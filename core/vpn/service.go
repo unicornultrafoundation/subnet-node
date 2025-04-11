@@ -1,14 +1,18 @@
 package vpn
 
 import (
+	"context"
+	"fmt"
+	"io"
+	"sync"
 	"time"
 
 	ddht "github.com/libp2p/go-libp2p-kad-dht/dual"
 	p2phost "github.com/libp2p/go-libp2p/core/host"
-	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/config"
-	"github.com/unicornultrafoundation/subnet-node/core/docker"
+	"github.com/unicornultrafoundation/subnet-node/core/apps"
 )
 
 const VPNProtocol = "/vpn/1.0.0"
@@ -16,74 +20,92 @@ const VPNProtocol = "/vpn/1.0.0"
 var log = logrus.WithField("service", "vpn")
 
 type Service struct {
-	PeerHost         p2phost.Host
-	cfg              *config.C
-	enable           bool
-	IsProvider       bool
-	DHT              *ddht.DHT
-	ConnectingPeerID peer.ID            // The PeerId that VPN Client is connecting to
-	requestMap       map[string]peer.ID // Virtual IP -> Sender PeerID
-	responseMap      map[string]string  // Actual application IP -> Virtual IP
-	dockerClient     docker.DockerClient
-	firstOctet       int
+	cfg            *config.C
+	enable         bool
+	IsProvider     bool
+	Apps           *apps.Service
+	PeerHost       p2phost.Host
+	DHT            *ddht.DHT
+	virtualIP      string
+	subnet         int
+	routes         []string
+	mtu            int
+	exposedPorts   map[string]bool // All ports exposed by running apps
+	unallowedPorts map[string]bool
+	streamCache    map[string]network.Stream
 
 	stopChan chan struct{} // Channel to stop background tasks
 }
 
 // Initializes the Service
-func New(cfg *config.C, peerHost p2phost.Host, dht *ddht.DHT, docker *docker.Service) *Service {
+func New(cfg *config.C, peerHost p2phost.Host, dht *ddht.DHT, apps *apps.Service) *Service {
+	unallowedPortList := cfg.GetStringSlice("vpn.unallowed_ports", []string{})
+	unallowedPorts := make(map[string]bool, len(unallowedPortList))
+	for _, port := range unallowedPortList {
+		unallowedPorts[port] = true
+	}
+
 	return &Service{
-		cfg:          cfg,
-		PeerHost:     peerHost,
-		enable:       cfg.GetBool("vpn.enable", false),
-		IsProvider:   cfg.GetBool("provider.enable", false),
-		DHT:          dht,
-		dockerClient: *docker.GetClient(),
-		requestMap:   make(map[string]peer.ID),
-		responseMap:  make(map[string]string),
-		stopChan:     make(chan struct{}),
+		cfg:            cfg,
+		Apps:           apps,
+		PeerHost:       peerHost,
+		enable:         cfg.GetBool("vpn.enable", false),
+		mtu:            cfg.GetInt("vpn.mtu", 1400),
+		virtualIP:      cfg.GetString("vpn.virtual_ip", ""),
+		subnet:         cfg.GetInt("vpn.subnet", 8),
+		routes:         cfg.GetStringSlice("vpn.routes", []string{"10.0.0.0/8"}),
+		unallowedPorts: unallowedPorts,
+		IsProvider:     cfg.GetBool("provider.enable", false),
+		DHT:            dht,
+		streamCache:    make(map[string]network.Stream),
+		exposedPorts:   make(map[string]bool),
+		stopChan:       make(chan struct{}),
 	}
 }
 
-func (s *Service) Start() error {
-	if !s.enable {
+func (s *Service) Start(ctx context.Context) error {
+	if !s.enable || len(s.routes) == 0 {
 		return nil
 	}
 
-	s.firstOctet = 10
+	// Wait until there are some peers connected
+	WaitUntilPeerConnected(ctx, s.PeerHost)
+	time.Sleep(1 * time.Second)
 
 	go func() {
-		// Wait to connect to peer to sync DHT
-		time.Sleep(5 * time.Second)
-		virtualIP, err := s.SyncPeerIDToDHT()
+		if s.IsProvider {
+			// Update for the first time
+			s.UpdateAllAppExposedPorts(ctx)
+
+			go s.startUpdatingExposedPorts(ctx)
+		}
+
+		err := s.start(ctx)
 		if err != nil {
-			log.Errorf("failed to sync peer id to DHT: %v", err)
-			return
+			log.Errorf("Something went wrong when running VPN: %v", err)
 		}
-
-		iface, err := s.CreateTUN(virtualIP, "8")
-		if err != nil {
-			log.Errorf("failed to create TUN: %v", err)
-			return
-		}
-		defer iface.Close()
-
-		s.HandleP2PTraffic(iface)
-
-		connectPeerIdStr := s.cfg.GetString("vpn.default_peer_id", "")
-		if len(connectPeerIdStr) != 0 {
-			connectPeerId, err := peer.Decode(connectPeerIdStr)
-			if err == nil {
-				s.ConnectingPeerID = connectPeerId
-			}
-		}
-
-		// Listen packets from TUN
-		s.listenFromTUN(iface)
 	}()
 
-	log.Infof("VPN service started successfully!")
 	return nil
+}
+
+func (s *Service) start(ctx context.Context) error {
+	// Wait to connect to peer to sync DHT
+	err := s.SyncPeerIDToDHT(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to sync peer id to DHT: %v", err)
+	}
+
+	iface, err := s.SetupTUN()
+	if err != nil {
+		return fmt.Errorf("failed to setup TUN interface: %v", err)
+	}
+	defer iface.Close()
+
+	s.HandleP2PTraffic(iface)
+
+	// Listen packets from TUN interface
+	return s.listenFromTUN(ctx, iface)
 }
 
 func (s *Service) Stop() error {
@@ -91,9 +113,22 @@ func (s *Service) Stop() error {
 		return nil
 	}
 
+	if len(s.streamCache) > 0 {
+		// Close all cached streams
+		var wg sync.WaitGroup
+		for _, stream := range s.streamCache {
+			wg.Add(1)
+			go func(str io.Closer) {
+				defer wg.Done()
+				str.Close()
+			}(stream)
+		}
+		wg.Wait()
+	}
+
 	// Close stopChan to stop all background tasks
 	close(s.stopChan)
 
-	log.Infof("VPN service stopped successfully!")
+	log.Infoln("VPN service stopped successfully!")
 	return nil
 }
