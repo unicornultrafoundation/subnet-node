@@ -4,7 +4,10 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"time"
 
+	"github.com/cenkalti/backoff/v4"
+	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/songgao/water"
 	"github.com/vishvananda/netlink"
@@ -87,7 +90,7 @@ func (s *Service) listenFromTUN(ctx context.Context, iface *water.Interface) err
 			}
 
 			go func() {
-				err = s.SendTrafficToPeer(ctx, packetInfo.DstIP.String(), packet)
+				err = s.RetrySendTrafficToPeer(ctx, packetInfo.DstIP.String(), packet)
 				if err != nil {
 					log.Debugf("failed to send traffic to peer: %v", err)
 				}
@@ -110,11 +113,10 @@ func (s *Service) SendTrafficToPeer(ctx context.Context, destIP string, data []b
 
 	stream, exist := s.streamCache[peerID]
 	if !exist {
-		stream, err = s.PeerHost.NewStream(ctx, parsedPeerID, VPNProtocol)
+		stream, err = s.CreateNewVPNStream(ctx, parsedPeerID)
 		if err != nil {
 			return fmt.Errorf("failed to create P2P stream: %v", err)
 		}
-		s.streamCache[peerID] = stream
 	}
 
 	_, err = stream.Write(data)
@@ -125,4 +127,25 @@ func (s *Service) SendTrafficToPeer(ctx context.Context, destIP string, data []b
 	}
 
 	return nil
+}
+
+func (s *Service) RetrySendTrafficToPeer(ctx context.Context, destIP string, data []byte) error {
+	operation := func() error {
+		return s.SendTrafficToPeer(ctx, destIP, data)
+	}
+
+	bo := backoff.NewExponentialBackOff()
+	bo.MaxElapsedTime = 30 * time.Second
+
+	return backoff.Retry(operation, backoff.WithContext(bo, ctx))
+}
+
+func (s *Service) CreateNewVPNStream(ctx context.Context, peerID peer.ID) (network.Stream, error) {
+	stream, err := s.PeerHost.NewStream(ctx, peerID, VPNProtocol)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create new VPN P2P stream: %v", err)
+	}
+	s.streamCache[peerID.String()] = stream
+
+	return stream, nil
 }
