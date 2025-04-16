@@ -12,6 +12,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/config"
+	"github.com/unicornultrafoundation/subnet-node/core/account"
 	"github.com/unicornultrafoundation/subnet-node/core/apps"
 )
 
@@ -23,6 +24,7 @@ type Service struct {
 	cfg            *config.C
 	enable         bool
 	IsProvider     bool
+	accountService *account.AccountService
 	Apps           *apps.Service
 	PeerHost       p2phost.Host
 	DHT            *ddht.DHT
@@ -33,12 +35,13 @@ type Service struct {
 	exposedPorts   map[string]bool // All ports exposed by running apps
 	unallowedPorts map[string]bool
 	streamCache    map[string]network.Stream
+	peerIDCache    map[string]string
 
 	stopChan chan struct{} // Channel to stop background tasks
 }
 
 // Initializes the Service
-func New(cfg *config.C, peerHost p2phost.Host, dht *ddht.DHT, apps *apps.Service) *Service {
+func New(cfg *config.C, peerHost p2phost.Host, dht *ddht.DHT, apps *apps.Service, accountService *account.AccountService) *Service {
 	unallowedPortList := cfg.GetStringSlice("vpn.unallowed_ports", []string{})
 	unallowedPorts := make(map[string]bool, len(unallowedPortList))
 	for _, port := range unallowedPortList {
@@ -49,6 +52,7 @@ func New(cfg *config.C, peerHost p2phost.Host, dht *ddht.DHT, apps *apps.Service
 		cfg:            cfg,
 		Apps:           apps,
 		PeerHost:       peerHost,
+		accountService: accountService,
 		enable:         cfg.GetBool("vpn.enable", false),
 		mtu:            cfg.GetInt("vpn.mtu", 1400),
 		virtualIP:      cfg.GetString("vpn.virtual_ip", ""),
@@ -58,6 +62,7 @@ func New(cfg *config.C, peerHost p2phost.Host, dht *ddht.DHT, apps *apps.Service
 		IsProvider:     cfg.GetBool("provider.enable", false),
 		DHT:            dht,
 		streamCache:    make(map[string]network.Stream),
+		peerIDCache:    make(map[string]string),
 		exposedPorts:   make(map[string]bool),
 		stopChan:       make(chan struct{}),
 	}
@@ -79,6 +84,7 @@ func (s *Service) Start(ctx context.Context) error {
 
 			go s.startUpdatingExposedPorts(ctx)
 		}
+		go s.startClearingPeerIDCache(ctx)
 
 		err := s.start(ctx)
 		if err != nil {
