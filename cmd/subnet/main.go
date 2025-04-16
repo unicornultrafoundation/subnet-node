@@ -56,7 +56,6 @@ func main() {
 		subcommand := flag.Args()[0]
 
 		if subcommand == "edit-config" {
-			fmt.Printf("Executing edit-config with args: %v\n", flag.Args()[1:])
 			if err := EditConfig(*dataPath, flag.Args()[1:]); err != nil {
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 				os.Exit(1)

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/unicornultrafoundation/subnet-node/common/fsutil"
 	"github.com/unicornultrafoundation/subnet-node/internal/api"
 	"github.com/unicornultrafoundation/subnet-node/repo/snrepo"
 	"gopkg.in/yaml.v2"
@@ -33,63 +34,14 @@ func (f *configSetFlag) Set(value string) error {
 	return nil
 }
 
-func ensureDefaultConfig(configPath string) error {
-	// Get directory and create default config path
-	dir := filepath.Dir(configPath)
-	defaultConfigPath := filepath.Join(dir, "config_default.yaml")
-
-	// Check if default config already exists
-	if _, err := os.Stat(defaultConfigPath); os.IsNotExist(err) {
-		// Read current config
-		content, err := os.ReadFile(configPath)
-		if err != nil {
-			return fmt.Errorf("failed to read config file: %v", err)
-		}
-
-		// Write to default config file
-		if err := os.WriteFile(defaultConfigPath, content, 0644); err != nil {
-			return fmt.Errorf("failed to create default config file: %v", err)
-		}
-	}
-	return nil
-}
-
-func resetConfig(configPath string) error {
-	defaultConfigPath := filepath.Join(filepath.Dir(configPath), "config_default.yaml")
-
-	// Check if default config exists
-	if _, err := os.Stat(defaultConfigPath); os.IsNotExist(err) {
-		return fmt.Errorf("no default config file found at %s", defaultConfigPath)
-	}
-
-	// Create backup of current config
-	if err := backupConfig(configPath); err != nil {
-		return err
-	}
-
-	// Read default config content
-	content, err := os.ReadFile(defaultConfigPath)
-	if err != nil {
-		return fmt.Errorf("failed to read default config file: %v", err)
-	}
-
-	// Reset config file to default values
-	if err := os.WriteFile(configPath, content, 0644); err != nil {
-		return fmt.Errorf("failed to reset config file: %v", err)
-	}
-
-	return nil
-}
-
-func backupConfig(configPath string) error {
+func backupConfig(expPath string) error {
 	// Read current config
-	content, err := os.ReadFile(configPath)
+	content, err := os.ReadFile(filepath.Join(expPath, "config.yaml"))
 	if err != nil {
 		return fmt.Errorf("failed to read config file: %v", err)
 	}
 
-	// Create backup file path
-	backupPath := filepath.Join(filepath.Dir(configPath), "config_backup.yaml")
+	backupPath := filepath.Join(expPath, "config_backup.yaml")
 
 	// Write to backup file
 	if err := os.WriteFile(backupPath, content, 0644); err != nil {
@@ -105,7 +57,6 @@ func EditConfig(dataPath string, args []string) error {
 
 	var setFlags configSetFlag
 	showFlag := editFlags.Bool("show", false, "Show current configuration")
-	resetFlag := editFlags.Bool("reset", false, "Reset configuration to default values")
 	editFlags.Var(&setFlags, "set", "Set configuration value (format: key=value, can be used multiple times)")
 
 	if err := editFlags.Parse(args); err != nil {
@@ -117,13 +68,12 @@ func EditConfig(dataPath string, args []string) error {
 		return fmt.Errorf("subnet node is not initialized. Please run 'subnet --datadir %s init' first", dataPath)
 	}
 
-	// Set config file path explicitly
-	configFile := filepath.Join(dataPath, "config.yaml")
-
-	// Ensure default config exists
-	if err := ensureDefaultConfig(configFile); err != nil {
-		return err
+	expPath, err := fsutil.ExpandHome(filepath.Clean(dataPath))
+	if err != nil {
+		return fmt.Errorf("failed to expand data path: %v", err)
 	}
+
+	configFile := filepath.Join(expPath, "config.yaml")
 
 	r, err := snrepo.Open(dataPath, &configFile)
 	if err != nil {
@@ -133,26 +83,6 @@ func EditConfig(dataPath string, args []string) error {
 
 	// Create config API instance
 	configAPI := api.NewConfigAPI(r)
-
-	// Handle reset configuration
-	if *resetFlag {
-		if err := resetConfig(configFile); err != nil {
-			return err
-		}
-
-		fmt.Println("Configuration has been reset to default values")
-		fmt.Printf("Previous configuration backed up to: %s\n", filepath.Join(dataPath, "config_backup.yaml"))
-
-		// Show the reset configuration
-		yamlBytes, err := os.ReadFile(configFile)
-		if err != nil {
-			return fmt.Errorf("failed to read config: %v", err)
-		}
-
-		fmt.Println("\nReset configuration:")
-		fmt.Println(string(yamlBytes))
-		return nil
-	}
 
 	// Handle show configuration
 	if *showFlag {
@@ -169,7 +99,7 @@ func EditConfig(dataPath string, args []string) error {
 	// Handle set configuration values
 	if len(setFlags) > 0 {
 		// Create backup before modification
-		if err := backupConfig(configFile); err != nil {
+		if err := backupConfig(expPath); err != nil {
 			return err
 		}
 
@@ -183,7 +113,7 @@ func EditConfig(dataPath string, args []string) error {
 		}
 
 		fmt.Println("Configuration updated successfully")
-		fmt.Printf("Previous configuration backed up to: %s\n", filepath.Join(dataPath, "config_backup.yaml"))
+		fmt.Printf("Previous configuration backed up to: %s\n", filepath.Join(expPath, "config_backup.yaml"))
 
 		// Show the updated configuration
 		yamlBytes, err := yaml.Marshal(r.Config().Settings)
@@ -196,14 +126,12 @@ func EditConfig(dataPath string, args []string) error {
 	}
 
 	// If no flags specified, print usage
-	if !*showFlag && !*resetFlag && len(setFlags) == 0 {
+	if !*showFlag && len(setFlags) == 0 {
 		fmt.Println("Usage of edit-config:")
 		fmt.Println("  Show current configuration:")
 		fmt.Println("    subnet --datadir ./.data edit-config --show")
 		fmt.Println("\n  Update configuration values:")
 		fmt.Println("    subnet --datadir ./.data edit-config --set key=value [--set key2=value2 ...]")
-		fmt.Println("\n  Reset to default configuration:")
-		fmt.Println("    subnet --datadir ./.data edit-config --reset")
 		fmt.Println("\n  Examples:")
 		fmt.Println("    subnet --datadir ./.data edit-config --set addresses.api=/ip4/0.0.0.0/tcp/8080")
 		fmt.Println("    subnet --datadir ./.data edit-config --set server.port=9090 --set debug=true")
