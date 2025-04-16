@@ -158,3 +158,35 @@ func TestExtractIPv6UnsupportedProto(t *testing.T) {
 		t.Errorf("expected no ports for ICMPv6, got src: %v, dst: %v", info.SrcPort, info.DstPort)
 	}
 }
+
+func TestConvertVirtualIPToNumber(t *testing.T) {
+	ip := "10.0.0.1"
+	expected := uint32(167772161)
+	result := vpn.ConvertVirtualIPToNumber(ip)
+	if result != expected {
+		t.Errorf("Expected %d, got %d", expected, result)
+	}
+}
+
+func TestConvertVirtualIPToNumberInvalidIP(t *testing.T) {
+	// Test with invalid IP format
+	ip := "invalid"
+	result := vpn.ConvertVirtualIPToNumber(ip)
+	if result != 0 {
+		t.Errorf("Expected 0 for invalid IP, got %d", result)
+	}
+
+	// Test with empty string
+	ip = ""
+	result = vpn.ConvertVirtualIPToNumber(ip)
+	if result != 0 {
+		t.Errorf("Expected 0 for empty string, got %d", result)
+	}
+
+	// Test with IPv6 address (should return 0 as we only support IPv4)
+	ip = "2001:db8::1"
+	result = vpn.ConvertVirtualIPToNumber(ip)
+	if result != 0 {
+		t.Errorf("Expected 0 for IPv6 address, got %d", result)
+	}
+}
