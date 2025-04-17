@@ -143,17 +143,25 @@ func (s *Service) SyncPeerIDToDHT(ctx context.Context) error {
 
 func (s *Service) GetPeerID(ctx context.Context, virtualIP string) (string, error) {
 	// Get from cache first
-	if peerID, found := s.peerIDCache.Get(virtualIP); found {
+	s.mu.Lock()
+	peerID, found := s.peerIDCache.Get(virtualIP)
+	s.mu.Unlock()
+	if found {
 		return peerID.(string), nil
 	}
 
 	peerID, err := s.GetPeerIDByRegistry(ctx, virtualIP)
 	if err != nil {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		s.peerIDCache.Set(virtualIP, "", 1*time.Minute)
 		return "", fmt.Errorf("failed to get peer ID from registry: %v", err)
 	}
 
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.peerIDCache.Set(virtualIP, peerID, 1*time.Minute)
-	return peerID, nil
+	return peerID.(string), nil
 }
 
 func (s *Service) GetPeerIDByRegistry(ctx context.Context, virtualIP string) (string, error) {

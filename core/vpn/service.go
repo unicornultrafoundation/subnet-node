@@ -22,6 +22,7 @@ const VPNProtocol = "/vpn/1.0.0"
 var log = logrus.WithField("service", "vpn")
 
 type Service struct {
+	mu             sync.Mutex
 	cfg            *config.C
 	enable         bool
 	IsProvider     bool
