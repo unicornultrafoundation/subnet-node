@@ -92,25 +92,6 @@ func (s *Service) StoreMappingInDHT(ctx context.Context, peerID string) error {
 	return nil
 }
 
-// Check PeerID - Virtual Ip exists
-func (s *Service) IsMappingExistedInDHT(ctx context.Context, peerID string, virtualIP string) (bool, error) {
-	virtualIPDHT, err := s.GetVirtualIP(ctx, peerID)
-	if err != nil {
-		return false, err
-	}
-
-	peerIDDHT, err := s.GetPeerID(ctx, virtualIP)
-	if err != nil {
-		return false, err
-	}
-
-	if len(virtualIPDHT) == 0 || len(peerIDDHT) == 0 {
-		return false, nil
-	}
-
-	return virtualIP == virtualIPDHT && peerID == peerIDDHT, nil
-}
-
 func (s *Service) GetVirtualIP(ctx context.Context, peerID string) (string, error) {
 	peerIDKey := "/vpn/mapping/" + peerID
 	recordData, err := s.DHT.GetValue(ctx, peerIDKey)
@@ -137,19 +118,21 @@ func (s *Service) SyncPeerIDToDHT(ctx context.Context) error {
 	// If yes, using that virtual IP
 	virtualIP, err := s.GetVirtualIP(ctx, peerID)
 	if err == nil && virtualIP != "" {
-		log.Infof("Use virtual IP %s for peer ID %s", virtualIP, peerID)
-		s.virtualIP = virtualIP
-		return nil
+		// Verify if the virtual IP is registered to the current peer ID
+		err = s.VerifyVirtualIPHasRegistered(ctx, virtualIP)
+		if err != nil {
+			log.Warnf("Try using the virtual IP %s user provided since virtual IP %s on DHT is not registered to this peer ID: %v.", s.virtualIP, virtualIP, err)
+		} else {
+			log.Infof("Use virtual IP %s on DHT for peer ID %s", virtualIP, peerID)
+			s.virtualIP = virtualIP
+			return nil
+		}
 	}
 
-	// Check if PeerID has already had a virtual IP on registry
-	if s.virtualIP == "" {
-		return fmt.Errorf("user needs to provide a virtual IP first")
-	}
-
-	// Check if the virtual IP is already mapped to the current peer ID
-	peerIDMapped, err := s.GetPeerID(ctx, s.virtualIP)
-	if err == nil && peerIDMapped == peerID {
+	// Check if user has registered a virtual IP
+	err = s.VerifyVirtualIPHasRegistered(ctx, s.virtualIP)
+	if err == nil {
+		// User has registered a virtual IP, store the mapping in DHT
 		log.Infof("Use new virtual IP %s for peer ID %s", virtualIP, peerID)
 		return s.StoreMappingInDHT(ctx, peerID)
 	}
@@ -180,6 +163,23 @@ func (s *Service) GetPeerIDByRegistry(ctx context.Context, virtualIP string) (st
 	}
 
 	return s.accountService.IPRegistry().GetPeer(nil, big.NewInt(int64(tokenID)))
+}
+
+func (s *Service) VerifyVirtualIPHasRegistered(ctx context.Context, virtualIP string) error {
+	if virtualIP == "" {
+		return fmt.Errorf("virtual IP is not set")
+	}
+
+	peerID, err := s.GetPeerID(ctx, virtualIP)
+	if err != nil {
+		return fmt.Errorf("failed to get peer ID from registry: %v", err)
+	}
+
+	if peerID != s.PeerHost.ID().String() {
+		return fmt.Errorf("virtual IP %s is not registered to this peer ID", virtualIP)
+	}
+
+	return nil
 }
 
 // Auto clear Peer ID cache each 30 seconds

@@ -69,7 +69,17 @@ func New(cfg *config.C, peerHost p2phost.Host, dht *ddht.DHT, apps *apps.Service
 }
 
 func (s *Service) Start(ctx context.Context) error {
-	if !s.enable || len(s.routes) == 0 {
+	if !s.enable {
+		return nil
+	}
+
+	if s.virtualIP == "" {
+		log.Error("virtual IP is not set")
+		return nil
+	}
+
+	if len(s.routes) == 0 {
+		log.Error("routes are not set")
 		return nil
 	}
 
@@ -115,7 +125,7 @@ func (s *Service) start(ctx context.Context) error {
 }
 
 func (s *Service) Stop() error {
-	if !s.enable {
+	if !s.enable || s.virtualIP == "" || len(s.routes) == 0 {
 		return nil
 	}
 
