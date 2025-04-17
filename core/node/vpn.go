@@ -7,13 +7,12 @@ import (
 	p2phost "github.com/libp2p/go-libp2p/core/host"
 	"github.com/unicornultrafoundation/subnet-node/config"
 	"github.com/unicornultrafoundation/subnet-node/core/account"
-	"github.com/unicornultrafoundation/subnet-node/core/apps"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn"
 	"go.uber.org/fx"
 )
 
-func VPNService(lc fx.Lifecycle, cfg *config.C, peerHost p2phost.Host, dht *ddht.DHT, apps *apps.Service, accountService *account.AccountService) (*vpn.Service, error) {
-	srv := vpn.New(cfg, peerHost, dht, apps, accountService)
+func VPNService(lc fx.Lifecycle, cfg *config.C, peerHost p2phost.Host, dht *ddht.DHT, accountService *account.AccountService) (*vpn.Service, error) {
+	srv := vpn.New(cfg, peerHost, dht, accountService)
 
 	lc.Append(fx.Hook{
 		OnStop: func(_ context.Context) error {
