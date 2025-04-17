@@ -143,8 +143,8 @@ func (s *Service) SyncPeerIDToDHT(ctx context.Context) error {
 
 func (s *Service) GetPeerID(ctx context.Context, virtualIP string) (string, error) {
 	// Get from cache first
-	if peerID, ok := s.peerIDCache[virtualIP]; ok {
-		return peerID, nil
+	if peerID, found := s.peerIDCache.Get(virtualIP); found {
+		return peerID.(string), nil
 	}
 
 	peerID, err := s.GetPeerIDByRegistry(ctx, virtualIP)
@@ -152,7 +152,7 @@ func (s *Service) GetPeerID(ctx context.Context, virtualIP string) (string, erro
 		return "", fmt.Errorf("failed to get peer ID from registry: %v", err)
 	}
 
-	s.peerIDCache[virtualIP] = peerID
+	s.peerIDCache.Set(virtualIP, peerID, 1*time.Minute)
 	return peerID, nil
 }
 
@@ -180,21 +180,4 @@ func (s *Service) VerifyVirtualIPHasRegistered(ctx context.Context, virtualIP st
 	}
 
 	return nil
-}
-
-// Auto clear Peer ID cache each 30 seconds
-func (s *Service) startClearingPeerIDCache(ctx context.Context) {
-	ticker := time.NewTicker(30 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ticker.C:
-			s.peerIDCache = make(map[string]string)
-		case <-s.stopChan:
-			return
-		case <-ctx.Done():
-			return
-		}
-	}
 }
