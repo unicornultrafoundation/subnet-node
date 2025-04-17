@@ -9,6 +9,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	ninit "github.com/unicornultrafoundation/subnet-node/cmd/init"
+	"github.com/unicornultrafoundation/subnet-node/cmd/subnet/config"
 	"github.com/unicornultrafoundation/subnet-node/subnet"
 )
 
@@ -56,7 +57,7 @@ func main() {
 		subcommand := flag.Args()[0]
 
 		if subcommand == "edit-config" {
-			if err := EditConfig(*dataPath, flag.Args()[1:]); err != nil {
+			if err := config.EditConfig(*dataPath, flag.Args()[1:]); err != nil {
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 				os.Exit(1)
 			}
