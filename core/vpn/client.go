@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/patrickmn/go-cache"
 	"github.com/songgao/water"
 	"github.com/vishvananda/netlink"
 )
@@ -82,19 +84,32 @@ func (s *Service) listenFromTUN(ctx context.Context, iface *water.Interface) err
 				log.Fatalf("error reading from TUN interface: %v", err)
 			}
 
-			packet := buf[:n]
+			packet := make([]byte, n)
+			copy(packet, buf[:n])
 			packetInfo, err := ExtractIPAndPorts(packet)
 			if err != nil {
 				log.Debugf("failed to parse the packet info: %v", err)
 				continue
 			}
 
-			go func() {
-				err = s.RetrySendTrafficToPeer(ctx, packetInfo.DstIP.String(), packet)
+			// Get destination IP for synchronization
+			destIP := packetInfo.DstIP.String()
+
+			// Create a synchronization key based on IP and port
+			syncKey := destIP
+			if packetInfo.DstPort != nil {
+				// If port is available, use IP:Port as the key
+				syncKey = fmt.Sprintf("%s:%d", destIP, *packetInfo.DstPort)
+			}
+
+			// Process packets concurrently for different IP:Port combinations
+			// but synchronously for the same IP:Port
+			go func(syncKey string, destIP string, packetData []byte) {
+				err = s.SendTrafficToPeerSync(ctx, syncKey, destIP, packetData)
 				if err != nil {
 					log.Debugf("failed to send traffic to peer: %v", err)
 				}
-			}()
+			}(syncKey, destIP, packet)
 		}
 	}
 }
@@ -130,6 +145,36 @@ func (s *Service) SendTrafficToPeer(ctx context.Context, destIP string, data []b
 }
 
 func (s *Service) RetrySendTrafficToPeer(ctx context.Context, destIP string, data []byte) error {
+	operation := func() error {
+		return s.SendTrafficToPeer(ctx, destIP, data)
+	}
+
+	bo := backoff.NewExponentialBackOff()
+	bo.MaxElapsedTime = 30 * time.Second
+
+	return backoff.Retry(operation, backoff.WithContext(bo, ctx))
+}
+
+// SendTrafficToPeerSync sends traffic to a peer with synchronization per destination IP:Port
+// This ensures packets to the same destination IP:Port are sent in order
+// Different ports on the same IP can still send concurrently
+func (s *Service) SendTrafficToPeerSync(ctx context.Context, syncKey string, destIP string, data []byte) error {
+	// Get or create a mutex for this destination IP:Port combination
+	mutexVal, _ := s.ipMutexes.LoadOrStore(syncKey, &sync.Mutex{})
+	mutex := mutexVal.(*sync.Mutex)
+
+	// Update activity cache for this synchronization key
+	s.ipActivityMu.Lock()
+	if s.ipActivityCache != nil {
+		s.ipActivityCache.Set(syncKey, time.Now(), cache.DefaultExpiration)
+	}
+	s.ipActivityMu.Unlock()
+
+	// Lock the mutex for this specific IP:Port combination
+	mutex.Lock()
+	defer mutex.Unlock()
+
+	// Use the retry mechanism with the synchronized access
 	operation := func() error {
 		return s.SendTrafficToPeer(ctx, destIP, data)
 	}
