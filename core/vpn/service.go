@@ -36,6 +36,13 @@ type Service struct {
 	streamCache    map[string]network.Stream
 	peerIDCache    *cache.Cache
 
+	// IP-specific mutexes for synchronous packet sending per destination IP
+	ipMutexes sync.Map
+	// Cache to track activity for IP cleanup
+	ipActivityCache *cache.Cache
+	// Mutex to protect access to ipActivityCache
+	ipActivityMu sync.Mutex
+
 	stopChan chan struct{} // Channel to stop background tasks
 }
 
@@ -48,20 +55,21 @@ func New(cfg *config.C, peerHost p2phost.Host, dht *ddht.DHT, accountService *ac
 	}
 
 	return &Service{
-		cfg:            cfg,
-		PeerHost:       peerHost,
-		accountService: accountService,
-		enable:         cfg.GetBool("vpn.enable", false),
-		mtu:            cfg.GetInt("vpn.mtu", 1400),
-		virtualIP:      cfg.GetString("vpn.virtual_ip", ""),
-		subnet:         cfg.GetInt("vpn.subnet", 8),
-		routes:         cfg.GetStringSlice("vpn.routes", []string{"10.0.0.0/8"}),
-		unallowedPorts: unallowedPorts,
-		IsProvider:     cfg.GetBool("provider.enable", false),
-		DHT:            dht,
-		streamCache:    make(map[string]network.Stream),
-		peerIDCache:    cache.New(1*time.Minute, 30*time.Second),
-		stopChan:       make(chan struct{}),
+		cfg:             cfg,
+		PeerHost:        peerHost,
+		accountService:  accountService,
+		enable:          cfg.GetBool("vpn.enable", false),
+		mtu:             cfg.GetInt("vpn.mtu", 1400),
+		virtualIP:       cfg.GetString("vpn.virtual_ip", ""),
+		subnet:          cfg.GetInt("vpn.subnet", 8),
+		routes:          cfg.GetStringSlice("vpn.routes", []string{"10.0.0.0/8"}),
+		unallowedPorts:  unallowedPorts,
+		IsProvider:      cfg.GetBool("provider.enable", false),
+		DHT:             dht,
+		streamCache:     make(map[string]network.Stream),
+		peerIDCache:     cache.New(1*time.Minute, 30*time.Second),
+		ipActivityCache: cache.New(10*time.Minute, 1*time.Minute),
+		stopChan:        make(chan struct{}),
 	}
 }
 
@@ -83,6 +91,9 @@ func (s *Service) Start(ctx context.Context) error {
 	// Wait until there are some peers connected
 	WaitUntilPeerConnected(ctx, s.PeerHost)
 	time.Sleep(1 * time.Second)
+
+	// Start a goroutine to periodically clean up unused IP mutexes
+	go s.cleanupIPMutexes(ctx)
 
 	go func() {
 		err := s.start(ctx)
@@ -113,6 +124,46 @@ func (s *Service) start(ctx context.Context) error {
 	return s.listenFromTUN(ctx, iface)
 }
 
+// cleanupIPMutexes periodically checks for and removes unused IP:Port mutexes
+func (s *Service) cleanupIPMutexes(_ context.Context) {
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+
+	// Use a separate cache to track last activity time for each IP:Port
+	s.ipActivityMu.Lock()
+	if s.ipActivityCache == nil {
+		s.ipActivityCache = cache.New(10*time.Minute, 1*time.Minute)
+	}
+	s.ipActivityMu.Unlock()
+	activityCache := s.ipActivityCache
+
+	// Update activity cache when packets are sent
+	s.ipMutexes.Range(func(key, value interface{}) bool {
+		syncKey := key.(string)
+		activityCache.Set(syncKey, time.Now(), cache.DefaultExpiration)
+		return true
+	})
+
+	for {
+		select {
+		case <-s.stopChan:
+			return
+		case <-ticker.C:
+			// Clean up IP:Port mutexes that have expired from the activity cache
+			s.ipMutexes.Range(func(key, value interface{}) bool {
+				syncKey := key.(string)
+				_, found := activityCache.Get(syncKey)
+				if !found {
+					// IP:Port has expired from activity cache, remove the mutex
+					s.ipMutexes.Delete(syncKey)
+					log.Debugf("Cleaned up mutex for unused key: %s", syncKey)
+				}
+				return true
+			})
+		}
+	}
+}
+
 func (s *Service) Stop() error {
 	if !s.enable || s.virtualIP == "" || len(s.routes) == 0 {
 		return nil
@@ -130,6 +181,12 @@ func (s *Service) Stop() error {
 		}
 		wg.Wait()
 	}
+
+	// Clear IP:Port mutexes and activity cache
+	s.ipMutexes = sync.Map{}
+	s.ipActivityMu.Lock()
+	s.ipActivityCache = nil
+	s.ipActivityMu.Unlock()
 
 	// Close stopChan to stop all background tasks
 	close(s.stopChan)
