@@ -10,6 +10,7 @@ import (
 	ddht "github.com/libp2p/go-libp2p-kad-dht/dual"
 	p2phost "github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/patrickmn/go-cache"
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/config"
 	"github.com/unicornultrafoundation/subnet-node/core/account"
@@ -35,7 +36,7 @@ type Service struct {
 	exposedPorts   map[string]bool // All ports exposed by running apps
 	unallowedPorts map[string]bool
 	streamCache    map[string]network.Stream
-	peerIDCache    map[string]string
+	peerIDCache    *cache.Cache
 
 	stopChan chan struct{} // Channel to stop background tasks
 }
@@ -62,7 +63,7 @@ func New(cfg *config.C, peerHost p2phost.Host, dht *ddht.DHT, apps *apps.Service
 		IsProvider:     cfg.GetBool("provider.enable", false),
 		DHT:            dht,
 		streamCache:    make(map[string]network.Stream),
-		peerIDCache:    make(map[string]string),
+		peerIDCache:    cache.New(1*time.Minute, 30*time.Second),
 		exposedPorts:   make(map[string]bool),
 		stopChan:       make(chan struct{}),
 	}
@@ -94,7 +95,6 @@ func (s *Service) Start(ctx context.Context) error {
 
 			go s.startUpdatingExposedPorts(ctx)
 		}
-		go s.startClearingPeerIDCache(ctx)
 
 		err := s.start(ctx)
 		if err != nil {
