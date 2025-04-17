@@ -45,7 +45,7 @@ type IdOutput struct { // nolint
 }
 
 func (api *NodeAPI) Id(ctx context.Context) (*IdOutput, error) {
-	p := api.resource.PeerId()
+	p := api.node.Identity
 	info := new(IdOutput)
 	info.ID = p.String()
 	ps := api.node.Peerstore
