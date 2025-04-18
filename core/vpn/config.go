@@ -2,6 +2,7 @@ package vpn
 
 import (
 	"net"
+	"strconv"
 	"time"
 
 	"github.com/unicornultrafoundation/subnet-node/config"
@@ -70,7 +71,7 @@ func (c *VPNConfig) Validate() error {
 
 	if c.VirtualIP == "" {
 		return ErrVirtualIPNotSet
-	} else if _, _, err := net.ParseCIDR(c.VirtualIP); err != nil {
+	} else if _, _, err := net.ParseCIDR(c.VirtualIP + "/" + strconv.Itoa(c.Subnet)); err != nil {
 		return ErrInvalidVirtualIP
 	}
 
