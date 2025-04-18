@@ -14,7 +14,7 @@ func (s *Service) HandleP2PTraffic(iface *water.Interface) {
 		go func() {
 			defer stream.Close()
 
-			buf := make([]byte, s.mtu)
+			buf := make([]byte, s.config.MTU)
 			for {
 				n, err := stream.Read(buf)
 				if err != nil {
@@ -32,12 +32,13 @@ func (s *Service) HandleP2PTraffic(iface *water.Interface) {
 				packetInfo, err := ExtractIPAndPorts(packet)
 				if err != nil {
 					log.Debugf("error extracting packet info: %v", err)
+					s.IncrementPacketsDropped()
 					continue
 				} else {
 					if packetInfo.DstPort != nil {
 						dstPort := strconv.Itoa(*packetInfo.DstPort)
 						// Reject all requests that are to unallowed ports
-						unallowedPort, exist := s.unallowedPorts[dstPort]
+						unallowedPort, exist := s.config.UnallowedPorts[dstPort]
 						if exist && unallowedPort {
 							continue
 						}

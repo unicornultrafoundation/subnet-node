@@ -44,7 +44,7 @@ func (s *Service) signVirtualIPHash(hash []byte) ([]byte, error) {
 
 // Save Virtual IP - PeerID mapping to DHT
 func (s *Service) StoreMappingInDHT(ctx context.Context, peerID string) error {
-	if s.virtualIP == "" {
+	if s.config.VirtualIP == "" {
 		return fmt.Errorf("virtual IP is not set")
 	}
 
@@ -53,7 +53,7 @@ func (s *Service) StoreMappingInDHT(ctx context.Context, peerID string) error {
 
 	// Create the info
 	info := &subnet_vpn.VirtualIPInfo{
-		Ip:        s.virtualIP,
+		Ip:        s.config.VirtualIP,
 		Timestamp: timestamp,
 	}
 
@@ -121,16 +121,16 @@ func (s *Service) SyncPeerIDToDHT(ctx context.Context) error {
 		// Verify if the virtual IP is registered to the current peer ID
 		err = s.VerifyVirtualIPHasRegistered(ctx, virtualIP)
 		if err != nil {
-			log.Warnf("Try using the virtual IP %s user provided since virtual IP %s on DHT is not registered to this peer ID: %v.", s.virtualIP, virtualIP, err)
+			log.Warnf("Try using the virtual IP %s user provided since virtual IP %s on DHT is not registered to this peer ID: %v.", s.config.VirtualIP, virtualIP, err)
 		} else {
 			log.Infof("Use virtual IP %s on DHT for peer ID %s", virtualIP, peerID)
-			s.virtualIP = virtualIP
+			s.config.VirtualIP = virtualIP
 			return nil
 		}
 	}
 
 	// Check if user has registered a virtual IP
-	err = s.VerifyVirtualIPHasRegistered(ctx, s.virtualIP)
+	err = s.VerifyVirtualIPHasRegistered(ctx, s.config.VirtualIP)
 	if err == nil {
 		// User has registered a virtual IP, store the mapping in DHT
 		log.Infof("Use new virtual IP %s for peer ID %s", virtualIP, peerID)
