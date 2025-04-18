@@ -3,13 +3,11 @@ package vpn
 import (
 	"context"
 	"fmt"
-	"io"
 	"sync"
 	"time"
 
 	ddht "github.com/libp2p/go-libp2p-kad-dht/dual"
 	p2phost "github.com/libp2p/go-libp2p/core/host"
-	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/patrickmn/go-cache"
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/config"
@@ -23,81 +21,77 @@ var log = logrus.WithField("service", "vpn")
 type Service struct {
 	mu             sync.Mutex
 	cfg            *config.C
-	enable         bool
+	config         *VPNConfig
 	IsProvider     bool
 	accountService *account.AccountService
 	PeerHost       p2phost.Host
 	DHT            *ddht.DHT
-	virtualIP      string
-	subnet         int
-	routes         []string
-	mtu            int
-	unallowedPorts map[string]bool
-	streamCache    map[string]network.Stream
 	peerIDCache    *cache.Cache
 
-	// IP-specific mutexes for synchronous packet sending per destination IP
-	ipMutexes sync.Map
-	// Cache to track activity for IP cleanup
-	ipActivityCache *cache.Cache
-	// Mutex to protect access to ipActivityCache
-	ipActivityMu sync.Mutex
-	// Map of packet queues for each destination IP:Port
-	packetQueues sync.Map
-	// Mutex to protect access to packetQueues
-	packetQueuesMu sync.Mutex
+	// Packet dispatcher for managing workers and routing packets
+	dispatcher *PacketDispatcher
+	// Buffer pool for packet processing
+	bufferPool sync.Pool
+	// Metrics for monitoring
+	metrics struct {
+		packetsReceived int64
+		packetsSent     int64
+		packetsDropped  int64
+		bytesReceived   int64
+		bytesSent       int64
+		streamErrors    int64
+		mutex           sync.Mutex
+	}
 
 	stopChan chan struct{} // Channel to stop background tasks
 }
 
 // Initializes the Service
 func New(cfg *config.C, peerHost p2phost.Host, dht *ddht.DHT, accountService *account.AccountService) *Service {
-	unallowedPortList := cfg.GetStringSlice("vpn.unallowed_ports", []string{})
-	unallowedPorts := make(map[string]bool, len(unallowedPortList))
-	for _, port := range unallowedPortList {
-		unallowedPorts[port] = true
+	// Create the VPN configuration
+	vpnConfig := NewVPNConfig(cfg)
+
+	// Initialize the buffer pool with MTU-sized buffers
+	service := &Service{
+		cfg:            cfg,
+		config:         vpnConfig,
+		PeerHost:       peerHost,
+		accountService: accountService,
+		IsProvider:     cfg.GetBool("provider.enable", false),
+		DHT:            dht,
+		peerIDCache:    cache.New(1*time.Minute, 30*time.Second),
+		bufferPool: sync.Pool{
+			New: func() interface{} {
+				buffer := make([]byte, vpnConfig.MTU)
+				return &buffer
+			},
+		},
+		stopChan: make(chan struct{}),
 	}
 
-	return &Service{
-		cfg:             cfg,
-		PeerHost:        peerHost,
-		accountService:  accountService,
-		enable:          cfg.GetBool("vpn.enable", false),
-		mtu:             cfg.GetInt("vpn.mtu", 1400),
-		virtualIP:       cfg.GetString("vpn.virtual_ip", ""),
-		subnet:          cfg.GetInt("vpn.subnet", 8),
-		routes:          cfg.GetStringSlice("vpn.routes", []string{"10.0.0.0/8"}),
-		unallowedPorts:  unallowedPorts,
-		IsProvider:      cfg.GetBool("provider.enable", false),
-		DHT:             dht,
-		streamCache:     make(map[string]network.Stream),
-		peerIDCache:     cache.New(1*time.Minute, 30*time.Second),
-		ipActivityCache: cache.New(10*time.Minute, 1*time.Minute),
-		stopChan:        make(chan struct{}),
-	}
+	// Create the packet dispatcher
+	service.dispatcher = NewPacketDispatcher(service, 0) // The second parameter is ignored now
+
+	return service
 }
 
 func (s *Service) Start(ctx context.Context) error {
-	if !s.enable {
+	if !s.config.Enable {
 		return nil
 	}
 
-	if s.virtualIP == "" {
-		log.Error("virtual IP is not set")
-		return nil
-	}
-
-	if len(s.routes) == 0 {
-		log.Error("routes are not set")
-		return nil
+	// Validate configuration
+	if err := s.config.Validate(); err != nil {
+		log.Errorf("Invalid VPN configuration: %v", err)
+		return err
 	}
 
 	// Wait until there are some peers connected
 	WaitUntilPeerConnected(ctx, s.PeerHost)
 	time.Sleep(1 * time.Second)
 
-	// Start a goroutine to periodically clean up unused IP mutexes
-	go s.cleanupIPMutexes(ctx)
+	// Start the packet dispatcher
+	s.dispatcher.Start()
 
 	go func() {
 		err := s.start(ctx)
@@ -128,83 +122,72 @@ func (s *Service) start(ctx context.Context) error {
 	return s.listenFromTUN(ctx, iface)
 }
 
-// cleanupIPMutexes periodically checks for and removes unused IP:Port mutexes
-func (s *Service) cleanupIPMutexes(_ context.Context) {
-	ticker := time.NewTicker(5 * time.Minute)
-	defer ticker.Stop()
-
-	// Use a separate cache to track last activity time for each IP:Port
-	s.ipActivityMu.Lock()
-	if s.ipActivityCache == nil {
-		s.ipActivityCache = cache.New(10*time.Minute, 1*time.Minute)
-	}
-	s.ipActivityMu.Unlock()
-	activityCache := s.ipActivityCache
-
-	// Update activity cache when packets are sent
-	s.ipMutexes.Range(func(key, value interface{}) bool {
-		syncKey := key.(string)
-		activityCache.Set(syncKey, time.Now(), cache.DefaultExpiration)
-		return true
-	})
-
-	for {
-		select {
-		case <-s.stopChan:
-			return
-		case <-ticker.C:
-			// Clean up IP:Port mutexes that have expired from the activity cache
-			s.ipMutexes.Range(func(key, value interface{}) bool {
-				syncKey := key.(string)
-				_, found := activityCache.Get(syncKey)
-				if !found {
-					// IP:Port has expired from activity cache, remove the mutex
-					s.ipMutexes.Delete(syncKey)
-					log.Debugf("Cleaned up mutex for unused key: %s", syncKey)
-				}
-				return true
-			})
-		}
-	}
-}
-
 func (s *Service) Stop() error {
-	if !s.enable || s.virtualIP == "" || len(s.routes) == 0 {
+	if !s.config.Enable || s.config.VirtualIP == "" || len(s.config.Routes) == 0 {
 		return nil
 	}
 
-	if len(s.streamCache) > 0 {
-		// Close all cached streams
-		var wg sync.WaitGroup
-		for _, stream := range s.streamCache {
-			wg.Add(1)
-			go func(str io.Closer) {
-				defer wg.Done()
-				str.Close()
-			}(stream)
-		}
-		wg.Wait()
-	}
-
-	// Clear IP:Port mutexes, packet queues, and activity cache
-	s.ipMutexes = sync.Map{}
-	s.ipActivityMu.Lock()
-	s.ipActivityCache = nil
-	s.ipActivityMu.Unlock()
-
-	// Close and clear all packet queues
-	s.packetQueuesMu.Lock()
-	s.packetQueues.Range(func(key, value interface{}) bool {
-		queue := value.(chan *QueuedPacket)
-		close(queue)
-		s.packetQueues.Delete(key)
-		return true
-	})
-	s.packetQueuesMu.Unlock()
+	// Stop the packet dispatcher
+	s.dispatcher.Stop()
 
 	// Close stopChan to stop all background tasks
 	close(s.stopChan)
 
 	log.Infoln("VPN service stopped successfully!")
 	return nil
+}
+
+// GetMetrics returns the current VPN metrics
+func (s *Service) GetMetrics() map[string]int64 {
+	s.metrics.mutex.Lock()
+	defer s.metrics.mutex.Unlock()
+
+	// Count active workers
+	activeWorkers := 0
+	s.dispatcher.workers.Range(func(_, _ interface{}) bool {
+		activeWorkers++
+		return true
+	})
+
+	return map[string]int64{
+		"packets_received": s.metrics.packetsReceived,
+		"packets_sent":     s.metrics.packetsSent,
+		"packets_dropped":  s.metrics.packetsDropped,
+		"bytes_received":   s.metrics.bytesReceived,
+		"bytes_sent":       s.metrics.bytesSent,
+		"active_workers":   int64(activeWorkers),
+		"stream_errors":    s.metrics.streamErrors,
+	}
+}
+
+// IncrementPacketsSent updates the packets sent metric
+func (s *Service) IncrementPacketsSent(bytes int) {
+	s.metrics.mutex.Lock()
+	defer s.metrics.mutex.Unlock()
+	s.metrics.packetsSent++
+	s.metrics.bytesSent += int64(bytes)
+}
+
+// IncrementPacketsDropped updates the packets dropped metric
+func (s *Service) IncrementPacketsDropped() {
+	s.metrics.mutex.Lock()
+	defer s.metrics.mutex.Unlock()
+	s.metrics.packetsDropped++
+}
+
+// IncrementStreamErrors updates the stream errors metric
+func (s *Service) IncrementStreamErrors() {
+	s.metrics.mutex.Lock()
+	defer s.metrics.mutex.Unlock()
+	s.metrics.streamErrors++
+}
+
+// GetWorkerBufferSize returns the worker buffer size
+func (s *Service) GetWorkerBufferSize() int {
+	return s.config.WorkerBufferSize
+}
+
+// GetWorkerIdleTimeout returns the worker idle timeout in seconds
+func (s *Service) GetWorkerIdleTimeout() int {
+	return s.config.WorkerIdleTimeout
 }

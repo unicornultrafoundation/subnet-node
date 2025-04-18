@@ -6,10 +6,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/cenkalti/backoff/v4"
-	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/patrickmn/go-cache"
 	"github.com/songgao/water"
 	"github.com/vishvananda/netlink"
 )
@@ -28,12 +25,12 @@ func (s *Service) SetupTUN() (*water.Interface, error) {
 	}
 
 	// Set MTU
-	if err := netlink.LinkSetMTU(link, s.mtu); err != nil {
+	if err := netlink.LinkSetMTU(link, s.config.MTU); err != nil {
 		return nil, fmt.Errorf("failed to set MTU: %w", err)
 	}
 
 	// Assign IP address
-	addr, err := netlink.ParseAddr(fmt.Sprintf("%s/%d", s.virtualIP, s.subnet))
+	addr, err := netlink.ParseAddr(fmt.Sprintf("%s/%d", s.config.VirtualIP, s.config.Subnet))
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse IP: %w", err)
 	}
@@ -47,7 +44,7 @@ func (s *Service) SetupTUN() (*water.Interface, error) {
 	}
 
 	// Add after iface creation
-	for _, r := range s.routes {
+	for _, r := range s.config.Routes {
 		_, dst, err := net.ParseCIDR(r)
 		if err != nil {
 			log.Errorf("Invalid route: %s", r)
@@ -71,7 +68,11 @@ func (s *Service) SetupTUN() (*water.Interface, error) {
 
 // Listen from TUN Interface & redirect requests/packets to Peer via p2p stream
 func (s *Service) listenFromTUN(ctx context.Context, iface *water.Interface) error {
-	buf := make([]byte, s.mtu)
+	// Get a buffer from the pool
+	bufPtr := s.bufferPool.Get().(*[]byte)
+	buf := *bufPtr
+
+	defer s.bufferPool.Put(bufPtr)
 
 	for {
 		select {
@@ -80,14 +81,25 @@ func (s *Service) listenFromTUN(ctx context.Context, iface *water.Interface) err
 		default:
 			n, err := iface.Read(buf)
 			if err != nil {
-				log.Fatalf("error reading from TUN interface: %v", err)
+				log.Errorf("Error reading from TUN interface: %v", err)
+				// Add a short sleep to prevent tight loop in case of persistent errors
+				time.Sleep(100 * time.Millisecond)
+				continue
 			}
 
+			// Update metrics
+			s.metrics.mutex.Lock()
+			s.metrics.packetsReceived++
+			s.metrics.bytesReceived += int64(n)
+			s.metrics.mutex.Unlock()
+
+			// Create a copy that will persist beyond this function
 			packet := make([]byte, n)
 			copy(packet, buf[:n])
 			packetInfo, err := ExtractIPAndPorts(packet)
 			if err != nil {
 				log.Debugf("failed to parse the packet info: %v", err)
+				s.IncrementPacketsDropped()
 				continue
 			}
 
@@ -101,123 +113,17 @@ func (s *Service) listenFromTUN(ctx context.Context, iface *water.Interface) err
 				syncKey = fmt.Sprintf("%s:%d", destIP, *packetInfo.DstPort)
 			}
 
-			// Get the packet queue for this destination
-			queue := s.getOrCreatePacketQueue(syncKey)
-
-			// Create a packet and add it to the queue (non-blocking)
-			packetObj := &QueuedPacket{
-				Ctx:    ctx,
-				DestIP: destIP,
-				Data:   packet,
-				// No DoneCh since we don't need to wait for completion
-			}
-
-			// Try to add the packet to the queue without blocking
-			select {
-			case queue <- packetObj:
-				// Successfully added to queue
-			default:
-				// Queue is full, log and continue
-				log.Debugf("Packet queue full for %s, dropping packet", syncKey)
-			}
+			// Dispatch the packet to the appropriate worker
+			s.dispatcher.DispatchPacket(ctx, syncKey, destIP, packet)
 		}
 	}
 }
 
-// SendTrafficToPeer forwards packets over P2P
-func (s *Service) SendTrafficToPeer(ctx context.Context, destIP string, data []byte) error {
-	peerID, err := s.GetPeerID(ctx, destIP)
-	if err != nil {
-		return fmt.Errorf("no peer mapping found for IP %s: %v", destIP, err)
-	}
-
-	parsedPeerID, err := peer.Decode(peerID)
-	if err != nil {
-		return fmt.Errorf("failed to parse peerid %s: %v", peerID, err)
-	}
-
-	stream, exist := s.streamCache[peerID]
-	if !exist {
-		stream, err = s.CreateNewVPNStream(ctx, parsedPeerID)
-		if err != nil {
-			return fmt.Errorf("failed to create P2P stream: %v", err)
-		}
-	}
-
-	_, err = stream.Write(data)
-	if err != nil {
-		stream.Close()
-		delete(s.streamCache, peerID)
-		return fmt.Errorf("error writing to P2P stream: %v", err)
-	}
-
-	return nil
-}
-
-// getOrCreatePacketQueue gets or creates a packet queue for the given synchronization key
-func (s *Service) getOrCreatePacketQueue(syncKey string) chan *QueuedPacket {
-	s.packetQueuesMu.Lock()
-	defer s.packetQueuesMu.Unlock()
-
-	queueVal, exists := s.packetQueues.Load(syncKey)
-	if exists {
-		return queueVal.(chan *QueuedPacket)
-	}
-
-	// Create a new queue with buffer size 100
-	queue := make(chan *QueuedPacket, 100)
-	s.packetQueues.Store(syncKey, queue)
-
-	// Start a goroutine to process this queue
-	go s.processPacketQueue(syncKey, queue)
-
-	return queue
-}
-
-// processPacketQueue processes packets from the queue in sequential order
-func (s *Service) processPacketQueue(syncKey string, queue chan *QueuedPacket) {
-	for {
-		select {
-		case <-s.stopChan:
-			return
-		case packet, ok := <-queue:
-			if !ok {
-				// Channel was closed
-				return
-			}
-
-			// Update activity cache for this synchronization key
-			s.ipActivityMu.Lock()
-			if s.ipActivityCache != nil {
-				s.ipActivityCache.Set(syncKey, time.Now(), cache.DefaultExpiration)
-			}
-			s.ipActivityMu.Unlock()
-
-			// Process the packet
-			operation := func() error {
-				return s.SendTrafficToPeer(packet.Ctx, packet.DestIP, packet.Data)
-			}
-
-			bo := backoff.NewExponentialBackOff()
-			bo.MaxElapsedTime = 30 * time.Second
-
-			err := backoff.Retry(operation, backoff.WithContext(bo, packet.Ctx))
-
-			// Signal completion
-			if packet.DoneCh != nil {
-				packet.DoneCh <- err
-				close(packet.DoneCh)
-			}
-		}
-	}
-}
-
-func (s *Service) CreateNewVPNStream(ctx context.Context, peerID peer.ID) (network.Stream, error) {
+func (s *Service) CreateNewVPNStream(ctx context.Context, peerID peer.ID) (VPNStream, error) {
 	stream, err := s.PeerHost.NewStream(ctx, peerID, VPNProtocol)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create new VPN P2P stream: %v", err)
 	}
-	s.streamCache[peerID.String()] = stream
 
 	return stream, nil
 }

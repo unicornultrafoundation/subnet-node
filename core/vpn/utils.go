@@ -12,6 +12,7 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 func ExtractIPAndPorts(packet []byte) (*PacketInfo, error) {
@@ -35,33 +36,71 @@ func extractIPv6Info(packet []byte) (*PacketInfo, error) {
 		return nil, errors.New("packet too short for IPv6")
 	}
 
+	// Extract the payload length from the IPv6 header
+	payloadLength := int(binary.BigEndian.Uint16(packet[4:6]))
+
+	// Ensure the packet is long enough to contain the payload
+	if len(packet) < 40+payloadLength {
+		return nil, errors.New("packet shorter than declared IPv6 length")
+	}
+
 	nextHeader := packet[6]
 	srcIP := net.IP(packet[8:24])
 	dstIP := net.IP(packet[24:40])
 
-	var srcPort, dstPort int
-	switch nextHeader {
-	case 6, 17: // TCP or UDP
-		if len(packet) < 44 {
-			return nil, errors.New("packet too short for transport header")
-		}
-		srcPort = int(binary.BigEndian.Uint16(packet[40:42]))
-		dstPort = int(binary.BigEndian.Uint16(packet[42:44]))
-	default:
-		return &PacketInfo{
-			SrcIP:    srcIP,
-			DstIP:    dstIP,
-			Protocol: nextHeader,
-		}, nil
-	}
+	// Handle extension headers
+	headerOffset := 40
+	currentHeader := nextHeader
 
-	return &PacketInfo{
-		SrcIP:    srcIP,
-		DstIP:    dstIP,
-		SrcPort:  &srcPort,
-		DstPort:  &dstPort,
-		Protocol: nextHeader,
-	}, nil
+	// Process extension headers
+	for {
+		switch currentHeader {
+		case 0: // Hop-by-Hop Options
+		case 43: // Routing
+		case 44: // Fragment
+		case 50: // ESP
+		case 51: // AH
+		case 60: // Destination Options
+			if headerOffset+2 > len(packet) {
+				return nil, errors.New("malformed IPv6 packet: extension header too short")
+			}
+
+			// Get the next header type
+			nextHeader = packet[headerOffset]
+
+			// Get the extension header length (in 8-octet units, not including first 8 octets)
+			headerLen := int(packet[headerOffset+1])*8 + 8
+
+			// Move to the next header
+			headerOffset += headerLen
+			currentHeader = nextHeader
+
+			if headerOffset >= len(packet) {
+				return nil, errors.New("malformed IPv6 packet: extension headers exceed packet length")
+			}
+		case 6, 17: // TCP or UDP
+			if headerOffset+4 > len(packet) {
+				return nil, errors.New("packet too short for transport header")
+			}
+			srcPort := int(binary.BigEndian.Uint16(packet[headerOffset : headerOffset+2]))
+			dstPort := int(binary.BigEndian.Uint16(packet[headerOffset+2 : headerOffset+4]))
+
+			return &PacketInfo{
+				SrcIP:    srcIP,
+				DstIP:    dstIP,
+				SrcPort:  &srcPort,
+				DstPort:  &dstPort,
+				Protocol: currentHeader,
+			}, nil
+		default:
+			// No port information for other protocols
+			return &PacketInfo{
+				SrcIP:    srcIP,
+				DstIP:    dstIP,
+				Protocol: currentHeader,
+			}, nil
+		}
+	}
 }
 
 func extractIPv4Info(packet []byte) (*PacketInfo, error) {
@@ -169,4 +208,9 @@ func ConvertVirtualIPToNumber(virtualIP string) uint32 {
 
 	// Convert to uint32
 	return binary.BigEndian.Uint32(ipv4)
+}
+
+// ParsePeerID parses a peer ID string
+func ParsePeerID(peerID string) (peer.ID, error) {
+	return peer.Decode(peerID)
 }
