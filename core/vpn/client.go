@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"sync"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -102,14 +101,25 @@ func (s *Service) listenFromTUN(ctx context.Context, iface *water.Interface) err
 				syncKey = fmt.Sprintf("%s:%d", destIP, *packetInfo.DstPort)
 			}
 
-			// Process packets concurrently for different IP:Port combinations
-			// but synchronously for the same IP:Port
-			go func(syncKey string, destIP string, packetData []byte) {
-				err = s.SendTrafficToPeerSync(ctx, syncKey, destIP, packetData)
-				if err != nil {
-					log.Debugf("failed to send traffic to peer: %v", err)
-				}
-			}(syncKey, destIP, packet)
+			// Get the packet queue for this destination
+			queue := s.getOrCreatePacketQueue(syncKey)
+
+			// Create a packet and add it to the queue (non-blocking)
+			packetObj := &QueuedPacket{
+				Ctx:    ctx,
+				DestIP: destIP,
+				Data:   packet,
+				// No DoneCh since we don't need to wait for completion
+			}
+
+			// Try to add the packet to the queue without blocking
+			select {
+			case queue <- packetObj:
+				// Successfully added to queue
+			default:
+				// Queue is full, log and continue
+				log.Debugf("Packet queue full for %s, dropping packet", syncKey)
+			}
 		}
 	}
 }
@@ -144,45 +154,62 @@ func (s *Service) SendTrafficToPeer(ctx context.Context, destIP string, data []b
 	return nil
 }
 
-func (s *Service) RetrySendTrafficToPeer(ctx context.Context, destIP string, data []byte) error {
-	operation := func() error {
-		return s.SendTrafficToPeer(ctx, destIP, data)
+// getOrCreatePacketQueue gets or creates a packet queue for the given synchronization key
+func (s *Service) getOrCreatePacketQueue(syncKey string) chan *QueuedPacket {
+	s.packetQueuesMu.Lock()
+	defer s.packetQueuesMu.Unlock()
+
+	queueVal, exists := s.packetQueues.Load(syncKey)
+	if exists {
+		return queueVal.(chan *QueuedPacket)
 	}
 
-	bo := backoff.NewExponentialBackOff()
-	bo.MaxElapsedTime = 30 * time.Second
+	// Create a new queue with buffer size 100
+	queue := make(chan *QueuedPacket, 100)
+	s.packetQueues.Store(syncKey, queue)
 
-	return backoff.Retry(operation, backoff.WithContext(bo, ctx))
+	// Start a goroutine to process this queue
+	go s.processPacketQueue(syncKey, queue)
+
+	return queue
 }
 
-// SendTrafficToPeerSync sends traffic to a peer with synchronization per destination IP:Port
-// This ensures packets to the same destination IP:Port are sent in order
-// Different ports on the same IP can still send concurrently
-func (s *Service) SendTrafficToPeerSync(ctx context.Context, syncKey string, destIP string, data []byte) error {
-	// Get or create a mutex for this destination IP:Port combination
-	mutexVal, _ := s.ipMutexes.LoadOrStore(syncKey, &sync.Mutex{})
-	mutex := mutexVal.(*sync.Mutex)
+// processPacketQueue processes packets from the queue in sequential order
+func (s *Service) processPacketQueue(syncKey string, queue chan *QueuedPacket) {
+	for {
+		select {
+		case <-s.stopChan:
+			return
+		case packet, ok := <-queue:
+			if !ok {
+				// Channel was closed
+				return
+			}
 
-	// Update activity cache for this synchronization key
-	s.ipActivityMu.Lock()
-	if s.ipActivityCache != nil {
-		s.ipActivityCache.Set(syncKey, time.Now(), cache.DefaultExpiration)
+			// Update activity cache for this synchronization key
+			s.ipActivityMu.Lock()
+			if s.ipActivityCache != nil {
+				s.ipActivityCache.Set(syncKey, time.Now(), cache.DefaultExpiration)
+			}
+			s.ipActivityMu.Unlock()
+
+			// Process the packet
+			operation := func() error {
+				return s.SendTrafficToPeer(packet.Ctx, packet.DestIP, packet.Data)
+			}
+
+			bo := backoff.NewExponentialBackOff()
+			bo.MaxElapsedTime = 30 * time.Second
+
+			err := backoff.Retry(operation, backoff.WithContext(bo, packet.Ctx))
+
+			// Signal completion
+			if packet.DoneCh != nil {
+				packet.DoneCh <- err
+				close(packet.DoneCh)
+			}
+		}
 	}
-	s.ipActivityMu.Unlock()
-
-	// Lock the mutex for this specific IP:Port combination
-	mutex.Lock()
-	defer mutex.Unlock()
-
-	// Use the retry mechanism with the synchronized access
-	operation := func() error {
-		return s.SendTrafficToPeer(ctx, destIP, data)
-	}
-
-	bo := backoff.NewExponentialBackOff()
-	bo.MaxElapsedTime = 30 * time.Second
-
-	return backoff.Retry(operation, backoff.WithContext(bo, ctx))
 }
 
 func (s *Service) CreateNewVPNStream(ctx context.Context, peerID peer.ID) (network.Stream, error) {

@@ -42,6 +42,10 @@ type Service struct {
 	ipActivityCache *cache.Cache
 	// Mutex to protect access to ipActivityCache
 	ipActivityMu sync.Mutex
+	// Map of packet queues for each destination IP:Port
+	packetQueues sync.Map
+	// Mutex to protect access to packetQueues
+	packetQueuesMu sync.Mutex
 
 	stopChan chan struct{} // Channel to stop background tasks
 }
@@ -182,11 +186,21 @@ func (s *Service) Stop() error {
 		wg.Wait()
 	}
 
-	// Clear IP:Port mutexes and activity cache
+	// Clear IP:Port mutexes, packet queues, and activity cache
 	s.ipMutexes = sync.Map{}
 	s.ipActivityMu.Lock()
 	s.ipActivityCache = nil
 	s.ipActivityMu.Unlock()
+
+	// Close and clear all packet queues
+	s.packetQueuesMu.Lock()
+	s.packetQueues.Range(func(key, value interface{}) bool {
+		queue := value.(chan *QueuedPacket)
+		close(queue)
+		s.packetQueues.Delete(key)
+		return true
+	})
+	s.packetQueuesMu.Unlock()
 
 	// Close stopChan to stop all background tasks
 	close(s.stopChan)
