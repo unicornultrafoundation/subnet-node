@@ -113,11 +113,17 @@ func (s *ClientService) listenFromTUN(ctx context.Context, iface *water.Interfac
 			// Get destination IP for synchronization
 			destIP := packetInfo.DstIP.String()
 
-			// Create a synchronization key based on IP and port
+			// Create a synchronization key based on source port, destination IP and destination port
 			syncKey := destIP
+
+			// Add source port to the key if available
+			if packetInfo.SrcPort != nil {
+				syncKey = fmt.Sprintf("%d:%s", *packetInfo.SrcPort, destIP)
+			}
+
+			// Add destination port to the key if available
 			if packetInfo.DstPort != nil {
-				// If port is available, use IP:Port as the key
-				syncKey = fmt.Sprintf("%s:%d", destIP, *packetInfo.DstPort)
+				syncKey = fmt.Sprintf("%s:%d", syncKey, *packetInfo.DstPort)
 			}
 
 			// Dispatch the packet to the appropriate worker

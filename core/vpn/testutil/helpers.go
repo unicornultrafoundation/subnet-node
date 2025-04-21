@@ -3,6 +3,7 @@ package testutil
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -163,14 +164,20 @@ func VerifyWorkerMetrics(t *testing.T, dispatcher *packet.Dispatcher, expectedWo
 	// Get worker metrics
 	metrics := dispatcher.GetWorkerMetrics()
 
-	// Verify that we have the expected number of workers
-	assert.Len(t, metrics, expectedWorkers, "Should have the expected number of workers")
-
-	// Verify that each worker has processed at least one packet
+	// Count workers with the expected format (12345:192.168.1.x:80)
+	workerCount := 0
 	for syncKey, workerMetrics := range metrics {
-		assert.GreaterOrEqual(t, workerMetrics.PacketCount, int64(1),
-			"Worker %s should have processed at least one packet", syncKey)
+		// Only count workers with the format we're testing (12345:192.168.1.x:80)
+		if strings.HasPrefix(syncKey, "12345:") {
+			workerCount++
+			// Verify that each worker has processed at least one packet
+			assert.GreaterOrEqual(t, workerMetrics.PacketCount, int64(1),
+				"Worker %s should have processed at least one packet", syncKey)
+		}
 	}
+
+	// Verify that we have the expected number of workers with the right format
+	assert.Equal(t, expectedWorkers, workerCount, "Should have the expected number of workers with format 12345:IP:port")
 }
 
 // VerifyMetrics verifies that metrics match expected values

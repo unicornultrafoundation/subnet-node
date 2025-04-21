@@ -28,9 +28,9 @@ func TestWorkerCreationAndMethods(t *testing.T) {
 	circuitBreakerMgr := resilience.NewCircuitBreakerManager(3, 10*time.Second, 2)
 	retryManager := resilience.NewRetryManager(3, 100*time.Millisecond, 2*time.Second)
 
-	// Create a worker
+	// Create a worker with the new sync key format (sourcePort:destIP:destPort)
 	worker := NewWorker(
-		"192.168.1.1:80",
+		"12345:192.168.1.1:80",
 		"192.168.1.1",
 		peerID,
 		mockPoolService,
@@ -42,7 +42,7 @@ func TestWorkerCreationAndMethods(t *testing.T) {
 	)
 
 	assert.NotNil(t, worker)
-	assert.Equal(t, "192.168.1.1:80", worker.SyncKey)
+	assert.Equal(t, "12345:192.168.1.1:80", worker.SyncKey)
 	assert.Equal(t, "192.168.1.1", worker.DestIP)
 	assert.Equal(t, peerID, worker.PeerID)
 	assert.Equal(t, mockPoolService, worker.PoolService)
@@ -71,9 +71,9 @@ func TestWorkerStartStop(t *testing.T) {
 	circuitBreakerMgr := resilience.NewCircuitBreakerManager(3, 10*time.Second, 2)
 	retryManager := resilience.NewRetryManager(3, 100*time.Millisecond, 2*time.Second)
 
-	// Create a worker
+	// Create a worker with the new sync key format (sourcePort:destIP:destPort)
 	worker := NewWorker(
-		"192.168.1.1:80",
+		"12345:192.168.1.1:80",
 		"192.168.1.1",
 		peerID,
 		mockPoolService,
@@ -121,9 +121,9 @@ func TestWorkerProcessPacket(t *testing.T) {
 	circuitBreakerMgr := resilience.NewCircuitBreakerManager(3, 10*time.Second, 2)
 	retryManager := resilience.NewRetryManager(3, 100*time.Millisecond, 2*time.Second)
 
-	// Create a worker
+	// Create a worker with the new sync key format (sourcePort:destIP:destPort)
 	worker := NewWorker(
-		"192.168.1.1:80",
+		"12345:192.168.1.1:80",
 		"192.168.1.1",
 		peerID,
 		mockPoolService,
@@ -176,9 +176,9 @@ func TestWorkerIsIdle(t *testing.T) {
 	circuitBreakerMgr := resilience.NewCircuitBreakerManager(3, 10*time.Second, 2)
 	retryManager := resilience.NewRetryManager(3, 100*time.Millisecond, 2*time.Second)
 
-	// Create a worker
+	// Create a worker with the new sync key format (sourcePort:destIP:destPort)
 	worker := NewWorker(
-		"192.168.1.1:80",
+		"12345:192.168.1.1:80",
 		"192.168.1.1",
 		peerID,
 		mockPoolService,
@@ -223,9 +223,9 @@ func TestWorkerEnqueuePacket(t *testing.T) {
 	circuitBreakerMgr := resilience.NewCircuitBreakerManager(3, 10*time.Second, 2)
 	retryManager := resilience.NewRetryManager(3, 100*time.Millisecond, 2*time.Second)
 
-	// Create a worker with a small buffer
+	// Create a worker with a small buffer and the new sync key format (sourcePort:destIP:destPort)
 	worker := NewWorker(
-		"192.168.1.1:80",
+		"12345:192.168.1.1:80",
 		"192.168.1.1",
 		peerID,
 		mockPoolService,
