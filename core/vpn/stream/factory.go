@@ -6,87 +6,50 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/stream/types"
 )
 
-// CreateStreamService creates a new stream service with all components
-//
-// This function accepts either a VPNConfig-like struct or a ConfigService-like interface
-// to get the configuration values.
-//
-// The configuration source can be:
-// 1. A struct with fields like MaxStreamsPerPeer, MinStreamsPerPeer, etc.
-// 2. An interface with getter methods like GetMaxStreamsPerPeer(), GetMinStreamsPerPeer(), etc.
+// StreamServiceConfig holds all configuration parameters for the stream service
+type StreamServiceConfig struct {
+	MaxStreamsPerPeer      int
+	MinStreamsPerPeer      int
+	StreamIdleTimeout      time.Duration
+	CleanupInterval        time.Duration
+	HealthCheckInterval    time.Duration
+	HealthCheckTimeout     time.Duration
+	MaxConsecutiveFailures int
+	WarmInterval           time.Duration
+}
+
+// DefaultStreamServiceConfig returns a configuration with sensible defaults
+func DefaultStreamServiceConfig() *StreamServiceConfig {
+	return &StreamServiceConfig{
+		MaxStreamsPerPeer:      10,
+		MinStreamsPerPeer:      2,
+		StreamIdleTimeout:      300 * time.Second, // 5 minutes
+		CleanupInterval:        60 * time.Second,  // 1 minute
+		HealthCheckInterval:    30 * time.Second,  // 30 seconds
+		HealthCheckTimeout:     5 * time.Second,   // 5 seconds
+		MaxConsecutiveFailures: 3,
+		WarmInterval:           60 * time.Second, // 1 minute
+	}
+}
+
+// CreateStreamService creates a new stream service with explicit configuration
 func CreateStreamService(
 	streamService types.Service,
-	config interface{},
+	config *StreamServiceConfig,
 ) *StreamService {
-	var (
-		maxStreamsPerPeer      int
-		minStreamsPerPeer      int
-		streamIdleTimeout      time.Duration
-		cleanupInterval        time.Duration
-		healthCheckInterval    time.Duration
-		healthCheckTimeout     time.Duration
-		maxConsecutiveFailures int
-		warmInterval           time.Duration
-	)
-
-	// Get configuration values based on the type of config provided
-	switch c := config.(type) {
-	case *struct {
-		MaxStreamsPerPeer      int
-		MinStreamsPerPeer      int
-		StreamIdleTimeout      time.Duration
-		CleanupInterval        time.Duration
-		HealthCheckInterval    time.Duration
-		HealthCheckTimeout     time.Duration
-		MaxConsecutiveFailures int
-		WarmInterval           time.Duration
-	}:
-		// Direct access to struct fields
-		maxStreamsPerPeer = c.MaxStreamsPerPeer
-		minStreamsPerPeer = c.MinStreamsPerPeer
-		streamIdleTimeout = c.StreamIdleTimeout
-		cleanupInterval = c.CleanupInterval
-		healthCheckInterval = c.HealthCheckInterval
-		healthCheckTimeout = c.HealthCheckTimeout
-		maxConsecutiveFailures = c.MaxConsecutiveFailures
-		warmInterval = c.WarmInterval
-	case interface {
-		GetMaxStreamsPerPeer() int
-		GetMinStreamsPerPeer() int
-		GetStreamIdleTimeout() time.Duration
-		GetCleanupInterval() time.Duration
-		GetHealthCheckInterval() time.Duration
-		GetHealthCheckTimeout() time.Duration
-		GetMaxConsecutiveFailures() int
-		GetWarmInterval() time.Duration
-	}:
-		// Access through getter methods
-		maxStreamsPerPeer = c.GetMaxStreamsPerPeer()
-		minStreamsPerPeer = c.GetMinStreamsPerPeer()
-		streamIdleTimeout = c.GetStreamIdleTimeout()
-		cleanupInterval = c.GetCleanupInterval()
-		healthCheckInterval = c.GetHealthCheckInterval()
-		healthCheckTimeout = c.GetHealthCheckTimeout()
-		maxConsecutiveFailures = c.GetMaxConsecutiveFailures()
-		warmInterval = c.GetWarmInterval()
-	default:
-		// Use the package-level logger from service.go
-		log.Error("Invalid configuration type provided to CreateStreamService")
-		return nil
+	if config == nil {
+		config = DefaultStreamServiceConfig()
 	}
 
-	// Create the stream service
-	service := NewStreamService(
+	return NewStreamService(
 		streamService,
-		maxStreamsPerPeer,
-		minStreamsPerPeer,
-		streamIdleTimeout,
-		cleanupInterval,
-		healthCheckInterval,
-		healthCheckTimeout,
-		maxConsecutiveFailures,
-		warmInterval,
+		config.MaxStreamsPerPeer,
+		config.MinStreamsPerPeer,
+		config.StreamIdleTimeout,
+		config.CleanupInterval,
+		config.HealthCheckInterval,
+		config.HealthCheckTimeout,
+		config.MaxConsecutiveFailures,
+		config.WarmInterval,
 	)
-
-	return service
 }

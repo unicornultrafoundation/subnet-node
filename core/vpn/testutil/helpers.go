@@ -32,17 +32,19 @@ func CreateTestPacket(size int) []byte {
 
 // SetupTestStreamService creates a stream service for testing
 func SetupTestStreamService(t *testing.T, mockStreamService types.Service) *stream.StreamService {
-	return stream.NewStreamService(
-		mockStreamService,
-		10,                   // maxStreamsPerPeer
-		3,                    // minStreamsPerPeer
-		5*time.Minute,        // streamIdleTimeout
-		1*time.Minute,        // cleanupInterval
-		1*time.Second,        // healthCheckInterval
-		500*time.Millisecond, // healthCheckTimeout
-		3,                    // maxConsecutiveFailures
-		1*time.Minute,        // warmInterval
-	)
+	// Create a stream service config with test values
+	streamConfig := &stream.StreamServiceConfig{
+		MaxStreamsPerPeer:      5,
+		MinStreamsPerPeer:      2,
+		StreamIdleTimeout:      5 * time.Minute,
+		CleanupInterval:        1 * time.Minute,
+		HealthCheckInterval:    1 * time.Second,
+		HealthCheckTimeout:     500 * time.Millisecond,
+		MaxConsecutiveFailures: 3,
+		WarmInterval:           1 * time.Minute,
+	}
+
+	return stream.CreateStreamService(mockStreamService, streamConfig)
 }
 
 // SetupTestDispatcher creates a packet dispatcher for testing
