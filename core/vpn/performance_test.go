@@ -46,7 +46,6 @@ func TestStreamServicePerformance(t *testing.T) {
 	// Create a stream service with optimized parameters for performance testing
 	streamService := stream.NewStreamService(
 		mockStreamService,
-		50,                   // maxStreamsPerPeer
 		10,                   // minStreamsPerPeer
 		5*time.Minute,        // streamIdleTimeout
 		30*time.Second,       // cleanupInterval
@@ -66,7 +65,7 @@ func TestStreamServicePerformance(t *testing.T) {
 		config *testutil.PerformanceConfig
 	}{
 		{
-			name:   "Low Load",
+			name: "Low Load",
 			config: &testutil.PerformanceConfig{
 				PacketSize:       1024,
 				PacketsPerSecond: 100,
@@ -77,7 +76,7 @@ func TestStreamServicePerformance(t *testing.T) {
 			},
 		},
 		{
-			name:   "Medium Load",
+			name: "Medium Load",
 			config: &testutil.PerformanceConfig{
 				PacketSize:       1024,
 				PacketsPerSecond: 500,
@@ -88,7 +87,7 @@ func TestStreamServicePerformance(t *testing.T) {
 			},
 		},
 		{
-			name:   "High Load",
+			name: "High Load",
 			config: &testutil.PerformanceConfig{
 				PacketSize:       1024,
 				PacketsPerSecond: 1000,
@@ -143,7 +142,7 @@ func TestPacketDispatcherPerformance(t *testing.T) {
 		config *testutil.PerformanceConfig
 	}{
 		{
-			name:   "Low Load",
+			name: "Low Load",
 			config: &testutil.PerformanceConfig{
 				PacketSize:       1024,
 				PacketsPerSecond: 100,
@@ -154,7 +153,7 @@ func TestPacketDispatcherPerformance(t *testing.T) {
 			},
 		},
 		{
-			name:   "Medium Load",
+			name: "Medium Load",
 			config: &testutil.PerformanceConfig{
 				PacketSize:       1024,
 				PacketsPerSecond: 500,
@@ -165,7 +164,7 @@ func TestPacketDispatcherPerformance(t *testing.T) {
 			},
 		},
 		{
-			name:   "High Load",
+			name: "High Load",
 			config: &testutil.PerformanceConfig{
 				PacketSize:       1024,
 				PacketsPerSecond: 1000,
@@ -210,7 +209,7 @@ func TestResiliencePerformance(t *testing.T) {
 		config *resilience.ResilienceConfig
 	}{
 		{
-			name:   "Fast Recovery",
+			name: "Fast Recovery",
 			config: &resilience.ResilienceConfig{
 				CircuitBreakerFailureThreshold: 3,
 				CircuitBreakerResetTimeout:     100 * time.Millisecond,
@@ -221,7 +220,7 @@ func TestResiliencePerformance(t *testing.T) {
 			},
 		},
 		{
-			name:   "Balanced",
+			name: "Balanced",
 			config: &resilience.ResilienceConfig{
 				CircuitBreakerFailureThreshold: 5,
 				CircuitBreakerResetTimeout:     500 * time.Millisecond,
@@ -232,7 +231,7 @@ func TestResiliencePerformance(t *testing.T) {
 			},
 		},
 		{
-			name:   "High Resilience",
+			name: "High Resilience",
 			config: &resilience.ResilienceConfig{
 				CircuitBreakerFailureThreshold: 10,
 				CircuitBreakerResetTimeout:     1 * time.Second,

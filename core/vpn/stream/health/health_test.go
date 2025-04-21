@@ -19,7 +19,6 @@ func TestHealthChecker(t *testing.T) {
 	// Create a real pool manager
 	poolManager := pool.NewStreamPoolManager(
 		mockService,
-		10,
 		3,
 		5*time.Minute,
 		1*time.Minute,
@@ -63,7 +62,6 @@ func TestStreamWarmer(t *testing.T) {
 	// Create a real pool manager
 	poolManager := pool.NewStreamPoolManager(
 		mockService,
-		10,
 		3,
 		5*time.Minute,
 		1*time.Minute,

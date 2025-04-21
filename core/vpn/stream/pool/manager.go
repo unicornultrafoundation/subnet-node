@@ -30,7 +30,6 @@ type StreamPoolManager struct {
 // NewStreamPoolManager creates a new stream pool manager
 func NewStreamPoolManager(
 	streamService types.Service,
-	maxStreamsPerPeer int,
 	minStreamsPerPeer int,
 	streamIdleTimeout time.Duration,
 	cleanupInterval time.Duration,
@@ -39,7 +38,6 @@ func NewStreamPoolManager(
 
 	pool := NewStreamPool(
 		streamService,
-		maxStreamsPerPeer,
 		minStreamsPerPeer,
 		streamIdleTimeout,
 	)

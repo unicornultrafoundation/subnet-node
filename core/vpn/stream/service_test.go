@@ -32,7 +32,6 @@ func TestStreamService(t *testing.T) {
 	// Create a stream service
 	service := stream.NewStreamService(
 		mockStreamService,
-		10,
 		3,
 		5*time.Minute,
 		1*time.Minute,

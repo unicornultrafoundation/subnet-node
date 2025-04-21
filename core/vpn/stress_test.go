@@ -88,7 +88,6 @@ func TestStressStreamService(t *testing.T) {
 	// Create a stream service with realistic parameters
 	streamService := stream.NewStreamService(
 		mockStreamService,
-		20,                   // maxStreamsPerPeer
 		5,                    // minStreamsPerPeer
 		5*time.Minute,        // streamIdleTimeout
 		30*time.Second,       // cleanupInterval
@@ -197,7 +196,6 @@ func TestStressPacketDispatcher(t *testing.T) {
 	// Create a stream service
 	streamService := stream.NewStreamService(
 		mockStreamService,
-		20,                   // maxStreamsPerPeer
 		5,                    // minStreamsPerPeer
 		5*time.Minute,        // streamIdleTimeout
 		30*time.Second,       // cleanupInterval
