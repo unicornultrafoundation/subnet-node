@@ -2,8 +2,10 @@ package api
 
 import (
 	"context"
+	"math/big"
 	"time"
 
+	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/resilience"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/stream/types"
@@ -25,6 +27,14 @@ type PeerDiscoveryService interface {
 	GetPeerID(ctx context.Context, destIP string) (string, error)
 	// SyncPeerIDToDHT syncs the peer ID to the DHT
 	SyncPeerIDToDHT(ctx context.Context) error
+	// GetVirtualIP gets the virtual IP for a peer ID
+	GetVirtualIP(ctx context.Context, peerID string) (string, error)
+	// StoreMappingInDHT stores a mapping in the DHT
+	StoreMappingInDHT(ctx context.Context, peerID string) error
+	// VerifyVirtualIPHasRegistered verifies if a virtual IP is registered to the current peer ID
+	VerifyVirtualIPHasRegistered(ctx context.Context, virtualIP string) error
+	// GetPeerIDByRegistry gets a peer ID from the registry
+	GetPeerIDByRegistry(ctx context.Context, destIP string) (string, error)
 }
 
 // StreamService handles stream creation and management
@@ -65,18 +75,6 @@ type StreamHealthService interface {
 	GetHealthMetrics() map[string]map[string]int64
 }
 
-// StreamMultiplexService handles stream multiplexing
-type StreamMultiplexService interface {
-	// StartMultiplexer starts the multiplexer manager
-	StartMultiplexer()
-	// StopMultiplexer stops the multiplexer manager
-	StopMultiplexer()
-	// SendPacket sends a packet using the multiplexer
-	SendPacketMultiplexed(ctx context.Context, peerID peer.ID, packet []byte) error
-	// GetMultiplexerMetrics returns the multiplexer metrics
-	GetMultiplexerMetrics() map[string]*types.MultiplexerMetrics
-}
-
 // RetryService handles retry operations with backoff
 type RetryService interface {
 	// RetryOperation retries an operation with exponential backoff
@@ -91,6 +89,46 @@ type MetricsService interface {
 	IncrementPacketsSent(bytes int)
 	// IncrementPacketsDropped increments the packets dropped counter
 	IncrementPacketsDropped()
+	// IncrementPacketsReceived increments the packets received counter
+	IncrementPacketsReceived(bytes int)
+	// IncrementCircuitOpenDrops increments the circuit open drops counter
+	IncrementCircuitOpenDrops()
+	// GetAllMetrics returns all metrics
+	GetAllMetrics() map[string]int64
+}
+
+// DHTService is an interface for DHT operations
+type DHTService interface {
+	// GetValue gets a value from the DHT
+	GetValue(ctx context.Context, key string) ([]byte, error)
+	// PutValue puts a value in the DHT
+	PutValue(ctx context.Context, key string, value []byte) error
+}
+
+// PeerstoreService is an interface for the peerstore service
+type PeerstoreService interface {
+	// PrivKey returns the private key for a peer ID
+	PrivKey(p peer.ID) crypto.PrivKey
+}
+
+// HostService is an interface for the host service
+type HostService interface {
+	// ID returns the peer ID of the host
+	ID() peer.ID
+	// Peerstore returns the peerstore of the host
+	Peerstore() PeerstoreService
+}
+
+// AccountService is an interface for the account service
+type AccountService interface {
+	// IPRegistry returns the IP registry contract
+	IPRegistry() IPRegistry
+}
+
+// IPRegistry is an interface for the IP registry contract
+type IPRegistry interface {
+	// GetPeer gets the peer ID for a token ID
+	GetPeer(opts any, tokenID *big.Int) (string, error)
 }
 
 // ConfigService handles configuration retrieval
@@ -121,12 +159,22 @@ type ConfigService interface {
 	GetMaxConsecutiveFailures() int
 	// GetWarmInterval returns the warm interval
 	GetWarmInterval() time.Duration
-	// GetMaxStreamsPerMultiplexer returns the maximum number of streams per multiplexer
-	GetMaxStreamsPerMultiplexer() int
-	// GetMinStreamsPerMultiplexer returns the minimum number of streams per multiplexer
-	GetMinStreamsPerMultiplexer() int
-	// GetAutoScalingInterval returns the auto-scaling interval
-	GetAutoScalingInterval() time.Duration
-	// GetMultiplexingEnabled returns whether multiplexing is enabled
-	GetMultiplexingEnabled() bool
+	// GetEnable returns whether the VPN service is enabled
+	GetEnable() bool
+	// GetMTU returns the MTU for the TUN interface
+	GetMTU() int
+	// GetVirtualIP returns the virtual IP for this node
+	GetVirtualIP() string
+	// GetSubnet returns the subnet for the TUN interface
+	GetSubnet() string
+	// GetRoutes returns the routes for the TUN interface
+	GetRoutes() []string
+	// GetUnallowedPorts returns the unallowed ports
+	GetUnallowedPorts() map[string]bool
+	// GetRetryMaxAttempts returns the maximum number of retry attempts
+	GetRetryMaxAttempts() int
+	// GetRetryInitialInterval returns the initial retry interval
+	GetRetryInitialInterval() time.Duration
+	// GetRetryMaxInterval returns the maximum retry interval
+	GetRetryMaxInterval() time.Duration
 }

@@ -30,16 +30,13 @@ The `HealthMetrics` struct tracks metrics for stream health, including:
 - Stream warming operations
 - Warm failures
 
-### MultiplexerMetrics
+### Circuit Breaker Metrics
 
-The `MultiplexerMetrics` struct tracks metrics for a stream multiplexer, including:
+The metrics service also tracks circuit breaker metrics, including:
 
-- Packet counts (sent, dropped)
-- Byte counts (sent)
-- Stream counts (created, closed)
-- Stream errors
-- Auto-scaling operations
-- Latency measurements
+- Circuit state changes (open, close, reset)
+- Request handling (allowed, blocked)
+- Active breaker count
 
 ## Usage
 

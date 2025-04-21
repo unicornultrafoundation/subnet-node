@@ -201,8 +201,25 @@ func (w *StreamWarmer) StopStreamWarmer() {
 	w.Stop()
 }
 
+// StartHealthChecker is a no-op for StreamWarmer (for HealthService interface)
+func (w *StreamWarmer) StartHealthChecker() {
+	// No-op
+}
+
+// StopHealthChecker is a no-op for StreamWarmer (for HealthService interface)
+func (w *StreamWarmer) StopHealthChecker() {
+	// No-op
+}
+
+// GetHealthMetrics returns the health metrics (for HealthService interface)
+func (w *StreamWarmer) GetHealthMetrics() map[string]map[string]int64 {
+	return map[string]map[string]int64{
+		"stream_warmer": w.metrics.GetMetrics(),
+	}
+}
+
 // Ensure StreamWarmer implements the required interfaces
 var (
-	_ types.StreamWarmerService    = (*StreamWarmer)(nil)
-	_ types.StreamLifecycleService = (*StreamWarmer)(nil)
+	_ types.HealthService    = (*StreamWarmer)(nil)
+	_ types.LifecycleService = (*StreamWarmer)(nil)
 )

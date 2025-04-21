@@ -7,11 +7,13 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
+	"github.com/unicornultrafoundation/subnet-node/core/vpn/api"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/discovery"
-	"github.com/unicornultrafoundation/subnet-node/core/vpn/stream/types"
+	"github.com/unicornultrafoundation/subnet-node/core/vpn/resilience"
+	streamTypes "github.com/unicornultrafoundation/subnet-node/core/vpn/stream/types"
 )
 
-var log = logrus.WithField("service", "vpn-packet")
+var dispatcherLog = logrus.WithField("service", "vpn-packet")
 
 // DispatcherService defines the interface for packet dispatching
 type DispatcherService interface {
@@ -26,11 +28,10 @@ type DispatcherService interface {
 // Dispatcher manages workers for different destination IP:Port combinations
 type Dispatcher struct {
 	// Service references for accessing service methods
-	peerDiscovery discovery.PeerDiscoveryService
-	streamService types.Service
+	peerDiscovery api.PeerDiscoveryService
+	streamService streamTypes.Service
 	// Enhanced stream services
-	poolService      types.PoolService
-	multiplexService types.MultiplexService
+	poolService streamTypes.PoolService
 	// Context for the dispatcher
 	ctx context.Context
 	// Cancel function for the dispatcher context
@@ -49,52 +50,31 @@ type Dispatcher struct {
 	stopChan chan struct{}
 	// Whether the dispatcher is running
 	running bool
-	// Whether to use multiplexing
-	useMultiplexing bool
+	// Resilience service
+	resilienceService *resilience.ResilienceService
 }
 
 // NewDispatcher creates a new packet dispatcher
 func NewDispatcher(
-	peerDiscovery discovery.PeerDiscoveryService,
-	streamService types.Service,
+	peerDiscovery api.PeerDiscoveryService,
+	streamService streamTypes.Service,
+	poolService streamTypes.PoolService,
 	workerIdleTimeout int,
 	workerCleanupInterval time.Duration,
 	workerBufferSize int,
+	resilienceService *resilience.ResilienceService,
 ) *Dispatcher {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	return &Dispatcher{
-		peerDiscovery:         peerDiscovery,
-		streamService:         streamService,
-		ctx:                   ctx,
-		cancel:                cancel,
-		workerIdleTimeout:     workerIdleTimeout,
-		workerCleanupInterval: workerCleanupInterval,
-		workerBufferSize:      workerBufferSize,
-		stopChan:              make(chan struct{}),
-		running:               false,
-		useMultiplexing:       false,
+	// Use default resilience service if none provided
+	if resilienceService == nil {
+		resilienceService = resilience.NewResilienceService(nil)
 	}
-}
-
-// NewEnhancedDispatcher creates a new packet dispatcher with enhanced stream services
-func NewEnhancedDispatcher(
-	peerDiscovery discovery.PeerDiscoveryService,
-	streamService types.Service,
-	poolService types.PoolService,
-	multiplexService types.MultiplexService,
-	workerIdleTimeout int,
-	workerCleanupInterval time.Duration,
-	workerBufferSize int,
-	useMultiplexing bool,
-) *Dispatcher {
-	ctx, cancel := context.WithCancel(context.Background())
 
 	return &Dispatcher{
 		peerDiscovery:         peerDiscovery,
 		streamService:         streamService,
 		poolService:           poolService,
-		multiplexService:      multiplexService,
 		ctx:                   ctx,
 		cancel:                cancel,
 		workerIdleTimeout:     workerIdleTimeout,
@@ -102,7 +82,7 @@ func NewEnhancedDispatcher(
 		workerBufferSize:      workerBufferSize,
 		stopChan:              make(chan struct{}),
 		running:               false,
-		useMultiplexing:       useMultiplexing,
+		resilienceService:     resilienceService,
 	}
 }
 
@@ -117,7 +97,7 @@ func (d *Dispatcher) Start() {
 	// Start the cleanup routine
 	go d.cleanupInactiveWorkers()
 
-	log.Infof("Packet dispatcher started")
+	dispatcherLog.Infof("Packet dispatcher started")
 }
 
 // Stop stops the dispatcher and all its workers
@@ -137,7 +117,13 @@ func (d *Dispatcher) Stop() {
 
 	d.running = false
 
-	log.Infof("Packet dispatcher stopped")
+	dispatcherLog.Infof("Packet dispatcher stopped")
+}
+
+// Close implements the io.Closer interface
+func (d *Dispatcher) Close() error {
+	d.Stop()
+	return nil
 }
 
 // DispatchPacket dispatches a packet to the appropriate worker
@@ -145,7 +131,7 @@ func (d *Dispatcher) DispatchPacket(ctx context.Context, syncKey, destIP string,
 	// Get or create a worker for this destination
 	worker, err := d.getOrCreateWorker(ctx, syncKey, destIP)
 	if err != nil {
-		log.Debugf("Failed to get worker for %s: %v", syncKey, err)
+		dispatcherLog.Debugf("Failed to get worker for %s: %v", syncKey, err)
 		return
 	}
 
@@ -158,7 +144,40 @@ func (d *Dispatcher) DispatchPacket(ctx context.Context, syncKey, destIP string,
 
 	// Try to add the packet to the worker's queue
 	if !worker.EnqueuePacket(packetObj) {
-		log.Debugf("Worker channel full for %s, dropping packet", syncKey)
+		dispatcherLog.Debugf("Worker channel full for %s, dropping packet", syncKey)
+	}
+}
+
+// DispatchPacketWithCallback dispatches a packet to the appropriate worker and provides a callback channel for the result
+func (d *Dispatcher) DispatchPacketWithCallback(ctx context.Context, syncKey, destIP string, packet []byte, doneCh chan error) {
+	// Get or create a worker for this destination
+	worker, err := d.getOrCreateWorker(ctx, syncKey, destIP)
+	if err != nil {
+		dispatcherLog.Debugf("Failed to get worker for %s: %v", syncKey, err)
+		// Signal the error on the done channel
+		if doneCh != nil {
+			doneCh <- fmt.Errorf("failed to get worker: %w", err)
+			close(doneCh)
+		}
+		return
+	}
+
+	// Create a packet object with the done channel
+	packetObj := &QueuedPacket{
+		Ctx:    ctx,
+		DestIP: destIP,
+		Data:   packet,
+		DoneCh: doneCh,
+	}
+
+	// Try to add the packet to the worker's queue
+	if !worker.EnqueuePacket(packetObj) {
+		dispatcherLog.Debugf("Worker channel full for %s, dropping packet", syncKey)
+		// Signal the error on the done channel
+		if doneCh != nil {
+			doneCh <- fmt.Errorf("worker queue full")
+			close(doneCh)
+		}
 	}
 }
 
@@ -186,70 +205,49 @@ func (d *Dispatcher) getOrCreateWorker(ctx context.Context, syncKey, destIP stri
 	// Get peer ID for the destination IP
 	peerID, err := d.peerDiscovery.GetPeerID(ctx, destIP)
 	if err != nil {
-		return nil, fmt.Errorf("no peer mapping found for IP %s: %v", destIP, err)
+		return nil, fmt.Errorf("no peer mapping found for IP %s: %w", destIP, err)
 	}
 
 	parsedPeerID, err := discovery.ParsePeerID(peerID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse peerid %s: %v", peerID, err)
+		return nil, fmt.Errorf("failed to parse peer ID %s for IP %s: %w", peerID, destIP, err)
 	}
 
 	// Create a new worker context with cancel function
 	workerCtx, cancel := context.WithCancel(d.ctx)
 
 	// Create a new worker based on available services
-	var worker *Worker
+	var newWorker *Worker
 
-	if d.poolService != nil && d.multiplexService != nil && d.useMultiplexing {
-		// Use multiplexing if available and enabled
-		worker = NewMultiplexedWorker(
-			syncKey,
-			destIP,
-			parsedPeerID,
-			d.multiplexService,
-			workerCtx,
-			cancel,
-			d.workerBufferSize,
-		)
-		log.Debugf("Created new multiplexed worker for %s", syncKey)
-	} else if d.poolService != nil {
-		// Use stream pooling if available
-		worker = NewPooledWorker(
-			syncKey,
-			destIP,
-			parsedPeerID,
-			d.poolService,
-			workerCtx,
-			cancel,
-			d.workerBufferSize,
-		)
-		log.Debugf("Created new pooled worker for %s", syncKey)
-	} else {
-		// Fall back to direct stream creation
-		vpnStream, err := d.streamService.CreateNewVPNStream(ctx, parsedPeerID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create P2P stream: %v", err)
+	// Ensure cancel is called on error paths
+	defer func() {
+		if newWorker == nil {
+			// If we're returning without a worker, cancel the context
+			cancel()
 		}
+	}()
 
-		worker = NewWorker(
-			syncKey,
-			destIP,
-			parsedPeerID,
-			vpnStream,
-			workerCtx,
-			cancel,
-			d.workerBufferSize,
-		)
-		log.Debugf("Created new direct worker for %s", syncKey)
-	}
+	// Create a new worker
+	newWorker = NewWorker(
+		syncKey,
+		destIP,
+		parsedPeerID,
+		d.poolService,
+		workerCtx,
+		cancel,
+		d.workerBufferSize,
+		d.resilienceService.GetCircuitBreakerManager(),
+		d.resilienceService.GetRetryManager(),
+	)
+	dispatcherLog.Debugf("Created new worker for %s", syncKey)
 
 	// Store the worker in the map
-	d.workers.Store(syncKey, worker)
+	d.workers.Store(syncKey, newWorker)
 
 	// Start the worker
-	worker.Start()
+	newWorker.Start()
 
-	return worker, nil
+	return newWorker, nil
 }
 
 // cleanupInactiveWorkers periodically checks for and removes inactive workers
@@ -265,7 +263,7 @@ func (d *Dispatcher) cleanupInactiveWorkers() {
 			idleTimeout := time.Duration(d.workerIdleTimeout) * time.Second
 
 			// Check all workers for inactivity
-			d.workers.Range(func(key, value interface{}) bool {
+			d.workers.Range(func(key, value any) bool {
 				syncKey := key.(string)
 				worker := value.(*Worker)
 
@@ -273,13 +271,13 @@ func (d *Dispatcher) cleanupInactiveWorkers() {
 
 				// Check if worker has been idle for too long
 				if worker.IsIdle(idleTimeout) {
-					log.Debugf("Cleaning up inactive worker for %s", syncKey)
+					dispatcherLog.Debugf("Cleaning up inactive worker for %s", syncKey)
 					shouldCleanup = true
 				}
 
 				// Check if worker has too many errors
 				if worker.GetErrorCount() > 100 {
-					log.Warnf("Cleaning up worker %s due to excessive errors", syncKey)
+					dispatcherLog.Warnf("Cleaning up worker %s due to excessive errors", syncKey)
 					shouldCleanup = true
 				}
 
@@ -287,7 +285,7 @@ func (d *Dispatcher) cleanupInactiveWorkers() {
 				packetCount := worker.GetPacketCount()
 				errorCount := worker.GetErrorCount()
 				if packetCount > 0 && errorCount > packetCount/2 {
-					log.Warnf("Cleaning up worker %s due to high error rate", syncKey)
+					dispatcherLog.Warnf("Cleaning up worker %s due to high error rate", syncKey)
 					shouldCleanup = true
 				}
 
@@ -307,7 +305,7 @@ func (d *Dispatcher) cleanupInactiveWorkers() {
 
 // stopAllWorkers stops all active workers
 func (d *Dispatcher) stopAllWorkers() {
-	d.workers.Range(func(key, value interface{}) bool {
+	d.workers.Range(func(key, value any) bool {
 		worker := value.(*Worker)
 
 		// Stop the worker
@@ -318,4 +316,23 @@ func (d *Dispatcher) stopAllWorkers() {
 
 		return true
 	})
+}
+
+// GetWorkerMetrics returns metrics for all active workers
+func (d *Dispatcher) GetWorkerMetrics() map[string]WorkerMetrics {
+	metrics := make(map[string]WorkerMetrics)
+
+	d.workers.Range(func(key, value any) bool {
+		syncKey := key.(string)
+		worker := value.(*Worker)
+
+		metrics[syncKey] = WorkerMetrics{
+			PacketCount: worker.GetPacketCount(),
+			ErrorCount:  worker.GetErrorCount(),
+		}
+
+		return true
+	})
+
+	return metrics
 }

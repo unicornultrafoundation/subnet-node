@@ -3,12 +3,14 @@ package pool
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sync"
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/metrics"
+	"github.com/unicornultrafoundation/subnet-node/core/vpn/resilience"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/stream/types"
 )
 
@@ -34,6 +36,8 @@ type StreamPool struct {
 	ctx context.Context
 	// Cancel function for the pool context
 	cancel context.CancelFunc
+	// Resilience service for stream operations
+	resilienceService *resilience.ResilienceService
 }
 
 // pooledStream represents a stream in the pool
@@ -55,6 +59,18 @@ func NewStreamPool(
 ) *StreamPool {
 	ctx, cancel := context.WithCancel(context.Background())
 
+	// Create a resilience service with default configuration
+	// Use values that are reasonable for stream operations
+	resilienceConfig := &resilience.ResilienceConfig{
+		CircuitBreakerFailureThreshold: 5,
+		CircuitBreakerResetTimeout:     30 * time.Second,
+		CircuitBreakerSuccessThreshold: 2,
+		RetryMaxAttempts:               3,
+		RetryInitialInterval:           500 * time.Millisecond,
+		RetryMaxInterval:               5 * time.Second,
+	}
+	resilienceService := resilience.NewResilienceService(resilienceConfig)
+
 	return &StreamPool{
 		pools:             make(map[string][]*pooledStream),
 		streamService:     streamService,
@@ -64,6 +80,7 @@ func NewStreamPool(
 		metrics:           metrics.NewStreamPoolMetrics(),
 		ctx:               ctx,
 		cancel:            cancel,
+		resilienceService: resilienceService,
 	}
 }
 
@@ -99,13 +116,39 @@ func (p *StreamPool) GetStream(ctx context.Context, peerID peer.ID) (types.VPNSt
 
 	// No available stream, create a new one if we haven't reached the maximum
 	if len(pool) < p.maxStreamsPerPeer {
-		// Create a new stream
-		newStream, err := p.streamService.CreateNewVPNStream(ctx, peerID)
+		// Use the unified resilience function for stream creation
+		var newStream types.VPNStream
+
+		logger := log.WithFields(logrus.Fields{
+			"peer_id":   peerIDStr,
+			"operation": "create_stream",
+			"pool_size": len(pool),
+			"max_size":  p.maxStreamsPerPeer,
+		})
+
+		logger.Debug("Creating new stream for peer")
+
+		err, _ := p.resilienceService.ExecuteWithResilience(
+			ctx,
+			p.resilienceService.FormatPeerBreakerId(peerID, "create_stream"),
+			func() error {
+				// Create a new stream
+				var createErr error
+				newStream, createErr = p.streamService.CreateNewVPNStream(ctx, peerID)
+				if createErr != nil {
+					logger.WithError(createErr).Warn("Failed to create new stream, will retry")
+					return createErr // Return the error to trigger retry
+				}
+				logger.Debug("Successfully created new stream")
+				return nil // Success
+			},
+		)
+
 		if err != nil {
 			// Update metrics
 			p.metrics.IncrementAcquisitionFailures()
-
-			return nil, fmt.Errorf("failed to create new stream: %v", err)
+			logger.WithError(err).Error("Failed to create new stream after retries")
+			return nil, fmt.Errorf("failed to create new stream for peer %s: %v", peerIDStr, err)
 		}
 
 		// Add the stream to the pool
@@ -164,7 +207,7 @@ func (p *StreamPool) ReleaseStream(peerID peer.ID, s types.VPNStream, healthy bo
 				ps.stream.Close()
 
 				// Remove the stream from the pool
-				p.pools[peerIDStr] = append(pool[:i], pool[i+1:]...)
+				p.pools[peerIDStr] = slices.Delete(pool, i, i+1)
 
 				// Update metrics
 				p.metrics.IncrementUnhealthyStreams()
@@ -208,10 +251,36 @@ func (p *StreamPool) ensureMinStreams(peerID peer.ID) {
 
 	// Create new streams until we reach the minimum
 	for len(pool) < p.minStreamsPerPeer {
-		// Create a new stream
-		newStream, err := p.streamService.CreateNewVPNStream(ctx, peerID)
+		// Use the unified resilience function for stream creation
+		var newStream types.VPNStream
+
+		logger := log.WithFields(logrus.Fields{
+			"peer_id":           peerIDStr,
+			"operation":         "ensure_min_streams",
+			"current_pool_size": len(pool),
+			"min_size":          p.minStreamsPerPeer,
+		})
+
+		logger.Debug("Creating new stream to ensure minimum pool size")
+
+		err, _ := p.resilienceService.ExecuteWithResilience(
+			ctx,
+			p.resilienceService.FormatPeerBreakerId(peerID, "ensure_min_streams"),
+			func() error {
+				// Create a new stream
+				var createErr error
+				newStream, createErr = p.streamService.CreateNewVPNStream(ctx, peerID)
+				if createErr != nil {
+					logger.WithError(createErr).Warn("Failed to create new stream, will retry")
+					return createErr // Return the error to trigger retry
+				}
+				logger.Debug("Successfully created new stream")
+				return nil // Success
+			},
+		)
+
 		if err != nil {
-			log.Errorf("Failed to create new stream for peer %s: %v", peerIDStr, err)
+			logger.WithError(err).Error("Failed to create new stream after retries")
 			return
 		}
 
@@ -234,10 +303,22 @@ func (p *StreamPool) CleanupIdleStreams() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
+	logger := log.WithFields(logrus.Fields{
+		"operation": "cleanup_idle_streams",
+		"timeout":   p.streamIdleTimeout,
+		"pool_size": len(p.pools),
+	})
+
+	logger.Debug("Starting cleanup of idle streams")
 	now := time.Now()
 
 	// Check each peer's pool
 	for peerIDStr, pool := range p.pools {
+		peerLogger := logger.WithFields(logrus.Fields{
+			"peer_id":   peerIDStr,
+			"pool_size": len(pool),
+		})
+
 		// Keep track of which streams to remove
 		toRemove := make([]int, 0)
 
@@ -249,9 +330,18 @@ func (p *StreamPool) CleanupIdleStreams() {
 			}
 
 			// Check if the stream has been idle for too long
-			if now.Sub(ps.lastUsed) > p.streamIdleTimeout {
+			idleTime := now.Sub(ps.lastUsed)
+			if idleTime > p.streamIdleTimeout {
+				streamLogger := peerLogger.WithFields(logrus.Fields{
+					"stream_idx": i,
+					"idle_time":  idleTime,
+				})
+				streamLogger.Debug("Closing idle stream")
+
 				// Close the stream
-				ps.stream.Close()
+				if err := ps.stream.Close(); err != nil {
+					streamLogger.WithError(err).Warn("Error closing idle stream")
+				}
 
 				// Mark the stream for removal
 				toRemove = append(toRemove, i)
@@ -262,19 +352,25 @@ func (p *StreamPool) CleanupIdleStreams() {
 		}
 
 		// Remove the streams (in reverse order to avoid index issues)
-		for i := len(toRemove) - 1; i >= 0; i-- {
-			idx := toRemove[i]
-			pool = append(pool[:idx], pool[idx+1:]...)
+		if len(toRemove) > 0 {
+			peerLogger.WithField("streams_to_remove", len(toRemove)).Debug("Removing idle streams")
+			for i := len(toRemove) - 1; i >= 0; i-- {
+				idx := toRemove[i]
+				pool = slices.Delete(pool, idx, idx+1)
+			}
 		}
 
 		// Update the pool
 		if len(pool) == 0 {
 			// Remove the peer if there are no streams
+			peerLogger.Debug("Removing peer from pool as it has no streams left")
 			delete(p.pools, peerIDStr)
 		} else {
 			p.pools[peerIDStr] = pool
 		}
 	}
+
+	logger.WithField("remaining_peers", len(p.pools)).Debug("Completed cleanup of idle streams")
 }
 
 // GetMetrics returns the current metrics
@@ -327,41 +423,72 @@ func (p *StreamPool) GetAllPeers() []peer.ID {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
+	logger := log.WithFields(logrus.Fields{
+		"operation": "get_all_peers",
+		"pool_size": len(p.pools),
+	})
+
+	logger.Debug("Retrieving all peers from pool")
+
 	// Create a list of peer IDs
 	peers := make([]peer.ID, 0, len(p.pools))
 
 	// Add each peer ID to the list
 	for peerIDStr := range p.pools {
+		peerLogger := logger.WithField("peer_id_str", peerIDStr)
 		peerID, err := peer.Decode(peerIDStr)
 		if err != nil {
-			log.Errorf("Failed to decode peer ID %s: %v", peerIDStr, err)
+			peerLogger.WithError(err).Error("Failed to decode peer ID")
 			continue
 		}
 
 		peers = append(peers, peerID)
 	}
 
+	logger.WithField("peer_count", len(peers)).Debug("Retrieved all peers from pool")
 	return peers
 }
 
 // Close closes all streams in the pool
-func (p *StreamPool) Close() {
+func (p *StreamPool) Close() error {
 	// Cancel the context
 	p.cancel()
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
+	logger := log.WithFields(logrus.Fields{
+		"operation": "close_pool",
+		"pool_size": len(p.pools),
+	})
+
+	logger.Info("Closing all streams in the pool")
+
 	// Close all streams
 	for peerIDStr, pool := range p.pools {
-		for _, ps := range pool {
-			ps.stream.Close()
+		peerLogger := logger.WithFields(logrus.Fields{
+			"peer_id":   peerIDStr,
+			"pool_size": len(pool),
+		})
+
+		peerLogger.Debug("Closing all streams for peer")
+		for i, ps := range pool {
+			streamLogger := peerLogger.WithField("stream_idx", i)
+			if err := ps.stream.Close(); err != nil {
+				streamLogger.WithError(err).Warn("Error closing stream")
+			} else {
+				streamLogger.Debug("Stream closed successfully")
+			}
 
 			// Update metrics
 			p.metrics.IncrementStreamsClosed()
 		}
 
 		// Remove the peer
+		peerLogger.Debug("Removed peer from pool")
 		delete(p.pools, peerIDStr)
 	}
+
+	logger.Info("All streams closed and pool emptied")
+	return nil
 }

@@ -3,70 +3,39 @@ package packet
 import (
 	"context"
 	"net"
-	"sync"
-	"time"
-
-	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/unicornultrafoundation/subnet-node/core/vpn/stream/types"
 )
 
-// PacketInfo contains extracted source and destination IPs and ports
+// PacketInfo contains extracted source and destination IPs and ports from a network packet.
+// This structure is used for packet analysis and routing decisions.
 type PacketInfo struct {
-	SrcIP    net.IP
-	DstIP    net.IP
-	SrcPort  *int // pointer to allow nil
-	DstPort  *int
+	// SrcIP is the source IP address of the packet
+	SrcIP net.IP
+	// DstIP is the destination IP address of the packet
+	DstIP net.IP
+	// SrcPort is the source port of the packet (pointer to allow nil for non-TCP/UDP protocols)
+	SrcPort *int
+	// DstPort is the destination port of the packet (pointer to allow nil for non-TCP/UDP protocols)
+	DstPort *int
+	// Protocol is the IP protocol number (e.g., 6 for TCP, 17 for UDP)
 	Protocol uint8
 }
 
-// QueuedPacket represents a packet in the sending queue
+// QueuedPacket represents a packet in the sending queue, ready to be processed by a worker.
+// It contains all the necessary information for packet transmission and completion signaling.
 type QueuedPacket struct {
-	Ctx    context.Context
-	DestIP string
-	Data   []byte
-	DoneCh chan error // Channel to signal when packet processing is complete
-}
-
-// Worker handles packets for a specific destination IP:Port
-type Worker struct {
-	// The unique key for this worker (IP:Port or just IP)
-	SyncKey string
-	// The destination IP
-	DestIP string
-	// The peer ID associated with this destination
-	PeerID peer.ID
-	// The stream to the peer (used in direct mode)
-	Stream types.VPNStream
-	// Stream services (used in pooled and multiplexed modes)
-	PoolService      types.PoolService
-	MultiplexService types.MultiplexService
-	// Channel for receiving packets
-	PacketChan chan *QueuedPacket
-	// Last activity time
-	LastActivity time.Time
-	// Mutex for protecting access to the worker
-	Mu sync.Mutex
-	// Context for the worker
+	// Ctx is the context for the packet processing operation
 	Ctx context.Context
-	// Cancel function for the worker context
-	Cancel context.CancelFunc
-	// Whether the worker is running
-	Running bool
-	// Mode flags
-	UsePooling      bool
-	UseMultiplexing bool
-	// PacketCount tracks the number of packets processed by this worker
-	PacketCount int64
-	// ErrorCount tracks the number of errors encountered by this worker
-	ErrorCount int64
+	// DestIP is the destination IP address for the packet
+	DestIP string
+	// Data contains the raw packet bytes to be transmitted
+	Data []byte
+	// DoneCh is a channel to signal when packet processing is complete
+	// The error (if any) is sent on this channel
+	DoneCh chan error
 }
 
-// EnqueuePacket adds a packet to the worker's queue
-func (w *Worker) EnqueuePacket(packet *QueuedPacket) bool {
-	select {
-	case w.PacketChan <- packet:
-		return true
-	default:
-		return false
-	}
+// WorkerMetrics contains metrics for a worker
+type WorkerMetrics struct {
+	PacketCount int64
+	ErrorCount  int64
 }
