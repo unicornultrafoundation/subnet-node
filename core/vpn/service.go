@@ -63,10 +63,6 @@ type Service struct {
 	// Context management
 	serviceCtx    context.Context
 	serviceCancel context.CancelFunc
-	// Map of child contexts and their cancel functions
-	childContexts map[string]context.Context
-	childCancels  map[string]context.CancelFunc
-	contextMu     sync.Mutex
 
 	// Resource management
 	resourceManager *utils.ResourceManager
@@ -99,8 +95,6 @@ func New(cfg *config.C, peerHost host.Host, dht *ddht.DHT, accountService *accou
 		dht:             dht,
 		metricsService:  metricsService,
 		bufferPool:      bufferPool,
-		childContexts:   make(map[string]context.Context),
-		childCancels:    make(map[string]context.CancelFunc),
 		resourceManager: resourceManager,
 		stopChan:        make(chan struct{}),
 	}
@@ -223,10 +217,11 @@ func (s *Service) Start(ctx context.Context) error {
 	// Create a service context that can be cancelled when the service stops
 	s.serviceCtx, s.serviceCancel = context.WithCancel(context.Background())
 
-	// Create child contexts for different components
-	dhtCtx := s.createChildContext("dht")
-	tunCtx := s.createChildContext("tun")
-	clientCtx := s.createChildContext("client")
+	// Create child contexts that inherit from the service context
+	// When the service context is cancelled, these will be cancelled automatically
+	dhtCtx := s.serviceCtx
+	tunCtx := s.serviceCtx
+	clientCtx := s.serviceCtx
 
 	go func() {
 		err := s.start(s.serviceCtx, dhtCtx, tunCtx, clientCtx)
@@ -351,13 +346,11 @@ func (s *Service) Stop() error {
 		"active_breakers":     metrics["active_breakers"],
 	}).Info("Circuit breaker metrics")
 
-	// First, cancel all contexts to signal components to stop
+	// Cancel the service context to signal all components to stop
+	// This will automatically cancel all child contexts
 	if s.serviceCancel != nil {
 		s.serviceCancel()
 	}
-
-	// Cancel all child contexts
-	s.cancelAllChildContexts()
 
 	// Close stopChan to signal all background tasks to stop
 	// This needs to happen before closing resources so components waiting on
@@ -449,37 +442,6 @@ func (s *Service) IsEnabled() bool {
 	defer s.mu.RUnlock()
 
 	return s.configService.GetEnable()
-}
-
-// createChildContext creates a child context with the given name
-func (s *Service) createChildContext(name string) context.Context {
-	s.contextMu.Lock()
-	defer s.contextMu.Unlock()
-
-	// Check if the context already exists
-	if ctx, exists := s.childContexts[name]; exists {
-		return ctx
-	}
-
-	// Create a new child context
-	ctx, cancel := context.WithCancel(s.serviceCtx)
-	s.childContexts[name] = ctx
-	s.childCancels[name] = cancel
-
-	return ctx
-}
-
-// cancelAllChildContexts cancels all child contexts
-func (s *Service) cancelAllChildContexts() {
-	s.contextMu.Lock()
-	defer s.contextMu.Unlock()
-
-	// Cancel all child contexts
-	for name, cancel := range s.childCancels {
-		cancel()
-		delete(s.childContexts, name)
-		delete(s.childCancels, name)
-	}
 }
 
 // StreamServiceAdapter implements the types.Service interface to break the circular
