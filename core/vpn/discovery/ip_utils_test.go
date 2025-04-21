@@ -62,7 +62,8 @@ func TestGetPeerIDByRegistry(t *testing.T) {
 
 	// Setup expectations for success case
 	mockAccountService.On("IPRegistry").Return(mockIPRegistry)
-	mockIPRegistry.On("GetPeer", mock.Anything, big.NewInt(0x010203)).Return("peer1", nil)
+	// The IP 10.1.2.3 converts to 167838211 in decimal (0x0A010203 in hex)
+	mockIPRegistry.On("GetPeer", mock.Anything, big.NewInt(167838211)).Return("peer1", nil)
 
 	// Create the peer discovery service
 	peerDiscovery := &PeerDiscovery{
@@ -82,7 +83,8 @@ func TestGetPeerIDByRegistry(t *testing.T) {
 	assert.Equal(t, "peer1", peerID)
 
 	// Setup expectations for error case
-	mockIPRegistry.On("GetPeer", mock.Anything, big.NewInt(0x020304)).Return("", fmt.Errorf("registry error"))
+	// The IP 10.2.3.4 converts to 167904004 in decimal (0x0A020304 in hex)
+	mockIPRegistry.On("GetPeer", mock.Anything, big.NewInt(167904004)).Return("", fmt.Errorf("registry error"))
 
 	// Test getting a peer ID from the registry with an error
 	peerID, err = peerDiscovery.GetPeerIDByRegistry(ctx, "10.2.3.4")
