@@ -46,6 +46,10 @@ type Worker struct {
 	ErrorCount int64
 	// ResilienceService provides circuit breaker and retry functionality
 	ResilienceService *resilience.ResilienceService
+	// CurrentStream is the current stream being used by this worker
+	CurrentStream streamTypes.VPNStream
+	// StreamMu protects concurrent access to the CurrentStream
+	StreamMu sync.Mutex
 }
 
 // NewWorker creates a new packet worker for handling packets to a specific destination.
@@ -110,10 +114,24 @@ func (w *Worker) Stop() {
 }
 
 // Close implements the io.Closer interface for clean resource management.
-// It stops the worker and returns nil as there are no errors to report.
+// It stops the worker, cleans up resources, and returns nil as there are no errors to report.
 func (w *Worker) Close() error {
 	w.Stop()
+	// Clean up the current stream if it exists
+	w.cleanupCurrentStream()
 	return nil
+}
+
+// cleanupCurrentStream safely cleans up the current stream if it exists
+func (w *Worker) cleanupCurrentStream() {
+	w.StreamMu.Lock()
+	defer w.StreamMu.Unlock()
+
+	if w.CurrentStream != nil {
+		// Release the stream back to the pool
+		w.PoolService.ReleaseStream(w.PeerID, w.CurrentStream, true)
+		w.CurrentStream = nil
+	}
 }
 
 // run is the main processing loop for the worker.
@@ -133,8 +151,8 @@ func (w *Worker) run() {
 		w.Running = false
 		w.Mu.Unlock()
 
-		// No need to close anything
-		// The pool manager handles stream lifecycle
+		// Clean up the current stream if it exists
+		w.cleanupCurrentStream()
 		logger.Debug("Worker stopped")
 	}()
 
@@ -185,9 +203,9 @@ func (w *Worker) run() {
 	}
 }
 
-// processPacket sends a packet using the worker's pool service.
-// It uses the resilience service to handle retries and circuit breaking,
-// getting a fresh stream for each attempt to ensure reliability.
+// processPacket sends a packet using the worker's current stream or gets a new one if needed.
+// It ensures sequential processing of packets with the same syncKey by using a single stream
+// at a time, only switching to a new stream if the current one fails.
 //
 // Parameters:
 //   - packet: The packet to be processed
@@ -200,7 +218,7 @@ func (w *Worker) processPacket(packet *QueuedPacket) error {
 		"dest_ip":     w.DestIP,
 		"peer_id":     w.PeerID.String(),
 		"packet_size": len(packet.Data),
-		"stream_mode": "pooled",
+		"stream_mode": "sequential",
 	})
 
 	// Check if PoolService is nil
@@ -221,7 +239,7 @@ func (w *Worker) processPacket(packet *QueuedPacket) error {
 		w.ResilienceService = resilience.NewResilienceService(nil)
 	}
 
-	// Use the resilience function for writing to the stream with a fresh stream for each attempt
+	// Use the resilience function for writing to the stream
 	writeBreakerId := fmt.Sprintf("%s-pool-write", w.SyncKey)
 	writeLogger := logger.WithField("breaker_id", writeBreakerId)
 	// Debug logging only when needed
@@ -246,32 +264,39 @@ func (w *Worker) processPacket(packet *QueuedPacket) error {
 				)
 			}
 
-			// Get a fresh stream from the pool for each attempt
-			stream, getErr := w.PoolService.GetStream(packet.Ctx, w.PeerID)
-			if getErr != nil {
-				writeLogger.WithError(getErr).Warn("Failed to get stream from pool")
-				return getErr // Return the error to trigger retry
+			// Lock to safely access and potentially modify the current stream
+			w.StreamMu.Lock()
+			defer w.StreamMu.Unlock()
+
+			// Check if we need to get a new stream
+			if w.CurrentStream == nil {
+				writeLogger.Debug("No current stream, getting a new one from pool")
+				stream, getErr := w.PoolService.GetStream(packet.Ctx, w.PeerID)
+				if getErr != nil {
+					writeLogger.WithError(getErr).Warn("Failed to get stream from pool")
+					return getErr // Return the error to trigger retry
+				}
+
+				// Check if stream is nil
+				if stream == nil {
+					writeLogger.Error("Stream is nil, cannot write packet")
+					return NewServiceError(
+						ErrStreamCreationFailed,
+						"pool",
+						"get_stream",
+						w.SyncKey,
+						w.PeerID.String(),
+						w.DestIP,
+					)
+				}
+
+				// Set the current stream
+				w.CurrentStream = stream
+				writeLogger.Debug("New stream acquired and set as current stream")
 			}
 
-			// Check if stream is nil
-			if stream == nil {
-				writeLogger.Error("Stream is nil, cannot write packet")
-				return NewServiceError(
-					ErrStreamCreationFailed,
-					"pool",
-					"get_stream",
-					w.SyncKey,
-					w.PeerID.String(),
-					w.DestIP,
-				)
-			}
-
-			// Write the packet to the stream
-			_, err := stream.Write(packet.Data)
-
-			// Always release the stream back to the pool after use
-			streamHealthy := err == nil
-			w.PoolService.ReleaseStream(w.PeerID, stream, streamHealthy)
+			// Write the packet to the current stream
+			_, err := w.CurrentStream.Write(packet.Data)
 
 			if err != nil {
 				// Create a network error with the appropriate context
@@ -291,7 +316,44 @@ func (w *Worker) processPacket(packet *QueuedPacket) error {
 					writeLogger.WithError(err).Error("Error writing to stream")
 				}
 
-				return netErr
+				// Release the unhealthy stream
+				writeLogger.Debug("Releasing unhealthy stream and getting a new one")
+				w.PoolService.ReleaseStream(w.PeerID, w.CurrentStream, false)
+				w.CurrentStream = nil
+
+				// Get a new stream for the next attempt
+				stream, getErr := w.PoolService.GetStream(packet.Ctx, w.PeerID)
+				if getErr != nil {
+					writeLogger.WithError(getErr).Warn("Failed to get replacement stream from pool")
+					return getErr // Return the error to trigger retry
+				}
+
+				// Check if stream is nil
+				if stream == nil {
+					writeLogger.Error("Replacement stream is nil, cannot write packet")
+					return NewServiceError(
+						ErrStreamCreationFailed,
+						"pool",
+						"get_stream",
+						w.SyncKey,
+						w.PeerID.String(),
+						w.DestIP,
+					)
+				}
+
+				// Set the new stream as current
+				w.CurrentStream = stream
+				writeLogger.Debug("New replacement stream acquired and set as current stream")
+
+				// Try to write with the new stream
+				_, err = w.CurrentStream.Write(packet.Data)
+				if err != nil {
+					// Release the unhealthy stream again
+					w.PoolService.ReleaseStream(w.PeerID, w.CurrentStream, false)
+					w.CurrentStream = nil
+					writeLogger.WithError(err).Error("Failed to write with replacement stream")
+					return netErr // Return the original error to trigger retry
+				}
 			}
 
 			// Debug logging only when needed
