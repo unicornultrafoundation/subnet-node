@@ -93,7 +93,8 @@ func TestTableDrivenIntegration(t *testing.T) {
 			for i := 1; i <= tc.peerCount && i <= 3; i++ { // Limit to 3 peers to avoid issues with peer IDs
 				packet := testutil.CreateTestPacket(tc.packetSize)
 				destIP := fmt.Sprintf("192.168.1.%d", i)
-				syncKey := destIP + ":80"
+				// Use the new sync key format (sourcePort:destIP:destPort)
+				syncKey := fmt.Sprintf("12345:%s:80", destIP)
 
 				// Dispatch packet
 				testutil.VerifyPacketDelivery(t, fixture.Dispatcher, syncKey, destIP, packet)
