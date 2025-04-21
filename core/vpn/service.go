@@ -135,8 +135,20 @@ func New(cfg *config.C, peerHost host.Host, dht *ddht.DHT, accountService *accou
 	// Create a stream service adapter that implements types.Service
 	streamServiceAdapter := &StreamServiceAdapter{service: service}
 
-	// Create the stream service using the adapter
-	service.streamService = stream.CreateStreamService(streamServiceAdapter, configService)
+	// Create a stream service config with values from the config service
+	streamConfig := &stream.StreamServiceConfig{
+		MaxStreamsPerPeer:      configService.GetMaxStreamsPerPeer(),
+		MinStreamsPerPeer:      configService.GetMinStreamsPerPeer(),
+		StreamIdleTimeout:      configService.GetStreamIdleTimeout(),
+		CleanupInterval:        configService.GetCleanupInterval(),
+		HealthCheckInterval:    configService.GetHealthCheckInterval(),
+		HealthCheckTimeout:     configService.GetHealthCheckTimeout(),
+		MaxConsecutiveFailures: configService.GetMaxConsecutiveFailures(),
+		WarmInterval:           configService.GetWarmInterval(),
+	}
+
+	// Create the stream service using the adapter and explicit config
+	service.streamService = stream.CreateStreamService(streamServiceAdapter, streamConfig)
 
 	// Register the stream service with the resource manager
 	service.resourceManager.Register(service.streamService)
