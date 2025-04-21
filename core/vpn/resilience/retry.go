@@ -3,6 +3,7 @@ package resilience
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -35,6 +36,12 @@ func NewRetryManager(maxAttempts int, initialInterval, maxInterval time.Duration
 
 // RetryOperation retries an operation with exponential backoff
 func (r *RetryManager) RetryOperation(ctx context.Context, operation func() error) error {
+	err, _ := r.RetryOperationWithAttempts(ctx, operation)
+	return err
+}
+
+// RetryOperationWithAttempts retries an operation with exponential backoff and returns the number of attempts
+func (r *RetryManager) RetryOperationWithAttempts(ctx context.Context, operation func() error) (error, int) {
 	bo := backoff.NewExponentialBackOff()
 	bo.InitialInterval = r.initialInterval
 	bo.MaxInterval = r.maxInterval
@@ -51,31 +58,33 @@ func (r *RetryManager) RetryOperation(ctx context.Context, operation func() erro
 		}
 
 		attempt++
+		atomic.AddInt64(&r.metrics.retryAttempts, 1) // Track each attempt
+
 		if attempt > r.maxAttempts {
 			return backoff.Permanent(err) // Stop retrying after max attempts
 		}
-		
+
 		err = operation()
 		if err != nil {
 			return err // Will be retried
 		}
-		
+
 		return nil // Success, stop retrying
 	}
 
 	// Run the retry operation
 	retryErr := backoff.Retry(backoffOperation, backoff.WithContext(bo, ctx))
-	
+
 	if retryErr != nil {
 		r.metrics.retryFailure++
 		// If context was canceled, return that error
 		if ctx.Err() != nil {
-			return fmt.Errorf("context canceled: %w", ctx.Err())
+			return fmt.Errorf("context canceled: %w", ctx.Err()), attempt
 		}
-		return err // Return the original error from the operation
+		return err, attempt // Return the original error from the operation
 	} else {
 		r.metrics.retrySuccess++
-		return nil
+		return nil, attempt
 	}
 }
 

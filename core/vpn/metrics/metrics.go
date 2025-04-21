@@ -1,7 +1,6 @@
 package metrics
 
 import (
-	"sync"
 	"sync/atomic"
 )
 
@@ -19,9 +18,6 @@ type VPNMetrics struct {
 
 	// Circuit breaker metrics
 	CircuitOpenDrops int64
-
-	// Mutex for protecting access to metrics
-	mu sync.Mutex
 }
 
 // NewVPNMetrics creates a new VPNMetrics instance
@@ -31,54 +27,41 @@ func NewVPNMetrics() *VPNMetrics {
 
 // IncrementPacketsReceived increments the packets received counter
 func (m *VPNMetrics) IncrementPacketsReceived(bytes int) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.PacketsReceived++
-	m.BytesReceived += int64(bytes)
+	atomic.AddInt64(&m.PacketsReceived, 1)
+	atomic.AddInt64(&m.BytesReceived, int64(bytes))
 }
 
 // IncrementPacketsSent increments the packets sent counter
 func (m *VPNMetrics) IncrementPacketsSent(bytes int) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.PacketsSent++
-	m.BytesSent += int64(bytes)
+	atomic.AddInt64(&m.PacketsSent, 1)
+	atomic.AddInt64(&m.BytesSent, int64(bytes))
 }
 
 // IncrementPacketsDropped increments the packets dropped counter
 func (m *VPNMetrics) IncrementPacketsDropped() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.PacketsDropped++
+	atomic.AddInt64(&m.PacketsDropped, 1)
 }
 
 // IncrementStreamErrors increments the stream errors counter
 func (m *VPNMetrics) IncrementStreamErrors() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.StreamErrors++
+	atomic.AddInt64(&m.StreamErrors, 1)
 }
 
 // IncrementCircuitOpenDrops increments the circuit open drops counter
 func (m *VPNMetrics) IncrementCircuitOpenDrops() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.CircuitOpenDrops++
+	atomic.AddInt64(&m.CircuitOpenDrops, 1)
 }
 
 // GetMetrics returns the current metrics as a map
 func (m *VPNMetrics) GetMetrics() map[string]int64 {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
 	return map[string]int64{
-		"packets_received":   m.PacketsReceived,
-		"packets_sent":       m.PacketsSent,
-		"packets_dropped":    m.PacketsDropped,
-		"bytes_received":     m.BytesReceived,
-		"bytes_sent":         m.BytesSent,
-		"stream_errors":      m.StreamErrors,
-		"circuit_open_drops": m.CircuitOpenDrops,
+		"packets_received":   atomic.LoadInt64(&m.PacketsReceived),
+		"packets_sent":       atomic.LoadInt64(&m.PacketsSent),
+		"packets_dropped":    atomic.LoadInt64(&m.PacketsDropped),
+		"bytes_received":     atomic.LoadInt64(&m.BytesReceived),
+		"bytes_sent":         atomic.LoadInt64(&m.BytesSent),
+		"stream_errors":      atomic.LoadInt64(&m.StreamErrors),
+		"circuit_open_drops": atomic.LoadInt64(&m.CircuitOpenDrops),
 	}
 }
 
@@ -200,89 +183,5 @@ func (m *HealthMetrics) GetMetrics() map[string]int64 {
 		"warms_performed":   atomic.LoadInt64(&m.WarmsPerformed),
 		"warm_failures":     atomic.LoadInt64(&m.WarmFailures),
 		"peer_resets":       atomic.LoadInt64(&m.PeerResets),
-	}
-}
-
-// MultiplexerMetrics tracks metrics for a stream multiplexer
-type MultiplexerMetrics struct {
-	PacketsSent         int64
-	PacketsDropped      int64
-	BytesSent           int64
-	StreamErrors        int64
-	StreamsCreated      int64
-	StreamsClosed       int64
-	ScaleUpOperations   int64
-	ScaleDownOperations int64
-	AvgLatency          int64
-	LatencyMeasurements int64
-}
-
-// NewMultiplexerMetrics creates a new MultiplexerMetrics instance
-func NewMultiplexerMetrics() *MultiplexerMetrics {
-	return &MultiplexerMetrics{}
-}
-
-// IncrementPacketsSent increments the packets sent counter
-func (m *MultiplexerMetrics) IncrementPacketsSent(bytes int) {
-	atomic.AddInt64(&m.PacketsSent, 1)
-	atomic.AddInt64(&m.BytesSent, int64(bytes))
-}
-
-// IncrementPacketsDropped increments the packets dropped counter
-func (m *MultiplexerMetrics) IncrementPacketsDropped() {
-	atomic.AddInt64(&m.PacketsDropped, 1)
-}
-
-// IncrementStreamErrors increments the stream errors counter
-func (m *MultiplexerMetrics) IncrementStreamErrors() {
-	atomic.AddInt64(&m.StreamErrors, 1)
-}
-
-// IncrementStreamsCreated increments the streams created counter
-func (m *MultiplexerMetrics) IncrementStreamsCreated() {
-	atomic.AddInt64(&m.StreamsCreated, 1)
-}
-
-// IncrementStreamsClosed increments the streams closed counter
-func (m *MultiplexerMetrics) IncrementStreamsClosed() {
-	atomic.AddInt64(&m.StreamsClosed, 1)
-}
-
-// IncrementScaleUpOperations increments the scale up operations counter
-func (m *MultiplexerMetrics) IncrementScaleUpOperations() {
-	atomic.AddInt64(&m.ScaleUpOperations, 1)
-}
-
-// IncrementScaleDownOperations increments the scale down operations counter
-func (m *MultiplexerMetrics) IncrementScaleDownOperations() {
-	atomic.AddInt64(&m.ScaleDownOperations, 1)
-}
-
-// UpdateLatency updates the average latency
-func (m *MultiplexerMetrics) UpdateLatency(latency int64) {
-	currentLatency := atomic.LoadInt64(&m.AvgLatency)
-	currentMeasurements := atomic.LoadInt64(&m.LatencyMeasurements)
-
-	// Calculate new average
-	newMeasurements := currentMeasurements + 1
-	newLatency := (currentLatency*currentMeasurements + latency) / newMeasurements
-
-	atomic.StoreInt64(&m.AvgLatency, newLatency)
-	atomic.StoreInt64(&m.LatencyMeasurements, newMeasurements)
-}
-
-// GetMetrics returns the current metrics
-func (m *MultiplexerMetrics) GetMetrics() map[string]int64 {
-	return map[string]int64{
-		"packets_sent":          atomic.LoadInt64(&m.PacketsSent),
-		"packets_dropped":       atomic.LoadInt64(&m.PacketsDropped),
-		"bytes_sent":            atomic.LoadInt64(&m.BytesSent),
-		"stream_errors":         atomic.LoadInt64(&m.StreamErrors),
-		"streams_created":       atomic.LoadInt64(&m.StreamsCreated),
-		"streams_closed":        atomic.LoadInt64(&m.StreamsClosed),
-		"scale_up_operations":   atomic.LoadInt64(&m.ScaleUpOperations),
-		"scale_down_operations": atomic.LoadInt64(&m.ScaleDownOperations),
-		"avg_latency":           atomic.LoadInt64(&m.AvgLatency),
-		"latency_measurements":  atomic.LoadInt64(&m.LatencyMeasurements),
 	}
 }

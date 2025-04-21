@@ -17,8 +17,8 @@ type TUNConfig struct {
 	MTU int
 	// Virtual IP for this node
 	VirtualIP string
-	// Subnet mask length
-	Subnet int
+	// Subnet mask length (as a string)
+	Subnet string
 	// Routes to add
 	Routes []string
 }
@@ -59,7 +59,7 @@ func (s *TUNService) SetupTUN() (*water.Interface, error) {
 	}
 
 	// Assign IP address
-	addr, err := netlink.ParseAddr(fmt.Sprintf("%s/%d", s.config.VirtualIP, s.config.Subnet))
+	addr, err := netlink.ParseAddr(fmt.Sprintf("%s/%s", s.config.VirtualIP, s.config.Subnet))
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse IP: %w", err)
 	}

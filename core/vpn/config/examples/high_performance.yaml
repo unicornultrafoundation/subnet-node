@@ -1,0 +1,53 @@
+# High Performance VPN Configuration Example
+---
+vpn:
+  enable: true
+
+  # Network settings - optimized for performance
+  mtu: 1500                     # Higher MTU for better throughput
+  virtual_ip: 10.0.0.1
+  subnet: 24
+  routes:
+    - 10.0.0.0/24
+  protocol: "/vpn/1.0.0"
+
+  # Security settings
+  unallowed_ports:
+    - "25"   # SMTP
+    - "587"  # Submission
+    - "465"  # SMTPS
+
+  # Worker settings - increased for high performance
+  worker_idle_timeout: 600      # 10 minutes
+  worker_buffer_size: 500       # Larger buffer for high throughput
+  max_workers: 5000             # More workers for parallel processing
+  worker_cleanup_interval: 120  # 2 minutes
+
+  # Stream settings - increased for high performance
+  max_streams_per_peer: 20      # More streams for parallel connections
+  min_streams_per_peer: 5       # Higher minimum for better availability
+  stream_idle_timeout: 600      # 10 minutes
+  cleanup_interval: 120         # 2 minutes
+
+  # Circuit breaker settings - more tolerant for high load
+  circuit_breaker_failure_threshold: 10  # More failures allowed
+  circuit_breaker_reset_timeout: 120     # 2 minutes
+  circuit_breaker_success_threshold: 3    # More successes required
+
+  # Stream health settings - more frequent checks
+  health_check_interval: 15     # 15 seconds
+  health_check_timeout: 3       # 3 seconds
+  max_consecutive_failures: 5   # More failures allowed
+  warm_interval: 30             # 30 seconds
+
+  # Retry settings - more aggressive
+  retry_max_attempts: 10           # More retry attempts
+  retry_initial_interval: 1        # 1 second
+  retry_max_interval: 60           # 1 minute
+
+  # Timeout settings - optimized for performance
+  peer_connection_timeout: 60       # 60 seconds - longer timeout for better reliability
+  dht_sync_timeout: 120             # 120 seconds - longer timeout for better reliability
+  tun_setup_timeout: 60             # 60 seconds - longer timeout for better reliability
+  peer_connection_check_interval: 50   # 50 milliseconds - more frequent checks
+  shutdown_grace_period: 100        # 100 milliseconds - longer grace period

@@ -7,6 +7,7 @@ import (
 
 	"github.com/songgao/water"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/packet"
+	"github.com/unicornultrafoundation/subnet-node/core/vpn/utils"
 )
 
 // ClientService handles client-side VPN operations
@@ -18,7 +19,7 @@ type ClientService struct {
 	// Metrics for monitoring
 	metrics VPNMetricsInterface
 	// Buffer pool for packet processing
-	bufferPool *BufferPool
+	bufferPool *utils.BufferPool
 	// Stop channel for graceful shutdown
 	stopChan chan struct{}
 }
@@ -28,7 +29,7 @@ func NewClientService(
 	tunService *TUNService,
 	dispatcher packet.DispatcherService,
 	metrics VPNMetricsInterface,
-	bufferPool *BufferPool,
+	bufferPool *utils.BufferPool,
 ) *ClientService {
 	return &ClientService{
 		tunService: tunService,
@@ -57,6 +58,11 @@ func (s *ClientService) Start(ctx context.Context) error {
 func (s *ClientService) Stop() error {
 	close(s.stopChan)
 	return s.tunService.Close()
+}
+
+// Close implements the io.Closer interface
+func (s *ClientService) Close() error {
+	return s.Stop()
 }
 
 // listenFromTUN listens for packets from the TUN interface
@@ -106,40 +112,5 @@ func (s *ClientService) listenFromTUN(ctx context.Context, iface *water.Interfac
 			// Dispatch the packet to the appropriate worker
 			s.dispatcher.DispatchPacket(ctx, syncKey, destIP, packetData)
 		}
-	}
-}
-
-// BufferPool manages a pool of byte buffers
-type BufferPool struct {
-	// Size of each buffer
-	bufferSize int
-	// Channel for storing buffers
-	pool chan []byte
-}
-
-// NewBufferPool creates a new buffer pool
-func NewBufferPool(bufferSize, poolSize int) *BufferPool {
-	return &BufferPool{
-		bufferSize: bufferSize,
-		pool:       make(chan []byte, poolSize),
-	}
-}
-
-// Get gets a buffer from the pool or creates a new one
-func (p *BufferPool) Get() []byte {
-	select {
-	case buf := <-p.pool:
-		return buf
-	default:
-		return make([]byte, p.bufferSize)
-	}
-}
-
-// Put returns a buffer to the pool
-func (p *BufferPool) Put(buf []byte) {
-	select {
-	case p.pool <- buf:
-	default:
-		// Pool is full, discard the buffer
 	}
 }

@@ -2,8 +2,6 @@ package metrics
 
 import (
 	"sync"
-
-	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 // MetricsService is the interface for the centralized metrics service
@@ -32,16 +30,6 @@ type MetricsService interface {
 	IncrementWarmFailures()
 	IncrementPeerResets()
 
-	// Multiplexer metrics
-	IncrementPacketsSentMultiplexer(peerID peer.ID, bytes int)
-	IncrementPacketsDroppedMultiplexer(peerID peer.ID)
-	IncrementStreamErrorsMultiplexer(peerID peer.ID)
-	IncrementStreamsCreatedMultiplexer(peerID peer.ID)
-	IncrementStreamsClosedMultiplexer(peerID peer.ID)
-	IncrementScaleUpOperations(peerID peer.ID)
-	IncrementScaleDownOperations(peerID peer.ID)
-	UpdateLatency(peerID peer.ID, latency int64)
-
 	// Circuit breaker metrics
 	IncrementCircuitOpenCount()
 	IncrementCircuitCloseCount()
@@ -65,18 +53,14 @@ type MetricsServiceImpl struct {
 	// Health metrics
 	healthMetrics *HealthMetrics
 
-	// Multiplexer metrics
-	multiplexerMetrics map[string]*MultiplexerMetrics
-	multiplexerMu      sync.RWMutex
-
 	// Circuit breaker metrics
-	circuitOpenCount    int64
-	circuitCloseCount   int64
-	circuitResetCount   int64
-	requestBlockCount   int64
-	requestAllowCount   int64
-	activeBreakers      int64
-	circuitBreakerMu    sync.RWMutex
+	circuitOpenCount  int64
+	circuitCloseCount int64
+	circuitResetCount int64
+	requestBlockCount int64
+	requestAllowCount int64
+	activeBreakers    int64
+	circuitBreakerMu  sync.RWMutex
 }
 
 // NewMetricsService creates a new metrics service
@@ -85,7 +69,6 @@ func NewMetricsService() *MetricsServiceImpl {
 		vpnMetrics:        NewVPNMetrics(),
 		streamPoolMetrics: NewStreamPoolMetrics(),
 		healthMetrics:     NewHealthMetrics(),
-		multiplexerMetrics: make(map[string]*MultiplexerMetrics),
 	}
 }
 
@@ -185,84 +168,6 @@ func (m *MetricsServiceImpl) IncrementPeerResets() {
 	m.healthMetrics.IncrementPeerResets()
 }
 
-// Multiplexer metrics
-
-// getOrCreateMultiplexerMetrics gets or creates multiplexer metrics for a peer
-func (m *MetricsServiceImpl) getOrCreateMultiplexerMetrics(peerID peer.ID) *MultiplexerMetrics {
-	peerIDStr := peerID.String()
-
-	m.multiplexerMu.RLock()
-	metrics, exists := m.multiplexerMetrics[peerIDStr]
-	m.multiplexerMu.RUnlock()
-
-	if exists {
-		return metrics
-	}
-
-	m.multiplexerMu.Lock()
-	defer m.multiplexerMu.Unlock()
-
-	// Check again in case another goroutine created the metrics
-	metrics, exists = m.multiplexerMetrics[peerIDStr]
-	if exists {
-		return metrics
-	}
-
-	// Create new metrics
-	metrics = NewMultiplexerMetrics()
-	m.multiplexerMetrics[peerIDStr] = metrics
-
-	return metrics
-}
-
-// IncrementPacketsSentMultiplexer increments the packets sent counter for a multiplexer
-func (m *MetricsServiceImpl) IncrementPacketsSentMultiplexer(peerID peer.ID, bytes int) {
-	metrics := m.getOrCreateMultiplexerMetrics(peerID)
-	metrics.IncrementPacketsSent(bytes)
-}
-
-// IncrementPacketsDroppedMultiplexer increments the packets dropped counter for a multiplexer
-func (m *MetricsServiceImpl) IncrementPacketsDroppedMultiplexer(peerID peer.ID) {
-	metrics := m.getOrCreateMultiplexerMetrics(peerID)
-	metrics.IncrementPacketsDropped()
-}
-
-// IncrementStreamErrorsMultiplexer increments the stream errors counter for a multiplexer
-func (m *MetricsServiceImpl) IncrementStreamErrorsMultiplexer(peerID peer.ID) {
-	metrics := m.getOrCreateMultiplexerMetrics(peerID)
-	metrics.IncrementStreamErrors()
-}
-
-// IncrementStreamsCreatedMultiplexer increments the streams created counter for a multiplexer
-func (m *MetricsServiceImpl) IncrementStreamsCreatedMultiplexer(peerID peer.ID) {
-	metrics := m.getOrCreateMultiplexerMetrics(peerID)
-	metrics.IncrementStreamsCreated()
-}
-
-// IncrementStreamsClosedMultiplexer increments the streams closed counter for a multiplexer
-func (m *MetricsServiceImpl) IncrementStreamsClosedMultiplexer(peerID peer.ID) {
-	metrics := m.getOrCreateMultiplexerMetrics(peerID)
-	metrics.IncrementStreamsClosed()
-}
-
-// IncrementScaleUpOperations increments the scale up operations counter for a multiplexer
-func (m *MetricsServiceImpl) IncrementScaleUpOperations(peerID peer.ID) {
-	metrics := m.getOrCreateMultiplexerMetrics(peerID)
-	metrics.IncrementScaleUpOperations()
-}
-
-// IncrementScaleDownOperations increments the scale down operations counter for a multiplexer
-func (m *MetricsServiceImpl) IncrementScaleDownOperations(peerID peer.ID) {
-	metrics := m.getOrCreateMultiplexerMetrics(peerID)
-	metrics.IncrementScaleDownOperations()
-}
-
-// UpdateLatency updates the average latency for a multiplexer
-func (m *MetricsServiceImpl) UpdateLatency(peerID peer.ID, latency int64) {
-	metrics := m.getOrCreateMultiplexerMetrics(peerID)
-	metrics.UpdateLatency(latency)
-}
-
 // Circuit breaker metrics
 
 // IncrementCircuitOpenCount increments the circuit open count
@@ -335,15 +240,6 @@ func (m *MetricsServiceImpl) GetAllMetrics() map[string]int64 {
 	metrics["request_allow_count"] = m.requestAllowCount
 	metrics["active_breakers"] = m.activeBreakers
 	m.circuitBreakerMu.RUnlock()
-
-	// Add multiplexer metrics
-	m.multiplexerMu.RLock()
-	for peerIDStr, multiplexerMetrics := range m.multiplexerMetrics {
-		for k, v := range multiplexerMetrics.GetMetrics() {
-			metrics["multiplexer_"+peerIDStr+"_"+k] = v
-		}
-	}
-	m.multiplexerMu.RUnlock()
 
 	return metrics
 }

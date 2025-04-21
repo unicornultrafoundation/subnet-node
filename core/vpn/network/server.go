@@ -66,6 +66,12 @@ func (s *ServerService) HandleStream(stream types.VPNStream, iface *water.Interf
 					s.metrics.IncrementPacketsDropped()
 					continue
 				}
+
+				// Reject all requests that are to ports outside the allowed range
+				if *packetInfo.DstPort < 30000 || *packetInfo.DstPort > 65535 {
+					s.metrics.IncrementPacketsDropped()
+					continue
+				}
 			}
 
 			// Write the packet to the TUN interface

@@ -94,6 +94,12 @@ func (m *StreamPoolManager) Stop() {
 	log.Info("Stream pool manager stopped")
 }
 
+// Close implements the io.Closer interface
+func (m *StreamPoolManager) Close() error {
+	m.Stop()
+	return nil
+}
+
 // runCleanup runs the cleanup loop
 func (m *StreamPoolManager) runCleanup() {
 	ticker := time.NewTicker(m.cleanupInterval)
@@ -122,21 +128,22 @@ func (m *StreamPoolManager) ReleaseStream(peerID peer.ID, stream types.VPNStream
 	m.pool.ReleaseStream(peerID, stream, healthy)
 }
 
-// GetMetrics returns the current metrics
-func (m *StreamPoolManager) GetMetrics() map[string]int64 {
+// GetStreamPoolMetrics returns the stream pool metrics (for MetricsService interface)
+func (m *StreamPoolManager) GetStreamPoolMetrics() map[string]int64 {
 	return m.pool.GetMetrics()
 }
 
-// GetStreamPoolMetrics returns the stream pool metrics (for StreamPoolMetricsService interface)
-func (m *StreamPoolManager) GetStreamPoolMetrics() map[string]int64 {
-	return m.GetMetrics()
+// GetHealthMetrics returns empty health metrics (for MetricsService interface)
+func (m *StreamPoolManager) GetHealthMetrics() map[string]map[string]int64 {
+	// Pool manager doesn't have health metrics
+	return map[string]map[string]int64{}
 }
 
 // Ensure StreamPoolManager implements the required interfaces
 var (
-	_ types.PoolService              = (*StreamPoolManager)(nil)
-	_ types.StreamPoolMetricsService = (*StreamPoolManager)(nil)
-	_ types.StreamLifecycleService   = (*StreamPoolManager)(nil)
+	_ types.PoolService      = (*StreamPoolManager)(nil)
+	_ types.MetricsService   = (*StreamPoolManager)(nil)
+	_ types.LifecycleService = (*StreamPoolManager)(nil)
 )
 
 // GetStreamCount returns the number of streams for a peer

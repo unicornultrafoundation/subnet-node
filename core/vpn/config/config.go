@@ -14,6 +14,7 @@ type VPNConfig struct {
 	VirtualIP string
 	Subnet    int
 	Routes    []string
+	Protocol  string
 
 	// Security settings
 	UnallowedPorts map[string]bool
@@ -26,9 +27,11 @@ type VPNConfig struct {
 
 	// Stream pool settings
 	MaxStreamsPerPeer int
-	MinStreamsPerPeer int
 	StreamIdleTimeout time.Duration
 	CleanupInterval   time.Duration
+
+	// Buffer pool settings
+	BufferPoolCapacity int
 
 	// Circuit breaker settings
 	CircuitBreakerFailureThreshold int
@@ -41,16 +44,17 @@ type VPNConfig struct {
 	MaxConsecutiveFailures int
 	WarmInterval           time.Duration
 
-	// Stream multiplexing settings
-	MultiplexingEnabled      bool
-	MaxStreamsPerMultiplexer int
-	MinStreamsPerMultiplexer int
-	AutoScalingInterval      time.Duration
-
 	// Retry settings
 	RetryMaxAttempts     int
 	RetryInitialInterval time.Duration
 	RetryMaxInterval     time.Duration
+
+	// Timeout settings
+	PeerConnectionTimeout       time.Duration
+	DHTSyncTimeout              time.Duration
+	TUNSetupTimeout             time.Duration
+	PeerConnectionCheckInterval time.Duration
+	ShutdownGracePeriod         time.Duration
 }
 
 // New creates a new VPNConfig with values from the provided config
@@ -69,6 +73,7 @@ func New(cfg *config.C) *VPNConfig {
 		VirtualIP: cfg.GetString("vpn.virtual_ip", ""),
 		Subnet:    cfg.GetInt("vpn.subnet", 8),
 		Routes:    cfg.GetStringSlice("vpn.routes", []string{"10.0.0.0/8"}),
+		Protocol:  cfg.GetString("vpn.protocol", "/vpn/1.0.0"),
 
 		// Security settings
 		UnallowedPorts: unallowedPorts,
@@ -81,9 +86,11 @@ func New(cfg *config.C) *VPNConfig {
 
 		// Stream pool settings
 		MaxStreamsPerPeer: cfg.GetInt("vpn.max_streams_per_peer", 10),                              // 10 streams per peer default
-		MinStreamsPerPeer: cfg.GetInt("vpn.min_streams_per_peer", 3),                               // 3 streams per peer default
 		StreamIdleTimeout: time.Duration(cfg.GetInt("vpn.stream_idle_timeout", 300)) * time.Second, // 5 minutes default
 		CleanupInterval:   time.Duration(cfg.GetInt("vpn.cleanup_interval", 60)) * time.Second,     // 1 minute default
+
+		// Buffer pool settings
+		BufferPoolCapacity: cfg.GetInt("vpn.buffer_pool_capacity", 100), // 100 buffers default
 
 		// Circuit breaker settings
 		CircuitBreakerFailureThreshold: cfg.GetInt("vpn.circuit_breaker_failure_threshold", 5),                           // 5 failures default
@@ -96,16 +103,17 @@ func New(cfg *config.C) *VPNConfig {
 		MaxConsecutiveFailures: cfg.GetInt("vpn.max_consecutive_failures", 3),                            // 3 failures default
 		WarmInterval:           time.Duration(cfg.GetInt("vpn.warm_interval", 60)) * time.Second,         // 1 minute default
 
-		// Stream multiplexing settings
-		MultiplexingEnabled:      cfg.GetBool("vpn.multiplexing_enabled", true),                            // Enabled by default
-		MaxStreamsPerMultiplexer: cfg.GetInt("vpn.max_streams_per_multiplexer", 5),                         // 5 streams per multiplexer default
-		MinStreamsPerMultiplexer: cfg.GetInt("vpn.min_streams_per_multiplexer", 2),                         // 2 streams per multiplexer default
-		AutoScalingInterval:      time.Duration(cfg.GetInt("vpn.auto_scaling_interval", 30)) * time.Second, // 30 seconds default
-
 		// Retry settings
 		RetryMaxAttempts:     cfg.GetInt("vpn.retry_max_attempts", 5),
 		RetryInitialInterval: time.Duration(cfg.GetInt("vpn.retry_initial_interval", 1)) * time.Second,
 		RetryMaxInterval:     time.Duration(cfg.GetInt("vpn.retry_max_interval", 30)) * time.Second,
+
+		// Timeout settings
+		PeerConnectionTimeout:       time.Duration(cfg.GetInt("vpn.peer_connection_timeout", 30)) * time.Second,              // 30 seconds default
+		DHTSyncTimeout:              time.Duration(cfg.GetInt("vpn.dht_sync_timeout", 60)) * time.Second,                     // 60 seconds default
+		TUNSetupTimeout:             time.Duration(cfg.GetInt("vpn.tun_setup_timeout", 30)) * time.Second,                    // 30 seconds default
+		PeerConnectionCheckInterval: time.Duration(cfg.GetInt("vpn.peer_connection_check_interval", 100)) * time.Millisecond, // 100 milliseconds default
+		ShutdownGracePeriod:         time.Duration(cfg.GetInt("vpn.shutdown_grace_period", 50)) * time.Millisecond,           // 50 milliseconds default
 	}
 }
 
@@ -127,11 +135,6 @@ func (c *VPNConfig) GetWorkerCleanupInterval() time.Duration {
 // GetMaxStreamsPerPeer returns the maximum number of streams per peer
 func (c *VPNConfig) GetMaxStreamsPerPeer() int {
 	return c.MaxStreamsPerPeer
-}
-
-// GetMinStreamsPerPeer returns the minimum number of streams per peer
-func (c *VPNConfig) GetMinStreamsPerPeer() int {
-	return c.MinStreamsPerPeer
 }
 
 // GetStreamIdleTimeout returns the stream idle timeout
@@ -177,24 +180,4 @@ func (c *VPNConfig) GetMaxConsecutiveFailures() int {
 // GetWarmInterval returns the warm interval
 func (c *VPNConfig) GetWarmInterval() time.Duration {
 	return c.WarmInterval
-}
-
-// GetMaxStreamsPerMultiplexer returns the maximum number of streams per multiplexer
-func (c *VPNConfig) GetMaxStreamsPerMultiplexer() int {
-	return c.MaxStreamsPerMultiplexer
-}
-
-// GetMinStreamsPerMultiplexer returns the minimum number of streams per multiplexer
-func (c *VPNConfig) GetMinStreamsPerMultiplexer() int {
-	return c.MinStreamsPerMultiplexer
-}
-
-// GetAutoScalingInterval returns the auto-scaling interval
-func (c *VPNConfig) GetAutoScalingInterval() time.Duration {
-	return c.AutoScalingInterval
-}
-
-// GetMultiplexingEnabled returns whether multiplexing is enabled
-func (c *VPNConfig) GetMultiplexingEnabled() bool {
-	return c.MultiplexingEnabled
 }
