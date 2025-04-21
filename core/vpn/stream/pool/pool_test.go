@@ -9,75 +9,22 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/stream/pool"
-	"github.com/unicornultrafoundation/subnet-node/core/vpn/stream/types"
+	"github.com/unicornultrafoundation/subnet-node/core/vpn/testutil"
 )
-
-// MockStreamService is a mock implementation of the types.Service interface
-type MockStreamService struct {
-	mock.Mock
-}
-
-func (m *MockStreamService) CreateNewVPNStream(ctx context.Context, peerID peer.ID) (types.VPNStream, error) {
-	args := m.Called(ctx, peerID)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(types.VPNStream), args.Error(1)
-}
-
-// MockStream is a mock implementation of the types.VPNStream interface
-type MockStream struct {
-	mock.Mock
-}
-
-func (m *MockStream) Read(p []byte) (n int, err error) {
-	args := m.Called(p)
-	return args.Int(0), args.Error(1)
-}
-
-func (m *MockStream) Write(p []byte) (n int, err error) {
-	args := m.Called(p)
-	return args.Int(0), args.Error(1)
-}
-
-func (m *MockStream) Close() error {
-	args := m.Called()
-	return args.Error(0)
-}
-
-func (m *MockStream) Reset() error {
-	args := m.Called()
-	return args.Error(0)
-}
-
-func (m *MockStream) SetDeadline(t time.Time) error {
-	args := m.Called(t)
-	return args.Error(0)
-}
-
-func (m *MockStream) SetReadDeadline(t time.Time) error {
-	args := m.Called(t)
-	return args.Error(0)
-}
-
-func (m *MockStream) SetWriteDeadline(t time.Time) error {
-	args := m.Called(t)
-	return args.Error(0)
-}
 
 func TestStreamPool(t *testing.T) {
 	// Create a mock stream service
-	mockService := new(MockStreamService)
+	mockService := new(testutil.MockStreamService)
 
 	// Create a mock stream
-	mockStream := new(MockStream)
+	mockStream := new(testutil.MockStream)
 
 	// Create a peer ID
 	peerID, _ := peer.Decode("QmYyQSo1c1Ym7orWxLYvCrM2EmxFTANf8wXmmE7DWjhx5N")
 
 	// Set up the mock service to return the mock stream
 	mockService.On("CreateNewVPNStream", mock.Anything, peerID).Return(mockStream, nil)
-	
+
 	// Set up the mock stream to handle Close
 	mockStream.On("Close").Return(nil)
 
@@ -115,11 +62,11 @@ func TestStreamPool(t *testing.T) {
 
 func TestStreamPoolManager(t *testing.T) {
 	// Create a mock stream service
-	mockService := new(MockStreamService)
+	mockService := new(testutil.MockStreamService)
 
 	// Create mock streams
-	mockStream1 := new(MockStream)
-	mockStream2 := new(MockStream)
+	mockStream1 := new(testutil.MockStream)
+	mockStream2 := new(testutil.MockStream)
 
 	// Create peer IDs
 	peerID1, _ := peer.Decode("QmYyQSo1c1Ym7orWxLYvCrM2EmxFTANf8wXmmE7DWjhx5N")
@@ -128,7 +75,7 @@ func TestStreamPoolManager(t *testing.T) {
 	// Set up the mock service to return different streams for different peers
 	mockService.On("CreateNewVPNStream", mock.Anything, peerID1).Return(mockStream1, nil)
 	mockService.On("CreateNewVPNStream", mock.Anything, peerID2).Return(mockStream2, nil)
-	
+
 	// Set up the mock streams to handle Close
 	mockStream1.On("Close").Return(nil)
 	mockStream2.On("Close").Return(nil)
@@ -170,7 +117,7 @@ func TestStreamPoolManager(t *testing.T) {
 	assert.Equal(t, 0, activeCount2)
 
 	// Test getting metrics
-	metrics := manager.GetMetrics()
+	metrics := manager.GetStreamPoolMetrics()
 	assert.NotNil(t, metrics)
 
 	// Test getting min streams per peer

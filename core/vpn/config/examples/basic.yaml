@@ -1,0 +1,51 @@
+# Basic VPN Configuration Example
+---
+vpn:
+  enable: true
+
+  # Network settings
+  mtu: 1400                     # Maximum Transmission Unit
+  virtual_ip: 10.0.0.1          # Virtual IP for this node
+  subnet: 24                    # CIDR subnet mask
+  routes:
+    - 10.0.0.0/24               # Routes to be added
+
+  # Security settings
+  unallowed_ports:
+    - "25"   # SMTP
+    - "587"  # Submission
+    - "465"  # SMTPS
+
+  # Worker settings
+  worker_idle_timeout: 300      # 5 minutes
+  max_workers: 1000
+  worker_cleanup_interval: 60   # 1 minute
+
+  # Stream settings
+  max_streams_per_peer: 10
+  min_streams_per_peer: 3
+  stream_idle_timeout: 300       # 5 minutes
+  cleanup_interval: 60           # 1 minute
+
+  # Circuit breaker settings
+  circuit_breaker_failure_threshold: 5
+  circuit_breaker_reset_timeout: 60    # 1 minute
+  circuit_breaker_success_threshold: 2
+
+  # Stream health settings
+  health_check_interval: 30      # 30 seconds
+  health_check_timeout: 5        # 5 seconds
+  max_consecutive_failures: 3
+  warm_interval: 60              # 1 minute
+
+  # Retry settings
+  retry_max_attempts: 5
+  retry_initial_interval: 1      # 1 second
+  retry_max_interval: 30         # 30 seconds
+
+  # Timeout settings
+  peer_connection_timeout: 30       # 30 seconds
+  dht_sync_timeout: 60              # 60 seconds
+  tun_setup_timeout: 30             # 30 seconds
+  peer_connection_check_interval: 100  # 100 milliseconds
+  shutdown_grace_period: 50         # 50 milliseconds

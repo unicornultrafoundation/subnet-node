@@ -1,6 +1,7 @@
 package config
 
 import (
+	"strconv"
 	"sync"
 	"time"
 
@@ -13,8 +14,9 @@ type ConfigService interface {
 	GetEnable() bool
 	GetMTU() int
 	GetVirtualIP() string
-	GetSubnet() int
+	GetSubnet() string
 	GetRoutes() []string
+	GetProtocol() string
 
 	// Security settings
 	GetUnallowedPorts() map[string]bool
@@ -27,9 +29,11 @@ type ConfigService interface {
 
 	// Stream pool settings
 	GetMaxStreamsPerPeer() int
-	GetMinStreamsPerPeer() int
 	GetStreamIdleTimeout() time.Duration
 	GetCleanupInterval() time.Duration
+
+	// Buffer pool settings
+	GetBufferPoolCapacity() int
 
 	// Circuit breaker settings
 	GetCircuitBreakerFailureThreshold() int
@@ -42,22 +46,26 @@ type ConfigService interface {
 	GetMaxConsecutiveFailures() int
 	GetWarmInterval() time.Duration
 
-	// Stream multiplexing settings
-	GetMultiplexingEnabled() bool
-	GetMaxStreamsPerMultiplexer() int
-	GetMinStreamsPerMultiplexer() int
-	GetAutoScalingInterval() time.Duration
-
 	// Retry settings
 	GetRetryMaxAttempts() int
 	GetRetryInitialInterval() time.Duration
 	GetRetryMaxInterval() time.Duration
 
+	// Timeout settings
+	GetPeerConnectionTimeout() time.Duration
+	GetDHTSyncTimeout() time.Duration
+	GetTUNSetupTimeout() time.Duration
+	GetPeerConnectionCheckInterval() time.Duration
+	GetShutdownGracePeriod() time.Duration
+
 	// Get the full VPN config
 	GetVPNConfig() *VPNConfig
 
 	// Update configuration
-	UpdateConfig(cfg *config.C)
+	UpdateConfig(cfg *config.C) error
+
+	// Update configuration with callback
+	UpdateConfigWithCallback(cfg *config.C, callback func(*VPNConfig, *VPNConfig)) error
 }
 
 // ConfigServiceImpl is the implementation of the ConfigService interface
@@ -98,11 +106,11 @@ func (c *ConfigServiceImpl) GetVirtualIP() string {
 	return c.vpnConfig.VirtualIP
 }
 
-// GetSubnet returns the subnet
-func (c *ConfigServiceImpl) GetSubnet() int {
+// GetSubnet returns the subnet as a string (CIDR notation)
+func (c *ConfigServiceImpl) GetSubnet() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	return c.vpnConfig.Subnet
+	return strconv.Itoa(c.vpnConfig.Subnet)
 }
 
 // GetRoutes returns the routes
@@ -110,6 +118,13 @@ func (c *ConfigServiceImpl) GetRoutes() []string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.vpnConfig.Routes
+}
+
+// GetProtocol returns the protocol
+func (c *ConfigServiceImpl) GetProtocol() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.vpnConfig.Protocol
 }
 
 // Security settings
@@ -160,13 +175,6 @@ func (c *ConfigServiceImpl) GetMaxStreamsPerPeer() int {
 	return c.vpnConfig.MaxStreamsPerPeer
 }
 
-// GetMinStreamsPerPeer returns the minimum number of streams per peer
-func (c *ConfigServiceImpl) GetMinStreamsPerPeer() int {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.vpnConfig.MinStreamsPerPeer
-}
-
 // GetStreamIdleTimeout returns the stream idle timeout
 func (c *ConfigServiceImpl) GetStreamIdleTimeout() time.Duration {
 	c.mu.RLock()
@@ -179,6 +187,15 @@ func (c *ConfigServiceImpl) GetCleanupInterval() time.Duration {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.vpnConfig.CleanupInterval
+}
+
+// Buffer pool settings
+
+// GetBufferPoolCapacity returns the buffer pool capacity
+func (c *ConfigServiceImpl) GetBufferPoolCapacity() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.vpnConfig.BufferPoolCapacity
 }
 
 // Circuit breaker settings
@@ -234,36 +251,6 @@ func (c *ConfigServiceImpl) GetWarmInterval() time.Duration {
 	return c.vpnConfig.WarmInterval
 }
 
-// Stream multiplexing settings
-
-// GetMultiplexingEnabled returns whether multiplexing is enabled
-func (c *ConfigServiceImpl) GetMultiplexingEnabled() bool {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.vpnConfig.MultiplexingEnabled
-}
-
-// GetMaxStreamsPerMultiplexer returns the maximum number of streams per multiplexer
-func (c *ConfigServiceImpl) GetMaxStreamsPerMultiplexer() int {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.vpnConfig.MaxStreamsPerMultiplexer
-}
-
-// GetMinStreamsPerMultiplexer returns the minimum number of streams per multiplexer
-func (c *ConfigServiceImpl) GetMinStreamsPerMultiplexer() int {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.vpnConfig.MinStreamsPerMultiplexer
-}
-
-// GetAutoScalingInterval returns the auto-scaling interval
-func (c *ConfigServiceImpl) GetAutoScalingInterval() time.Duration {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.vpnConfig.AutoScalingInterval
-}
-
 // Retry settings
 
 // GetRetryMaxAttempts returns the maximum number of retry attempts
@@ -287,6 +274,43 @@ func (c *ConfigServiceImpl) GetRetryMaxInterval() time.Duration {
 	return c.vpnConfig.RetryMaxInterval
 }
 
+// Timeout settings
+
+// GetPeerConnectionTimeout returns the peer connection timeout
+func (c *ConfigServiceImpl) GetPeerConnectionTimeout() time.Duration {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.vpnConfig.PeerConnectionTimeout
+}
+
+// GetDHTSyncTimeout returns the DHT sync timeout
+func (c *ConfigServiceImpl) GetDHTSyncTimeout() time.Duration {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.vpnConfig.DHTSyncTimeout
+}
+
+// GetTUNSetupTimeout returns the TUN setup timeout
+func (c *ConfigServiceImpl) GetTUNSetupTimeout() time.Duration {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.vpnConfig.TUNSetupTimeout
+}
+
+// GetPeerConnectionCheckInterval returns the peer connection check interval
+func (c *ConfigServiceImpl) GetPeerConnectionCheckInterval() time.Duration {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.vpnConfig.PeerConnectionCheckInterval
+}
+
+// GetShutdownGracePeriod returns the shutdown grace period
+func (c *ConfigServiceImpl) GetShutdownGracePeriod() time.Duration {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.vpnConfig.ShutdownGracePeriod
+}
+
 // GetVPNConfig returns the full VPN config
 func (c *ConfigServiceImpl) GetVPNConfig() *VPNConfig {
 	c.mu.RLock()
@@ -295,8 +319,48 @@ func (c *ConfigServiceImpl) GetVPNConfig() *VPNConfig {
 }
 
 // UpdateConfig updates the configuration
-func (c *ConfigServiceImpl) UpdateConfig(cfg *config.C) {
+func (c *ConfigServiceImpl) UpdateConfig(cfg *config.C) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.vpnConfig = New(cfg)
+
+	// Create a new configuration
+	newConfig := New(cfg)
+
+	// Validate the new configuration
+	if err := newConfig.Validate(); err != nil {
+		return err
+	}
+
+	// Update the configuration
+	c.vpnConfig = newConfig
+
+	return nil
+}
+
+// UpdateConfigWithCallback updates the configuration and calls the callback function
+// with the old and new configurations if the update is successful
+func (c *ConfigServiceImpl) UpdateConfigWithCallback(cfg *config.C, callback func(*VPNConfig, *VPNConfig)) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// Create a new configuration
+	newConfig := New(cfg)
+
+	// Validate the new configuration
+	if err := newConfig.Validate(); err != nil {
+		return err
+	}
+
+	// Store the old configuration
+	oldConfig := c.vpnConfig
+
+	// Update the configuration
+	c.vpnConfig = newConfig
+
+	// Call the callback function
+	if callback != nil {
+		callback(oldConfig, newConfig)
+	}
+
+	return nil
 }

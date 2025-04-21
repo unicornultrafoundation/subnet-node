@@ -1,16 +1,25 @@
+// Package vpn provides a secure, peer-to-peer Virtual Private Network implementation
+// for the Subnet Node. It creates an encrypted overlay network that allows nodes to
+// communicate securely regardless of their physical location or network configuration.
+//
+// The VPN service leverages libp2p for peer-to-peer communication and establishes
+// TUN interfaces on participating nodes to route traffic through the secure overlay network.
+//
+// For detailed documentation, see the docs/vpn.md file.
 package vpn
 
 import (
 	"context"
 	"fmt"
 	"sync"
-	"time"
 
 	ddht "github.com/libp2p/go-libp2p-kad-dht/dual"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/sirupsen/logrus"
+	"github.com/songgao/water"
 	"github.com/unicornultrafoundation/subnet-node/config"
 	"github.com/unicornultrafoundation/subnet-node/core/account"
 	vpnconfig "github.com/unicornultrafoundation/subnet-node/core/vpn/config"
@@ -21,15 +30,17 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/resilience"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/stream"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/stream/types"
+	"github.com/unicornultrafoundation/subnet-node/core/vpn/utils"
 )
 
-const VPNProtocol = "/vpn/1.0.0"
-
+// Logger for the VPN service
 var log = logrus.WithField("service", "vpn")
 
-// Service is the main VPN service
+// Service is the main VPN service that coordinates all VPN functionality.
+// It manages the lifecycle of all VPN components and provides the main interface
+// for starting, stopping, and monitoring the VPN service.
 type Service struct {
-	mu             sync.Mutex
+	mu             sync.RWMutex
 	cfg            *config.C
 	configService  vpnconfig.ConfigService
 	isProvider     bool
@@ -43,42 +54,63 @@ type Service struct {
 	clientService     *vpnnetwork.ClientService
 	serverService     *vpnnetwork.ServerService
 	dispatcher        *packet.Dispatcher
-	circuitBreakerMgr *resilience.CircuitBreakerManager
-	retryManager      *resilience.RetryManager
+	resilienceService *resilience.ResilienceService
 	metricsService    *metrics.MetricsServiceImpl
-	bufferPool        *vpnnetwork.BufferPool
+	bufferPool        *utils.BufferPool
 	streamService     *stream.StreamService
+
+	// Context management
+	serviceCtx    context.Context
+	serviceCancel context.CancelFunc
+	// Map of child contexts and their cancel functions
+	childContexts map[string]context.Context
+	childCancels  map[string]context.CancelFunc
+	contextMu     sync.Mutex
+
+	// Resource management
+	resourceManager *utils.ResourceManager
 
 	// Stop channel for graceful shutdown
 	stopChan chan struct{}
 }
 
-// New creates a new VPN service
+// New creates a new VPN service with the provided configuration and dependencies.
 func New(cfg *config.C, peerHost host.Host, dht *ddht.DHT, accountService *account.AccountService) *Service {
 	// Create the configuration service
 	configService := vpnconfig.NewConfigService(cfg)
 
 	// Create the buffer pool
-	bufferPool := vpnnetwork.NewBufferPool(configService.GetMTU(), 100)
+	bufferPool := utils.NewBufferPool(configService.GetMTU())
 
 	// Create the metrics service
 	metricsService := metrics.NewMetricsService()
 
+	// Create the resource manager
+	resourceManager := utils.NewResourceManager()
+
 	// Create the service
 	service := &Service{
-		cfg:            cfg,
-		configService:  configService,
-		isProvider:     cfg.GetBool("provider.enable", false),
-		accountService: accountService,
-		peerHost:       peerHost,
-		dht:            dht,
-		metricsService: metricsService,
-		bufferPool:     bufferPool,
-		stopChan:       make(chan struct{}),
+		cfg:             cfg,
+		configService:   configService,
+		isProvider:      cfg.GetBool("provider.enable", false),
+		accountService:  accountService,
+		peerHost:        peerHost,
+		dht:             dht,
+		metricsService:  metricsService,
+		bufferPool:      bufferPool,
+		childContexts:   make(map[string]context.Context),
+		childCancels:    make(map[string]context.CancelFunc),
+		resourceManager: resourceManager,
+		stopChan:        make(chan struct{}),
 	}
 
-	// Create the peer discovery service
-	service.peerDiscovery = discovery.NewPeerDiscovery(peerHost, dht, configService.GetVirtualIP())
+	// Create the peer discovery service directly from libp2p components
+	service.peerDiscovery = discovery.NewPeerDiscoveryFromLibp2p(
+		peerHost,
+		dht,
+		configService.GetVirtualIP(),
+		accountService,
+	)
 
 	// Create the TUN service
 	tunConfig := &vpnnetwork.TUNConfig{
@@ -89,37 +121,39 @@ func New(cfg *config.C, peerHost host.Host, dht *ddht.DHT, accountService *accou
 	}
 	service.tunService = vpnnetwork.NewTUNService(tunConfig)
 
-	// Create the circuit breaker manager
-	service.circuitBreakerMgr = resilience.NewCircuitBreakerManager(
-		configService.GetCircuitBreakerFailureThreshold(),
-		configService.GetCircuitBreakerResetTimeout(),
-		configService.GetCircuitBreakerSuccessThreshold(),
-	)
-
-	// Create the retry manager
-	service.retryManager = resilience.NewRetryManager(
-		configService.GetRetryMaxAttempts(),
-		configService.GetRetryInitialInterval(),
-		configService.GetRetryMaxInterval(),
-	)
+	// Create the resilience service with configuration from the config service
+	resilienceConfig := &resilience.ResilienceConfig{
+		CircuitBreakerFailureThreshold: configService.GetCircuitBreakerFailureThreshold(),
+		CircuitBreakerResetTimeout:     configService.GetCircuitBreakerResetTimeout(),
+		CircuitBreakerSuccessThreshold: configService.GetCircuitBreakerSuccessThreshold(),
+		RetryMaxAttempts:               configService.GetRetryMaxAttempts(),
+		RetryInitialInterval:           configService.GetRetryInitialInterval(),
+		RetryMaxInterval:               configService.GetRetryMaxInterval(),
+	}
+	service.resilienceService = resilience.NewResilienceService(resilienceConfig)
 
 	// Create a stream service adapter that implements types.Service
 	streamServiceAdapter := &StreamServiceAdapter{service: service}
 
 	// Create the stream service using the adapter
-	service.streamService = stream.CreateStreamServiceWithConfigService(streamServiceAdapter, configService)
+	service.streamService = stream.CreateStreamService(streamServiceAdapter, configService)
 
-	// Create the packet dispatcher with enhanced stream services
-	service.dispatcher = packet.NewEnhancedDispatcher(
+	// Register the stream service with the resource manager
+	service.resourceManager.Register(service.streamService)
+
+	// Create the packet dispatcher with stream pooling
+	service.dispatcher = packet.NewDispatcher(
 		service.peerDiscovery,
 		streamServiceAdapter,
-		service.streamService,
 		service.streamService,
 		configService.GetWorkerIdleTimeout(),
 		configService.GetWorkerCleanupInterval(),
 		configService.GetWorkerBufferSize(),
-		configService.GetMultiplexingEnabled(),
+		service.resilienceService,
 	)
+
+	// Register the dispatcher with the resource manager
+	service.resourceManager.Register(service.dispatcher)
 
 	// Create a metrics adapter for the network services
 	metricsAdapter := vpnnetwork.NewMetricsAdapter(service.metricsService)
@@ -132,6 +166,9 @@ func New(cfg *config.C, peerHost host.Host, dht *ddht.DHT, accountService *accou
 		service.bufferPool,
 	)
 
+	// Register the client service with the resource manager
+	service.resourceManager.Register(service.clientService)
+
 	// Create the server service
 	serverConfig := &vpnnetwork.ServerConfig{
 		MTU:            configService.GetMTU(),
@@ -142,24 +179,44 @@ func New(cfg *config.C, peerHost host.Host, dht *ddht.DHT, accountService *accou
 	return service
 }
 
-// Start starts the VPN service
+// Start initializes and starts the VPN service.
+// It waits for peer connections before setting up the TUN interface and other components.
+// If the VPN service is disabled, this method returns immediately.
 func (s *Service) Start(ctx context.Context) error {
+	// Check if the service is enabled
+	s.mu.RLock()
 	if !s.configService.GetEnable() {
+		s.mu.RUnlock()
+		log.Infoln("VPN service is disabled")
 		return nil
 	}
+	s.mu.RUnlock()
 
-	// Wait until there are some peers connected
-	waitUntilPeerConnected(ctx, s.peerHost)
-	time.Sleep(1 * time.Second)
+	// Lock for write to modify service state
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	// Start the packet dispatcher
-	s.dispatcher.Start()
+	log.Infoln("Starting VPN service...")
 
-	// Start the stream service
-	s.streamService.Start()
+	// Create a context with timeout for peer connection
+	connectCtx, cancel := context.WithTimeout(ctx, s.configService.GetPeerConnectionTimeout())
+	defer cancel()
+
+	// Wait until there are some peers connected or timeout
+	if err := s.waitUntilPeerConnected(connectCtx, s.peerHost); err != nil {
+		return fmt.Errorf("failed to connect to peers: %w", err)
+	}
+
+	// Create a service context that can be cancelled when the service stops
+	s.serviceCtx, s.serviceCancel = context.WithCancel(context.Background())
+
+	// Create child contexts for different components
+	dhtCtx := s.createChildContext("dht")
+	tunCtx := s.createChildContext("tun")
+	clientCtx := s.createChildContext("client")
 
 	go func() {
-		err := s.start(ctx)
+		err := s.start(s.serviceCtx, dhtCtx, tunCtx, clientCtx)
 		if err != nil {
 			log.Errorf("Something went wrong when running VPN: %v", err)
 		}
@@ -168,56 +225,80 @@ func (s *Service) Start(ctx context.Context) error {
 	return nil
 }
 
-// waitUntilPeerConnected waits until at least one peer is connected
-func waitUntilPeerConnected(ctx context.Context, host host.Host) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-			if len(host.Network().Peers()) > 0 {
-				return
-			}
-			time.Sleep(100 * time.Millisecond)
+// waitUntilPeerConnected blocks until at least one peer is connected to the host.
+// It uses RetryManager for exponential backoff when checking for connections.
+func (s *Service) waitUntilPeerConnected(ctx context.Context, host host.Host) error {
+	log.Debug("Waiting for peer connection using retry manager with exponential backoff")
+
+	// Use the resilience service to implement exponential backoff
+	return s.resilienceService.GetRetryManager().RetryOperation(ctx, func() error {
+		// Check if we have any peers connected
+		if len(host.Network().Peers()) > 0 {
+			log.Infof("Connected to %d peers", len(host.Network().Peers()))
+			return nil // Success, stop retrying
 		}
-	}
+
+		// No peers connected yet, return an error to trigger retry
+		return fmt.Errorf("no peers connected yet, will retry")
+	})
 }
 
-func (s *Service) start(ctx context.Context) error {
-	// Wait to connect to peer to sync DHT
-	err := s.peerDiscovery.SyncPeerIDToDHT(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to sync peer id to DHT: %v", err)
-	}
-
-	// Set up the TUN interface
-	iface, err := s.tunService.SetupTUN()
-	if err != nil {
-		return fmt.Errorf("failed to setup TUN interface: %v", err)
-	}
-	defer iface.Close()
-
-	// Set up the stream handler for incoming P2P traffic
-	s.peerHost.SetStreamHandler(VPNProtocol, func(netStream network.Stream) {
-		// Use the stream directly as a VPNStream
-		s.serverService.HandleStream(netStream, iface)
-	})
-
+// start is the internal implementation of the Start method.
+// It initializes and starts all VPN components in sequence.
+func (s *Service) start(_, dhtCtx, tunCtx, clientCtx context.Context) error {
 	// Start the stream service
 	s.streamService.Start()
 
 	// Start the packet dispatcher
 	s.dispatcher.Start()
 
-	// Start the client service
-	return s.clientService.Start(ctx)
+	// Create a context with timeout for DHT sync
+	dhtSyncCtx, cancel := context.WithTimeout(dhtCtx, s.configService.GetDHTSyncTimeout())
+	defer cancel()
+
+	// Wait to connect to peer to sync DHT with retry
+	err := s.syncPeerIDToDHTWithRetry(dhtSyncCtx)
+	if err != nil {
+		return fmt.Errorf("failed to sync peer ID to DHT: %w", err)
+	}
+
+	// Set up the TUN interface with retry
+	tunSetupCtx, cancel := context.WithTimeout(tunCtx, s.configService.GetTUNSetupTimeout())
+	defer cancel()
+
+	// Setup TUN interface with retry
+	iface, err := s.setupTUNWithRetry(tunSetupCtx)
+	if err != nil {
+		return fmt.Errorf("failed to setup TUN interface: %w", err)
+	}
+
+	// Register the TUN interface with the resource manager
+	s.resourceManager.Register(iface)
+
+	// Set up the stream handler for incoming P2P streams
+	s.peerHost.SetStreamHandler(protocol.ID(s.configService.GetProtocol()), func(netStream network.Stream) {
+		// Handle the incoming stream as a VPN stream
+		s.serverService.HandleStream(netStream, iface)
+	})
+
+	// Start the client service with its own context
+	return s.clientService.Start(clientCtx)
 }
 
-// Stop stops the VPN service
+// Stop gracefully shuts down the VPN service and all its components.
+// It logs metrics before stopping and uses the resource manager to close all resources.
 func (s *Service) Stop() error {
+	// Check if the service is enabled
+	s.mu.RLock()
 	if !s.configService.GetEnable() {
+		s.mu.RUnlock()
 		return nil
 	}
+	s.mu.RUnlock()
+
+	// Lock for write to modify service state
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	// Log metrics before stopping
 	metrics := s.metricsService.GetAllMetrics()
@@ -240,42 +321,148 @@ func (s *Service) Stop() error {
 		"active_breakers":     metrics["active_breakers"],
 	}).Info("Circuit breaker metrics")
 
-	// Stop the client service
-	if err := s.clientService.Stop(); err != nil {
-		log.Errorf("Error stopping client service: %v", err)
+	// First, cancel all contexts to signal components to stop
+	if s.serviceCancel != nil {
+		s.serviceCancel()
 	}
 
-	// Stop the packet dispatcher
-	s.dispatcher.Stop()
+	// Cancel all child contexts
+	s.cancelAllChildContexts()
 
-	// Stop the stream service
-	s.streamService.Stop()
-
-	// Close stopChan to stop all background tasks
+	// Close stopChan to signal all background tasks to stop
+	// This needs to happen before closing resources so components waiting on
+	// this channel can begin their shutdown process
 	close(s.stopChan)
+
+	// Note: We rely on the resource manager to properly close all resources
+
+	// Close all resources using the resource manager
+	// This will close the client service, dispatcher, and stream service
+	// since they're registered with the resource manager and implement io.Closer
+	if err := s.resourceManager.Close(); err != nil {
+		log.Warnf("Error closing resources: %v - continuing shutdown", err)
+	}
 
 	log.Infoln("VPN service stopped successfully!")
 	return nil
 }
 
-// GetMetrics returns the current VPN metrics
+// GetMetrics returns the current performance metrics for the VPN service.
 func (s *Service) GetMetrics() map[string]int64 {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
 	// Get all metrics from the metrics service
 	return s.metricsService.GetAllMetrics()
 }
 
-// StreamServiceAdapter is an adapter that implements the types.Service interface
-// It's used to break the circular dependency between Service and StreamService
+// setupTUNWithRetry attempts to set up the TUN interface with retry logic.
+func (s *Service) setupTUNWithRetry(ctx context.Context) (*water.Interface, error) {
+	log.Debug("Setting up TUN interface using retry manager with exponential backoff")
+
+	var iface *water.Interface
+
+	// Use the resilience service to implement exponential backoff
+	err := s.resilienceService.GetRetryManager().RetryOperation(ctx, func() error {
+		// Attempt to set up the TUN interface
+		var err error
+		iface, err = s.tunService.SetupTUN()
+		if err != nil {
+			log.Warnf("Failed to setup TUN interface with MTU %d, will retry: %v", s.configService.GetMTU(), err)
+			return err // Return the error to trigger retry
+		}
+
+		log.Info("Successfully set up TUN interface")
+		return nil // Success, stop retrying
+	})
+
+	return iface, err
+}
+
+// syncPeerIDToDHTWithRetry attempts to sync the peer ID to the DHT with retry logic.
+func (s *Service) syncPeerIDToDHTWithRetry(ctx context.Context) error {
+	log.Debug("Syncing peer ID to DHT using retry manager with exponential backoff")
+
+	// Use the resilience service to implement exponential backoff
+	return s.resilienceService.GetRetryManager().RetryOperation(ctx, func() error {
+		// Attempt to sync peer ID to DHT
+		err := s.peerDiscovery.SyncPeerIDToDHT(ctx)
+		if err != nil {
+			log.Warnf("Failed to sync peer ID to DHT, will retry: %v", err)
+			return err // Return the error to trigger retry
+		}
+
+		log.Info("Successfully synced peer ID to DHT")
+		return nil // Success, stop retrying
+	})
+}
+
+// IsEnabled returns whether the VPN service is enabled
+func (s *Service) IsEnabled() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	return s.configService.GetEnable()
+}
+
+// createChildContext creates a child context with the given name
+func (s *Service) createChildContext(name string) context.Context {
+	s.contextMu.Lock()
+	defer s.contextMu.Unlock()
+
+	// Check if the context already exists
+	if ctx, exists := s.childContexts[name]; exists {
+		return ctx
+	}
+
+	// Create a new child context
+	ctx, cancel := context.WithCancel(s.serviceCtx)
+	s.childContexts[name] = ctx
+	s.childCancels[name] = cancel
+
+	return ctx
+}
+
+// cancelAllChildContexts cancels all child contexts
+func (s *Service) cancelAllChildContexts() {
+	s.contextMu.Lock()
+	defer s.contextMu.Unlock()
+
+	// Cancel all child contexts
+	for name, cancel := range s.childCancels {
+		cancel()
+		delete(s.childContexts, name)
+		delete(s.childCancels, name)
+	}
+}
+
+// StreamServiceAdapter implements the types.Service interface to break the circular
+// dependency between Service and StreamService. It allows the StreamService to create
+// new VPN streams without directly depending on the main Service implementation.
 type StreamServiceAdapter struct {
 	service *Service
 }
 
-// CreateNewVPNStream implements the types.Service interface
+// CreateNewVPNStream implements the types.Service interface by creating a new
+// libp2p stream to the specified peer using the VPN protocol with retry logic.
 func (a *StreamServiceAdapter) CreateNewVPNStream(ctx context.Context, peerID peer.ID) (types.VPNStream, error) {
-	// Create a new stream to the peer
-	stream, err := a.service.peerHost.NewStream(ctx, peerID, VPNProtocol)
+	// Use the resilience service to implement exponential backoff
+	var stream types.VPNStream
+
+	err := a.service.resilienceService.GetRetryManager().RetryOperation(ctx, func() error {
+		// Attempt to create a new stream to the peer
+		var err error
+		stream, err = a.service.peerHost.NewStream(ctx, peerID, protocol.ID(a.service.configService.GetProtocol()))
+		if err != nil {
+			log.Debugf("Failed to create P2P stream to peer %s, will retry: %v", peerID.String(), err)
+			return err // Return the error to trigger retry
+		}
+
+		return nil // Success, stop retrying
+	})
+
 	if err != nil {
-		return nil, fmt.Errorf("failed to create P2P stream: %v", err)
+		return nil, fmt.Errorf("failed to create P2P stream to peer %s after retries: %w", peerID.String(), err)
 	}
 
 	return stream, nil

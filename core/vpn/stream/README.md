@@ -1,6 +1,6 @@
 # VPN Stream Package
 
-This package manages P2P streams and multiplexing for the VPN system.
+This package manages P2P streams for the VPN system, focusing on stream pooling and health monitoring.
 
 ## Components
 
@@ -33,45 +33,57 @@ The `HealthService` interface defines the methods for stream health monitoring, 
 - Starting and stopping the stream warmer
 - Getting health metrics
 
-### MultiplexService
+### MetricsService
 
-The `MultiplexService` interface defines the methods for stream multiplexing, including:
+The `MetricsService` interface defines the methods for collecting metrics, including:
 
-- Starting and stopping the multiplexer
-- Sending packets using the multiplexer
-- Getting multiplexer metrics
+- Getting stream pool metrics
+- Getting health metrics
 
-### MultiplexerMetrics
+### LifecycleService
 
-The `MultiplexerMetrics` struct contains metrics for a multiplexer, including:
+The `LifecycleService` interface defines the methods for managing service lifecycle, including:
 
-- Packet counts (sent, dropped)
-- Byte counts (sent)
-- Stream counts (created, closed)
-- Auto-scaling operations
-- Latency measurements
+- Starting the service
+- Stopping the service
+
+## Architecture
+
+The stream package uses a layered architecture:
+
+1. **StreamService**: The main service that coordinates all stream-related operations
+2. **StreamPoolManager**: Manages pools of streams for different peers
+3. **HealthChecker**: Monitors stream health and closes unhealthy streams
+4. **StreamWarmer**: Ensures a minimum number of streams are available for each peer
 
 ## Usage
 
 ```go
-// Create a new VPN stream
+// Create a stream service with configuration
+streamService := stream.CreateStreamService(baseStreamService, config)
+
+// Start the stream service
+streamService.Start()
+
+// Create a new VPN stream directly
 vpnStream, err := streamService.CreateNewVPNStream(ctx, peerID)
 if err != nil {
     return nil, fmt.Errorf("failed to create P2P stream: %v", err)
 }
 
 // Get a stream from the pool
-vpnStream, err := streamPoolService.GetStream(ctx, peerID)
+vpnStream, err := streamService.GetStream(ctx, peerID)
 if err != nil {
     return nil, fmt.Errorf("failed to get stream from pool: %v", err)
 }
 
 // Release a stream back to the pool
-streamPoolService.ReleaseStream(peerID, vpnStream, true)
+streamService.ReleaseStream(peerID, vpnStream, true)
 
-// Send a packet using the multiplexer
-err := streamMultiplexService.SendPacketMultiplexed(ctx, peerID, packet)
-if err != nil {
-    return fmt.Errorf("failed to send packet: %v", err)
-}
+// Get metrics
+healthMetrics := streamService.GetHealthMetrics()
+poolMetrics := streamService.GetStreamPoolMetrics()
+
+// Stop the stream service when done
+streamService.Stop()
 ```

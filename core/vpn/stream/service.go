@@ -8,15 +8,15 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/stream/health"
-	"github.com/unicornultrafoundation/subnet-node/core/vpn/stream/multiplex"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/stream/pool"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/stream/types"
 )
 
 var log = logrus.WithField("service", "vpn-stream")
 
-// StreamService implements the Service, PoolService, HealthCheckerService, StreamWarmerService, HealthMetricsService,
-// MultiplexerService, MultiplexerMetricsService, StreamPoolMetricsService, and StreamLifecycleService interfaces
+// StreamService implements the Service, PoolService, HealthService, MetricsService,
+// and LifecycleService interfaces. It provides a unified interface for managing streams,
+// including stream pooling, health checking, and metrics collection.
 type StreamService struct {
 	// Stream service for creating new streams
 	streamService types.Service
@@ -26,10 +26,6 @@ type StreamService struct {
 	healthChecker *health.HealthChecker
 	// Stream warmer
 	streamWarmer *health.StreamWarmer
-	// Multiplexer manager
-	multiplexManager *multiplex.MultiplexerManager
-	// Whether multiplexing is enabled
-	multiplexingEnabled bool
 	// Mutex to protect access to the service
 	mu sync.Mutex
 }
@@ -45,10 +41,6 @@ func NewStreamService(
 	healthCheckTimeout time.Duration,
 	maxConsecutiveFailures int,
 	warmInterval time.Duration,
-	maxStreamsPerMultiplexer int,
-	minStreamsPerMultiplexer int,
-	autoScalingInterval time.Duration,
-	multiplexingEnabled bool,
 ) *StreamService {
 	// Create the stream pool manager
 	poolManager := pool.NewStreamPoolManager(
@@ -75,22 +67,11 @@ func NewStreamService(
 		minStreamsPerPeer,
 	)
 
-	// Create the multiplexer manager
-	multiplexManager := multiplex.NewMultiplexerManager(
-		streamService,
-		poolManager,
-		maxStreamsPerMultiplexer,
-		minStreamsPerMultiplexer,
-		autoScalingInterval,
-	)
-
 	return &StreamService{
-		streamService:       streamService,
-		poolManager:         poolManager,
-		healthChecker:       healthChecker,
-		streamWarmer:        streamWarmer,
-		multiplexManager:    multiplexManager,
-		multiplexingEnabled: multiplexingEnabled,
+		streamService: streamService,
+		poolManager:   poolManager,
+		healthChecker: healthChecker,
+		streamWarmer:  streamWarmer,
 	}
 }
 
@@ -108,11 +89,6 @@ func (s *StreamService) Start() {
 	// Start the stream warmer
 	s.streamWarmer.Start()
 
-	// Start the multiplexer manager if multiplexing is enabled
-	if s.multiplexingEnabled {
-		s.multiplexManager.Start()
-	}
-
 	log.Info("Stream service started")
 }
 
@@ -120,11 +96,6 @@ func (s *StreamService) Start() {
 func (s *StreamService) Stop() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	// Stop the multiplexer manager if multiplexing is enabled
-	if s.multiplexingEnabled {
-		s.multiplexManager.Stop()
-	}
 
 	// Stop the stream warmer
 	s.streamWarmer.Stop()
@@ -136,6 +107,12 @@ func (s *StreamService) Stop() {
 	s.poolManager.Stop()
 
 	log.Info("Stream service stopped")
+}
+
+// Close implements the io.Closer interface
+func (s *StreamService) Close() error {
+	s.Stop()
+	return nil
 }
 
 // CreateNewVPNStream creates a new stream to a peer
@@ -184,69 +161,16 @@ func (s *StreamService) GetHealthMetrics() map[string]map[string]int64 {
 	}
 }
 
-// StartMultiplexer starts the multiplexer manager
-func (s *StreamService) StartMultiplexer() {
-	if s.multiplexingEnabled {
-		s.multiplexManager.Start()
-	}
-}
-
-// StopMultiplexer stops the multiplexer manager
-func (s *StreamService) StopMultiplexer() {
-	if s.multiplexingEnabled {
-		s.multiplexManager.Stop()
-	}
-}
-
-// SendPacketMultiplexed sends a packet using the multiplexer
-func (s *StreamService) SendPacketMultiplexed(ctx context.Context, peerID peer.ID, packet []byte) error {
-	if !s.multiplexingEnabled {
-		// If multiplexing is disabled, fall back to the regular stream pool
-		stream, err := s.GetStream(ctx, peerID)
-		if err != nil {
-			return err
-		}
-
-		_, err = stream.Write(packet)
-		if err != nil {
-			// Release the stream as unhealthy
-			s.ReleaseStream(peerID, stream, false)
-			return err
-		}
-
-		// Release the stream as healthy
-		s.ReleaseStream(peerID, stream, true)
-		return nil
-	}
-
-	return s.multiplexManager.SendPacket(ctx, peerID, packet)
-}
-
-// GetMultiplexerMetrics returns the multiplexer metrics
-func (s *StreamService) GetMultiplexerMetrics() map[string]*types.MultiplexerMetrics {
-	if !s.multiplexingEnabled {
-		return make(map[string]*types.MultiplexerMetrics)
-	}
-
-	return s.multiplexManager.GetMultiplexerMetrics()
-}
-
 // GetStreamPoolMetrics returns the stream pool metrics
 func (s *StreamService) GetStreamPoolMetrics() map[string]int64 {
-	return s.poolManager.GetMetrics()
+	return s.poolManager.GetStreamPoolMetrics()
 }
 
 // Ensure StreamService implements all the required interfaces
 var (
-	_ types.Service                   = (*StreamService)(nil)
-	_ types.PoolService               = (*StreamService)(nil)
-	_ types.HealthCheckerService      = (*StreamService)(nil)
-	_ types.StreamWarmerService       = (*StreamService)(nil)
-	_ types.HealthMetricsService      = (*StreamService)(nil)
-	_ types.MultiplexerService        = (*StreamService)(nil)
-	_ types.MultiplexerMetricsService = (*StreamService)(nil)
-	_ types.StreamPoolMetricsService  = (*StreamService)(nil)
-	_ types.StreamLifecycleService    = (*StreamService)(nil)
-	_ types.HealthService             = (*StreamService)(nil)
-	_ types.MultiplexService          = (*StreamService)(nil)
+	_ types.Service          = (*StreamService)(nil)
+	_ types.PoolService      = (*StreamService)(nil)
+	_ types.HealthService    = (*StreamService)(nil)
+	_ types.MetricsService   = (*StreamService)(nil)
+	_ types.LifecycleService = (*StreamService)(nil)
 )

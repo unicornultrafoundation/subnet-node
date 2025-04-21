@@ -35,67 +35,46 @@ type PoolService interface {
 	ReleaseStream(peerID peer.ID, stream VPNStream, healthy bool)
 }
 
-// HealthCheckerService handles stream health checking
-type HealthCheckerService interface {
+// HealthService handles stream health checking and warming
+//
+// This interface combines the functionality of health checking and stream warming,
+// providing a unified interface for managing stream health. It includes methods
+// for starting and stopping the health checker and stream warmer, as well as
+// retrieving health metrics.
+type HealthService interface {
 	// StartHealthChecker starts the health checker
 	StartHealthChecker()
 	// StopHealthChecker stops the health checker
 	StopHealthChecker()
-}
-
-// StreamWarmerService handles stream warming
-type StreamWarmerService interface {
 	// StartStreamWarmer starts the stream warmer
 	StartStreamWarmer()
 	// StopStreamWarmer stops the stream warmer
 	StopStreamWarmer()
-}
-
-// HealthMetricsService handles health metrics
-type HealthMetricsService interface {
 	// GetHealthMetrics returns the health metrics
 	GetHealthMetrics() map[string]map[string]int64
 }
 
-// MultiplexerService handles stream multiplexing operations
-type MultiplexerService interface {
-	// StartMultiplexer starts the multiplexer manager
-	StartMultiplexer()
-	// StopMultiplexer stops the multiplexer manager
-	StopMultiplexer()
-	// SendPacketMultiplexed sends a packet using the multiplexer
-	SendPacketMultiplexed(ctx context.Context, peerID peer.ID, packet []byte) error
-}
-
-// MultiplexerMetricsService handles multiplexer metrics
-type MultiplexerMetricsService interface {
-	// GetMultiplexerMetrics returns the multiplexer metrics
-	GetMultiplexerMetrics() map[string]*MultiplexerMetrics
-}
-
-// StreamPoolMetricsService handles stream pool metrics
-type StreamPoolMetricsService interface {
+// MetricsService handles metrics for the stream service
+//
+// This interface provides methods for retrieving metrics from different components
+// of the stream service. It includes methods for getting stream pool metrics and
+// health metrics, providing a unified interface for monitoring the service.
+type MetricsService interface {
 	// GetStreamPoolMetrics returns the stream pool metrics
 	GetStreamPoolMetrics() map[string]int64
+	// GetHealthMetrics returns the health metrics
+	GetHealthMetrics() map[string]map[string]int64
 }
 
-// StreamLifecycleService handles stream service lifecycle
-type StreamLifecycleService interface {
-	// Start starts the stream service
+// LifecycleService handles service lifecycle
+//
+// This interface provides methods for managing the lifecycle of a service,
+// including starting and stopping the service. It's implemented by various
+// components in the stream package to provide a consistent way to manage
+// their lifecycle.
+type LifecycleService interface {
+	// Start starts the service
 	Start()
-	// Stop stops the stream service
+	// Stop stops the service
 	Stop()
-}
-
-// HealthService is a composite interface for backward compatibility
-type HealthService interface {
-	HealthCheckerService
-	StreamWarmerService
-	HealthMetricsService
-}
-
-// MultiplexService is a composite interface for backward compatibility
-type MultiplexService interface {
-	MultiplexerService
-	MultiplexerMetricsService
 }
