@@ -28,7 +28,6 @@ type ConfigService interface {
 	GetWorkerCleanupInterval() time.Duration
 
 	// Stream pool settings
-	GetMaxStreamsPerPeer() int
 	GetMinStreamsPerPeer() int
 	GetStreamIdleTimeout() time.Duration
 	GetCleanupInterval() time.Duration
@@ -168,13 +167,6 @@ func (c *ConfigServiceImpl) GetWorkerCleanupInterval() time.Duration {
 }
 
 // Stream pool settings
-
-// GetMaxStreamsPerPeer returns the maximum number of streams per peer
-func (c *ConfigServiceImpl) GetMaxStreamsPerPeer() int {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.vpnConfig.MaxStreamsPerPeer
-}
 
 // GetMinStreamsPerPeer returns the minimum number of streams per peer
 func (c *ConfigServiceImpl) GetMinStreamsPerPeer() int {

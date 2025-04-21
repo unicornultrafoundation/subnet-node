@@ -24,7 +24,7 @@ vpn:
   worker_cleanup_interval: 120  # 2 minutes
 
   # Stream settings - increased for high performance
-  max_streams_per_peer: 20      # More streams for parallel connections
+
   min_streams_per_peer: 5       # Higher minimum for better availability
   stream_idle_timeout: 600      # 10 minutes
   cleanup_interval: 120         # 2 minutes

@@ -23,7 +23,6 @@ func createValidConfig() *VPNConfig {
 		WorkerCleanupInterval: 60 * time.Second,
 
 		// Stream pool settings
-		MaxStreamsPerPeer: 10,
 		StreamIdleTimeout: 300 * time.Second,
 		CleanupInterval:   60 * time.Second,
 
@@ -100,11 +99,6 @@ func TestValidate(t *testing.T) {
 			wantErr: ErrInvalidWorkerIdleTimeout,
 		},
 		// Stream pool settings errors
-		{
-			name:    "invalid max streams per peer",
-			modify:  func(cfg *VPNConfig) { cfg.MaxStreamsPerPeer = 0 },
-			wantErr: ErrInvalidMaxStreamsPerPeer,
-		},
 		// Circuit breaker settings errors
 		{
 			name:    "invalid circuit breaker failure threshold",
@@ -236,11 +230,7 @@ func TestValidateAllSettings(t *testing.T) {
 				modify:  func(cfg *VPNConfig) {},
 				wantErr: nil,
 			},
-			{
-				name:    "invalid max streams per peer",
-				modify:  func(cfg *VPNConfig) { cfg.MaxStreamsPerPeer = 0 },
-				wantErr: ErrInvalidMaxStreamsPerPeer,
-			},
+
 			{
 				name:    "invalid stream idle timeout",
 				modify:  func(cfg *VPNConfig) { cfg.StreamIdleTimeout = 0 },

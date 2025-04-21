@@ -31,7 +31,6 @@ func TestStreamPool(t *testing.T) {
 	// Create a stream pool
 	streamPool := pool.NewStreamPool(
 		mockService,
-		10,
 		3,
 		5*time.Minute,
 	)
@@ -83,7 +82,6 @@ func TestStreamPoolManager(t *testing.T) {
 	// Create a stream pool manager
 	manager := pool.NewStreamPoolManager(
 		mockService,
-		10,
 		3,
 		5*time.Minute,
 		1*time.Minute,

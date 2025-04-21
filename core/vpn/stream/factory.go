@@ -8,7 +8,6 @@ import (
 
 // StreamServiceConfig holds all configuration parameters for the stream service
 type StreamServiceConfig struct {
-	MaxStreamsPerPeer      int
 	MinStreamsPerPeer      int
 	StreamIdleTimeout      time.Duration
 	CleanupInterval        time.Duration
@@ -21,7 +20,6 @@ type StreamServiceConfig struct {
 // DefaultStreamServiceConfig returns a configuration with sensible defaults
 func DefaultStreamServiceConfig() *StreamServiceConfig {
 	return &StreamServiceConfig{
-		MaxStreamsPerPeer:      10,
 		MinStreamsPerPeer:      2,
 		StreamIdleTimeout:      300 * time.Second, // 5 minutes
 		CleanupInterval:        60 * time.Second,  // 1 minute
@@ -43,7 +41,6 @@ func CreateStreamService(
 
 	return NewStreamService(
 		streamService,
-		config.MaxStreamsPerPeer,
 		config.MinStreamsPerPeer,
 		config.StreamIdleTimeout,
 		config.CleanupInterval,

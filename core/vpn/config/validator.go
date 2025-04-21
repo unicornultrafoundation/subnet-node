@@ -22,7 +22,6 @@ var (
 	ErrInvalidWorkerCleanupInterval = errors.New("invalid worker cleanup interval (must be greater than 0)")
 
 	// Stream pool settings errors
-	ErrInvalidMaxStreamsPerPeer = errors.New("invalid max streams per peer (must be greater than 0)")
 	ErrInvalidStreamIdleTimeout = errors.New("invalid stream idle timeout (must be greater than 0)")
 	ErrInvalidCleanupInterval   = errors.New("invalid cleanup interval (must be greater than 0)")
 
@@ -143,10 +142,6 @@ func (c *VPNConfig) validateWorkerSettings() error {
 
 // validateStreamPoolSettings validates the stream pool settings
 func (c *VPNConfig) validateStreamPoolSettings() error {
-	// Validate max streams per peer
-	if c.MaxStreamsPerPeer <= 0 {
-		return ErrInvalidMaxStreamsPerPeer
-	}
 
 	// Validate stream idle timeout
 	if c.StreamIdleTimeout <= 0 {

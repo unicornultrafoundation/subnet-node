@@ -139,8 +139,7 @@ type ConfigService interface {
 	GetWorkerIdleTimeout() int
 	// GetWorkerCleanupInterval returns the interval for worker cleanup
 	GetWorkerCleanupInterval() time.Duration
-	// GetMaxStreamsPerPeer returns the maximum number of streams per peer
-	GetMaxStreamsPerPeer() int
+
 	// GetMinStreamsPerPeer returns the minimum number of streams per peer
 	GetMinStreamsPerPeer() int
 	// GetStreamIdleTimeout returns the stream idle timeout

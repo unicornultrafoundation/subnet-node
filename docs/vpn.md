@@ -63,7 +63,7 @@ The VPN service is highly configurable through the configuration service. Key co
 
 ### Stream Settings
 
-- `vpn.max_streams_per_peer`: Maximum number of streams per peer
+
 - `vpn.min_streams_per_peer`: Minimum number of streams per peer
 - `vpn.stream_idle_timeout`: Timeout for idle streams
 - `vpn.cleanup_interval`: Interval for cleaning up idle streams
@@ -265,7 +265,7 @@ To optimize VPN performance, consider the following tuning options:
 
 1. **MTU Optimization**: Adjust the MTU setting to match your network conditions.
 
-2. **Stream Pooling**: Configure the stream pool size (`max_streams_per_peer` and `min_streams_per_peer`) based on expected traffic patterns.
+2. **Stream Pooling**: Configure the minimum streams per peer (`min_streams_per_peer`) based on expected traffic patterns.
 
 3. **Worker Settings**: Adjust worker buffer size and maximum workers based on system resources.
 

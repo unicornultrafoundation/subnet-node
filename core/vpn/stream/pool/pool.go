@@ -24,8 +24,7 @@ type StreamPool struct {
 	mu sync.RWMutex
 	// Stream service for creating new streams
 	streamService types.Service
-	// Maximum streams per peer
-	maxStreamsPerPeer int
+
 	// Minimum streams per peer
 	minStreamsPerPeer int
 	// Stream idle timeout
@@ -53,7 +52,6 @@ type pooledStream struct {
 // NewStreamPool creates a new stream pool
 func NewStreamPool(
 	streamService types.Service,
-	maxStreamsPerPeer int,
 	minStreamsPerPeer int,
 	streamIdleTimeout time.Duration,
 ) *StreamPool {
@@ -74,7 +72,6 @@ func NewStreamPool(
 	return &StreamPool{
 		pools:             make(map[string][]*pooledStream),
 		streamService:     streamService,
-		maxStreamsPerPeer: maxStreamsPerPeer,
 		minStreamsPerPeer: minStreamsPerPeer,
 		streamIdleTimeout: streamIdleTimeout,
 		metrics:           metrics.NewStreamPoolMetrics(),
@@ -96,7 +93,7 @@ func (p *StreamPool) GetStream(ctx context.Context, peerID peer.ID) (types.VPNSt
 	pool, exists := p.pools[peerIDStr]
 	if !exists {
 		// Create a new pool for this peer
-		p.pools[peerIDStr] = make([]*pooledStream, 0, p.maxStreamsPerPeer)
+		p.pools[peerIDStr] = make([]*pooledStream, 0)
 		pool = p.pools[peerIDStr]
 	}
 
@@ -114,63 +111,53 @@ func (p *StreamPool) GetStream(ctx context.Context, peerID peer.ID) (types.VPNSt
 		}
 	}
 
-	// No available stream, create a new one if we haven't reached the maximum
-	if len(pool) < p.maxStreamsPerPeer {
-		// Use the unified resilience function for stream creation
-		var newStream types.VPNStream
+	// Create a new stream (no maximum limit)
+	var newStream types.VPNStream
 
-		logger := log.WithFields(logrus.Fields{
-			"peer_id":   peerIDStr,
-			"operation": "create_stream",
-			"pool_size": len(pool),
-			"max_size":  p.maxStreamsPerPeer,
-		})
+	logger := log.WithFields(logrus.Fields{
+		"peer_id":   peerIDStr,
+		"operation": "create_stream",
+		"pool_size": len(pool),
+	})
 
-		logger.Debug("Creating new stream for peer")
+	logger.Debug("Creating new stream for peer")
 
-		err, _ := p.resilienceService.ExecuteWithResilience(
-			ctx,
-			p.resilienceService.FormatPeerBreakerId(peerID, "create_stream"),
-			func() error {
-				// Create a new stream
-				var createErr error
-				newStream, createErr = p.streamService.CreateNewVPNStream(ctx, peerID)
-				if createErr != nil {
-					logger.WithError(createErr).Warn("Failed to create new stream, will retry")
-					return createErr // Return the error to trigger retry
-				}
-				logger.Debug("Successfully created new stream")
-				return nil // Success
-			},
-		)
+	err, _ := p.resilienceService.ExecuteWithResilience(
+		ctx,
+		p.resilienceService.FormatPeerBreakerId(peerID, "create_stream"),
+		func() error {
+			// Create a new stream
+			var createErr error
+			newStream, createErr = p.streamService.CreateNewVPNStream(ctx, peerID)
+			if createErr != nil {
+				logger.WithError(createErr).Warn("Failed to create new stream, will retry")
+				return createErr // Return the error to trigger retry
+			}
+			logger.Debug("Successfully created new stream")
+			return nil // Success
+		},
+	)
 
-		if err != nil {
-			// Update metrics
-			p.metrics.IncrementAcquisitionFailures()
-			logger.WithError(err).Error("Failed to create new stream after retries")
-			return nil, fmt.Errorf("failed to create new stream for peer %s: %v", peerIDStr, err)
-		}
-
-		// Add the stream to the pool
-		ps := &pooledStream{
-			stream:   newStream,
-			lastUsed: time.Now(),
-			inUse:    true,
-		}
-		p.pools[peerIDStr] = append(pool, ps)
-
+	if err != nil {
 		// Update metrics
-		p.metrics.IncrementStreamsCreated()
-		p.metrics.IncrementStreamsAcquired()
-
-		return newStream, nil
+		p.metrics.IncrementAcquisitionFailures()
+		logger.WithError(err).Error("Failed to create new stream after retries")
+		return nil, fmt.Errorf("failed to create new stream for peer %s: %v", peerIDStr, err)
 	}
 
-	// We've reached the maximum number of streams for this peer
-	// Update metrics
-	p.metrics.IncrementAcquisitionFailures()
+	// Add the stream to the pool
+	ps := &pooledStream{
+		stream:   newStream,
+		lastUsed: time.Now(),
+		inUse:    true,
+	}
+	p.pools[peerIDStr] = append(pool, ps)
 
-	return nil, fmt.Errorf("maximum number of streams reached for peer %s", peerIDStr)
+	// Update metrics
+	p.metrics.IncrementStreamsCreated()
+	p.metrics.IncrementStreamsAcquired()
+
+	return newStream, nil
 }
 
 // ReleaseStream returns a stream to the pool
@@ -245,7 +232,7 @@ func (p *StreamPool) ensureMinStreams(peerID peer.ID) {
 	pool, exists := p.pools[peerIDStr]
 	if !exists {
 		// Create a new pool for this peer
-		p.pools[peerIDStr] = make([]*pooledStream, 0, p.maxStreamsPerPeer)
+		p.pools[peerIDStr] = make([]*pooledStream, 0)
 		pool = p.pools[peerIDStr]
 	}
 
