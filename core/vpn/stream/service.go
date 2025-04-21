@@ -164,6 +164,16 @@ func (s *StreamService) GetStreamPoolMetrics() map[string]int64 {
 	return s.poolManager.GetStreamPoolMetrics()
 }
 
+// GetStreamCount returns the number of streams for a peer
+func (s *StreamService) GetStreamCount(peerID peer.ID) int {
+	return s.poolManager.GetStreamCount(peerID)
+}
+
+// GetActiveStreamCount returns the number of active streams for a peer
+func (s *StreamService) GetActiveStreamCount(peerID peer.ID) int {
+	return s.poolManager.GetActiveStreamCount(peerID)
+}
+
 // Ensure StreamService implements all the required interfaces
 var (
 	_ types.Service          = (*StreamService)(nil)
