@@ -41,11 +41,22 @@ func NewClientService(
 }
 
 // Start starts the client service
-func (s *ClientService) Start(ctx context.Context) error {
-	// Set up the TUN interface
-	iface, err := s.tunService.SetupTUN()
-	if err != nil {
-		return fmt.Errorf("failed to setup TUN interface: %v", err)
+// If an existing TUN interface is provided, it will be used instead of creating a new one
+func (s *ClientService) Start(ctx context.Context, existingIface *water.Interface) error {
+	var iface *water.Interface
+	var err error
+
+	if existingIface != nil {
+		// Use the existing TUN interface
+		log.Debug("Using existing TUN interface")
+		iface = existingIface
+	} else {
+		// Set up a new TUN interface
+		log.Debug("Creating new TUN interface")
+		iface, err = s.tunService.SetupTUN()
+		if err != nil {
+			return fmt.Errorf("failed to setup TUN interface: %v", err)
+		}
 	}
 
 	// Start listening for packets from the TUN interface
