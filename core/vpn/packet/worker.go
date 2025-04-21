@@ -284,9 +284,9 @@ func (w *Worker) processPacket(packet *QueuedPacket) error {
 
 				// Log based on error type
 				if netErr.IsConnectionReset() || netErr.IsStreamClosed() {
-					writeLogger.WithError(err).Warn("Connection reset or stream closed")
+					writeLogger.WithError(err).Debug("Connection reset or stream closed")
 				} else if netErr.IsTemporary() {
-					writeLogger.WithError(err).Warn("Temporary error writing to stream")
+					writeLogger.WithError(err).Debug("Temporary error writing to stream")
 				} else {
 					writeLogger.WithError(err).Error("Error writing to stream")
 				}
