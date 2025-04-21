@@ -19,8 +19,8 @@ func TestConvertVirtualIPToNumber(t *testing.T) {
 	}{
 		{
 			name:      "Valid IP in 10.0.0.0/8 range",
-			virtualIP: "10.1.2.3",
-			expected:  0x010203, // 1*2^16 + 2*2^8 + 3
+			virtualIP: "10.0.0.1",
+			expected:  167772161,
 		},
 		{
 			name:      "IP not in 10.0.0.0/8 range",

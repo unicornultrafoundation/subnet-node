@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
 	"math/big"
 	"net"
@@ -12,12 +13,14 @@ func ConvertVirtualIPToNumber(virtualIP string) uint32 {
 	// Parse the IP address
 	ip := net.ParseIP(virtualIP)
 	if ip == nil {
+		// Invalid IP address format
 		return 0
 	}
 
-	// Ensure it's an IPv4 address
+	// Convert to IPv4 format
 	ipv4 := ip.To4()
 	if ipv4 == nil {
+		// Not an IPv4 address
 		return 0
 	}
 
@@ -26,9 +29,8 @@ func ConvertVirtualIPToNumber(virtualIP string) uint32 {
 		return 0
 	}
 
-	// Convert to a token ID (last 3 octets as a number)
-	tokenID := uint32(ipv4[1])<<16 | uint32(ipv4[2])<<8 | uint32(ipv4[3])
-	return tokenID
+	// Convert to uint32
+	return binary.BigEndian.Uint32(ipv4)
 }
 
 // GetPeerIDByRegistry gets the peer ID from the registry
