@@ -12,6 +12,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	ddht "github.com/libp2p/go-libp2p-kad-dht/dual"
 	"github.com/libp2p/go-libp2p/core/host"
@@ -238,21 +239,38 @@ func (s *Service) Start(ctx context.Context) error {
 }
 
 // waitUntilPeerConnected blocks until at least one peer is connected to the host.
-// It uses RetryManager for exponential backoff when checking for connections.
+// It uses a simple retry loop with unlimited retry attempts and records metrics.
 func (s *Service) waitUntilPeerConnected(ctx context.Context, host host.Host) error {
-	log.Debug("Waiting for peer connection using retry manager with exponential backoff")
+	log.Debug("Waiting for peer connection (unlimited attempts)")
 
-	// Use the resilience service to implement exponential backoff
-	return s.resilienceService.GetRetryManager().RetryOperation(ctx, func() error {
+	// Use a simple retry loop with unlimited attempts
+	var attempts int
+	breakerId := "peer_connection"
+
+	// Manual retry loop with unlimited attempts
+	for attempts = 1; ; attempts++ { // No upper limit
 		// Check if we have any peers connected
 		if len(host.Network().Peers()) > 0 {
 			log.Infof("Connected to %d peers", len(host.Network().Peers()))
+			// Record success for metrics purposes
+			s.resilienceService.GetCircuitBreakerManager().GetBreaker(breakerId).RecordSuccess()
 			return nil // Success, stop retrying
 		}
 
-		// No peers connected yet, return an error to trigger retry
-		return fmt.Errorf("no peers connected yet, will retry")
-	})
+		// Check if context is canceled
+		if ctx.Err() != nil {
+			return ctx.Err() // Exit the function on context cancellation
+		}
+
+		// No peers connected yet, wait before retrying
+		log.Debugf("No peers connected yet, retry attempt %d (waiting for peers...)", attempts)
+		select {
+		case <-ctx.Done():
+			return ctx.Err() // Exit the function on context cancellation
+		case <-time.After(time.Duration(attempts) * 100 * time.Millisecond): // Simple backoff
+			// Continue to next attempt
+		}
+	}
 }
 
 // start is the internal implementation of the Start method.
@@ -293,8 +311,8 @@ func (s *Service) start(_, dhtCtx, tunCtx, clientCtx context.Context) error {
 		s.serverService.HandleStream(netStream, iface)
 	})
 
-	// Start the client service with its own context
-	return s.clientService.Start(clientCtx)
+	// Start the client service with its own context and pass the existing TUN interface
+	return s.clientService.Start(clientCtx, iface)
 }
 
 // Stop gracefully shuts down the VPN service and all its components.
@@ -368,14 +386,15 @@ func (s *Service) GetMetrics() map[string]int64 {
 	return s.metricsService.GetAllMetrics()
 }
 
-// setupTUNWithRetry attempts to set up the TUN interface with retry logic.
+// setupTUNWithRetry attempts to set up the TUN interface with circuit breaker and retry protection.
 func (s *Service) setupTUNWithRetry(ctx context.Context) (*water.Interface, error) {
-	log.Debug("Setting up TUN interface using retry manager with exponential backoff")
+	log.Debug("Setting up TUN interface using resilience service with circuit breaker and retry protection")
 
 	var iface *water.Interface
 
-	// Use the resilience service to implement exponential backoff
-	err := s.resilienceService.GetRetryManager().RetryOperation(ctx, func() error {
+	// Use ExecuteWithResilience for better fault tolerance and metrics
+	breakerId := "tun_setup"
+	err, attempts := s.resilienceService.ExecuteWithResilience(ctx, breakerId, func() error {
 		// Attempt to set up the TUN interface
 		var err error
 		iface, err = s.tunService.SetupTUN()
@@ -388,15 +407,22 @@ func (s *Service) setupTUNWithRetry(ctx context.Context) (*water.Interface, erro
 		return nil // Success, stop retrying
 	})
 
+	if err != nil {
+		log.Warnf("Failed to set up TUN interface after %d attempts: %v", attempts, err)
+	} else if attempts > 1 {
+		log.Infof("Successfully set up TUN interface after %d attempts", attempts)
+	}
+
 	return iface, err
 }
 
-// syncPeerIDToDHTWithRetry attempts to sync the peer ID to the DHT with retry logic.
+// syncPeerIDToDHTWithRetry attempts to sync the peer ID to the DHT with circuit breaker and retry protection.
 func (s *Service) syncPeerIDToDHTWithRetry(ctx context.Context) error {
-	log.Debug("Syncing peer ID to DHT using retry manager with exponential backoff")
+	log.Debug("Syncing peer ID to DHT using resilience service with circuit breaker and retry protection")
 
-	// Use the resilience service to implement exponential backoff
-	return s.resilienceService.GetRetryManager().RetryOperation(ctx, func() error {
+	// Use ExecuteWithResilience for better fault tolerance and metrics
+	breakerId := "dht_sync"
+	err, attempts := s.resilienceService.ExecuteWithResilience(ctx, breakerId, func() error {
 		// Attempt to sync peer ID to DHT
 		err := s.peerDiscovery.SyncPeerIDToDHT(ctx)
 		if err != nil {
@@ -407,6 +433,14 @@ func (s *Service) syncPeerIDToDHTWithRetry(ctx context.Context) error {
 		log.Info("Successfully synced peer ID to DHT")
 		return nil // Success, stop retrying
 	})
+
+	if err != nil {
+		log.Warnf("Failed to sync peer ID to DHT after %d attempts: %v", attempts, err)
+	} else if attempts > 1 {
+		log.Infof("Successfully synced peer ID to DHT after %d attempts", attempts)
+	}
+
+	return err
 }
 
 // IsEnabled returns whether the VPN service is enabled
@@ -456,12 +490,15 @@ type StreamServiceAdapter struct {
 }
 
 // CreateNewVPNStream implements the types.Service interface by creating a new
-// libp2p stream to the specified peer using the VPN protocol with retry logic.
+// libp2p stream to the specified peer using the VPN protocol with circuit breaker and retry protection.
 func (a *StreamServiceAdapter) CreateNewVPNStream(ctx context.Context, peerID peer.ID) (types.VPNStream, error) {
-	// Use the resilience service to implement exponential backoff
+	// Use ExecuteWithResilience for better fault tolerance and metrics
 	var stream types.VPNStream
 
-	err := a.service.resilienceService.GetRetryManager().RetryOperation(ctx, func() error {
+	// Create a breaker ID for this peer operation
+	breakerId := a.service.resilienceService.FormatPeerBreakerId(peerID, "create_stream")
+
+	err, attempts := a.service.resilienceService.ExecuteWithResilience(ctx, breakerId, func() error {
 		// Attempt to create a new stream to the peer
 		var err error
 		stream, err = a.service.peerHost.NewStream(ctx, peerID, protocol.ID(a.service.configService.GetProtocol()))
@@ -474,7 +511,10 @@ func (a *StreamServiceAdapter) CreateNewVPNStream(ctx context.Context, peerID pe
 	})
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to create P2P stream to peer %s after retries: %w", peerID.String(), err)
+		log.Warnf("Failed to create P2P stream to peer %s after %d attempts: %v", peerID.String(), attempts, err)
+		return nil, fmt.Errorf("failed to create P2P stream to peer %s after %d attempts: %w", peerID.String(), attempts, err)
+	} else if attempts > 1 {
+		log.Debugf("Successfully created P2P stream to peer %s after %d attempts", peerID.String(), attempts)
 	}
 
 	return stream, nil
