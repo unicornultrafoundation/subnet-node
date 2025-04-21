@@ -35,7 +35,7 @@ The `VPNConfig` struct contains all configuration settings for the VPN system, o
 
 | Setting | Description | Default | Valid Range |
 |---------|-------------|---------|------------|
-| `max_streams_per_peer` | Maximum number of streams per peer | `10` | > 0 |
+
 | `min_streams_per_peer` | Minimum number of streams per peer | `3` | > 0 |
 | `stream_idle_timeout` | Timeout in seconds after which an idle stream is closed | `300` | > 0 |
 | `cleanup_interval` | Interval in seconds for cleaning up idle streams | `60` | > 0 |
