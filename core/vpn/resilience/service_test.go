@@ -91,9 +91,9 @@ func TestFormatBreakerIds(t *testing.T) {
 	peerId := service.FormatPeerBreakerId(peerID, "stream")
 	assert.Equal(t, "peer-QmYyQSo1c1Ym7orWxLYvCrM2EmxFTANf8wXmmE7DWjhx5N-stream", peerId)
 
-	// Test worker breaker ID formatting with the new sync key format (sourcePort:destIP:destPort)
-	workerId := service.FormatWorkerBreakerId("12345:192.168.1.1:80", "write")
-	assert.Equal(t, "worker-12345:192.168.1.1:80-write", workerId)
+	// Test worker breaker ID formatting with the sync key format (destIP:destPort)
+	workerId := service.FormatWorkerBreakerId("192.168.1.1:80", "write")
+	assert.Equal(t, "worker-192.168.1.1:80-write", workerId)
 }
 
 func TestGetMetrics(t *testing.T) {
