@@ -1,6 +1,7 @@
 package router
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -8,6 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
+
+// Tests for handling packets with and without ports
 
 // Tests
 func TestStreamRouter_GetOrCreateRoute(t *testing.T) {
@@ -110,4 +113,51 @@ func TestStreamRouter_GetStreamForRoute(t *testing.T) {
 
 	// Verify expectations
 	mockPool.AssertExpectations(t)
+}
+
+func TestStreamRouter_DispatchPacketWithoutPorts(t *testing.T) {
+	// Set mock mode to return packets without ports
+	originalMode := MockMode
+	MockMode = "WITHOUT_PORTS"
+	defer func() { MockMode = originalMode }()
+
+	// Create mocks
+	mockPool := new(MockPoolServiceExt)
+	mockPeerDiscovery := new(MockPeerDiscoveryService)
+	mockStream := new(MockVPNStream)
+
+	// Create test config
+	config := DefaultStreamRouterConfig()
+
+	// Setup mock expectations
+	testPeerID, _ := peer.Decode("QmYyQSo1c1Ym7orWxLYvCrM2EmxFTANf8wXmmE7DWjhx5N")
+	mockPeerDiscovery.On("GetPeerID", mock.Anything, "192.168.1.1").Return(testPeerID.String(), nil)
+	mockStream.On("Write", mock.Anything).Return(10, nil)
+	mockPool.On("GetStreamByIndex", mock.Anything, testPeerID, mock.Anything).Return(mockStream, nil)
+
+	// Create router
+	router := NewStreamRouter(config, mockPool, mockPeerDiscovery)
+	defer router.Shutdown()
+
+	// Test dispatching a packet without ports (like ICMP)
+	ctx := context.Background()
+	// Create a valid IPv4 ICMP packet (20 bytes IPv4 header + 8 bytes ICMP header)
+	packet := []byte{
+		0x45, 0x00, 0x00, 0x1c, // IPv4 header: version, IHL, TOS, total length
+		0x00, 0x00, 0x00, 0x00, // ID, flags, fragment offset
+		0x40, 0x01, 0x00, 0x00, // TTL, protocol (1=ICMP), header checksum
+		0x0a, 0x00, 0x00, 0x01, // Source IP: 10.0.0.1
+		0xc0, 0xa8, 0x01, 0x01, // Destination IP: 192.168.1.1
+		0x08, 0x00, 0x00, 0x00, // ICMP header: type (8=echo request), code, checksum
+		0x00, 0x00, 0x00, 0x00, // ICMP identifier and sequence number
+	}
+	err := router.DispatchPacket(ctx, packet)
+
+	// Verify packet was processed successfully
+	assert.NoError(t, err)
+
+	// Verify expectations
+	mockPeerDiscovery.AssertExpectations(t)
+	mockPool.AssertExpectations(t)
+	mockStream.AssertExpectations(t)
 }
