@@ -11,6 +11,7 @@ package vpn
 import (
 	"context"
 	"fmt"
+	"io"
 	"sync"
 	"time"
 
@@ -54,7 +55,7 @@ type Service struct {
 	tunService        *vpnnetwork.TUNService
 	clientService     *vpnnetwork.ClientService
 	serverService     *vpnnetwork.ServerService
-	dispatcher        *packet.Dispatcher
+	dispatcher        packet.DispatcherService
 	resilienceService *resilience.ResilienceService
 	metricsService    *metrics.MetricsServiceImpl
 	bufferPool        *utils.BufferPool
@@ -147,19 +148,13 @@ func New(cfg *config.C, peerHost host.Host, dht *ddht.DHT, accountService *accou
 	// Register the stream service with the resource manager
 	service.resourceManager.Register(service.streamService)
 
-	// Create the packet dispatcher with stream pooling
-	service.dispatcher = packet.NewDispatcher(
-		service.peerDiscovery,
-		streamServiceAdapter,
-		service.streamService,
-		configService.GetWorkerIdleTimeout(),
-		configService.GetWorkerCleanupInterval(),
-		configService.GetWorkerBufferSize(),
-		service.resilienceService,
-	)
+	// Create the packet dispatcher (either default or StreamRouter based on config)
+	service.dispatcher = service.createDispatcher()
 
-	// Register the dispatcher with the resource manager
-	service.resourceManager.Register(service.dispatcher)
+	// Only register the dispatcher with the resource manager if it implements io.Closer
+	if closer, ok := service.dispatcher.(io.Closer); ok {
+		service.resourceManager.Register(closer)
+	}
 
 	// Create a metrics adapter for the network services
 	metricsAdapter := vpnnetwork.NewMetricsAdapter(service.metricsService)
