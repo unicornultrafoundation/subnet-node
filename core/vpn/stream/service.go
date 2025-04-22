@@ -26,6 +26,10 @@ type StreamService struct {
 	healthChecker *health.HealthChecker
 	// Stream warmer
 	streamWarmer *health.StreamWarmer
+	// Stream registry for tracking streams by index
+	streamRegistry *streamRegistry
+	// Metrics for the stream service
+	metrics *StreamMetrics
 	// Mutex to protect access to the service
 	mu sync.Mutex
 }
@@ -66,10 +70,12 @@ func NewStreamService(
 	)
 
 	return &StreamService{
-		streamService: streamService,
-		poolManager:   poolManager,
-		healthChecker: healthChecker,
-		streamWarmer:  streamWarmer,
+		streamService:  streamService,
+		poolManager:    poolManager,
+		healthChecker:  healthChecker,
+		streamWarmer:   streamWarmer,
+		streamRegistry: newStreamRegistry(),
+		metrics:        NewStreamMetrics(),
 	}
 }
 
