@@ -159,6 +159,11 @@ func (m *StreamPoolManager) GetMinStreamsPerPeer() int {
 	return m.pool.minStreamsPerPeer
 }
 
+// GetCleanupInterval returns the cleanup interval
+func (m *StreamPoolManager) GetCleanupInterval() time.Duration {
+	return m.cleanupInterval
+}
+
 // GetAllPeers returns a list of all peers in the pool
 func (m *StreamPoolManager) GetAllPeers() []peer.ID {
 	return m.pool.GetAllPeers()

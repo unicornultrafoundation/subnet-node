@@ -11,10 +11,8 @@ func (s *Service) createDispatcher() packet.DispatcherService {
 	routerIntegration := router.NewIntegration(s.cfg)
 	if routerIntegration.IsEnabled() {
 		log.Info("Using StreamRouter for packet dispatching")
-		// Create an adapter that implements PoolServiceExtension
-		poolAdapter := &StreamServicePoolAdapter{service: s}
 		return routerIntegration.CreateDispatcherService(
-			poolAdapter,
+			s.streamService,
 			s.peerDiscovery,
 		)
 	}
