@@ -163,11 +163,11 @@ func VerifyWorkerMetrics(t *testing.T, dispatcher *packet.Dispatcher, expectedWo
 	// Get worker metrics
 	metrics := dispatcher.GetWorkerMetrics()
 
-	// Count workers with the expected format (12345:192.168.1.x:80)
+	// Count workers with the expected format (192.168.1.x:80)
 	workerCount := 0
 	for syncKey, workerMetrics := range metrics {
-		// Only count workers with the format we're testing (12345:192.168.1.x:80)
-		if strings.HasPrefix(syncKey, "12345:") {
+		// Only count workers with the format we're testing (192.168.1.x:80)
+		if strings.Contains(syncKey, "192.168.1.") && strings.HasSuffix(syncKey, ":80") {
 			workerCount++
 			// Verify that each worker has processed at least one packet
 			assert.GreaterOrEqual(t, workerMetrics.PacketCount, int64(1),
@@ -176,7 +176,7 @@ func VerifyWorkerMetrics(t *testing.T, dispatcher *packet.Dispatcher, expectedWo
 	}
 
 	// Verify that we have the expected number of workers with the right format
-	assert.Equal(t, expectedWorkers, workerCount, "Should have the expected number of workers with format 12345:IP:port")
+	assert.Equal(t, expectedWorkers, workerCount, "Should have the expected number of workers with format IP:port")
 }
 
 // VerifyMetrics verifies that metrics match expected values
