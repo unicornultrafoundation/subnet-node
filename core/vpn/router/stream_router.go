@@ -13,7 +13,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/api"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/packet"
-	"github.com/unicornultrafoundation/subnet-node/core/vpn/stream/pool"
 	streamTypes "github.com/unicornultrafoundation/subnet-node/core/vpn/stream/types"
 )
 
@@ -22,7 +21,6 @@ var log = logrus.WithField("service", "vpn-stream-router")
 // StreamRouter manages packet routing and stream allocation
 type StreamRouter struct {
 	// Core components
-	streamPool    pool.PoolServiceExtension
 	peerDiscovery api.PeerDiscoveryService
 
 	// Connection management
@@ -31,12 +29,9 @@ type StreamRouter struct {
 	connectionMapMu    sync.RWMutex
 
 	// Stream management
-	streamsPerPeer map[peer.ID]int
-	streamsMu      sync.RWMutex
+	streamManager *StreamManager
 
 	// Scaling configuration
-	minStreamsPerPeer   int     // Default: 1
-	maxStreamsPerPeer   int     // Default: 10
 	throughputThreshold int64   // Packets per second per stream
 	scaleUpThreshold    float64 // e.g., 0.8 (80% of throughputThreshold)
 	scaleDownThreshold  float64 // e.g., 0.3 (30% of throughputThreshold)
@@ -97,6 +92,9 @@ type StreamRouterConfig struct {
 	ConnectionTTL   time.Duration // Default: 30 seconds (shortened)
 	CleanupInterval time.Duration // Default: 10 seconds (shortened)
 	CacheShardCount int           // Default: 16
+
+	// Load balancing configuration
+	UseLoadBalancing bool // Default: true - use load-aware stream assignment
 }
 
 // DefaultStreamRouterConfig returns a default configuration
@@ -118,11 +116,12 @@ func DefaultStreamRouterConfig() *StreamRouterConfig {
 		ConnectionTTL:            30 * time.Second, // Shortened for frequent cleanup
 		CleanupInterval:          10 * time.Second, // Shortened for frequent cleanup
 		CacheShardCount:          16,
+		UseLoadBalancing:         true, // Enable load-aware stream assignment by default
 	}
 }
 
 // NewStreamRouter creates a new stream router
-func NewStreamRouter(config *StreamRouterConfig, streamPool pool.PoolServiceExtension, peerDiscovery api.PeerDiscoveryService) *StreamRouter {
+func NewStreamRouter(config *StreamRouterConfig, streamService streamTypes.Service, peerDiscovery api.PeerDiscoveryService) *StreamRouter {
 	if config == nil {
 		config = DefaultStreamRouterConfig()
 	}
@@ -150,14 +149,19 @@ func NewStreamRouter(config *StreamRouterConfig, streamPool pool.PoolServiceExte
 		config.CleanupInterval,
 	)
 
+	// Create stream manager
+	streamManager := NewStreamManager(
+		ctx,
+		streamService,
+		config.MinStreamsPerPeer,
+		config.MaxStreamsPerPeer,
+	)
+
 	router := &StreamRouter{
-		streamPool:          streamPool,
 		peerDiscovery:       peerDiscovery,
 		connectionCache:     connectionCache,
 		connectionToWorker:  make(map[string]int),
-		streamsPerPeer:      make(map[peer.ID]int),
-		minStreamsPerPeer:   config.MinStreamsPerPeer,
-		maxStreamsPerPeer:   config.MaxStreamsPerPeer,
+		streamManager:       streamManager,
 		throughputThreshold: config.ThroughputThreshold,
 		scaleUpThreshold:    config.ScaleUpThreshold,
 		scaleDownThreshold:  config.ScaleDownThreshold,
@@ -174,6 +178,11 @@ func NewStreamRouter(config *StreamRouterConfig, streamPool pool.PoolServiceExte
 		router.connectionMapMu.Lock()
 		delete(router.connectionToWorker, connKey)
 		router.connectionMapMu.Unlock()
+
+		// Notify the stream manager about the connection removal
+		if route, ok := value.(*ConnectionRoute); ok {
+			router.streamManager.ReleaseStream(route.peerID, route.streamIndex, route.connKey, true)
+		}
 	})
 
 	// Initialize worker pool with reference to router
@@ -287,21 +296,12 @@ func (r *StreamRouter) getOrCreateRoute(connKey string, peerID peer.ID) (*Connec
 		r.connectionMapMu.Unlock()
 	}
 
-	// Initialize peer stream count if needed
-	r.streamsMu.RLock()
-	streamCount := r.streamsPerPeer[peerID]
-	if streamCount == 0 {
-		r.streamsMu.RUnlock()
-		r.streamsMu.Lock()
-		r.streamsPerPeer[peerID] = r.minStreamsPerPeer
-		streamCount = r.minStreamsPerPeer
-		r.streamsMu.Unlock()
-	} else {
-		r.streamsMu.RUnlock()
+	// Get a stream from the stream manager
+	// The stream manager handles load balancing and stream creation
+	_, streamIndex, err := r.streamManager.GetStream(peerID, connKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get stream for connection: %w", err)
 	}
-
-	// Determine stream index using consistent hash
-	streamIndex := r.getStreamIndexForConnection(connKey, streamCount)
 
 	// Create new route with the permanent worker ID
 	route := &ConnectionRoute{
@@ -319,45 +319,38 @@ func (r *StreamRouter) getOrCreateRoute(connKey string, peerID peer.ID) (*Connec
 	return route, nil
 }
 
-// getStreamIndexForConnection determines which stream to use for a connection
-func (r *StreamRouter) getStreamIndexForConnection(connKey string, streamCount int) int {
-	// Use consistent hash to determine stream index
-	h := fnv.New32a()
-	h.Write([]byte(connKey))
-	return int(h.Sum32() % uint32(streamCount))
-}
-
 // getStreamForRoute gets the appropriate stream for a route
 func (r *StreamRouter) getStreamForRoute(route *ConnectionRoute) (streamTypes.VPNStream, error) {
-	// Get current stream count for this peer
-	r.streamsMu.RLock()
-	streamCount := r.streamsPerPeer[route.peerID]
-	if streamCount == 0 {
-		streamCount = r.minStreamsPerPeer
-	}
-	r.streamsMu.RUnlock()
-
-	// Ensure stream index is valid
-	if route.streamIndex >= streamCount {
-		route.streamIndex = route.streamIndex % streamCount
-	}
-
-	// Get stream from pool
-	stream, err := r.streamPool.GetStreamByIndex(r.ctx, route.peerID, route.streamIndex)
+	// Get stream from the stream manager
+	// The stream manager will ensure the stream index is valid
+	stream, _, err := r.streamManager.GetStream(route.peerID, route.connKey)
 	if err != nil {
+		log.WithFields(logrus.Fields{
+			"peer_id": route.peerID.String(),
+			"index":   route.streamIndex,
+			"error":   err,
+		}).Warn("Failed to get stream for route")
 		return nil, err
 	}
 
 	return stream, nil
 }
 
-// releaseStream releases a stream back to the pool
+// releaseStream releases a stream back to the pool and handles stream replacement
 func (r *StreamRouter) releaseStream(peerID peer.ID, streamIndex int) {
-	r.streamPool.ReleaseStreamByIndex(peerID, streamIndex, false)
+	// Release the unhealthy stream through the stream manager
+	// This will close the stream and ensure a replacement is created
+	r.streamManager.ReleaseStream(peerID, streamIndex, "unhealthy", false)
+
+	// Log the release for debugging
+	log.WithFields(logrus.Fields{
+		"peer_id": peerID.String(),
+		"index":   streamIndex,
+	}).Debug("Released unhealthy stream through stream manager")
 }
 
 // recordPacket records a packet for metrics
-func (r *StreamRouter) recordPacket(route *ConnectionRoute) {
+func (r *StreamRouter) recordPacket(route *ConnectionRoute, packetSize int) {
 	// Update route stats
 	atomic.AddInt64(&route.packetCount, 1)
 
@@ -370,6 +363,10 @@ func (r *StreamRouter) startThroughputMonitoring() {
 	ticker := time.NewTicker(r.scalingInterval)
 	defer ticker.Stop()
 
+	// Also start a stream verification routine with a different interval
+	verifyTicker := time.NewTicker(30 * time.Second) // Check every 30 seconds
+	defer verifyTicker.Stop()
+
 	for {
 		select {
 		case <-r.ctx.Done():
@@ -377,6 +374,8 @@ func (r *StreamRouter) startThroughputMonitoring() {
 		case <-ticker.C:
 			r.updateThroughputMetrics()
 			r.evaluateScaling()
+		case <-verifyTicker.C:
+			r.verifyStreamCounts()
 		}
 	}
 }
@@ -384,6 +383,14 @@ func (r *StreamRouter) startThroughputMonitoring() {
 // updateThroughputMetrics updates throughput metrics
 func (r *StreamRouter) updateThroughputMetrics() {
 	r.metrics.updateThroughput()
+}
+
+// verifyStreamCounts verifies that our stream counts match reality and fixes any discrepancies
+func (r *StreamRouter) verifyStreamCounts() {
+	// Let the stream manager verify stream counts
+	r.streamManager.VerifyStreamCounts()
+
+	log.Debug("Verified stream counts through stream manager")
 }
 
 // evaluateScaling evaluates whether to scale streams up or down
@@ -397,12 +404,9 @@ func (r *StreamRouter) evaluateScaling() {
 
 	// Calculate metrics for each peer
 	for peerID, throughput := range r.metrics.peerThroughput {
-		r.streamsMu.RLock()
-		streamCount := r.streamsPerPeer[peerID]
-		if streamCount == 0 {
-			streamCount = r.minStreamsPerPeer
-		}
-		r.streamsMu.RUnlock()
+		// Get stream stats from the stream manager
+		stats := r.streamManager.GetStreamStats(peerID)
+		streamCount := stats["target_count"].(int)
 
 		avgThroughput := throughput / float64(streamCount)
 
@@ -418,11 +422,16 @@ func (r *StreamRouter) evaluateScaling() {
 	}
 	r.metrics.mu.RUnlock()
 
+	// Get configuration values from the stream manager
+	config := r.config
+	minStreamsPerPeer := config.MinStreamsPerPeer
+	maxStreamsPerPeer := config.MaxStreamsPerPeer
+
 	// Evaluate scaling for each peer
 	for peerID, metrics := range peerMetrics {
 		// Scale up if average throughput per stream is above threshold
 		if metrics.avgThroughputPerStream > float64(r.throughputThreshold)*r.scaleUpThreshold &&
-			metrics.streamCount < r.maxStreamsPerPeer {
+			metrics.streamCount < maxStreamsPerPeer {
 			r.scaleStreamsForPeer(peerID, metrics.streamCount+1)
 			log.Infof("Scaling up streams for peer %s from %d to %d (avg throughput: %.2f packets/sec/stream)",
 				peerID.String(), metrics.streamCount, metrics.streamCount+1, metrics.avgThroughputPerStream)
@@ -431,7 +440,7 @@ func (r *StreamRouter) evaluateScaling() {
 		// Scale down if average throughput per stream is below threshold
 		// and we have more than minimum streams
 		if metrics.avgThroughputPerStream < float64(r.throughputThreshold)*r.scaleDownThreshold &&
-			metrics.streamCount > r.minStreamsPerPeer {
+			metrics.streamCount > minStreamsPerPeer {
 			r.scaleStreamsForPeer(peerID, metrics.streamCount-1)
 			log.Infof("Scaling down streams for peer %s from %d to %d (avg throughput: %.2f packets/sec/stream)",
 				peerID.String(), metrics.streamCount, metrics.streamCount-1, metrics.avgThroughputPerStream)
@@ -441,29 +450,19 @@ func (r *StreamRouter) evaluateScaling() {
 
 // scaleStreamsForPeer scales the number of streams for a peer
 func (r *StreamRouter) scaleStreamsForPeer(peerID peer.ID, newCount int) {
-	// Ensure new count is within bounds
-	if newCount < r.minStreamsPerPeer {
-		newCount = r.minStreamsPerPeer
-	}
-	if newCount > r.maxStreamsPerPeer {
-		newCount = r.maxStreamsPerPeer
-	}
-
-	r.streamsMu.Lock()
-	oldCount := r.streamsPerPeer[peerID]
-	if oldCount == 0 {
-		oldCount = r.minStreamsPerPeer
-	}
-	r.streamsPerPeer[peerID] = newCount
-	r.streamsMu.Unlock()
+	// Let the stream manager handle scaling
+	r.streamManager.SetTargetStreamsForPeer(peerID, newCount)
 
 	// If scaling down, we need to rebalance connections
+	// Get the current stats to determine if we're scaling down
+	stats := r.streamManager.GetStreamStats(peerID)
+	oldCount := stats["target_count"].(int)
+
 	if newCount < oldCount {
 		r.rebalanceConnectionsForPeer(peerID, oldCount, newCount)
 	}
 
-	// Notify the stream pool of the new target
-	r.streamPool.SetTargetStreamsForPeer(peerID, newCount)
+	log.Infof("Scaled streams for peer %s from %d to %d", peerID.String(), oldCount, newCount)
 }
 
 // rebalanceConnectionsForPeer rebalances connections when scaling down streams
@@ -489,11 +488,18 @@ func (r *StreamRouter) rebalanceConnectionsForPeer(peerID peer.ID, oldCount, new
 		if routeObj, found := r.connectionCache.Get(connKey); found {
 			route := routeObj.(*ConnectionRoute)
 
+			// Store old stream index for load tracker
+			oldStreamIndex := route.streamIndex
+
 			// Recalculate stream index
 			route.streamIndex = route.streamIndex % newCount
 
 			// Update in cache
 			r.connectionCache.Set(connKey, route, cache.DefaultExpiration)
+
+			// Notify the stream manager about the connection move
+			r.streamManager.ReleaseStream(route.peerID, oldStreamIndex, route.connKey, true)
+			_, _, _ = r.streamManager.GetStream(route.peerID, route.connKey)
 		}
 	}
 
@@ -501,6 +507,11 @@ func (r *StreamRouter) rebalanceConnectionsForPeer(peerID peer.ID, oldCount, new
 		log.Infof("Rebalanced %d connections for peer %s after scaling down streams from %d to %d",
 			len(affectedConnKeys), peerID.String(), oldCount, newCount)
 	}
+}
+
+// GetStreamStats returns statistics about stream usage
+func (r *StreamRouter) GetStreamStats(peerID peer.ID) map[string]interface{} {
+	return r.streamManager.GetStreamStats(peerID)
 }
 
 // Shutdown gracefully shuts down the router and all workers
