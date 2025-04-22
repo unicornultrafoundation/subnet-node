@@ -194,20 +194,26 @@ func (r *StreamRouter) DispatchPacket(ctx context.Context, packetData []byte) er
 		return err
 	}
 
-	// Skip packets without source or destination ports
-	if packetInfo.SrcPort == nil || packetInfo.DstPort == nil {
-		return fmt.Errorf("packet missing source or destination port")
-	}
-
 	// Get destination IP and create connection key
 	destIP := packetInfo.DstIP.String()
 
 	// Create a connection key that includes the full tuple
-	connKey := fmt.Sprintf("%s:%d:%s:%d",
-		packetInfo.SrcIP.String(),
-		*packetInfo.SrcPort,
-		destIP,
-		*packetInfo.DstPort)
+	var connKey string
+	if packetInfo.SrcPort == nil || packetInfo.DstPort == nil {
+		// For protocols without ports (like ICMP), use protocol number instead
+		connKey = fmt.Sprintf("%s:p%d:%s:p%d",
+			packetInfo.SrcIP.String(),
+			packetInfo.Protocol,
+			destIP,
+			packetInfo.Protocol)
+	} else {
+		// For protocols with ports (like TCP/UDP), use the standard format
+		connKey = fmt.Sprintf("%s:%d:%s:%d",
+			packetInfo.SrcIP.String(),
+			*packetInfo.SrcPort,
+			destIP,
+			*packetInfo.DstPort)
+	}
 
 	// Get peer ID for destination IP
 	peerID, err := r.peerDiscovery.GetPeerID(ctx, destIP)
