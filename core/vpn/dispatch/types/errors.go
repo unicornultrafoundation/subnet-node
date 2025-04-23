@@ -7,24 +7,27 @@ import (
 
 // Common errors
 var (
-	ErrEmptyPacket           = errors.New("empty packet")
-	ErrInvalidPacketLength   = errors.New("invalid packet length")
-	ErrUnsupportedIPVersion  = errors.New("unsupported IP version")
-	ErrNoStreamService       = errors.New("no stream service available")
-	ErrStreamCreationFailed  = errors.New("failed to create stream")
-	ErrStreamWriteFailed     = errors.New("failed to write to stream")
-	ErrWorkerNotFound        = errors.New("worker not found")
-	ErrWorkerQueueFull       = errors.New("worker queue full")
-	ErrWorkerStopped         = errors.New("worker stopped")
-	ErrDispatcherStopped     = errors.New("dispatcher stopped")
-	ErrNoPeerMapping         = errors.New("no peer mapping found")
-	ErrInvalidPeerID         = errors.New("invalid peer ID")
-	ErrNoStreamAvailable     = errors.New("no stream available")
-	ErrStreamPoolExhausted   = errors.New("stream pool exhausted")
-	ErrStreamChannelClosed   = errors.New("stream channel closed")
-	ErrStreamChannelFull     = errors.New("stream channel full")
-	ErrContextCancelled      = errors.New("context cancelled")
-	ErrNoHealthyStreams      = errors.New("no healthy streams available")
+	ErrEmptyPacket            = errors.New("empty packet")
+	ErrInvalidPacketLength    = errors.New("invalid packet length")
+	ErrUnsupportedIPVersion   = errors.New("unsupported IP version")
+	ErrNoStreamService        = errors.New("no stream service available")
+	ErrStreamCreationFailed   = errors.New("failed to create stream")
+	ErrStreamWriteFailed      = errors.New("failed to write to stream")
+	ErrWorkerNotFound         = errors.New("worker not found")
+	ErrWorkerQueueFull        = errors.New("worker queue full")
+	ErrWorkerStopped          = errors.New("worker stopped")
+	ErrWorkerChannelFull      = errors.New("worker channel full")
+	ErrWorkerPoolStopped      = errors.New("worker pool stopped")
+	ErrMaxWorkersReached      = errors.New("maximum number of workers reached")
+	ErrDispatcherStopped      = errors.New("dispatcher stopped")
+	ErrNoPeerMapping          = errors.New("no peer mapping found")
+	ErrInvalidPeerID          = errors.New("invalid peer ID")
+	ErrNoStreamAvailable      = errors.New("no stream available")
+	ErrStreamPoolExhausted    = errors.New("stream pool exhausted")
+	ErrStreamChannelClosed    = errors.New("stream channel closed")
+	ErrStreamChannelFull      = errors.New("stream channel full")
+	ErrContextCancelled       = errors.New("context cancelled")
+	ErrNoHealthyStreams       = errors.New("no healthy streams available")
 	ErrStreamAssignmentFailed = errors.New("failed to assign stream")
 )
 
@@ -68,7 +71,7 @@ type ServiceError struct {
 
 // Error implements the error interface
 func (e *ServiceError) Error() string {
-	return fmt.Sprintf("service error in %s.%s for %s (peer %s, dest %s): %v", 
+	return fmt.Sprintf("service error in %s.%s for %s (peer %s, dest %s): %v",
 		e.Service, e.Op, e.ConnKey, e.PeerID, e.DestIP, e.Err)
 }
 
