@@ -62,7 +62,7 @@ func (r *RealDockerClient) ContainerList(ctx context.Context, options ctypes.Lis
 	var filteredContainers []dtypes.Container
 	for _, container := range containers {
 		for _, name := range container.Names {
-			if strings.HasPrefix(name, "subnet-") {
+			if strings.HasPrefix(name, "/subnet-") {
 				filteredContainers = append(filteredContainers, container)
 				break
 			}
