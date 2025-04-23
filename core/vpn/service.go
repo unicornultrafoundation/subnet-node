@@ -24,14 +24,13 @@ import (
 	"github.com/songgao/water"
 	"github.com/unicornultrafoundation/subnet-node/config"
 	"github.com/unicornultrafoundation/subnet-node/core/account"
+	"github.com/unicornultrafoundation/subnet-node/core/vpn/api"
 	vpnconfig "github.com/unicornultrafoundation/subnet-node/core/vpn/config"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/discovery"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/metrics"
 	vpnnetwork "github.com/unicornultrafoundation/subnet-node/core/vpn/network"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/packet"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/resilience"
-	"github.com/unicornultrafoundation/subnet-node/core/vpn/stream"
-	"github.com/unicornultrafoundation/subnet-node/core/vpn/stream/types"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/utils"
 )
 
@@ -59,7 +58,7 @@ type Service struct {
 	resilienceService *resilience.ResilienceService
 	metricsService    *metrics.MetricsServiceImpl
 	bufferPool        *utils.BufferPool
-	streamService     *stream.StreamService
+	streamService     *StreamService
 
 	// Context management
 	serviceCtx    context.Context
@@ -128,11 +127,11 @@ func New(cfg *config.C, peerHost host.Host, dht *ddht.DHT, accountService *accou
 	}
 	service.resilienceService = resilience.NewResilienceService(resilienceConfig)
 
-	// Create a stream service adapter that implements types.Service
+	// Create a stream service adapter that implements api.StreamService
 	streamServiceAdapter := &StreamServiceAdapter{service: service}
 
 	// Create a stream service config with values from the config service
-	streamConfig := &stream.StreamServiceConfig{
+	streamConfig := &StreamServiceConfig{
 		MinStreamsPerPeer:      configService.GetMinStreamsPerPeer(),
 		StreamIdleTimeout:      configService.GetStreamIdleTimeout(),
 		CleanupInterval:        configService.GetCleanupInterval(),
@@ -143,7 +142,7 @@ func New(cfg *config.C, peerHost host.Host, dht *ddht.DHT, accountService *accou
 	}
 
 	// Create the stream service using the adapter and explicit config
-	service.streamService = stream.CreateStreamService(streamServiceAdapter, streamConfig)
+	service.streamService = NewStreamService(streamServiceAdapter, streamConfig)
 
 	// Register the stream service with the resource manager
 	service.resourceManager.Register(service.streamService)
@@ -438,18 +437,18 @@ func (s *Service) IsEnabled() bool {
 	return s.configService.GetEnable()
 }
 
-// StreamServiceAdapter implements the types.Service interface to break the circular
+// StreamServiceAdapter implements the api.StreamService interface to break the circular
 // dependency between Service and StreamService. It allows the StreamService to create
 // new VPN streams without directly depending on the main Service implementation.
 type StreamServiceAdapter struct {
 	service *Service
 }
 
-// CreateNewVPNStream implements the types.Service interface by creating a new
+// CreateNewVPNStream implements the api.StreamService interface by creating a new
 // libp2p stream to the specified peer using the VPN protocol with circuit breaker and retry protection.
-func (a *StreamServiceAdapter) CreateNewVPNStream(ctx context.Context, peerID peer.ID) (types.VPNStream, error) {
+func (a *StreamServiceAdapter) CreateNewVPNStream(ctx context.Context, peerID peer.ID) (api.VPNStream, error) {
 	// Use ExecuteWithResilience for better fault tolerance and metrics
-	var stream types.VPNStream
+	var stream api.VPNStream
 
 	// Create a breaker ID for this peer operation
 	breakerId := a.service.resilienceService.FormatPeerBreakerId(peerID, "create_stream")

@@ -11,10 +11,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"github.com/unicornultrafoundation/subnet-node/core/vpn/api"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/packet"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/resilience"
-	"github.com/unicornultrafoundation/subnet-node/core/vpn/stream"
-	"github.com/unicornultrafoundation/subnet-node/core/vpn/stream/types"
 )
 
 // TestContext creates a context with timeout for testing
@@ -31,28 +30,14 @@ func CreateTestPacket(size int) []byte {
 	return packet
 }
 
-// SetupTestStreamService creates a stream service for testing
-func SetupTestStreamService(t *testing.T, mockStreamService types.Service) *stream.StreamService {
-	// Create a stream service config with test values
-	streamConfig := &stream.StreamServiceConfig{
-		MinStreamsPerPeer:      2,
-		StreamIdleTimeout:      5 * time.Minute,
-		CleanupInterval:        1 * time.Minute,
-		HealthCheckInterval:    1 * time.Second,
-		HealthCheckTimeout:     500 * time.Millisecond,
-		MaxConsecutiveFailures: 3,
-		WarmInterval:           1 * time.Minute,
-	}
-
-	return stream.CreateStreamService(mockStreamService, streamConfig)
-}
+// No longer needed - removed stream package
 
 // SetupTestDispatcher creates a packet dispatcher for testing
 func SetupTestDispatcher(
 	t *testing.T,
 	discoveryService *MockDiscoveryService,
-	streamService types.Service,
-	poolService types.PoolService,
+	streamService api.StreamService,
+	poolService api.StreamPoolService,
 ) *packet.Dispatcher {
 	resilienceService := resilience.NewResilienceService(nil)
 

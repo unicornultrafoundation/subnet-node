@@ -9,7 +9,7 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/sirupsen/logrus"
-	streamTypes "github.com/unicornultrafoundation/subnet-node/core/vpn/stream/types"
+	"github.com/unicornultrafoundation/subnet-node/core/vpn/api"
 )
 
 var sharedPoolLog = logrus.WithField("service", "vpn-shared-stream-pool")
@@ -18,9 +18,9 @@ var sharedPoolLog = logrus.WithField("service", "vpn-shared-stream-pool")
 // It respects the maximum number of streams per peer and properly handles stream health
 type SharedStreamPool struct {
 	// Core components
-	streamService streamTypes.Service
-	ctx           context.Context
-	cancel        context.CancelFunc
+	createStreamFn StreamCreator
+	ctx            context.Context
+	cancel         context.CancelFunc
 
 	// Stream management
 	mu            sync.RWMutex
@@ -41,7 +41,7 @@ type SharedStreamPool struct {
 
 // sharedStream represents a stream in the shared pool
 type sharedStream struct {
-	stream       streamTypes.VPNStream
+	stream       api.VPNStream
 	index        int
 	usageCount   int32
 	lastUsed     time.Time
@@ -52,7 +52,7 @@ type sharedStream struct {
 // NewSharedStreamPool creates a new shared stream pool
 func NewSharedStreamPool(
 	ctx context.Context,
-	streamService streamTypes.Service,
+	createStreamFn StreamCreator,
 	minStreamsPerPeer int,
 	maxStreamsPerPeer int,
 ) *SharedStreamPool {
@@ -66,7 +66,7 @@ func NewSharedStreamPool(
 	poolCtx, cancel := context.WithCancel(ctx)
 
 	pool := &SharedStreamPool{
-		streamService:     streamService,
+		createStreamFn:    createStreamFn,
 		ctx:               poolCtx,
 		cancel:            cancel,
 		peerStreams:       make(map[string][]*sharedStream),
@@ -171,7 +171,7 @@ func (p *SharedStreamPool) getOrCreatePeerStreams(peerID peer.ID) ([]*sharedStre
 
 // GetStream gets a stream for a specific index
 // It ensures that the stream exists and is healthy
-func (p *SharedStreamPool) GetStream(ctx context.Context, peerID peer.ID, streamIndex int) (streamTypes.VPNStream, error) {
+func (p *SharedStreamPool) GetStream(ctx context.Context, peerID peer.ID, streamIndex int) (api.VPNStream, error) {
 	peerIDStr := peerID.String()
 	streams, indices := p.getOrCreatePeerStreams(peerID)
 
@@ -234,7 +234,7 @@ func (p *SharedStreamPool) GetStream(ctx context.Context, peerID peer.ID, stream
 }
 
 // createNewStream creates a new stream and adds it to the pool
-func (p *SharedStreamPool) createNewStream(ctx context.Context, peerID peer.ID, streamIndex int) (streamTypes.VPNStream, error) {
+func (p *SharedStreamPool) createNewStream(ctx context.Context, peerID peer.ID, streamIndex int) (api.VPNStream, error) {
 	peerIDStr := peerID.String()
 	streams := p.peerStreams[peerIDStr]
 	indices := p.streamIndices[peerIDStr]
@@ -283,7 +283,7 @@ func (p *SharedStreamPool) createNewStream(ctx context.Context, peerID peer.ID, 
 	}
 
 	// Create a new stream directly
-	newStream, err := p.streamService.CreateNewVPNStream(ctx, peerID)
+	newStream, err := p.createStreamFn(ctx, peerID)
 	if err != nil {
 		sharedPoolLog.WithFields(logrus.Fields{
 			"peer_id":      peerIDStr,

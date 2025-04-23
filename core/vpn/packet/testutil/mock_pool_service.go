@@ -5,19 +5,19 @@ import (
 	"sync"
 
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/unicornultrafoundation/subnet-node/core/vpn/stream/types"
+	"github.com/unicornultrafoundation/subnet-node/core/vpn/api"
 )
 
-// MockPoolService is a mock implementation of types.PoolService for testing
+// MockPoolService is a mock implementation of api.StreamPoolService for testing
 type MockPoolService struct {
 	mu            sync.Mutex
-	stream        types.VPNStream
+	stream        api.VPNStream
 	getStreamErr  error
 	releaseStream bool
 }
 
 // NewMockPoolService creates a new mock pool service
-func NewMockPoolService(stream types.VPNStream) *MockPoolService {
+func NewMockPoolService(stream api.VPNStream) *MockPoolService {
 	return &MockPoolService{
 		stream: stream,
 	}
@@ -31,7 +31,7 @@ func (m *MockPoolService) SetGetStreamError(err error) {
 }
 
 // GetStream returns the mock stream
-func (m *MockPoolService) GetStream(ctx context.Context, peerID peer.ID) (types.VPNStream, error) {
+func (m *MockPoolService) GetStream(ctx context.Context, peerID peer.ID) (api.VPNStream, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.getStreamErr != nil {
@@ -41,7 +41,7 @@ func (m *MockPoolService) GetStream(ctx context.Context, peerID peer.ID) (types.
 }
 
 // ReleaseStream records that the stream was released
-func (m *MockPoolService) ReleaseStream(peerID peer.ID, stream types.VPNStream, healthy bool) {
+func (m *MockPoolService) ReleaseStream(peerID peer.ID, stream api.VPNStream, healthy bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.releaseStream = true

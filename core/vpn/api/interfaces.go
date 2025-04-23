@@ -2,13 +2,14 @@ package api
 
 import (
 	"context"
+	"io"
 	"math/big"
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/resilience"
-	"github.com/unicornultrafoundation/subnet-node/core/vpn/stream/types"
 )
 
 // VPNService is the main interface for the VPN system
@@ -37,18 +38,30 @@ type PeerDiscoveryService interface {
 	GetPeerIDByRegistry(ctx context.Context, destIP string) (string, error)
 }
 
+// VPNStream is an interface for the network.Stream to make it easier to mock
+type VPNStream interface {
+	io.ReadWriteCloser
+	Reset() error
+	SetDeadline(time.Time) error
+	SetReadDeadline(time.Time) error
+	SetWriteDeadline(time.Time) error
+}
+
+// Ensure network.Stream implements VPNStream
+var _ VPNStream = (network.Stream)(nil)
+
 // StreamService handles stream creation and management
 type StreamService interface {
 	// CreateNewVPNStream creates a new stream to a peer
-	CreateNewVPNStream(ctx context.Context, peerID peer.ID) (types.VPNStream, error)
+	CreateNewVPNStream(ctx context.Context, peerID peer.ID) (VPNStream, error)
 }
 
 // StreamPoolService handles stream pooling
 type StreamPoolService interface {
 	// GetStream gets a stream from the pool or creates a new one
-	GetStream(ctx context.Context, peerID peer.ID) (types.VPNStream, error)
+	GetStream(ctx context.Context, peerID peer.ID) (VPNStream, error)
 	// ReleaseStream returns a stream to the pool
-	ReleaseStream(peerID peer.ID, stream types.VPNStream, healthy bool)
+	ReleaseStream(peerID peer.ID, stream VPNStream, healthy bool)
 }
 
 // CircuitBreakerService handles circuit breaker operations

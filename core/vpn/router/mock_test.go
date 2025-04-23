@@ -7,28 +7,26 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/mock"
-	streamTypes "github.com/unicornultrafoundation/subnet-node/core/vpn/stream/types"
+	"github.com/unicornultrafoundation/subnet-node/core/vpn/api"
 )
 
-// MockPoolServiceExt implements pool.PoolServiceExtension for testing
-type MockPoolServiceExt struct {
+// We're using the MockMode from mock_packet.go
+
+// MockStreamCreator implements the StreamCreator function type for testing
+type MockStreamCreator struct {
 	mock.Mock
 }
 
-func (m *MockPoolServiceExt) GetStreamByIndex(ctx context.Context, peerID peer.ID, index int) (streamTypes.VPNStream, error) {
-	args := m.Called(ctx, peerID, index)
-	return args.Get(0).(streamTypes.VPNStream), args.Error(1)
+// CreateNewVPNStream implements the StreamCreator function type for testing
+func (m *MockStreamCreator) CreateNewVPNStream(ctx context.Context, peerID peer.ID) (api.VPNStream, error) {
+	args := m.Called(ctx, peerID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(api.VPNStream), args.Error(1)
 }
 
-func (m *MockPoolServiceExt) ReleaseStreamByIndex(peerID peer.ID, index int, close bool) {
-	m.Called(peerID, index, close)
-}
-
-func (m *MockPoolServiceExt) SetTargetStreamsForPeer(peerID peer.ID, targetStreams int) {
-	m.Called(peerID, targetStreams)
-}
-
-// MockVPNStream implements streamTypes.VPNStream for testing
+// MockVPNStream implements api.VPNStream for testing
 type MockVPNStream struct {
 	mock.Mock
 }
@@ -155,22 +153,25 @@ func (c *MockConfig) GetDuration(key string, defaultValue time.Duration) time.Du
 
 // MockPacketInfo creates a mock packet info for testing
 func MockPacketInfo() *struct {
-	SrcIP   net.IP
-	DstIP   net.IP
-	SrcPort *int
-	DstPort *int
+	SrcIP    net.IP
+	DstIP    net.IP
+	SrcPort  *int
+	DstPort  *int
+	Protocol uint8
 } {
 	srcPort := 12345
 	dstPort := 80
 	return &struct {
-		SrcIP   net.IP
-		DstIP   net.IP
-		SrcPort *int
-		DstPort *int
+		SrcIP    net.IP
+		DstIP    net.IP
+		SrcPort  *int
+		DstPort  *int
+		Protocol uint8
 	}{
-		SrcIP:   net.ParseIP("10.0.0.1"),
-		DstIP:   net.ParseIP("192.168.1.1"),
-		SrcPort: &srcPort,
-		DstPort: &dstPort,
+		SrcIP:    net.ParseIP("10.0.0.1"),
+		DstIP:    net.ParseIP("192.168.1.1"),
+		SrcPort:  &srcPort,
+		DstPort:  &dstPort,
+		Protocol: 6, // TCP
 	}
 }

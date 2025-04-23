@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/packet"
-	"github.com/unicornultrafoundation/subnet-node/core/vpn/stream"
 )
 
 // FaultInjectionConfig contains configuration for fault injection
@@ -53,7 +52,6 @@ type FaultInjector struct {
 	mockStreamService *MockStreamService
 	mockDiscovery     *MockDiscoveryService
 	dispatcher        *packet.Dispatcher
-	streamService     *stream.StreamService
 
 	// State
 	active         bool
@@ -67,7 +65,6 @@ func NewFaultInjector(
 	mockStreamService *MockStreamService,
 	mockDiscovery *MockDiscoveryService,
 	dispatcher *packet.Dispatcher,
-	streamService *stream.StreamService,
 ) *FaultInjector {
 	if config == nil {
 		config = DefaultFaultInjectionConfig()
@@ -78,7 +75,6 @@ func NewFaultInjector(
 		mockStreamService: mockStreamService,
 		mockDiscovery:     mockDiscovery,
 		dispatcher:        dispatcher,
-		streamService:     streamService,
 		active:            false,
 		originalConfig:    nil,
 		mutex:             sync.Mutex{},
@@ -216,7 +212,6 @@ func RunChaosTest(t *testing.T, fixture *TestFixture, duration time.Duration, in
 		fixture.MockStreamService,
 		fixture.MockDiscoveryService,
 		fixture.Dispatcher,
-		fixture.StreamService,
 	)
 
 	// Start time
