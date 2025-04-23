@@ -87,11 +87,15 @@ func (p *WorkerPool) createWorker() *PacketWorker {
 	ctx, cancel := context.WithCancel(p.router.ctx)
 
 	worker := &PacketWorker{
-		id:         workerID,
-		packetChan: make(chan *PacketTask, p.queueSize),
-		ctx:        ctx,
-		cancel:     cancel,
-		router:     p.router,
+		id:             workerID,
+		packetChan:     make(chan *PacketTask, p.queueSize),
+		ctx:            ctx,
+		cancel:         cancel,
+		router:         p.router,
+		lastActivity:   time.Now().UnixNano(),
+		routeCache:     make(map[string]*ConnectionRoute),
+		routeCacheTTL:  5 * time.Second,
+		lastCacheClean: time.Now(),
 	}
 
 	p.workers = append(p.workers, worker)
