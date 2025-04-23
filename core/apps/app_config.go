@@ -71,6 +71,10 @@ func (s *Service) containerEnvConfig(containerConfig atypes.ContainerConfig) ([]
 	// Add environment variables to the container spec
 	envs := []string{}
 	for key, value := range containerEnvs {
+		if value == "${PEER_ID}" {
+			value = s.peerId.String()
+		}
+
 		envs = append(envs, fmt.Sprintf("%s=%s", key, value))
 	}
 
