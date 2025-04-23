@@ -31,12 +31,6 @@ func createValidConfig() *VPNConfig {
 		CircuitBreakerResetTimeout:     60 * time.Second,
 		CircuitBreakerSuccessThreshold: 2,
 
-		// Stream health settings
-		HealthCheckInterval:    30 * time.Second,
-		HealthCheckTimeout:     5 * time.Second,
-		MaxConsecutiveFailures: 3,
-		WarmInterval:           60 * time.Second,
-
 		// Retry settings
 		RetryMaxAttempts:     5,
 		RetryInitialInterval: 1 * time.Second,
@@ -104,12 +98,6 @@ func TestValidate(t *testing.T) {
 			name:    "invalid circuit breaker failure threshold",
 			modify:  func(cfg *VPNConfig) { cfg.CircuitBreakerFailureThreshold = 0 },
 			wantErr: ErrInvalidCircuitBreakerFailureThreshold,
-		},
-		// Stream health settings errors
-		{
-			name:    "invalid health check interval",
-			modify:  func(cfg *VPNConfig) { cfg.HealthCheckInterval = 0 },
-			wantErr: ErrInvalidHealthCheckInterval,
 		},
 		// Retry settings errors
 		{
@@ -270,26 +258,6 @@ func TestValidateAllSettings(t *testing.T) {
 				modify:  func(cfg *VPNConfig) {},
 				wantErr: nil,
 			},
-			{
-				name:    "invalid health check interval",
-				modify:  func(cfg *VPNConfig) { cfg.HealthCheckInterval = 0 },
-				wantErr: ErrInvalidHealthCheckInterval,
-			},
-			{
-				name:    "invalid health check timeout",
-				modify:  func(cfg *VPNConfig) { cfg.HealthCheckTimeout = 0 },
-				wantErr: ErrInvalidHealthCheckTimeout,
-			},
-			{
-				name:    "invalid max consecutive failures",
-				modify:  func(cfg *VPNConfig) { cfg.MaxConsecutiveFailures = 0 },
-				wantErr: ErrInvalidMaxConsecutiveFailures,
-			},
-			{
-				name:    "invalid warm interval",
-				modify:  func(cfg *VPNConfig) { cfg.WarmInterval = 0 },
-				wantErr: ErrInvalidWarmInterval,
-			},
 		},
 		"validateRetrySettings": {
 			{
@@ -321,7 +289,6 @@ func TestValidateAllSettings(t *testing.T) {
 		"validateWorkerSettings":         (*VPNConfig).validateWorkerSettings,
 		"validateStreamPoolSettings":     (*VPNConfig).validateStreamPoolSettings,
 		"validateCircuitBreakerSettings": (*VPNConfig).validateCircuitBreakerSettings,
-		"validateStreamHealthSettings":   (*VPNConfig).validateStreamHealthSettings,
 		"validateRetrySettings":          (*VPNConfig).validateRetrySettings,
 	}
 

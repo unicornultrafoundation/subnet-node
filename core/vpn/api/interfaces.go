@@ -170,14 +170,6 @@ type ConfigService interface {
 	GetCircuitBreakerResetTimeout() time.Duration
 	// GetCircuitBreakerSuccessThreshold returns the circuit breaker success threshold
 	GetCircuitBreakerSuccessThreshold() int
-	// GetHealthCheckInterval returns the health check interval
-	GetHealthCheckInterval() time.Duration
-	// GetHealthCheckTimeout returns the health check timeout
-	GetHealthCheckTimeout() time.Duration
-	// GetMaxConsecutiveFailures returns the maximum consecutive failures
-	GetMaxConsecutiveFailures() int
-	// GetWarmInterval returns the warm interval
-	GetWarmInterval() time.Duration
 	// GetEnable returns whether the VPN service is enabled
 	GetEnable() bool
 	// GetMTU returns the MTU for the TUN interface

@@ -35,13 +35,9 @@ type StreamService struct {
 
 // StreamServiceConfig contains configuration for the stream service
 type StreamServiceConfig struct {
-	MinStreamsPerPeer      int
-	StreamIdleTimeout      time.Duration
-	CleanupInterval        time.Duration
-	HealthCheckInterval    time.Duration
-	HealthCheckTimeout     time.Duration
-	MaxConsecutiveFailures int
-	WarmInterval           time.Duration
+	MinStreamsPerPeer int
+	StreamIdleTimeout time.Duration
+	CleanupInterval   time.Duration
 }
 
 // NewStreamService creates a new stream service
