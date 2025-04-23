@@ -24,11 +24,12 @@ type ConfigService interface {
 	// Worker settings
 	GetWorkerIdleTimeout() int
 	GetWorkerBufferSize() int
-	GetMaxWorkers() int
+	GetMaxWorkersPerPeer() int
 	GetWorkerCleanupInterval() time.Duration
 
 	// Stream pool settings
 	GetMinStreamsPerPeer() int
+	GetMaxStreamsPerPeer() int
 	GetStreamIdleTimeout() time.Duration
 	GetCleanupInterval() time.Duration
 
@@ -52,7 +53,6 @@ type ConfigService interface {
 	GetRetryMaxInterval() time.Duration
 
 	// Timeout settings
-	GetPeerConnectionTimeout() time.Duration
 	GetDHTSyncTimeout() time.Duration
 	GetTUNSetupTimeout() time.Duration
 	GetPeerConnectionCheckInterval() time.Duration
@@ -152,11 +152,11 @@ func (c *ConfigServiceImpl) GetWorkerBufferSize() int {
 	return c.vpnConfig.WorkerBufferSize
 }
 
-// GetMaxWorkers returns the maximum number of workers
-func (c *ConfigServiceImpl) GetMaxWorkers() int {
+// GetMaxWorkersPerPeer returns the maximum number of workers per peer
+func (c *ConfigServiceImpl) GetMaxWorkersPerPeer() int {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	return c.vpnConfig.MaxWorkers
+	return c.vpnConfig.MaxWorkersPerPeer
 }
 
 // GetWorkerCleanupInterval returns the worker cleanup interval
@@ -173,6 +173,13 @@ func (c *ConfigServiceImpl) GetMinStreamsPerPeer() int {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.vpnConfig.MinStreamsPerPeer
+}
+
+// GetMaxStreamsPerPeer returns the maximum number of streams per peer
+func (c *ConfigServiceImpl) GetMaxStreamsPerPeer() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.vpnConfig.MaxStreamsPerPeer
 }
 
 // GetStreamIdleTimeout returns the stream idle timeout
@@ -275,13 +282,6 @@ func (c *ConfigServiceImpl) GetRetryMaxInterval() time.Duration {
 }
 
 // Timeout settings
-
-// GetPeerConnectionTimeout returns the peer connection timeout
-func (c *ConfigServiceImpl) GetPeerConnectionTimeout() time.Duration {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.vpnConfig.PeerConnectionTimeout
-}
 
 // GetDHTSyncTimeout returns the DHT sync timeout
 func (c *ConfigServiceImpl) GetDHTSyncTimeout() time.Duration {
