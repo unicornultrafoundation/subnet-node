@@ -2,6 +2,7 @@ package vpn
 
 import (
 	"context"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/dispatch"
@@ -15,7 +16,7 @@ func (s *Service) createDispatcher() packet.DispatcherService {
 	logrus.Info("Using new dispatcher for packet dispatching")
 
 	// Create dispatcher configuration
-	config := &dispatch.DispatcherConfig{
+	config := &dispatch.Config{
 		// Stream pool configuration
 		MinStreamsPerPeer:     s.configService.GetMinStreamsPerPeer(),
 		MaxStreamsPerPeer:     s.configService.GetMaxStreamsPerPeer(),
@@ -23,7 +24,7 @@ func (s *Service) createDispatcher() packet.DispatcherService {
 		StreamCleanupInterval: s.configService.GetCleanupInterval(),
 
 		// Worker pool configuration
-		WorkerIdleTimeout:     s.configService.GetWorkerIdleTimeout(),
+		WorkerIdleTimeout:     time.Duration(s.configService.GetWorkerIdleTimeout()) * time.Second,
 		WorkerCleanupInterval: s.configService.GetWorkerCleanupInterval(),
 		WorkerBufferSize:      s.configService.GetWorkerBufferSize(),
 		MaxWorkersPerPeer:     s.configService.GetMaxWorkersPerPeer(),
@@ -46,13 +47,17 @@ func (s *Service) createDispatcher() packet.DispatcherService {
 	}
 }
 
-// dispatcherAdapter adapts the new dispatch.Dispatcher to the packet.DispatcherService interface
+// dispatcherAdapter adapts the new dispatcher to the packet.DispatcherService interface
 type dispatcherAdapter struct {
-	dispatcher *dispatch.Dispatcher
+	dispatcher interface {
+		DispatchPacket(ctx context.Context, connKey types.ConnectionKey, destIP string, packet []byte) error
+		Start()
+		Stop()
+	}
 }
 
 // DispatchPacket implements the packet.DispatcherService interface
-func (a *dispatcherAdapter) DispatchPacket(ctx context.Context, syncKey, destIP string, packet []byte) {
+func (a *dispatcherAdapter) DispatchPacket(ctx context.Context, syncKey, destIP string, packet []byte) error {
 	// Convert the syncKey to a ConnectionKey
 	// The syncKey format is typically sourcePort:destIP:destPort
 	connKey := types.ConnectionKey(syncKey)
@@ -62,6 +67,7 @@ func (a *dispatcherAdapter) DispatchPacket(ctx context.Context, syncKey, destIP 
 	if err != nil {
 		logrus.Debugf("Failed to dispatch packet: %v", err)
 	}
+	return err
 }
 
 // Start implements the packet.DispatcherService interface

@@ -32,7 +32,7 @@ func main() {
 	streamService := NewMockStreamService()
 
 	// Create dispatcher config
-	config := &dispatch.DispatcherConfig{
+	config := &dispatch.Config{
 		MaxStreamsPerPeer:     10,
 		StreamIdleTimeout:     5 * time.Minute,
 		StreamCleanupInterval: 1 * time.Minute,
