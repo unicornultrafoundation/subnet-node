@@ -299,6 +299,22 @@ func (w *MultiConnectionWorker) GetMetrics() types.WorkerMetrics {
 	}
 }
 
+// GetBufferUtilization returns the current buffer utilization as a percentage (0-100)
+func (w *MultiConnectionWorker) GetBufferUtilization() int {
+	// Get the current length of the packet channel
+	currentLen := len(w.PacketChan)
+
+	// Get the capacity of the packet channel
+	capacity := cap(w.PacketChan)
+
+	// Calculate utilization percentage
+	if capacity == 0 {
+		return 0
+	}
+
+	return (currentLen * 100) / capacity
+}
+
 // GetConnectionMetrics returns metrics for all connections
 func (w *MultiConnectionWorker) GetConnectionMetrics() map[string]types.WorkerMetrics {
 	metrics := make(map[string]types.WorkerMetrics)

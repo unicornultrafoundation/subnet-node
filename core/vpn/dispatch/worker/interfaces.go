@@ -33,6 +33,8 @@ type MultiConnectionWorkerInterface interface {
 	GetConnectionCount() int
 	// GetConnectionMetrics returns metrics for all connections
 	GetConnectionMetrics() map[string]types.WorkerMetrics
+	// GetBufferUtilization returns the current buffer utilization as a percentage (0-100)
+	GetBufferUtilization() int
 }
 
 // StreamManagerInterface defines the interface for stream management
