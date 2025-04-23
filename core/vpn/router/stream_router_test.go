@@ -113,7 +113,7 @@ func TestStreamRouter_GetStreamForRoute(t *testing.T) {
 		connKey:      "10.0.0.1:12345:192.168.1.1:80",
 		peerID:       testPeerID,
 		streamIndex:  0,
-		lastActivity: time.Now(),
+		lastActivity: time.Now().UnixNano(),
 		packetCount:  0,
 		workerID:     0,
 	}
