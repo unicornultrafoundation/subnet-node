@@ -37,6 +37,10 @@ type StreamPool struct {
 	streams map[string][]*StreamChannel
 	// Map of peer ID -> stream usage counts
 	streamUsage map[string][]int64
+	// Map of peer ID -> mutex for that peer's streams
+	peerMutexes map[string]*sync.RWMutex
+	// Mutex for the peerMutexes map
+	peerMutexesMu sync.RWMutex
 }
 
 // StreamChannel represents a channel dedicated to a specific stream
@@ -45,12 +49,10 @@ type StreamChannel struct {
 	Stream api.VPNStream
 	// Channel for sending packets to the stream
 	PacketChan chan *types.QueuedPacket
-	// Last activity time
-	LastActivity time.Time
-	// Mutex for protecting access to the stream
-	mu sync.RWMutex
-	// Whether the stream is healthy
-	Healthy bool
+	// Last activity time (Unix nano time)
+	lastActivity int64
+	// Whether the stream is healthy (0 = unhealthy, 1 = healthy)
+	healthy int32
 	// Metrics for the stream
 	Metrics types.StreamMetrics
 	// Context for the stream
@@ -82,6 +84,7 @@ func NewStreamPool(streamCreator api.StreamService, config *StreamPoolConfig) *S
 		cleanupInterval:   config.CleanupInterval,
 		streams:           make(map[string][]*StreamChannel),
 		streamUsage:       make(map[string][]int64),
+		peerMutexes:       make(map[string]*sync.RWMutex),
 	}
 }
 
@@ -114,11 +117,29 @@ func (p *StreamPool) Stop() {
 	p.cancel()
 	p.active = false
 
-	// Close all streams
-	p.streamsMu.Lock()
-	defer p.streamsMu.Unlock()
+	// Get a snapshot of all peer IDs
+	p.streamsMu.RLock()
+	peerIDs := make([]string, 0, len(p.streams))
+	for peerID := range p.streams {
+		peerIDs = append(peerIDs, peerID)
+	}
+	p.streamsMu.RUnlock()
 
-	for peerID, streamChannels := range p.streams {
+	// Process each peer separately with its own mutex
+	for _, peerID := range peerIDs {
+		peerMutex := p.getPeerMutex(peerID)
+		peerMutex.Lock()
+		p.streamsMu.Lock()
+
+		// Check if the peer still exists (might have been removed by another goroutine)
+		streamChannels, exists := p.streams[peerID]
+		if !exists {
+			p.streamsMu.Unlock()
+			peerMutex.Unlock()
+			continue
+		}
+
+		// Close all streams for this peer
 		for _, streamChannel := range streamChannels {
 			// Cancel the stream context
 			streamChannel.cancel()
@@ -127,9 +148,19 @@ func (p *StreamPool) Stop() {
 			// Close the stream
 			streamChannel.Stream.Close()
 		}
+
+		// Remove the peer from the maps
 		delete(p.streams, peerID)
 		delete(p.streamUsage, peerID)
+
+		p.streamsMu.Unlock()
+		peerMutex.Unlock()
 	}
+
+	// Clear the peer mutexes map
+	p.peerMutexesMu.Lock()
+	p.peerMutexes = make(map[string]*sync.RWMutex)
+	p.peerMutexesMu.Unlock()
 }
 
 // GetStreamChannel gets a stream channel for a peer
@@ -137,7 +168,11 @@ func (p *StreamPool) Stop() {
 func (p *StreamPool) GetStreamChannel(ctx context.Context, peerID peer.ID) (*StreamChannel, error) {
 	peerIDStr := peerID.String()
 
+	// Get the mutex for this peer
+	peerMutex := p.getPeerMutex(peerIDStr)
+
 	// Check if we have any streams for this peer
+	peerMutex.RLock()
 	p.streamsMu.RLock()
 	streamChannels, exists := p.streams[peerIDStr]
 	var usageCounts []int64
@@ -145,6 +180,7 @@ func (p *StreamPool) GetStreamChannel(ctx context.Context, peerID peer.ID) (*Str
 		usageCounts = p.streamUsage[peerIDStr]
 	}
 	p.streamsMu.RUnlock()
+	peerMutex.RUnlock()
 
 	// If this is the first time we're seeing this peer, initialize the minimum number of streams
 	if !exists || len(streamChannels) < p.minStreamsPerPeer {
@@ -154,10 +190,12 @@ func (p *StreamPool) GetStreamChannel(ctx context.Context, peerID peer.ID) (*Str
 		}
 
 		// Refresh our view of the streams
+		peerMutex.RLock()
 		p.streamsMu.RLock()
 		streamChannels = p.streams[peerIDStr]
 		usageCounts = p.streamUsage[peerIDStr]
 		p.streamsMu.RUnlock()
+		peerMutex.RUnlock()
 	}
 
 	if len(streamChannels) > 0 {
@@ -173,9 +211,7 @@ func (p *StreamPool) GetStreamChannel(ctx context.Context, peerID peer.ID) (*Str
 		}
 
 		// Check if the stream is still healthy
-		streamChannels[minIndex].mu.RLock()
-		healthy := streamChannels[minIndex].Healthy
-		streamChannels[minIndex].mu.RUnlock()
+		healthy := atomic.LoadInt32(&streamChannels[minIndex].healthy) == 1
 
 		if healthy {
 			// Increment the usage count
@@ -184,9 +220,11 @@ func (p *StreamPool) GetStreamChannel(ctx context.Context, peerID peer.ID) (*Str
 		}
 
 		// Stream is unhealthy, remove it
+		peerMutex.Lock()
 		p.streamsMu.Lock()
 		p.removeStreamAtIndex(peerIDStr, minIndex)
 		p.streamsMu.Unlock()
+		peerMutex.Unlock()
 	}
 
 	// Create a new stream channel
@@ -197,10 +235,15 @@ func (p *StreamPool) GetStreamChannel(ctx context.Context, peerID peer.ID) (*Str
 func (p *StreamPool) createNewStreamChannel(ctx context.Context, peerID peer.ID) (*StreamChannel, error) {
 	peerIDStr := peerID.String()
 
+	// Get the mutex for this peer
+	peerMutex := p.getPeerMutex(peerIDStr)
+
 	// Check if we've reached the maximum number of streams for this peer
+	peerMutex.RLock()
 	p.streamsMu.RLock()
 	streamCount := len(p.streams[peerIDStr])
 	p.streamsMu.RUnlock()
+	peerMutex.RUnlock()
 
 	if streamCount >= p.maxStreamsPerPeer {
 		return nil, types.ErrStreamPoolExhausted
@@ -219,8 +262,8 @@ func (p *StreamPool) createNewStreamChannel(ctx context.Context, peerID peer.ID)
 	streamChannel := &StreamChannel{
 		Stream:       stream,
 		PacketChan:   make(chan *types.QueuedPacket, 100), // Buffer size
-		LastActivity: time.Now(),
-		Healthy:      true,
+		lastActivity: time.Now().UnixNano(),
+		healthy:      1, // 1 = healthy
 		ctx:          streamCtx,
 		cancel:       streamCancel,
 	}
@@ -229,8 +272,8 @@ func (p *StreamPool) createNewStreamChannel(ctx context.Context, peerID peer.ID)
 	go p.processStreamPackets(streamChannel, peerID)
 
 	// Add the stream to the pool
+	peerMutex.Lock()
 	p.streamsMu.Lock()
-	defer p.streamsMu.Unlock()
 
 	if _, exists := p.streams[peerIDStr]; !exists {
 		p.streams[peerIDStr] = make([]*StreamChannel, 0)
@@ -239,6 +282,9 @@ func (p *StreamPool) createNewStreamChannel(ctx context.Context, peerID peer.ID)
 
 	p.streams[peerIDStr] = append(p.streams[peerIDStr], streamChannel)
 	p.streamUsage[peerIDStr] = append(p.streamUsage[peerIDStr], 1) // Start with usage count of 1
+
+	p.streamsMu.Unlock()
+	peerMutex.Unlock()
 
 	return streamChannel, nil
 }
@@ -252,9 +298,7 @@ func (p *StreamPool) processStreamPackets(streamChannel *StreamChannel, peerID p
 
 	defer func() {
 		// Mark the stream as unhealthy
-		streamChannel.mu.Lock()
-		streamChannel.Healthy = false
-		streamChannel.mu.Unlock()
+		atomic.StoreInt32(&streamChannel.healthy, 0)
 
 		// Close the stream
 		streamChannel.Stream.Close()
@@ -274,9 +318,7 @@ func (p *StreamPool) processStreamPackets(streamChannel *StreamChannel, peerID p
 			}
 
 			// Update last activity time
-			streamChannel.mu.Lock()
-			streamChannel.LastActivity = time.Now()
-			streamChannel.mu.Unlock()
+			atomic.StoreInt64(&streamChannel.lastActivity, time.Now().UnixNano())
 
 			// Process the packet
 			err := p.writePacketToStream(streamChannel, packet)
@@ -285,14 +327,18 @@ func (p *StreamPool) processStreamPackets(streamChannel *StreamChannel, peerID p
 
 				// Signal the error on the done channel if provided
 				if packet.DoneCh != nil {
-					packet.DoneCh <- err
-					close(packet.DoneCh)
+					// Use a non-blocking send to avoid panics if the channel is closed
+					select {
+					case packet.DoneCh <- err:
+						// Successfully sent the error
+					default:
+						// Channel might be closed or full, don't panic
+					}
+					// Don't close the channel here, let the caller close it
 				}
 
 				// Mark the stream as unhealthy
-				streamChannel.mu.Lock()
-				streamChannel.Healthy = false
-				streamChannel.mu.Unlock()
+				atomic.StoreInt32(&streamChannel.healthy, 0)
 
 				// Increment error count
 				atomic.AddInt64(&streamChannel.Metrics.ErrorCount, 1)
@@ -302,8 +348,13 @@ func (p *StreamPool) processStreamPackets(streamChannel *StreamChannel, peerID p
 
 			// Signal success on the done channel if provided
 			if packet.DoneCh != nil {
-				packet.DoneCh <- nil
-				close(packet.DoneCh)
+				select {
+				case packet.DoneCh <- nil:
+					// Successfully sent the result
+				default:
+					// Channel might be closed or full, don't panic
+				}
+				// Don't close the channel here, let the caller close it
 			}
 
 			// Update metrics
@@ -328,9 +379,7 @@ func (p *StreamPool) writePacketToStream(streamChannel *StreamChannel, packet *t
 func (p *StreamPool) ReleaseStreamChannel(peerID peer.ID, streamChannel *StreamChannel, healthy bool) {
 	if !healthy {
 		// Mark the stream as unhealthy
-		streamChannel.mu.Lock()
-		streamChannel.Healthy = false
-		streamChannel.mu.Unlock()
+		atomic.StoreInt32(&streamChannel.healthy, 0)
 
 		// Cancel the stream context to stop the processor
 		streamChannel.cancel()
@@ -338,6 +387,8 @@ func (p *StreamPool) ReleaseStreamChannel(peerID peer.ID, streamChannel *StreamC
 }
 
 // removeStreamAtIndex removes a stream at the specified index
+// Note: This method assumes that the streamsMu lock is already held
+// Note: This method assumes that the peer-specific mutex is already held
 func (p *StreamPool) removeStreamAtIndex(peerIDStr string, index int) {
 	streams := p.streams[peerIDStr]
 	usageCounts := p.streamUsage[peerIDStr]
@@ -374,23 +425,42 @@ func (p *StreamPool) cleanupIdleStreams() {
 		case <-p.ctx.Done():
 			return
 		case <-ticker.C:
-			p.streamsMu.Lock()
+			// Get a snapshot of all peer IDs
+			p.streamsMu.RLock()
+			peerIDs := make([]string, 0, len(p.streams))
+			for peerID := range p.streams {
+				peerIDs = append(peerIDs, peerID)
+			}
+			p.streamsMu.RUnlock()
 
-			for peerID, streamChannels := range p.streams {
+			// Process each peer separately with its own mutex
+			for _, peerID := range peerIDs {
+				peerMutex := p.getPeerMutex(peerID)
+				peerMutex.Lock()
+				p.streamsMu.Lock()
+
+				// Check if the peer still exists (might have been removed by another goroutine)
+				streamChannels, exists := p.streams[peerID]
+				if !exists {
+					p.streamsMu.Unlock()
+					peerMutex.Unlock()
+					continue
+				}
+
+				// Check each stream
 				for i := len(streamChannels) - 1; i >= 0; i-- {
-					streamChannels[i].mu.RLock()
-					lastActivity := streamChannels[i].LastActivity
-					healthy := streamChannels[i].Healthy
-					streamChannels[i].mu.RUnlock()
+					lastActivity := time.Unix(0, atomic.LoadInt64(&streamChannels[i].lastActivity))
+					healthy := atomic.LoadInt32(&streamChannels[i].healthy) == 1
 
 					// Check if the stream is idle or unhealthy
 					if !healthy || time.Since(lastActivity) > p.streamIdleTimeout {
 						p.removeStreamAtIndex(peerID, i)
 					}
 				}
-			}
 
-			p.streamsMu.Unlock()
+				p.streamsMu.Unlock()
+				peerMutex.Unlock()
+			}
 		}
 	}
 }
@@ -399,10 +469,16 @@ func (p *StreamPool) cleanupIdleStreams() {
 func (p *StreamPool) GetStreamCount(peerID peer.ID) int {
 	peerIDStr := peerID.String()
 
-	p.streamsMu.RLock()
-	defer p.streamsMu.RUnlock()
+	// Get the mutex for this peer
+	peerMutex := p.getPeerMutex(peerIDStr)
 
-	return len(p.streams[peerIDStr])
+	peerMutex.RLock()
+	p.streamsMu.RLock()
+	count := len(p.streams[peerIDStr])
+	p.streamsMu.RUnlock()
+	peerMutex.RUnlock()
+
+	return count
 }
 
 // GetTotalStreamCount returns the total number of streams
@@ -420,14 +496,31 @@ func (p *StreamPool) GetTotalStreamCount() int {
 
 // GetStreamMetrics returns metrics for all streams
 func (p *StreamPool) GetStreamMetrics() map[string]map[string]int64 {
+	// Get a snapshot of all peer IDs
 	p.streamsMu.RLock()
-	defer p.streamsMu.RUnlock()
+	peerIDs := make([]string, 0, len(p.streams))
+	for peerID := range p.streams {
+		peerIDs = append(peerIDs, peerID)
+	}
+	p.streamsMu.RUnlock()
 
 	metrics := make(map[string]map[string]int64)
 
-	for peerID, streamChannels := range p.streams {
-		peerMetrics := make(map[string]int64)
+	// Process each peer separately with its own mutex
+	for _, peerID := range peerIDs {
+		peerMutex := p.getPeerMutex(peerID)
+		peerMutex.RLock()
+		p.streamsMu.RLock()
 
+		// Check if the peer still exists (might have been removed by another goroutine)
+		streamChannels, exists := p.streams[peerID]
+		if !exists {
+			p.streamsMu.RUnlock()
+			peerMutex.RUnlock()
+			continue
+		}
+
+		peerMetrics := make(map[string]int64)
 		var totalPackets, totalErrors, totalBytes int64
 
 		for _, streamChannel := range streamChannels {
@@ -442,6 +535,9 @@ func (p *StreamPool) GetStreamMetrics() map[string]map[string]int64 {
 		peerMetrics["bytes_sent"] = totalBytes
 
 		metrics[peerID] = peerMetrics
+
+		p.streamsMu.RUnlock()
+		peerMutex.RUnlock()
 	}
 
 	return metrics
@@ -455,13 +551,18 @@ func (p *StreamPool) initializeMinStreams(ctx context.Context, peerID peer.ID) e
 		"min_streams": p.minStreamsPerPeer,
 	}).Debug("Initializing minimum streams for peer")
 
+	// Get the mutex for this peer
+	peerMutex := p.getPeerMutex(peerIDStr)
+
 	// Lock to prevent concurrent initialization
+	peerMutex.Lock()
 	p.streamsMu.Lock()
-	defer p.streamsMu.Unlock()
 
 	// Check again in case another goroutine initialized the streams while we were waiting for the lock
 	streamChannels, exists := p.streams[peerIDStr]
 	if exists && len(streamChannels) >= p.minStreamsPerPeer {
+		p.streamsMu.Unlock()
+		peerMutex.Unlock()
 		return nil
 	}
 
@@ -491,8 +592,8 @@ func (p *StreamPool) initializeMinStreams(ctx context.Context, peerID peer.ID) e
 		streamChannel := &StreamChannel{
 			Stream:       stream,
 			PacketChan:   make(chan *types.QueuedPacket, 100), // Buffer size
-			LastActivity: time.Now(),
-			Healthy:      true,
+			lastActivity: time.Now().UnixNano(),
+			healthy:      1, // 1 = healthy
 			ctx:          streamCtx,
 			cancel:       streamCancel,
 		}
@@ -505,12 +606,44 @@ func (p *StreamPool) initializeMinStreams(ctx context.Context, peerID peer.ID) e
 		p.streamUsage[peerIDStr] = append(p.streamUsage[peerIDStr], 0) // Start with usage count of 0
 	}
 
+	streamCount := len(p.streams[peerIDStr])
+
+	p.streamsMu.Unlock()
+	peerMutex.Unlock()
+
 	streamLog.WithFields(logrus.Fields{
 		"peer_id":      peerIDStr,
-		"stream_count": len(p.streams[peerIDStr]),
+		"stream_count": streamCount,
 	}).Debug("Initialized streams for peer")
 
 	return nil
+}
+
+// getPeerMutex gets or creates a mutex for a peer
+func (p *StreamPool) getPeerMutex(peerIDStr string) *sync.RWMutex {
+	// First try with a read lock
+	p.peerMutexesMu.RLock()
+	mutex, exists := p.peerMutexes[peerIDStr]
+	p.peerMutexesMu.RUnlock()
+
+	if exists {
+		return mutex
+	}
+
+	// If not found, acquire write lock and create
+	p.peerMutexesMu.Lock()
+	defer p.peerMutexesMu.Unlock()
+
+	// Check again in case another goroutine created it while we were waiting
+	mutex, exists = p.peerMutexes[peerIDStr]
+	if exists {
+		return mutex
+	}
+
+	// Create a new mutex
+	mutex = &sync.RWMutex{}
+	p.peerMutexes[peerIDStr] = mutex
+	return mutex
 }
 
 // Close implements io.Closer

@@ -15,16 +15,33 @@ import (
 
 var multiPoolLog = logrus.WithField("service", "multi-worker-pool")
 
+// workerOp represents an operation on the worker pool
+type workerOp struct {
+	opType     string // "get_worker", "dispatch", "get_count", "get_metrics", "cleanup"
+	connKey    types.ConnectionKey
+	destIP     string
+	ctx        context.Context
+	packet     *types.QueuedPacket
+	resultChan chan workerOpResult
+}
+
+// workerOpResult represents the result of a worker operation
+type workerOpResult struct {
+	worker  MultiConnectionWorkerInterface
+	index   int64
+	count   int
+	metrics map[string]int64
+	err     error
+}
+
 // MultiWorkerPool manages a pool of multi-connection workers for a specific peer ID
 type MultiWorkerPool struct {
 	// PeerID is the peer ID this pool is responsible for
 	PeerID peer.ID
 	// StreamManager provides access to stream management
 	StreamManager StreamManagerInterface
-	// Workers is a slice of multi-connection workers
-	Workers []MultiConnectionWorkerInterface
-	// WorkersMu protects the workers slice
-	WorkersMu sync.RWMutex
+	// Workers is a slice of multi-connection workers (managed by workerManager)
+	workers []MultiConnectionWorkerInterface
 	// ConnectionMap maps connection keys to worker indices
 	ConnectionMap sync.Map
 	// Context for the worker pool
@@ -41,10 +58,12 @@ type MultiWorkerPool struct {
 	MaxWorkersPerPeer int
 	// Channel to signal worker pool shutdown
 	StopChan chan struct{}
-	// Whether the worker pool is running
-	Running bool
+	// Whether the worker pool is running (0 = not running, 1 = running)
+	running int32
 	// Resilience service
 	ResilienceService *resilience.ResilienceService
+	// Channel for worker operations
+	opChan chan workerOp
 	// Metrics
 	Metrics struct {
 		WorkersCreated int64
@@ -77,10 +96,10 @@ func NewMultiWorkerPool(
 		resilienceService = resilience.NewResilienceService(nil)
 	}
 
-	return &MultiWorkerPool{
+	pool := &MultiWorkerPool{
 		PeerID:                peerID,
 		StreamManager:         streamManager,
-		Workers:               make([]MultiConnectionWorkerInterface, 0),
+		workers:               make([]MultiConnectionWorkerInterface, 0),
 		Ctx:                   ctx,
 		Cancel:                cancel,
 		WorkerIdleTimeout:     config.WorkerIdleTimeout,
@@ -88,18 +107,26 @@ func NewMultiWorkerPool(
 		WorkerBufferSize:      config.WorkerBufferSize,
 		MaxWorkersPerPeer:     config.MaxWorkersPerPeer,
 		StopChan:              make(chan struct{}),
-		Running:               false,
 		ResilienceService:     resilienceService,
+		opChan:                make(chan workerOp, 100), // Buffer for operations
 	}
+
+	// Initialize atomic values
+	atomic.StoreInt32(&pool.running, 0) // Not running initially
+
+	return pool
 }
 
-// Start starts the worker pool and its cleanup routine
+// Start starts the worker pool and its management routines
 func (p *MultiWorkerPool) Start() {
-	if p.Running {
+	if atomic.LoadInt32(&p.running) == 1 {
 		return
 	}
 
-	p.Running = true
+	atomic.StoreInt32(&p.running, 1)
+
+	// Start the worker manager routine
+	go p.workerManager()
 
 	// Start the cleanup routine
 	go p.cleanupInactiveWorkers()
@@ -107,26 +134,79 @@ func (p *MultiWorkerPool) Start() {
 	multiPoolLog.WithField("peer_id", p.PeerID.String()).Info("Multi-worker pool started")
 }
 
+// workerManager handles worker operations through the operation channel
+func (p *MultiWorkerPool) workerManager() {
+	logger := multiPoolLog.WithField("peer_id", p.PeerID.String())
+	logger.Debug("Worker manager started")
+
+	for {
+		select {
+		case <-p.StopChan:
+			logger.Debug("Worker manager stopping")
+			return
+		case op := <-p.opChan:
+			switch op.opType {
+			case "get_worker":
+				worker, idx, err := p.getOrCreateWorkerInternal(op.ctx, op.connKey, op.destIP)
+				op.resultChan <- workerOpResult{worker: worker, index: idx, err: err}
+			case "dispatch":
+				worker, _, err := p.getOrCreateWorkerInternal(op.ctx, op.connKey, op.destIP)
+				if err != nil {
+					atomic.AddInt64(&p.Metrics.Errors, 1)
+					op.resultChan <- workerOpResult{err: err}
+					continue
+				}
+
+				// Try to add the packet to the worker's queue
+				if !worker.EnqueuePacket(op.packet, op.connKey) {
+					atomic.AddInt64(&p.Metrics.PacketsDropped, 1)
+					op.resultChan <- workerOpResult{err: types.ErrWorkerQueueFull}
+					continue
+				}
+
+				// Update metrics
+				atomic.AddInt64(&p.Metrics.PacketsHandled, 1)
+				op.resultChan <- workerOpResult{err: nil}
+			case "get_count":
+				op.resultChan <- workerOpResult{count: len(p.workers)}
+			case "get_metrics":
+				metrics := p.getMetricsInternal()
+				op.resultChan <- workerOpResult{metrics: metrics}
+			case "cleanup":
+				p.cleanupWorkersInternal(op.ctx)
+				op.resultChan <- workerOpResult{}
+			case "stop_all":
+				// Stop all workers
+				for _, worker := range p.workers {
+					worker.Stop()
+				}
+				p.workers = make([]MultiConnectionWorkerInterface, 0)
+				op.resultChan <- workerOpResult{}
+			}
+		}
+	}
+}
+
 // Stop stops the worker pool and all its workers
 func (p *MultiWorkerPool) Stop() {
-	if !p.Running {
+	if atomic.LoadInt32(&p.running) == 0 {
 		return
 	}
 
 	// Signal the cleanup routine to stop
 	close(p.StopChan)
-	p.Running = false
+	atomic.StoreInt32(&p.running, 0)
 
 	// Cancel the context to stop all workers
 	p.Cancel()
 
-	// Stop all workers
-	p.WorkersMu.Lock()
-	for _, worker := range p.Workers {
-		worker.Stop()
+	// Stop all workers through the worker manager
+	resultChan := make(chan workerOpResult, 1)
+	p.opChan <- workerOp{
+		opType:     "stop_all",
+		resultChan: resultChan,
 	}
-	p.Workers = make([]MultiConnectionWorkerInterface, 0)
-	p.WorkersMu.Unlock()
+	<-resultChan // Wait for the operation to complete
 
 	// Clear the connection map
 	p.ConnectionMap = sync.Map{}
@@ -140,52 +220,59 @@ func (p *MultiWorkerPool) getOrCreateWorker(
 	connKey types.ConnectionKey,
 	destIP string,
 ) (MultiConnectionWorkerInterface, error) {
+	// Use the worker manager to get or create a worker
+	resultChan := make(chan workerOpResult, 1)
+	p.opChan <- workerOp{
+		opType:     "get_worker",
+		connKey:    connKey,
+		destIP:     destIP,
+		ctx:        ctx,
+		resultChan: resultChan,
+	}
+
+	// Wait for the result
+	result := <-resultChan
+	if result.err != nil {
+		return nil, result.err
+	}
+
+	// Assign the connection key to this worker
+	p.ConnectionMap.Store(connKey, result.index)
+
+	return result.worker, nil
+}
+
+// getOrCreateWorkerInternal is the internal implementation of getOrCreateWorker
+// It's called by the worker manager routine
+func (p *MultiWorkerPool) getOrCreateWorkerInternal(
+	ctx context.Context,
+	connKey types.ConnectionKey,
+	destIP string,
+) (MultiConnectionWorkerInterface, int64, error) {
 	// Check if we already have a worker assigned to this connection key
 	if workerIdx, ok := p.ConnectionMap.Load(connKey); ok {
-		p.WorkersMu.RLock()
-		if int(workerIdx.(int64)) < len(p.Workers) {
-			worker := p.Workers[workerIdx.(int64)]
-			p.WorkersMu.RUnlock()
+		if int(workerIdx.(int64)) < len(p.workers) {
+			worker := p.workers[workerIdx.(int64)]
 			if worker.IsRunning() {
-				return worker, nil
+				return worker, workerIdx.(int64), nil
 			}
-		} else {
-			p.WorkersMu.RUnlock()
 		}
 		// Worker doesn't exist or isn't running, remove the mapping
 		p.ConnectionMap.Delete(connKey)
 	}
 
-	// Find the least loaded worker or create a new one
-	worker, workerIdx, err := p.findOrCreateLeastLoadedWorker(ctx, destIP)
-	if err != nil {
-		return nil, err
-	}
-
-	// Assign the connection key to this worker
-	p.ConnectionMap.Store(connKey, workerIdx)
-
-	return worker, nil
-}
-
-// findOrCreateLeastLoadedWorker finds the least loaded worker or creates a new one
-func (p *MultiWorkerPool) findOrCreateLeastLoadedWorker(
-	ctx context.Context,
-	destIP string,
-) (MultiConnectionWorkerInterface, int64, error) {
-	p.WorkersMu.RLock()
-	workerCount := len(p.Workers)
-
 	// If we have workers, find the least loaded one
-	if workerCount > 0 {
+	if len(p.workers) > 0 {
 		leastConnections := int(^uint(0) >> 1) // Max int
 		leastLoadedIdx := 0
+		foundRunningWorker := false
 
-		for i, worker := range p.Workers {
+		for i, worker := range p.workers {
 			if !worker.IsRunning() {
 				continue
 			}
 
+			foundRunningWorker = true
 			connections := worker.GetConnectionCount()
 			if connections < leastConnections {
 				leastConnections = connections
@@ -193,39 +280,17 @@ func (p *MultiWorkerPool) findOrCreateLeastLoadedWorker(
 			}
 		}
 
-		// If we found a running worker and it's not at capacity, use it
-		if p.Workers[leastLoadedIdx].IsRunning() {
-			worker := p.Workers[leastLoadedIdx]
-			p.WorkersMu.RUnlock()
+		// If we found a running worker, use it
+		if foundRunningWorker {
+			worker := p.workers[leastLoadedIdx]
 			return worker, int64(leastLoadedIdx), nil
-		}
-	}
-	p.WorkersMu.RUnlock()
-
-	// No suitable worker found, create a new one if we haven't reached the limit
-	p.WorkersMu.Lock()
-	defer p.WorkersMu.Unlock()
-
-	// Check again in case another goroutine created a worker while we were waiting for the lock
-	if len(p.Workers) > 0 {
-		for i, worker := range p.Workers {
-			if worker.IsRunning() {
-				return worker, int64(i), nil
-			}
 		}
 	}
 
 	// Check if we've reached the maximum number of workers
-	if len(p.Workers) >= p.MaxWorkersPerPeer {
-		// Find any worker that's running, even if it's heavily loaded
-		for i, worker := range p.Workers {
-			if worker.IsRunning() {
-				return worker, int64(i), nil
-			}
-		}
-
+	if len(p.workers) >= p.MaxWorkersPerPeer {
 		// If we get here, all workers are stopped, so we'll replace the first one
-		if len(p.Workers) > 0 {
+		if len(p.workers) > 0 {
 			workerIdx := 0
 			// Create a new worker to replace the stopped one
 			workerCtx, workerCancel := context.WithCancel(ctx)
@@ -245,7 +310,7 @@ func (p *MultiWorkerPool) findOrCreateLeastLoadedWorker(
 			worker.Start()
 
 			// Replace the worker
-			p.Workers[workerIdx] = worker
+			p.workers[workerIdx] = worker
 
 			// Update metrics
 			atomic.AddInt64(&p.Metrics.WorkersCreated, 1)
@@ -257,7 +322,7 @@ func (p *MultiWorkerPool) findOrCreateLeastLoadedWorker(
 	}
 
 	// Create a new worker
-	workerIdx := len(p.Workers)
+	workerIdx := len(p.workers)
 	workerCtx, workerCancel := context.WithCancel(ctx)
 	workerID := fmt.Sprintf("%s-worker-%d", p.PeerID.String()[:8], workerIdx)
 	worker := NewMultiConnectionWorker(
@@ -275,7 +340,7 @@ func (p *MultiWorkerPool) findOrCreateLeastLoadedWorker(
 	worker.Start()
 
 	// Add the worker to the pool
-	p.Workers = append(p.Workers, worker)
+	p.workers = append(p.workers, worker)
 
 	// Update metrics
 	atomic.AddInt64(&p.Metrics.WorkersCreated, 1)
@@ -290,22 +355,20 @@ func (p *MultiWorkerPool) DispatchPacket(
 	destIP string,
 	packet *types.QueuedPacket,
 ) error {
-	// Get or create a worker for this connection key
-	worker, err := p.getOrCreateWorker(ctx, connKey, destIP)
-	if err != nil {
-		atomic.AddInt64(&p.Metrics.Errors, 1)
-		return err
+	// Use the worker manager to dispatch the packet
+	resultChan := make(chan workerOpResult, 1)
+	p.opChan <- workerOp{
+		opType:     "dispatch",
+		connKey:    connKey,
+		destIP:     destIP,
+		ctx:        ctx,
+		packet:     packet,
+		resultChan: resultChan,
 	}
 
-	// Try to add the packet to the worker's queue
-	if !worker.EnqueuePacket(packet, connKey) {
-		atomic.AddInt64(&p.Metrics.PacketsDropped, 1)
-		return types.ErrWorkerQueueFull
-	}
-
-	// Update metrics
-	atomic.AddInt64(&p.Metrics.PacketsHandled, 1)
-	return nil
+	// Wait for the result
+	result := <-resultChan
+	return result.err
 }
 
 // cleanupInactiveWorkers periodically checks for and removes inactive workers
@@ -318,54 +381,100 @@ func (p *MultiWorkerPool) cleanupInactiveWorkers() {
 		case <-p.StopChan:
 			return
 		case <-ticker.C:
-			idleTimeout := time.Duration(p.WorkerIdleTimeout) * time.Second
-			now := time.Now()
-
-			p.WorkersMu.Lock()
-			// Check each worker
-			for i := 0; i < len(p.Workers); i++ {
-				if i >= len(p.Workers) {
-					break
-				}
-
-				worker := p.Workers[i]
-				lastActivity := worker.GetLastActivity()
-
-				// If the worker has been idle for too long, stop it
-				if now.Sub(lastActivity) > idleTimeout {
-					worker.Stop()
-
-					// Remove the worker from the slice
-					p.Workers = append(p.Workers[:i], p.Workers[i+1:]...)
-					i-- // Adjust index since we removed an element
-
-					atomic.AddInt64(&p.Metrics.WorkersRemoved, 1)
-				}
+			// Use the worker manager to clean up inactive workers
+			resultChan := make(chan workerOpResult, 1)
+			p.opChan <- workerOp{
+				opType:     "cleanup",
+				ctx:        p.Ctx,
+				resultChan: resultChan,
 			}
-			p.WorkersMu.Unlock()
-
-			// Clean up connection map entries for non-existent workers
-			p.ConnectionMap.Range(func(key, value interface{}) bool {
-				workerIdx := value.(int64)
-
-				p.WorkersMu.RLock()
-				validIdx := int(workerIdx) < len(p.Workers)
-				p.WorkersMu.RUnlock()
-
-				if !validIdx {
-					p.ConnectionMap.Delete(key)
-				}
-				return true
-			})
+			<-resultChan // Wait for the operation to complete
 		}
 	}
 }
 
+// cleanupWorkersInternal is the internal implementation of cleanupInactiveWorkers
+// It's called by the worker manager routine
+func (p *MultiWorkerPool) cleanupWorkersInternal(_ context.Context) {
+	idleTimeout := time.Duration(p.WorkerIdleTimeout) * time.Second
+	now := time.Now()
+
+	// Find workers to remove
+	var workersToRemove []int
+	var activeWorkers []MultiConnectionWorkerInterface
+
+	// Identify workers to remove
+	for i, worker := range p.workers {
+		lastActivity := worker.GetLastActivity()
+
+		// If the worker has been idle for too long, mark it for removal
+		if now.Sub(lastActivity) > idleTimeout {
+			workersToRemove = append(workersToRemove, i)
+		} else {
+			activeWorkers = append(activeWorkers, worker)
+		}
+	}
+
+	// Stop workers that need to be removed
+	for _, idx := range workersToRemove {
+		p.workers[idx].Stop()
+		atomic.AddInt64(&p.Metrics.WorkersRemoved, 1)
+	}
+
+	// If we have workers to remove, update the workers slice
+	if len(workersToRemove) > 0 {
+		p.workers = activeWorkers
+	}
+
+	// Clean up connection map entries for non-existent workers
+	p.ConnectionMap.Range(func(key, value interface{}) bool {
+		workerIdx := value.(int64)
+		validIdx := int(workerIdx) < len(p.workers)
+
+		if !validIdx {
+			p.ConnectionMap.Delete(key)
+		}
+		return true
+	})
+}
+
+// getMetricsInternal is the internal implementation of GetMetrics
+// It's called by the worker manager routine
+func (p *MultiWorkerPool) getMetricsInternal() map[string]int64 {
+	metrics := map[string]int64{
+		"workers_created":  atomic.LoadInt64(&p.Metrics.WorkersCreated),
+		"workers_removed":  atomic.LoadInt64(&p.Metrics.WorkersRemoved),
+		"packets_handled":  atomic.LoadInt64(&p.Metrics.PacketsHandled),
+		"packets_dropped":  atomic.LoadInt64(&p.Metrics.PacketsDropped),
+		"errors":           atomic.LoadInt64(&p.Metrics.Errors),
+		"active_workers":   int64(len(p.workers)),
+		"connection_count": int64(p.GetConnectionCount()),
+	}
+
+	// Add worker-specific metrics
+	for i, worker := range p.workers {
+		workerMetrics := worker.GetMetrics()
+		metrics[fmt.Sprintf("worker_%d_packets", i)] = workerMetrics.PacketCount
+		metrics[fmt.Sprintf("worker_%d_errors", i)] = workerMetrics.ErrorCount
+		metrics[fmt.Sprintf("worker_%d_bytes", i)] = workerMetrics.BytesSent
+		metrics[fmt.Sprintf("worker_%d_connections", i)] = int64(worker.GetConnectionCount())
+	}
+
+	return metrics
+}
+
 // GetWorkerCount returns the number of active workers
 func (p *MultiWorkerPool) GetWorkerCount() int {
-	p.WorkersMu.RLock()
-	defer p.WorkersMu.RUnlock()
-	return len(p.Workers)
+	// Use the worker manager to get the worker count
+	resultChan := make(chan workerOpResult, 1)
+	p.opChan <- workerOp{
+		opType:     "get_count",
+		resultChan: resultChan,
+	}
+
+	// Wait for the result
+	result := <-resultChan
+	return result.count
 }
 
 // GetConnectionCount returns the total number of connections across all workers
@@ -380,28 +489,16 @@ func (p *MultiWorkerPool) GetConnectionCount() int {
 
 // GetMetrics returns the worker pool's metrics
 func (p *MultiWorkerPool) GetMetrics() map[string]int64 {
-	metrics := map[string]int64{
-		"workers_created":  atomic.LoadInt64(&p.Metrics.WorkersCreated),
-		"workers_removed":  atomic.LoadInt64(&p.Metrics.WorkersRemoved),
-		"packets_handled":  atomic.LoadInt64(&p.Metrics.PacketsHandled),
-		"packets_dropped":  atomic.LoadInt64(&p.Metrics.PacketsDropped),
-		"errors":           atomic.LoadInt64(&p.Metrics.Errors),
-		"active_workers":   int64(p.GetWorkerCount()),
-		"connection_count": int64(p.GetConnectionCount()),
+	// Use the worker manager to get the metrics
+	resultChan := make(chan workerOpResult, 1)
+	p.opChan <- workerOp{
+		opType:     "get_metrics",
+		resultChan: resultChan,
 	}
 
-	// Add worker-specific metrics
-	p.WorkersMu.RLock()
-	for i, worker := range p.Workers {
-		workerMetrics := worker.GetMetrics()
-		metrics[fmt.Sprintf("worker_%d_packets", i)] = workerMetrics.PacketCount
-		metrics[fmt.Sprintf("worker_%d_errors", i)] = workerMetrics.ErrorCount
-		metrics[fmt.Sprintf("worker_%d_bytes", i)] = workerMetrics.BytesSent
-		metrics[fmt.Sprintf("worker_%d_connections", i)] = int64(worker.GetConnectionCount())
-	}
-	p.WorkersMu.RUnlock()
-
-	return metrics
+	// Wait for the result
+	result := <-resultChan
+	return result.metrics
 }
 
 // Close implements io.Closer

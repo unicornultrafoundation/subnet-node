@@ -44,20 +44,16 @@ type MultiConnectionWorker struct {
 	Ctx context.Context
 	// Cancel is the cancel function for the worker context
 	Cancel context.CancelFunc
-	// Mu is the mutex for protecting worker state
-	Mu sync.RWMutex
-	// Running indicates whether the worker is running
-	Running bool
+	// Running indicates whether the worker is running (0 = not running, 1 = running)
+	running int32
 	// ResilienceService provides resilience patterns
 	ResilienceService *resilience.ResilienceService
 	// Metrics for this worker
 	Metrics types.WorkerMetrics
-	// ConnectionsMu protects the connections map
-	ConnectionsMu sync.RWMutex
-	// Connections maps connection keys to their state
-	Connections map[types.ConnectionKey]*ConnectionState
-	// LastActivity is the timestamp of the last activity
-	LastActivity time.Time
+	// Connections maps connection keys to their state (using sync.Map for concurrent access)
+	connections sync.Map
+	// LastActivity is the timestamp of the last activity (Unix nano time)
+	lastActivity int64
 }
 
 // NewMultiConnectionWorker creates a new worker that handles multiple connection keys
@@ -76,7 +72,7 @@ func NewMultiConnectionWorker(
 		resilienceService = resilience.NewResilienceService(nil)
 	}
 
-	return &MultiConnectionWorker{
+	worker := &MultiConnectionWorker{
 		WorkerID:          workerID,
 		DestIP:            destIP,
 		PeerID:            peerID,
@@ -84,11 +80,14 @@ func NewMultiConnectionWorker(
 		PacketChan:        make(chan *types.QueuedPacket, bufferSize),
 		Ctx:               ctx,
 		Cancel:            cancel,
-		Running:           true,
 		ResilienceService: resilienceService,
-		Connections:       make(map[types.ConnectionKey]*ConnectionState),
-		LastActivity:      time.Now(),
 	}
+
+	// Initialize atomic values
+	atomic.StoreInt32(&worker.running, 1)
+	atomic.StoreInt64(&worker.lastActivity, time.Now().UnixNano())
+
+	return worker
 }
 
 // Start begins the worker's packet processing loop
@@ -98,23 +97,24 @@ func (w *MultiConnectionWorker) Start() {
 
 // Stop terminates the worker's processing loop
 func (w *MultiConnectionWorker) Stop() {
+	atomic.StoreInt32(&w.running, 0)
 	w.Cancel()
 }
 
 // EnqueuePacket adds a packet to the worker's queue
 func (w *MultiConnectionWorker) EnqueuePacket(packet *types.QueuedPacket, connKey types.ConnectionKey) bool {
 	// Update the connection state or create a new one
-	w.ConnectionsMu.Lock()
-	connState, exists := w.Connections[connKey]
-	if !exists {
-		connState = &ConnectionState{
-			Key:          connKey,
-			LastActivity: time.Now(),
-		}
-		w.Connections[connKey] = connState
-	}
-	connState.LastActivity = time.Now()
-	w.ConnectionsMu.Unlock()
+	now := time.Now()
+
+	// Get existing connection state or create a new one
+	value, _ := w.connections.LoadOrStore(connKey, &ConnectionState{
+		Key:          connKey,
+		LastActivity: now,
+	})
+
+	// Update last activity time
+	connState := value.(*ConnectionState)
+	connState.LastActivity = now
 
 	// Try to enqueue the packet
 	select {
@@ -137,10 +137,7 @@ func (w *MultiConnectionWorker) run() {
 	logger.Debug("Multi-connection worker started")
 
 	defer func() {
-		w.Mu.Lock()
-		w.Running = false
-		w.Mu.Unlock()
-
+		atomic.StoreInt32(&w.running, 0)
 		logger.Debug("Multi-connection worker stopped")
 	}()
 
@@ -156,10 +153,8 @@ func (w *MultiConnectionWorker) run() {
 				return
 			}
 
-			w.Mu.Lock()
 			// Update last activity time
-			w.LastActivity = time.Now()
-			w.Mu.Unlock()
+			atomic.StoreInt64(&w.lastActivity, time.Now().UnixNano())
 
 			// Extract the connection key from the packet
 			connKey, err := w.extractConnectionKey(packet)
@@ -205,11 +200,10 @@ func (w *MultiConnectionWorker) run() {
 				atomic.AddInt64(&w.Metrics.ErrorCount, 1)
 
 				// Update connection-specific metrics
-				w.ConnectionsMu.Lock()
-				if connState, exists := w.Connections[connKey]; exists {
-					connState.ErrorCount++
+				if value, ok := w.connections.Load(connKey); ok {
+					connState := value.(*ConnectionState)
+					atomic.AddInt64(&connState.ErrorCount, 1)
 				}
-				w.ConnectionsMu.Unlock()
 			} else {
 				// Signal success on the done channel if provided
 				if packet.DoneCh != nil {
@@ -222,12 +216,11 @@ func (w *MultiConnectionWorker) run() {
 				atomic.AddInt64(&w.Metrics.BytesSent, int64(packetSize))
 
 				// Update connection-specific metrics
-				w.ConnectionsMu.Lock()
-				if connState, exists := w.Connections[connKey]; exists {
-					connState.PacketCount++
-					connState.BytesSent += int64(packetSize)
+				if value, ok := w.connections.Load(connKey); ok {
+					connState := value.(*ConnectionState)
+					atomic.AddInt64(&connState.PacketCount, 1)
+					atomic.AddInt64(&connState.BytesSent, int64(packetSize))
 				}
-				w.ConnectionsMu.Unlock()
 			}
 		}
 	}
@@ -279,23 +272,22 @@ func (w *MultiConnectionWorker) processPacket(packet *types.QueuedPacket, connKe
 
 // IsRunning returns whether the worker is running
 func (w *MultiConnectionWorker) IsRunning() bool {
-	w.Mu.RLock()
-	defer w.Mu.RUnlock()
-	return w.Running
+	return atomic.LoadInt32(&w.running) == 1
 }
 
 // GetLastActivity returns the timestamp of the last activity
 func (w *MultiConnectionWorker) GetLastActivity() time.Time {
-	w.Mu.RLock()
-	defer w.Mu.RUnlock()
-	return w.LastActivity
+	return time.Unix(0, atomic.LoadInt64(&w.lastActivity))
 }
 
 // GetConnectionCount returns the number of connections this worker is handling
 func (w *MultiConnectionWorker) GetConnectionCount() int {
-	w.ConnectionsMu.RLock()
-	defer w.ConnectionsMu.RUnlock()
-	return len(w.Connections)
+	count := 0
+	w.connections.Range(func(_, _ interface{}) bool {
+		count++
+		return true
+	})
+	return count
 }
 
 // GetMetrics returns the worker's metrics
@@ -309,17 +301,20 @@ func (w *MultiConnectionWorker) GetMetrics() types.WorkerMetrics {
 
 // GetConnectionMetrics returns metrics for all connections
 func (w *MultiConnectionWorker) GetConnectionMetrics() map[string]types.WorkerMetrics {
-	w.ConnectionsMu.RLock()
-	defer w.ConnectionsMu.RUnlock()
-
 	metrics := make(map[string]types.WorkerMetrics)
-	for connKey, connState := range w.Connections {
+
+	w.connections.Range(func(key, value interface{}) bool {
+		connKey := key.(types.ConnectionKey)
+		connState := value.(*ConnectionState)
+
 		metrics[string(connKey)] = types.WorkerMetrics{
-			PacketCount: connState.PacketCount,
-			ErrorCount:  connState.ErrorCount,
-			BytesSent:   connState.BytesSent,
+			PacketCount: atomic.LoadInt64(&connState.PacketCount),
+			ErrorCount:  atomic.LoadInt64(&connState.ErrorCount),
+			BytesSent:   atomic.LoadInt64(&connState.BytesSent),
 		}
-	}
+
+		return true
+	})
 
 	return metrics
 }
