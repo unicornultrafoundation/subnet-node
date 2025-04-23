@@ -11,64 +11,64 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/dispatch/types"
 )
 
-// MockStreamPool is a mock implementation of the StreamPool
-type MockStreamPool struct {
+// MockStreamPoolV2 is a mock implementation of the StreamPoolInterfaceV2
+type MockStreamPoolV2 struct {
 	mock.Mock
 }
 
-func (m *MockStreamPool) GetStreamChannel(ctx context.Context, peerID peer.ID) (*StreamChannel, error) {
+func (m *MockStreamPoolV2) GetStreamChannel(ctx context.Context, peerID peer.ID) (*StreamChannelV2, error) {
 	args := m.Called(ctx, peerID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*StreamChannel), args.Error(1)
+	return args.Get(0).(*StreamChannelV2), args.Error(1)
 }
 
-func (m *MockStreamPool) ReleaseStreamChannel(peerID peer.ID, streamChannel *StreamChannel, healthy bool) {
+func (m *MockStreamPoolV2) ReleaseStreamChannel(peerID peer.ID, streamChannel *StreamChannelV2, healthy bool) {
 	m.Called(peerID, streamChannel, healthy)
 }
 
-func (m *MockStreamPool) Start() {
+func (m *MockStreamPoolV2) Start() {
 	m.Called()
 }
 
-func (m *MockStreamPool) Stop() {
+func (m *MockStreamPoolV2) Stop() {
 	m.Called()
 }
 
-func (m *MockStreamPool) GetStreamMetrics() map[string]map[string]int64 {
+func (m *MockStreamPoolV2) GetStreamMetrics() map[string]map[string]int64 {
 	args := m.Called()
 	return args.Get(0).(map[string]map[string]int64)
 }
 
-func (m *MockStreamPool) GetStreamCount(peerID peer.ID) int {
+func (m *MockStreamPoolV2) GetStreamCount(peerID peer.ID) int {
 	args := m.Called(peerID)
 	return args.Int(0)
 }
 
-func (m *MockStreamPool) GetTotalStreamCount() int {
+func (m *MockStreamPoolV2) GetTotalStreamCount() int {
 	args := m.Called()
 	return args.Int(0)
 }
 
-func (m *MockStreamPool) Close() error {
+func (m *MockStreamPoolV2) Close() error {
 	args := m.Called()
 	return args.Error(0)
 }
 
-func (m *MockStreamPool) GetPacketBufferSize() int {
+func (m *MockStreamPoolV2) GetPacketBufferSize() int {
 	args := m.Called()
 	return args.Int(0)
 }
 
-func TestStreamManager_GetOrCreateStreamForConnection(t *testing.T) {
+func TestStreamManagerV2_GetOrCreateStreamForConnection(t *testing.T) {
 	// Create mocks
-	mockStreamPool := new(MockStreamPool)
+	mockStreamPool := new(MockStreamPoolV2)
 	mockStream := new(MockStream)
 
 	// Create a stream channel
 	streamCtx, streamCancel := context.WithCancel(context.Background())
-	streamChannel := &StreamChannel{
+	streamChannel := &StreamChannelV2{
 		Stream:       mockStream,
 		PacketChan:   make(chan *types.QueuedPacket, 10),
 		lastActivity: time.Now().UnixNano(),
@@ -92,7 +92,7 @@ func TestStreamManager_GetOrCreateStreamForConnection(t *testing.T) {
 	mockStream.On("Close").Return(nil)
 
 	// Create stream manager
-	streamManager := NewStreamManager(mockStreamPool)
+	streamManager := NewStreamManagerV2(mockStreamPool)
 
 	// Start the stream manager
 	streamManager.Start()
@@ -121,14 +121,14 @@ func TestStreamManager_GetOrCreateStreamForConnection(t *testing.T) {
 	assert.Equal(t, 1, streamManager.GetConnectionCount())
 }
 
-func TestStreamManager_SendPacket(t *testing.T) {
+func TestStreamManagerV2_SendPacket(t *testing.T) {
 	// Create mocks
-	mockStreamPool := new(MockStreamPool)
+	mockStreamPool := new(MockStreamPoolV2)
 	mockStream := new(MockStream)
 
 	// Create a stream channel
 	streamCtx, streamCancel := context.WithCancel(context.Background())
-	streamChannel := &StreamChannel{
+	streamChannel := &StreamChannelV2{
 		Stream:       mockStream,
 		PacketChan:   make(chan *types.QueuedPacket, 10),
 		lastActivity: time.Now().UnixNano(),
@@ -163,7 +163,7 @@ func TestStreamManager_SendPacket(t *testing.T) {
 	mockStream.On("Close").Return(nil)
 
 	// Create stream manager
-	streamManager := NewStreamManager(mockStreamPool)
+	streamManager := NewStreamManagerV2(mockStreamPool)
 
 	// Start the stream manager
 	streamManager.Start()
@@ -195,14 +195,14 @@ func TestStreamManager_SendPacket(t *testing.T) {
 	assert.Equal(t, int64(1), metrics["packets_processed"])
 }
 
-func TestStreamManager_ReleaseConnection(t *testing.T) {
+func TestStreamManagerV2_ReleaseConnection(t *testing.T) {
 	// Create mocks
-	mockStreamPool := new(MockStreamPool)
+	mockStreamPool := new(MockStreamPoolV2)
 	mockStream := new(MockStream)
 
 	// Create a stream channel
 	streamCtx, streamCancel := context.WithCancel(context.Background())
-	streamChannel := &StreamChannel{
+	streamChannel := &StreamChannelV2{
 		Stream:       mockStream,
 		PacketChan:   make(chan *types.QueuedPacket, 10),
 		lastActivity: time.Now().UnixNano(),
@@ -226,7 +226,7 @@ func TestStreamManager_ReleaseConnection(t *testing.T) {
 	mockStream.On("Close").Return(nil)
 
 	// Create stream manager
-	streamManager := NewStreamManager(mockStreamPool)
+	streamManager := NewStreamManagerV2(mockStreamPool)
 
 	// Start the stream manager
 	streamManager.Start()
