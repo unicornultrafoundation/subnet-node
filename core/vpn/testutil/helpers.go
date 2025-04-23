@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/api"
-	"github.com/unicornultrafoundation/subnet-node/core/vpn/packet"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/resilience"
 )
 
@@ -38,10 +37,10 @@ func SetupTestDispatcher(
 	discoveryService *MockDiscoveryService,
 	streamService api.StreamService,
 	poolService api.StreamPoolService,
-) *packet.Dispatcher {
+) *DispatcherAdapter {
 	resilienceService := resilience.NewResilienceService(nil)
 
-	return packet.NewDispatcher(
+	return NewDispatcher(
 		discoveryService,
 		streamService,
 		poolService,
@@ -118,7 +117,7 @@ func SetupMockStreamService(t *testing.T, config *MockServiceConfig, mockStream 
 }
 
 // VerifyPacketDelivery verifies that a packet was delivered successfully
-func VerifyPacketDelivery(t *testing.T, dispatcher *packet.Dispatcher, syncKey, destIP string, packet []byte) {
+func VerifyPacketDelivery(t *testing.T, dispatcher *DispatcherAdapter, syncKey, destIP string, packet []byte) {
 	ctx, cancel := TestContext(t)
 	defer cancel()
 
@@ -144,7 +143,7 @@ func VerifyPacketDelivery(t *testing.T, dispatcher *packet.Dispatcher, syncKey, 
 }
 
 // VerifyWorkerMetrics verifies that worker metrics are as expected
-func VerifyWorkerMetrics(t *testing.T, dispatcher *packet.Dispatcher, expectedWorkers int) {
+func VerifyWorkerMetrics(t *testing.T, dispatcher *DispatcherAdapter, expectedWorkers int) {
 	// Get worker metrics
 	metrics := dispatcher.GetWorkerMetrics()
 

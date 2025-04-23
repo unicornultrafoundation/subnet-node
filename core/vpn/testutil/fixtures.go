@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"github.com/unicornultrafoundation/subnet-node/core/vpn/packet"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/resilience"
 )
 
@@ -21,7 +20,7 @@ type TestFixture struct {
 	MockPoolService      *MockPoolService
 	MockDiscoveryService *MockDiscoveryService
 	ResilienceService    *resilience.ResilienceService
-	Dispatcher           *packet.Dispatcher
+	Dispatcher           *DispatcherAdapter
 
 	// Test data
 	PeerIDs []peer.ID

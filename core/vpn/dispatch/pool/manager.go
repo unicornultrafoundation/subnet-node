@@ -163,7 +163,33 @@ func (m *StreamManager) SendPacket(
 		return err
 	}
 
-	// Send the packet to the stream's channel
+	// Add a recovery mechanism to prevent panics from closed channels
+	defer func() {
+		if r := recover(); r != nil {
+			managerLog.WithFields(logrus.Fields{
+				"conn_key": connKey,
+				"peer_id":  peerID,
+				"panic":    r,
+			}).Error("Recovered from panic in SendPacket")
+
+			// Mark the stream as unhealthy
+			if streamChannel != nil {
+				atomic.StoreInt32(&streamChannel.healthy, 0)
+				m.ReleaseConnection(connKey, false)
+			}
+
+			// Update error metrics
+			atomic.AddInt64(&m.metrics.Errors, 1)
+		}
+	}()
+
+	// Check if the stream is still healthy before sending
+	if atomic.LoadInt32(&streamChannel.healthy) != 1 {
+		atomic.AddInt64(&m.metrics.Errors, 1)
+		return types.ErrNoHealthyStreams
+	}
+
+	// Send the packet to the stream's channel with additional safety checks
 	select {
 	case streamChannel.PacketChan <- packet:
 		// Packet sent successfully
@@ -173,6 +199,13 @@ func (m *StreamManager) SendPacket(
 		// Context cancelled
 		atomic.AddInt64(&m.metrics.Errors, 1)
 		return types.ErrContextCancelled
+	case <-streamChannel.ctx.Done():
+		// Stream context cancelled, stream is shutting down
+		atomic.AddInt64(&m.metrics.Errors, 1)
+		// Mark the stream as unhealthy
+		atomic.StoreInt32(&streamChannel.healthy, 0)
+		m.ReleaseConnection(connKey, false)
+		return types.ErrStreamChannelClosed
 	default:
 		// Channel full, packet dropped
 		atomic.AddInt64(&m.metrics.Errors, 1)

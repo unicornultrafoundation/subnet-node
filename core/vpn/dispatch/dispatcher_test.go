@@ -150,7 +150,7 @@ func TestDispatcher_DispatchPacket_Error(t *testing.T) {
 	mockPeerDiscovery.On("GetPeerID", mock.Anything, "192.168.1.2").Return("", errors.New("peer not found"))
 
 	// Create dispatcher config
-	config := &DispatcherConfig{
+	config := &Config{
 		MaxStreamsPerPeer:     10,
 		StreamIdleTimeout:     5 * time.Minute,
 		StreamCleanupInterval: 1 * time.Minute,

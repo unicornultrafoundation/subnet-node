@@ -10,6 +10,11 @@ import (
 // in the format sourcePort:destinationIP:destinationPort
 type ConnectionKey string
 
+// String returns the string representation of the connection key
+func (k ConnectionKey) String() string {
+	return string(k)
+}
+
 // PacketInfo contains extracted source and destination IPs and ports from a network packet.
 // This structure is used for packet analysis and routing decisions.
 type PacketInfo struct {
