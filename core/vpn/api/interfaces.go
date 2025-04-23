@@ -56,6 +56,13 @@ type StreamService interface {
 	CreateNewVPNStream(ctx context.Context, peerID peer.ID) (VPNStream, error)
 }
 
+// ConfigurableStreamService extends StreamService with configuration methods
+type ConfigurableStreamService interface {
+	StreamService
+	// GetPacketBufferSize returns the packet buffer size for streams
+	GetPacketBufferSize() int
+}
+
 // StreamPoolService handles stream pooling
 type StreamPoolService interface {
 	// GetStream gets a stream from the pool or creates a new one
