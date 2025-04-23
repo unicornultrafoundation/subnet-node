@@ -165,13 +165,13 @@ func (w *MultiConnectionWorker) run() {
 			connKey, err := w.extractConnectionKey(packet)
 			if err != nil {
 				logger.WithError(err).Warn("Failed to extract connection key from packet")
-				
+
 				// Signal the error on the done channel if provided
 				if packet.DoneCh != nil {
 					packet.DoneCh <- err
 					close(packet.DoneCh)
 				}
-				
+
 				// Update error metrics
 				atomic.AddInt64(&w.Metrics.ErrorCount, 1)
 				continue
@@ -194,16 +194,16 @@ func (w *MultiConnectionWorker) run() {
 			err = w.processPacket(packet, connKey)
 			if err != nil {
 				packetLogger.WithError(err).Warn("Failed to process packet")
-				
+
 				// Signal the error on the done channel if provided
 				if packet.DoneCh != nil {
 					packet.DoneCh <- err
 					close(packet.DoneCh)
 				}
-				
+
 				// Update error metrics
 				atomic.AddInt64(&w.Metrics.ErrorCount, 1)
-				
+
 				// Update connection-specific metrics
 				w.ConnectionsMu.Lock()
 				if connState, exists := w.Connections[connKey]; exists {
@@ -216,11 +216,11 @@ func (w *MultiConnectionWorker) run() {
 					packet.DoneCh <- nil
 					close(packet.DoneCh)
 				}
-				
+
 				// Update packet metrics
 				atomic.AddInt64(&w.Metrics.PacketCount, 1)
 				atomic.AddInt64(&w.Metrics.BytesSent, int64(packetSize))
-				
+
 				// Update connection-specific metrics
 				w.ConnectionsMu.Lock()
 				if connState, exists := w.Connections[connKey]; exists {
@@ -241,13 +241,22 @@ func (w *MultiConnectionWorker) extractConnectionKey(packet *types.QueuedPacket)
 		return "", err
 	}
 
-	// Check if we have source and destination ports
-	if packetInfo.SrcPort == nil || packetInfo.DstPort == nil {
-		return "", types.ErrInvalidPacketLength
+	// Create a connection key based on available information
+	// If ports are missing, use default values
+	srcPort := 0
+	dstPort := 0
+
+	// Use actual ports if available
+	if packetInfo.SrcPort != nil {
+		srcPort = *packetInfo.SrcPort
+	}
+
+	if packetInfo.DstPort != nil {
+		dstPort = *packetInfo.DstPort
 	}
 
 	// Format the connection key
-	return types.FormatConnectionKey(*packetInfo.SrcPort, packet.DestIP, *packetInfo.DstPort), nil
+	return types.FormatConnectionKey(srcPort, packet.DestIP, dstPort), nil
 }
 
 // processPacket processes a packet with resilience patterns
