@@ -33,19 +33,10 @@ type ConfigService interface {
 	GetStreamIdleTimeout() time.Duration
 	GetCleanupInterval() time.Duration
 
-	// Buffer pool settings
-	GetBufferPoolCapacity() int
-
 	// Circuit breaker settings
 	GetCircuitBreakerFailureThreshold() int
 	GetCircuitBreakerResetTimeout() time.Duration
 	GetCircuitBreakerSuccessThreshold() int
-
-	// Stream health settings
-	GetHealthCheckInterval() time.Duration
-	GetHealthCheckTimeout() time.Duration
-	GetMaxConsecutiveFailures() int
-	GetWarmInterval() time.Duration
 
 	// Retry settings
 	GetRetryMaxAttempts() int
@@ -196,15 +187,6 @@ func (c *ConfigServiceImpl) GetCleanupInterval() time.Duration {
 	return c.vpnConfig.CleanupInterval
 }
 
-// Buffer pool settings
-
-// GetBufferPoolCapacity returns the buffer pool capacity
-func (c *ConfigServiceImpl) GetBufferPoolCapacity() int {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.vpnConfig.BufferPoolCapacity
-}
-
 // Circuit breaker settings
 
 // GetCircuitBreakerFailureThreshold returns the circuit breaker failure threshold
@@ -226,36 +208,6 @@ func (c *ConfigServiceImpl) GetCircuitBreakerSuccessThreshold() int {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.vpnConfig.CircuitBreakerSuccessThreshold
-}
-
-// Stream health settings
-
-// GetHealthCheckInterval returns the health check interval
-func (c *ConfigServiceImpl) GetHealthCheckInterval() time.Duration {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.vpnConfig.HealthCheckInterval
-}
-
-// GetHealthCheckTimeout returns the health check timeout
-func (c *ConfigServiceImpl) GetHealthCheckTimeout() time.Duration {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.vpnConfig.HealthCheckTimeout
-}
-
-// GetMaxConsecutiveFailures returns the maximum consecutive failures
-func (c *ConfigServiceImpl) GetMaxConsecutiveFailures() int {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.vpnConfig.MaxConsecutiveFailures
-}
-
-// GetWarmInterval returns the warm interval
-func (c *ConfigServiceImpl) GetWarmInterval() time.Duration {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.vpnConfig.WarmInterval
 }
 
 // Retry settings
