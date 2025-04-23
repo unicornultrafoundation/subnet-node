@@ -239,6 +239,15 @@ func (p *MultiWorkerPool) getOrCreateWorker(
 	// Assign the connection key to this worker
 	p.ConnectionMap.Store(connKey, result.index)
 
+	// Log worker assignment for debugging
+	multiPoolLog.WithFields(logrus.Fields{
+		"peer_id":       p.PeerID.String(),
+		"conn_key":      string(connKey),
+		"worker_id":     result.worker.(*MultiConnectionWorker).WorkerID,
+		"worker_idx":    result.index,
+		"total_workers": len(p.workers),
+	}).Debug("Assigned connection to worker")
+
 	return result.worker, nil
 }
 
@@ -263,29 +272,90 @@ func (p *MultiWorkerPool) getOrCreateWorkerInternal(
 
 	// If we have workers, find the least loaded one
 	if len(p.workers) > 0 {
-		leastConnections := int(^uint(0) >> 1) // Max int
+		leastLoadScore := float64(^uint(0) >> 1) // Max float64
 		leastLoadedIdx := 0
 		foundRunningWorker := false
+		runningWorkers := 0
+
+		// Define thresholds for creating new workers
+		const (
+			// Buffer utilization threshold (percentage)
+			bufferUtilThreshold = 70
+			// Connection count threshold
+			connCountThreshold = 10
+		)
+
+		// Track if any worker is approaching resource limits
+		anyWorkerNearingCapacity := false
 
 		for i, worker := range p.workers {
 			if !worker.IsRunning() {
 				continue
 			}
 
+			runningWorkers++
 			foundRunningWorker = true
+
+			// Get worker metrics
 			connections := worker.GetConnectionCount()
-			if connections < leastConnections {
-				leastConnections = connections
+			bufferUtil := worker.GetBufferUtilization()
+			metrics := worker.GetMetrics()
+
+			// Calculate a load score that considers multiple factors
+			// This is a weighted score where higher values mean more load
+			loadScore := (float64(connections) * 1.0) + (float64(bufferUtil) * 0.5)
+
+			// Check if this worker is nearing capacity
+			if bufferUtil > bufferUtilThreshold ||
+				connections > connCountThreshold {
+				anyWorkerNearingCapacity = true
+
+				// Log detailed metrics when a worker is nearing capacity
+				multiPoolLog.WithFields(logrus.Fields{
+					"worker_id":          i,
+					"peer_id":            p.PeerID.String(),
+					"buffer_utilization": bufferUtil,
+					"connections":        connections,
+					"packets_handled":    metrics.PacketCount,
+				}).Info("Worker nearing capacity")
+			}
+
+			// Find the worker with the lowest load score
+			if loadScore < leastLoadScore {
+				leastLoadScore = loadScore
 				leastLoadedIdx = i
 			}
 		}
 
-		// If we found a running worker, use it
+		// If we found a running worker, decide whether to use it or create a new one
 		if foundRunningWorker {
+			// Create a new worker if:
+			// 1. We have capacity for more workers (haven't reached MaxWorkersPerPeer)
+			// 2. At least one worker is nearing capacity
+			// 3. MaxWorkersPerPeer is greater than 1 (we're allowed to have multiple workers)
+			if runningWorkers < p.MaxWorkersPerPeer &&
+				p.MaxWorkersPerPeer > 1 &&
+				anyWorkerNearingCapacity &&
+				len(p.workers) < p.MaxWorkersPerPeer {
+				// Log the decision to create a new worker
+				multiPoolLog.WithFields(logrus.Fields{
+					"peer_id":         p.PeerID.String(),
+					"running_workers": runningWorkers,
+					"max_workers":     p.MaxWorkersPerPeer,
+				}).Info("Creating new worker due to resource utilization")
+
+				// Create a new worker instead of reusing an existing one
+				goto createNewWorker
+			}
+
+			// Use the least loaded worker
 			worker := p.workers[leastLoadedIdx]
 			return worker, int64(leastLoadedIdx), nil
 		}
 	}
+
+	// Label for creating a new worker
+createNewWorker:
 
 	// Check if we've reached the maximum number of workers
 	if len(p.workers) >= p.MaxWorkersPerPeer {
@@ -314,6 +384,15 @@ func (p *MultiWorkerPool) getOrCreateWorkerInternal(
 
 			// Update metrics
 			atomic.AddInt64(&p.Metrics.WorkersCreated, 1)
+
+			// Log worker replacement
+			multiPoolLog.WithFields(logrus.Fields{
+				"peer_id":       p.PeerID.String(),
+				"worker_id":     workerID,
+				"worker_idx":    workerIdx,
+				"total_workers": len(p.workers),
+				"max_workers":   p.MaxWorkersPerPeer,
+			}).Info("Replaced worker")
 
 			return worker, int64(workerIdx), nil
 		}
@@ -345,6 +424,15 @@ func (p *MultiWorkerPool) getOrCreateWorkerInternal(
 	// Update metrics
 	atomic.AddInt64(&p.Metrics.WorkersCreated, 1)
 
+	// Log worker creation
+	multiPoolLog.WithFields(logrus.Fields{
+		"peer_id":       p.PeerID.String(),
+		"worker_id":     workerID,
+		"worker_idx":    workerIdx,
+		"total_workers": len(p.workers),
+		"max_workers":   p.MaxWorkersPerPeer,
+	}).Info("Created new worker")
+
 	return worker, int64(workerIdx), nil
 }
 
@@ -373,14 +461,18 @@ func (p *MultiWorkerPool) DispatchPacket(
 
 // cleanupInactiveWorkers periodically checks for and removes inactive workers
 func (p *MultiWorkerPool) cleanupInactiveWorkers() {
-	ticker := time.NewTicker(p.WorkerCleanupInterval)
-	defer ticker.Stop()
+	cleanupTicker := time.NewTicker(p.WorkerCleanupInterval)
+	defer cleanupTicker.Stop()
+
+	// Create a separate ticker for status logging (every minute)
+	statusTicker := time.NewTicker(1 * time.Minute)
+	defer statusTicker.Stop()
 
 	for {
 		select {
 		case <-p.StopChan:
 			return
-		case <-ticker.C:
+		case <-cleanupTicker.C:
 			// Use the worker manager to clean up inactive workers
 			resultChan := make(chan workerOpResult, 1)
 			p.opChan <- workerOp{
@@ -389,6 +481,16 @@ func (p *MultiWorkerPool) cleanupInactiveWorkers() {
 				resultChan: resultChan,
 			}
 			<-resultChan // Wait for the operation to complete
+		case <-statusTicker.C:
+			// Log the current status of the worker pool
+			metrics := p.GetMetrics()
+			multiPoolLog.WithFields(logrus.Fields{
+				"peer_id":         p.PeerID.String(),
+				"active_workers":  metrics["active_workers"],
+				"max_workers":     p.MaxWorkersPerPeer,
+				"connections":     metrics["connection_count"],
+				"packets_handled": metrics["packets_handled"],
+			}).Info("Worker pool status")
 		}
 	}
 }
