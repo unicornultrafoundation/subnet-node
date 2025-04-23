@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -28,9 +29,12 @@ type MultiWorkerPoolV2 struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	// Worker management
+	// Worker management - using multi-connection workers
 	workersMu sync.RWMutex
-	workers   map[types.ConnectionKey]*PacketWorkerV2
+	workers   []*MultiConnectionWorker
+
+	// Connection to worker mapping
+	connectionMap sync.Map // map[types.ConnectionKey]int - maps connection keys to worker indices
 
 	// Lifecycle management
 	stopChan chan struct{}
@@ -69,7 +73,7 @@ func NewMultiWorkerPoolV2(
 		config:            config,
 		ctx:               ctx,
 		cancel:            cancel,
-		workers:           make(map[types.ConnectionKey]*PacketWorkerV2),
+		workers:           make([]*MultiConnectionWorker, 0),
 		stopChan:          make(chan struct{}),
 		running:           false,
 		resilienceService: resilienceService,
@@ -108,8 +112,11 @@ func (p *MultiWorkerPoolV2) Stop() {
 	for _, worker := range p.workers {
 		worker.Stop()
 	}
-	p.workers = make(map[types.ConnectionKey]*PacketWorkerV2)
+	p.workers = make([]*MultiConnectionWorker, 0)
 	p.workersMu.Unlock()
+
+	// Clear the connection map
+	p.connectionMap = sync.Map{}
 
 	multiWorkerPoolV2Log.WithField("peer_id", p.peerID.String()).Info("Multi-worker pool V2 stopped")
 }
@@ -125,66 +132,131 @@ func (p *MultiWorkerPoolV2) DispatchPacket(
 		return types.ErrWorkerPoolStopped
 	}
 
+	// Set the destination IP in the packet
+	packet.DestIP = destIP
+
 	// Get or create a worker for this connection
-	worker, err := p.getOrCreateWorker(connKey)
+	workerIndex, err := p.getOrCreateWorkerForConnection(connKey)
 	if err != nil {
 		atomic.AddInt64(&p.metrics.PacketsDropped, 1)
 		atomic.AddInt64(&p.metrics.Errors, 1)
 		return err
 	}
 
+	// Get the worker
+	p.workersMu.RLock()
+	if workerIndex >= len(p.workers) {
+		p.workersMu.RUnlock()
+		return fmt.Errorf("invalid worker index: %d", workerIndex)
+	}
+	worker := p.workers[workerIndex]
+	p.workersMu.RUnlock()
+
 	// Dispatch the packet to the worker
-	err = worker.ProcessPacket(ctx, destIP, packet)
-	if err != nil {
+	if !worker.EnqueuePacket(packet, connKey) {
 		atomic.AddInt64(&p.metrics.PacketsDropped, 1)
 		atomic.AddInt64(&p.metrics.Errors, 1)
-		return err
+		return types.ErrWorkerChannelFull
 	}
 
 	atomic.AddInt64(&p.metrics.PacketsProcessed, 1)
 	return nil
 }
 
-// getOrCreateWorker gets or creates a worker for a connection
-func (p *MultiWorkerPoolV2) getOrCreateWorker(connKey types.ConnectionKey) (*PacketWorkerV2, error) {
+// getOrCreateWorkerForConnection gets or creates a worker for a connection
+func (p *MultiWorkerPoolV2) getOrCreateWorkerForConnection(connKey types.ConnectionKey) (int, error) {
 	// Check if we already have a worker for this connection
-	p.workersMu.RLock()
-	worker, exists := p.workers[connKey]
-	p.workersMu.RUnlock()
-
-	if exists {
-		return worker, nil
+	if workerIndexVal, exists := p.connectionMap.Load(connKey); exists {
+		return workerIndexVal.(int), nil
 	}
 
-	// Check if we've reached the maximum number of workers
-	p.workersMu.RLock()
-	workerCount := len(p.workers)
-	p.workersMu.RUnlock()
+	// Find the least loaded worker or create a new one
+	return p.assignConnectionToWorker(connKey)
+}
 
-	if p.config.MaxWorkersPerPeer > 0 && workerCount >= p.config.MaxWorkersPerPeer {
-		return nil, types.ErrMaxWorkersReached
-	}
-
-	// Create a new worker
+// assignConnectionToWorker assigns a connection to the least loaded worker or creates a new one
+func (p *MultiWorkerPoolV2) assignConnectionToWorker(connKey types.ConnectionKey) (int, error) {
 	p.workersMu.Lock()
 	defer p.workersMu.Unlock()
 
-	// Check again in case another goroutine created it while we were waiting for the lock
-	if worker, exists = p.workers[connKey]; exists {
-		return worker, nil
+	// If we have no workers, create one
+	if len(p.workers) == 0 {
+		return p.createNewWorker(connKey)
 	}
 
-	// Create worker configuration
-	workerConfig := &PacketWorkerConfig{
-		BufferSize:  p.config.WorkerBufferSize,
-		IdleTimeout: time.Duration(p.config.WorkerIdleTimeout) * time.Second,
+	// If we have reached the maximum number of workers, find the least loaded one
+	if p.config.MaxWorkersPerPeer > 0 && len(p.workers) >= p.config.MaxWorkersPerPeer {
+		return p.findLeastLoadedWorker(connKey)
 	}
+
+	// Check if any existing worker has capacity
+	for i, worker := range p.workers {
+		// Check if the worker has capacity (less than 75% buffer utilization)
+		if worker.GetBufferUtilization() < 75 {
+			// Assign the connection to this worker
+			p.connectionMap.Store(connKey, i)
+			return i, nil
+		}
+	}
+
+	// All workers are loaded, create a new one
+	return p.createNewWorker(connKey)
+}
+
+// findLeastLoadedWorker finds the worker with the least load
+func (p *MultiWorkerPoolV2) findLeastLoadedWorker(connKey types.ConnectionKey) (int, error) {
+	// Find the worker with the lowest buffer utilization
+	leastLoadedIndex := 0
+	leastLoad := 100 // Start with maximum load
+
+	for i, worker := range p.workers {
+		load := worker.GetBufferUtilization()
+		if load < leastLoad {
+			leastLoad = load
+			leastLoadedIndex = i
+		}
+	}
+
+	// Assign the connection to the least loaded worker
+	p.connectionMap.Store(connKey, leastLoadedIndex)
+	return leastLoadedIndex, nil
+}
+
+// createNewWorker creates a new worker
+func (p *MultiWorkerPoolV2) createNewWorker(connKey types.ConnectionKey) (int, error) {
+	// Check if we've reached the maximum number of workers
+	if p.config.MaxWorkersPerPeer > 0 && len(p.workers) >= p.config.MaxWorkersPerPeer {
+		return 0, types.ErrMaxWorkersReached
+	}
+
+	// Create a new worker context
+	workerCtx, workerCancel := context.WithCancel(p.ctx)
 
 	// Create a new worker
-	worker = NewPacketWorkerV2(p.ctx, p.peerID, connKey, p.streamManager, workerConfig, p.resilienceService)
+	workerID := fmt.Sprintf("worker-%s-%d", p.peerID.String()[:8], len(p.workers))
 
-	// Store the worker
-	p.workers[connKey] = worker
+	// Create a StreamManagerAdapter to adapt StreamManagerV2 to StreamManagerInterface
+	streamManagerAdapter := &StreamManagerV2Adapter{
+		streamManager: p.streamManager,
+	}
+
+	worker := NewMultiConnectionWorker(
+		workerID,
+		"", // destIP is set per packet
+		p.peerID,
+		streamManagerAdapter,
+		workerCtx,
+		workerCancel,
+		p.config.WorkerBufferSize,
+		p.resilienceService,
+	)
+
+	// Add the worker to the pool
+	workerIndex := len(p.workers)
+	p.workers = append(p.workers, worker)
+
+	// Assign the connection to this worker
+	p.connectionMap.Store(connKey, workerIndex)
 
 	// Start the worker
 	worker.Start()
@@ -194,11 +266,51 @@ func (p *MultiWorkerPoolV2) getOrCreateWorker(connKey types.ConnectionKey) (*Pac
 
 	multiWorkerPoolV2Log.WithFields(logrus.Fields{
 		"peer_id":     p.peerID.String(),
-		"conn_key":    connKey.String(),
-		"worker_mode": "connection",
-	}).Debug("Created new packet worker V2")
+		"worker_id":   workerID,
+		"worker_mode": "multi-connection",
+	}).Debug("Created new multi-connection worker")
 
-	return worker, nil
+	return workerIndex, nil
+}
+
+// StreamManagerV2Adapter adapts StreamManagerV2 to StreamManagerInterface
+type StreamManagerV2Adapter struct {
+	streamManager *pool.StreamManagerV2
+}
+
+// SendPacket implements StreamManagerInterface
+func (a *StreamManagerV2Adapter) SendPacket(
+	ctx context.Context,
+	connKey types.ConnectionKey,
+	peerID peer.ID,
+	packet *types.QueuedPacket,
+) error {
+	return a.streamManager.SendPacket(ctx, connKey, peerID, packet)
+}
+
+// Start implements StreamManagerInterface
+func (a *StreamManagerV2Adapter) Start() {
+	a.streamManager.Start()
+}
+
+// Stop implements StreamManagerInterface
+func (a *StreamManagerV2Adapter) Stop() {
+	a.streamManager.Stop()
+}
+
+// GetMetrics implements StreamManagerInterface
+func (a *StreamManagerV2Adapter) GetMetrics() map[string]int64 {
+	return a.streamManager.GetMetrics()
+}
+
+// GetConnectionCount implements StreamManagerInterface
+func (a *StreamManagerV2Adapter) GetConnectionCount() int {
+	return a.streamManager.GetConnectionCount()
+}
+
+// Close implements StreamManagerInterface
+func (a *StreamManagerV2Adapter) Close() error {
+	return a.streamManager.Close()
 }
 
 // cleanupIdleWorkers periodically removes idle workers
@@ -223,23 +335,61 @@ func (p *MultiWorkerPoolV2) removeIdleWorkers() {
 	p.workersMu.Lock()
 	defer p.workersMu.Unlock()
 
-	for connKey, worker := range p.workers {
-		if worker.IsIdle(now) {
+	// We need at least one worker, so don't remove the last one
+	if len(p.workers) <= 1 {
+		return
+	}
+
+	// Check each worker
+	for i := len(p.workers) - 1; i >= 1; i-- { // Start from the end, keep at least one worker
+		worker := p.workers[i]
+
+		// Check if the worker is idle and has no connections
+		lastActivity := worker.GetLastActivity()
+		if now.Sub(lastActivity) > time.Duration(p.config.WorkerIdleTimeout)*time.Second &&
+			worker.GetConnectionCount() == 0 {
 			// Stop the worker
 			worker.Stop()
 
-			// Remove the worker from the map
-			delete(p.workers, connKey)
+			// Remove the worker from the slice
+			p.workers = append(p.workers[:i], p.workers[i+1:]...)
 
 			// Update metrics
 			atomic.AddInt64(&p.metrics.WorkersRemoved, 1)
 
 			multiWorkerPoolV2Log.WithFields(logrus.Fields{
-				"peer_id":  p.peerID.String(),
-				"conn_key": connKey.String(),
-			}).Debug("Removed idle packet worker V2")
+				"peer_id":   p.peerID.String(),
+				"worker_id": worker.WorkerID,
+			}).Debug("Removed idle multi-connection worker")
 		}
 	}
+
+	// Rebuild the connection map if needed
+	p.rebuildConnectionMap()
+}
+
+// rebuildConnectionMap rebuilds the connection map after workers have been removed
+func (p *MultiWorkerPoolV2) rebuildConnectionMap() {
+	// Create a new connection map
+	newConnectionMap := sync.Map{}
+
+	// Iterate through the old connection map
+	p.connectionMap.Range(func(key, value interface{}) bool {
+		connKey := key.(types.ConnectionKey)
+		workerIndex := value.(int)
+
+		// If the worker index is out of bounds, reassign to worker 0
+		if workerIndex >= len(p.workers) {
+			newConnectionMap.Store(connKey, 0)
+		} else {
+			newConnectionMap.Store(connKey, workerIndex)
+		}
+
+		return true
+	})
+
+	// Replace the old connection map
+	p.connectionMap = newConnectionMap
 }
 
 // GetMetrics returns the worker pool's metrics
