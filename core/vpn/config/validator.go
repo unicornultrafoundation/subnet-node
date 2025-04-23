@@ -30,12 +30,6 @@ var (
 	ErrInvalidCircuitBreakerResetTimeout     = errors.New("invalid circuit breaker reset timeout (must be greater than 0)")
 	ErrInvalidCircuitBreakerSuccessThreshold = errors.New("invalid circuit breaker success threshold (must be greater than 0)")
 
-	// Stream health settings errors
-	ErrInvalidHealthCheckInterval    = errors.New("invalid health check interval (must be greater than 0)")
-	ErrInvalidHealthCheckTimeout     = errors.New("invalid health check timeout (must be greater than 0)")
-	ErrInvalidMaxConsecutiveFailures = errors.New("invalid max consecutive failures (must be greater than 0)")
-	ErrInvalidWarmInterval           = errors.New("invalid warm interval (must be greater than 0)")
-
 	// Retry settings errors
 	ErrInvalidRetryMaxAttempts     = errors.New("invalid retry max attempts (must be greater than 0)")
 	ErrInvalidRetryInitialInterval = errors.New("invalid retry initial interval (must be greater than 0)")
@@ -66,11 +60,6 @@ func (c *VPNConfig) Validate() error {
 
 	// Validate circuit breaker settings
 	if err := c.validateCircuitBreakerSettings(); err != nil {
-		return err
-	}
-
-	// Validate stream health settings
-	if err := c.validateStreamHealthSettings(); err != nil {
 		return err
 	}
 
@@ -171,31 +160,6 @@ func (c *VPNConfig) validateCircuitBreakerSettings() error {
 	// Validate circuit breaker success threshold
 	if c.CircuitBreakerSuccessThreshold <= 0 {
 		return ErrInvalidCircuitBreakerSuccessThreshold
-	}
-
-	return nil
-}
-
-// validateStreamHealthSettings validates the stream health settings
-func (c *VPNConfig) validateStreamHealthSettings() error {
-	// Validate health check interval
-	if c.HealthCheckInterval <= 0 {
-		return ErrInvalidHealthCheckInterval
-	}
-
-	// Validate health check timeout
-	if c.HealthCheckTimeout <= 0 {
-		return ErrInvalidHealthCheckTimeout
-	}
-
-	// Validate max consecutive failures
-	if c.MaxConsecutiveFailures <= 0 {
-		return ErrInvalidMaxConsecutiveFailures
-	}
-
-	// Validate warm interval
-	if c.WarmInterval <= 0 {
-		return ErrInvalidWarmInterval
 	}
 
 	return nil
