@@ -131,7 +131,7 @@ func (d *Dispatcher) Stop() {
 	d.workerPoolsMu.Lock()
 	for _, pool := range d.workerPools {
 		// Stop the worker pool
-		if p, ok := pool.(*worker.MultiWorkerPoolV2); ok {
+		if p, ok := pool.(*worker.MultiWorkerPool); ok {
 			p.Stop()
 		} else {
 			dispatcherLog.Warnf("Unknown worker pool type: %T", pool)
@@ -242,7 +242,7 @@ func (d *Dispatcher) dispatchPacketInternal(
 	}
 
 	// Dispatch the packet to the worker pool
-	if pool, ok := workerPool.(*worker.MultiWorkerPoolV2); ok {
+	if pool, ok := workerPool.(*worker.MultiWorkerPool); ok {
 		return pool.DispatchPacket(ctx, connKey, destIP, packet)
 	}
 	return fmt.Errorf("unknown worker pool type: %T", workerPool)
@@ -295,8 +295,8 @@ func (d *Dispatcher) getOrCreateWorkerPool(peerID peer.ID) (any, error) {
 		MaxWorkersPerPeer:     d.config.MaxWorkersPerPeer,
 	}
 
-	// Create a new multi-worker pool V2
-	multiWorkerPool := worker.NewMultiWorkerPoolV2(
+	// Create a new multi-worker pool
+	multiWorkerPool := worker.NewMultiWorkerPool(
 		peerID,
 		d.streamManager,
 		multiWorkerPoolConfig,
@@ -356,7 +356,7 @@ func (d *Dispatcher) GetWorkerMetrics() map[string]map[string]int64 {
 	defer d.workerPoolsMu.RUnlock()
 
 	for peerID, pool := range d.workerPools {
-		if p, ok := pool.(*worker.MultiWorkerPoolV2); ok {
+		if p, ok := pool.(*worker.MultiWorkerPool); ok {
 			metrics[peerID] = p.GetMetrics()
 		}
 	}
