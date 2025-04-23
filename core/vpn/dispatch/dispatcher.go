@@ -148,14 +148,11 @@ func (d *Dispatcher) Stop() {
 	// Stop all worker pools
 	d.workerPoolsMu.Lock()
 	for _, pool := range d.workerPools {
-		// Type switch to handle different worker pool types
-		switch p := pool.(type) {
-		case *worker.WorkerPool:
+		// Stop the worker pool
+		if p, ok := pool.(*worker.MultiWorkerPool); ok {
 			p.Stop()
-		case *worker.MultiWorkerPool:
-			p.Stop()
-		default:
-			dispatcherLog.Warnf("Unknown worker pool type: %T", p)
+		} else {
+			dispatcherLog.Warnf("Unknown worker pool type: %T", pool)
 		}
 	}
 	d.workerPools = make(map[string]interface{})
@@ -262,15 +259,11 @@ func (d *Dispatcher) dispatchPacketInternal(
 		return err
 	}
 
-	// Dispatch the packet to the worker pool based on its type
-	switch pool := workerPool.(type) {
-	case *worker.WorkerPool:
+	// Dispatch the packet to the worker pool
+	if pool, ok := workerPool.(*worker.MultiWorkerPool); ok {
 		return pool.DispatchPacket(ctx, connKey, destIP, packet)
-	case *worker.MultiWorkerPool:
-		return pool.DispatchPacket(ctx, connKey, destIP, packet)
-	default:
-		return fmt.Errorf("unknown worker pool type: %T", pool)
 	}
+	return fmt.Errorf("unknown worker pool type: %T", workerPool)
 }
 
 // getPeerIDForDestIP gets the peer ID for a destination IP

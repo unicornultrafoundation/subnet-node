@@ -3,6 +3,7 @@ package pool
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -186,9 +187,7 @@ func TestStreamPool_ReleaseStreamChannel(t *testing.T) {
 	streamPool.ReleaseStreamChannel(testPeerID, streamChannel, false)
 
 	// Verify stream channel is marked as unhealthy
-	streamChannel.mu.RLock()
-	healthy := streamChannel.Healthy
-	streamChannel.mu.RUnlock()
+	healthy := atomic.LoadInt32(&streamChannel.healthy) == 1
 	assert.False(t, healthy)
 
 	// Get another stream channel for the same peer

@@ -19,9 +19,8 @@ type StreamManager struct {
 	ctx        context.Context
 	cancel     context.CancelFunc
 
-	// Connection to stream mapping
-	connectionsMu sync.RWMutex
-	connections   map[types.ConnectionKey]*ConnectionState
+	// Connection to stream mapping using sync.Map for concurrent access
+	connections sync.Map // map[types.ConnectionKey]*ConnectionState
 
 	// Metrics
 	metrics struct {
@@ -49,10 +48,9 @@ func NewStreamManager(streamPool StreamPoolInterface) *StreamManager {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &StreamManager{
-		streamPool:  streamPool,
-		ctx:         ctx,
-		cancel:      cancel,
-		connections: make(map[types.ConnectionKey]*ConnectionState),
+		streamPool: streamPool,
+		ctx:        ctx,
+		cancel:     cancel,
 	}
 }
 
@@ -67,15 +65,16 @@ func (m *StreamManager) Stop() {
 	m.cancel()
 
 	// Release all connections
-	m.connectionsMu.Lock()
-	defer m.connectionsMu.Unlock()
+	m.connections.Range(func(key, value interface{}) bool {
+		connKey := key.(types.ConnectionKey)
+		conn := value.(*ConnectionState)
 
-	for key, conn := range m.connections {
 		if conn.StreamChannel != nil {
 			m.streamPool.ReleaseStreamChannel(conn.PeerID, conn.StreamChannel, true)
 		}
-		delete(m.connections, key)
-	}
+		m.connections.Delete(connKey)
+		return true
+	})
 }
 
 // GetOrCreateStreamForConnection gets or creates a stream for a connection
@@ -85,27 +84,24 @@ func (m *StreamManager) GetOrCreateStreamForConnection(
 	peerID peer.ID,
 ) (*StreamChannel, error) {
 	// Check if we already have a stream for this connection
-	m.connectionsMu.RLock()
-	conn, exists := m.connections[connKey]
-	m.connectionsMu.RUnlock()
+	value, exists := m.connections.Load(connKey)
 
-	if exists && conn.StreamChannel != nil {
-		// Check if the stream is still healthy
-		conn.StreamChannel.mu.RLock()
-		healthy := conn.StreamChannel.Healthy
-		conn.StreamChannel.mu.RUnlock()
-
-		if healthy {
-			return conn.StreamChannel, nil
-		}
-
-		// Stream is unhealthy, remove it
-		m.connectionsMu.Lock()
+	if exists {
+		conn := value.(*ConnectionState)
 		if conn.StreamChannel != nil {
-			m.streamPool.ReleaseStreamChannel(conn.PeerID, conn.StreamChannel, false)
-			conn.StreamChannel = nil
+			// Check if the stream is still healthy
+			healthy := atomic.LoadInt32(&conn.StreamChannel.healthy) == 1
+
+			if healthy {
+				return conn.StreamChannel, nil
+			}
+
+			// Stream is unhealthy, release it
+			if conn.StreamChannel != nil {
+				m.streamPool.ReleaseStreamChannel(conn.PeerID, conn.StreamChannel, false)
+				conn.StreamChannel = nil
+			}
 		}
-		m.connectionsMu.Unlock()
 	}
 
 	// Get a stream from the pool
@@ -115,20 +111,20 @@ func (m *StreamManager) GetOrCreateStreamForConnection(
 	}
 
 	// Create or update the connection state
-	m.connectionsMu.Lock()
-	defer m.connectionsMu.Unlock()
-
 	if !exists {
 		// Create a new connection state
-		m.connections[connKey] = &ConnectionState{
+		newConn := &ConnectionState{
 			Key:           connKey,
 			PeerID:        peerID,
 			StreamChannel: streamChannel,
 			LastActivity:  0, // Will be updated on first packet
 		}
+		m.connections.Store(connKey, newConn)
 	} else {
 		// Update the existing connection state
+		conn := value.(*ConnectionState)
 		conn.StreamChannel = streamChannel
+		m.connections.Store(connKey, conn)
 	}
 
 	// Update metrics
@@ -139,11 +135,13 @@ func (m *StreamManager) GetOrCreateStreamForConnection(
 
 // ReleaseConnection releases a connection and its associated stream
 func (m *StreamManager) ReleaseConnection(connKey types.ConnectionKey, healthy bool) {
-	m.connectionsMu.Lock()
-	defer m.connectionsMu.Unlock()
+	value, exists := m.connections.Load(connKey)
+	if !exists {
+		return
+	}
 
-	conn, exists := m.connections[connKey]
-	if !exists || conn.StreamChannel == nil {
+	conn := value.(*ConnectionState)
+	if conn.StreamChannel == nil {
 		return
 	}
 
@@ -153,7 +151,10 @@ func (m *StreamManager) ReleaseConnection(connKey types.ConnectionKey, healthy b
 
 	// Remove the connection if unhealthy
 	if !healthy {
-		delete(m.connections, connKey)
+		m.connections.Delete(connKey)
+	} else {
+		// Update the connection state
+		m.connections.Store(connKey, conn)
 	}
 
 	// Update metrics
@@ -203,9 +204,12 @@ func (m *StreamManager) GetMetrics() map[string]int64 {
 
 // GetConnectionCount returns the number of active connections
 func (m *StreamManager) GetConnectionCount() int {
-	m.connectionsMu.RLock()
-	defer m.connectionsMu.RUnlock()
-	return len(m.connections)
+	count := 0
+	m.connections.Range(func(_, _ interface{}) bool {
+		count++
+		return true
+	})
+	return count
 }
 
 // Close implements io.Closer
