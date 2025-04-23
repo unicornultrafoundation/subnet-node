@@ -2,6 +2,7 @@ package types
 
 import (
 	"context"
+	"fmt"
 	"net"
 )
 
@@ -60,7 +61,7 @@ type StreamMetrics struct {
 
 // FormatConnectionKey formats a connection key from source port, destination IP, and destination port
 func FormatConnectionKey(srcPort int, destIP string, destPort int) ConnectionKey {
-	return ConnectionKey(net.JoinHostPort(net.JoinHostPort(destIP, string(destPort)), string(srcPort)))
+	return ConnectionKey(fmt.Sprintf("%d:%s:%d", srcPort, destIP, destPort))
 }
 
 // ExtractPacketInfo extracts source and destination IPs and ports from a packet

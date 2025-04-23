@@ -66,8 +66,8 @@ func TestStreamManager_GetOrCreateStreamForConnection(t *testing.T) {
 	streamChannel := &StreamChannel{
 		Stream:       mockStream,
 		PacketChan:   make(chan *types.QueuedPacket, 10),
-		LastActivity: time.Now(),
-		Healthy:      true,
+		lastActivity: time.Now().UnixNano(),
+		healthy:      1, // 1 = healthy
 		ctx:          streamCtx,
 		cancel:       streamCancel,
 	}
@@ -125,8 +125,8 @@ func TestStreamManager_SendPacket(t *testing.T) {
 	streamChannel := &StreamChannel{
 		Stream:       mockStream,
 		PacketChan:   make(chan *types.QueuedPacket, 10),
-		LastActivity: time.Now(),
-		Healthy:      true,
+		lastActivity: time.Now().UnixNano(),
+		healthy:      1, // 1 = healthy
 		ctx:          streamCtx,
 		cancel:       streamCancel,
 	}
@@ -198,8 +198,8 @@ func TestStreamManager_ReleaseConnection(t *testing.T) {
 	streamChannel := &StreamChannel{
 		Stream:       mockStream,
 		PacketChan:   make(chan *types.QueuedPacket, 10),
-		LastActivity: time.Now(),
-		Healthy:      true,
+		lastActivity: time.Now().UnixNano(),
+		healthy:      1, // 1 = healthy
 		ctx:          streamCtx,
 		cancel:       streamCancel,
 	}

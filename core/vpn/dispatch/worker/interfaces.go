@@ -24,13 +24,6 @@ type WorkerInterface interface {
 	Close() error
 }
 
-// SingleConnectionWorker is the interface for workers that handle a single connection
-type SingleConnectionWorker interface {
-	WorkerInterface
-	// EnqueuePacket adds a packet to the worker's queue
-	EnqueuePacket(packet *types.QueuedPacket) bool
-}
-
 // MultiConnectionWorkerInterface is the interface for workers that handle multiple connections
 type MultiConnectionWorkerInterface interface {
 	WorkerInterface
