@@ -10,7 +10,7 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/mock"
-	"github.com/unicornultrafoundation/subnet-node/core/vpn/stream/types"
+	"github.com/unicornultrafoundation/subnet-node/core/vpn/api"
 )
 
 // MockStreamConfig contains configuration for mock streams
@@ -21,7 +21,7 @@ type MockStreamConfig struct {
 	FailureRate float64
 }
 
-// MockStream is a configurable mock implementation of types.VPNStream
+// MockStream is a configurable mock implementation of api.VPNStream
 type MockStream struct {
 	mock.Mock
 	Config MockStreamConfig
@@ -151,7 +151,7 @@ type MockServiceConfig struct {
 	PacketLoss  float64
 }
 
-// MockStreamService is a configurable mock implementation of types.Service
+// MockStreamService is a configurable mock implementation of api.StreamService
 type MockStreamService struct {
 	mock.Mock
 	Config MockServiceConfig
@@ -180,8 +180,8 @@ func NewMockStreamService(config *MockServiceConfig) *MockStreamService {
 	}
 }
 
-// CreateNewVPNStream implements the types.Service interface
-func (s *MockStreamService) CreateNewVPNStream(ctx context.Context, peerID peer.ID) (types.VPNStream, error) {
+// CreateNewVPNStream implements the api.StreamService interface
+func (s *MockStreamService) CreateNewVPNStream(ctx context.Context, peerID peer.ID) (api.VPNStream, error) {
 	// Simulate latency
 	if s.Config.Latency > 0 {
 		time.Sleep(s.Config.Latency)
@@ -201,7 +201,7 @@ func (s *MockStreamService) CreateNewVPNStream(ctx context.Context, peerID peer.
 
 	atomic.AddInt64(&s.Stats.StreamsCreated, 1)
 	args := s.Called(ctx, peerID)
-	return args.Get(0).(types.VPNStream), args.Error(1)
+	return args.Get(0).(api.VPNStream), args.Error(1)
 }
 
 // GetStats returns the service statistics
@@ -383,7 +383,7 @@ func (s *MockDiscoveryService) GetPeerIDByRegistry(ctx context.Context, destIP s
 	return s.GetPeerID(ctx, destIP)
 }
 
-// MockPoolService is a configurable mock implementation of types.PoolService
+// MockPoolService is a configurable mock implementation of api.StreamPoolService
 type MockPoolService struct {
 	mock.Mock
 	Config MockServiceConfig
@@ -404,8 +404,8 @@ func NewMockPoolService(config *MockServiceConfig) *MockPoolService {
 	}
 }
 
-// GetStream implements the types.PoolService interface
-func (s *MockPoolService) GetStream(ctx context.Context, peerID peer.ID) (types.VPNStream, error) {
+// GetStream implements the api.StreamPoolService interface
+func (s *MockPoolService) GetStream(ctx context.Context, peerID peer.ID) (api.VPNStream, error) {
 	// Simulate latency
 	if s.Config.Latency > 0 {
 		time.Sleep(s.Config.Latency)
@@ -425,11 +425,11 @@ func (s *MockPoolService) GetStream(ctx context.Context, peerID peer.ID) (types.
 
 	atomic.AddInt64(&s.Stats.StreamsAcquired, 1)
 	args := s.Called(ctx, peerID)
-	return args.Get(0).(types.VPNStream), args.Error(1)
+	return args.Get(0).(api.VPNStream), args.Error(1)
 }
 
-// ReleaseStream implements the types.PoolService interface
-func (s *MockPoolService) ReleaseStream(peerID peer.ID, stream types.VPNStream, healthy bool) {
+// ReleaseStream implements the api.StreamPoolService interface
+func (s *MockPoolService) ReleaseStream(peerID peer.ID, stream api.VPNStream, healthy bool) {
 	atomic.AddInt64(&s.Stats.StreamsReleased, 1)
 	s.Called(peerID, stream, healthy)
 }
@@ -449,15 +449,15 @@ type MockPoolManager struct {
 	MinStreamsPerPeer int
 }
 
-func (m *MockPoolManager) GetStream(ctx context.Context, peerID peer.ID) (types.VPNStream, error) {
+func (m *MockPoolManager) GetStream(ctx context.Context, peerID peer.ID) (api.VPNStream, error) {
 	args := m.Called(ctx, peerID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(types.VPNStream), args.Error(1)
+	return args.Get(0).(api.VPNStream), args.Error(1)
 }
 
-func (m *MockPoolManager) ReleaseStream(peerID peer.ID, s types.VPNStream, healthy bool) {
+func (m *MockPoolManager) ReleaseStream(peerID peer.ID, s api.VPNStream, healthy bool) {
 	m.Called(peerID, s, healthy)
 }
 

@@ -153,7 +153,6 @@ func TestNetworkPartition(t *testing.T) {
 		fixture.MockStreamService,
 		fixture.MockDiscoveryService,
 		fixture.Dispatcher,
-		fixture.StreamService,
 	)
 
 	// Create a test packet
@@ -262,7 +261,6 @@ func TestHighLatency(t *testing.T) {
 		fixture.MockStreamService,
 		fixture.MockDiscoveryService,
 		fixture.Dispatcher,
-		fixture.StreamService,
 	)
 
 	// Create a test packet

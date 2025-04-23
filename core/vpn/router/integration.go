@@ -1,11 +1,12 @@
 package router
 
 import (
+	"context"
 	"time"
 
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/api"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/packet"
-	"github.com/unicornultrafoundation/subnet-node/core/vpn/stream/pool"
 )
 
 // Integration provides methods to integrate the StreamRouter with the VPN service
@@ -32,14 +33,17 @@ func NewIntegration(cfg interface {
 
 // CreateDispatcherService creates a DispatcherService implementation using the StreamRouter
 func (i *Integration) CreateDispatcherService(
-	streamPool pool.PoolServiceExtension,
+	externalStreamCreator func(ctx context.Context, peerID peer.ID) (api.VPNStream, error),
 	peerDiscovery api.PeerDiscoveryService,
 ) packet.DispatcherService {
 	// Create the factory
 	factory := NewFactory(i.cfg)
 
+	// Create a StreamCreator function from the external stream creator
+	createStreamFn := StreamCreator(externalStreamCreator)
+
 	// Create the router adapter
-	return factory.CreateRouterAdapter(streamPool, peerDiscovery)
+	return factory.CreateRouterAdapter(createStreamFn, peerDiscovery)
 }
 
 // IsEnabled returns whether the StreamRouter is enabled

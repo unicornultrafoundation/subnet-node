@@ -10,7 +10,6 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/api"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/discovery"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/resilience"
-	streamTypes "github.com/unicornultrafoundation/subnet-node/core/vpn/stream/types"
 )
 
 var dispatcherLog = logrus.WithField("service", "vpn-packet")
@@ -29,9 +28,9 @@ type DispatcherService interface {
 type Dispatcher struct {
 	// Service references for accessing service methods
 	peerDiscovery api.PeerDiscoveryService
-	streamService streamTypes.Service
+	streamService api.StreamService
 	// Enhanced stream services
-	poolService streamTypes.PoolService
+	poolService api.StreamPoolService
 	// Context for the dispatcher
 	ctx context.Context
 	// Cancel function for the dispatcher context
@@ -57,8 +56,8 @@ type Dispatcher struct {
 // NewDispatcher creates a new packet dispatcher
 func NewDispatcher(
 	peerDiscovery api.PeerDiscoveryService,
-	streamService streamTypes.Service,
-	poolService streamTypes.PoolService,
+	streamService api.StreamService,
+	poolService api.StreamPoolService,
 	workerIdleTimeout int,
 	workerCleanupInterval time.Duration,
 	workerBufferSize int,
