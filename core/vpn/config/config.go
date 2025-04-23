@@ -22,11 +22,12 @@ type VPNConfig struct {
 	// Worker settings
 	WorkerIdleTimeout     int
 	WorkerBufferSize      int
-	MaxWorkers            int
+	MaxWorkersPerPeer     int
 	WorkerCleanupInterval time.Duration
 
 	// Stream pool settings
 	MinStreamsPerPeer int
+	MaxStreamsPerPeer int
 	StreamIdleTimeout time.Duration
 	CleanupInterval   time.Duration
 
@@ -50,7 +51,6 @@ type VPNConfig struct {
 	RetryMaxInterval     time.Duration
 
 	// Timeout settings
-	PeerConnectionTimeout       time.Duration
 	DHTSyncTimeout              time.Duration
 	TUNSetupTimeout             time.Duration
 	PeerConnectionCheckInterval time.Duration
@@ -79,15 +79,16 @@ func New(cfg *config.C) *VPNConfig {
 		UnallowedPorts: unallowedPorts,
 
 		// Worker settings
-		WorkerIdleTimeout:     cfg.GetInt("vpn.worker_idle_timeout", 300),                                 // 5 minutes default
-		WorkerBufferSize:      cfg.GetInt("vpn.worker_buffer_size", 100),                                  // Default buffer size
-		MaxWorkers:            cfg.GetInt("vpn.max_workers", 1000),                                        // Maximum number of workers
+		WorkerIdleTimeout:     cfg.GetInt("vpn.worker_idle_timeout", 60),                                  // 1 minute default
+		WorkerBufferSize:      cfg.GetInt("vpn.worker_buffer_size", 200),                                  // 200 packets buffer size
+		MaxWorkersPerPeer:     cfg.GetInt("vpn.max_workers_per_peer", 6),                                  // 6 workers per peer default
 		WorkerCleanupInterval: time.Duration(cfg.GetInt("vpn.worker_cleanup_interval", 60)) * time.Second, // 1 minute default
 
 		// Stream pool settings
-		MinStreamsPerPeer: cfg.GetInt("vpn.min_streams_per_peer", 2),                               // 2 streams per peer default
-		StreamIdleTimeout: time.Duration(cfg.GetInt("vpn.stream_idle_timeout", 300)) * time.Second, // 5 minutes default
-		CleanupInterval:   time.Duration(cfg.GetInt("vpn.cleanup_interval", 60)) * time.Second,     // 1 minute default
+		MinStreamsPerPeer: cfg.GetInt("vpn.min_streams_per_peer", 3),                              // 3 streams per peer default
+		MaxStreamsPerPeer: cfg.GetInt("vpn.max_streams_per_peer", 10),                             // 10 streams per peer default
+		StreamIdleTimeout: time.Duration(cfg.GetInt("vpn.stream_idle_timeout", 60)) * time.Second, // 1 minute default
+		CleanupInterval:   time.Duration(cfg.GetInt("vpn.cleanup_interval", 60)) * time.Second,    // 1 minute default
 
 		// Buffer pool settings
 		BufferPoolCapacity: cfg.GetInt("vpn.buffer_pool_capacity", 100), // 100 buffers default
@@ -103,13 +104,12 @@ func New(cfg *config.C) *VPNConfig {
 		MaxConsecutiveFailures: cfg.GetInt("vpn.max_consecutive_failures", 3),                            // 3 failures default
 		WarmInterval:           time.Duration(cfg.GetInt("vpn.warm_interval", 60)) * time.Second,         // 1 minute default
 
-		// Retry settings
+		// Retry settingsies
 		RetryMaxAttempts:     cfg.GetInt("vpn.retry_max_attempts", 5),
 		RetryInitialInterval: time.Duration(cfg.GetInt("vpn.retry_initial_interval", 1)) * time.Second,
 		RetryMaxInterval:     time.Duration(cfg.GetInt("vpn.retry_max_interval", 30)) * time.Second,
 
 		// Timeout settings
-		PeerConnectionTimeout:       time.Duration(cfg.GetInt("vpn.peer_connection_timeout", 30)) * time.Second,              // 30 seconds default
 		DHTSyncTimeout:              time.Duration(cfg.GetInt("vpn.dht_sync_timeout", 60)) * time.Second,                     // 60 seconds default
 		TUNSetupTimeout:             time.Duration(cfg.GetInt("vpn.tun_setup_timeout", 30)) * time.Second,                    // 30 seconds default
 		PeerConnectionCheckInterval: time.Duration(cfg.GetInt("vpn.peer_connection_check_interval", 100)) * time.Millisecond, // 100 milliseconds default
@@ -135,6 +135,11 @@ func (c *VPNConfig) GetWorkerCleanupInterval() time.Duration {
 // GetMinStreamsPerPeer returns the minimum number of streams per peer
 func (c *VPNConfig) GetMinStreamsPerPeer() int {
 	return c.MinStreamsPerPeer
+}
+
+// GetMaxStreamsPerPeer returns the maximum number of streams per peer
+func (c *VPNConfig) GetMaxStreamsPerPeer() int {
+	return c.MaxStreamsPerPeer
 }
 
 // GetStreamIdleTimeout returns the stream idle timeout
@@ -180,4 +185,9 @@ func (c *VPNConfig) GetMaxConsecutiveFailures() int {
 // GetWarmInterval returns the warm interval
 func (c *VPNConfig) GetWarmInterval() time.Duration {
 	return c.WarmInterval
+}
+
+// GetMaxWorkersPerPeer returns the maximum number of workers per peer
+func (c *VPNConfig) GetMaxWorkersPerPeer() int {
+	return c.MaxWorkersPerPeer
 }
