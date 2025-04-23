@@ -198,12 +198,8 @@ func (s *Service) Start(ctx context.Context) error {
 
 	log.Infoln("Starting VPN service...")
 
-	// Create a context with timeout for peer connection
-	connectCtx, cancel := context.WithTimeout(ctx, s.configService.GetPeerConnectionTimeout())
-	defer cancel()
-
 	// Wait until there are some peers connected or timeout
-	if err := s.waitUntilPeerConnected(connectCtx, s.peerHost); err != nil {
+	if err := s.waitUntilPeerConnected(ctx, s.peerHost); err != nil {
 		return fmt.Errorf("failed to connect to peers: %w", err)
 	}
 
