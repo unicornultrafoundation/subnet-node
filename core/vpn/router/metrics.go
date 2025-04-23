@@ -33,31 +33,47 @@ func NewRouterMetrics() *RouterMetrics {
 
 // recordPacket records a packet for metrics
 func (m *RouterMetrics) recordPacket(peerID peer.ID, streamIndex int) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	// Use a read lock to check if maps are initialized
+	m.mu.RLock()
+	_, peerExists := m.currentPacketCounts[peerID]
+	m.mu.RUnlock()
 
-	// Initialize maps if needed
-	if m.currentPacketCounts[peerID] == nil {
-		m.currentPacketCounts[peerID] = make(map[int]int64)
+	// Initialize maps if needed (with write lock)
+	if !peerExists {
+		m.mu.Lock()
+		// Check again in case another goroutine initialized it
+		if m.currentPacketCounts[peerID] == nil {
+			m.currentPacketCounts[peerID] = make(map[int]int64)
+		}
+		m.mu.Unlock()
 	}
 
-	// Increment packet count
+	// Use a shorter lock scope for incrementing the counter
+	m.mu.Lock()
 	m.currentPacketCounts[peerID][streamIndex]++
+	m.mu.Unlock()
 }
 
 // updateThroughput calculates throughput based on packet counts
 func (m *RouterMetrics) updateThroughput() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
+	// Take a snapshot of the current packet counts with minimal lock time
 	now := time.Now()
-	elapsed := now.Sub(m.lastUpdateTime).Seconds()
 
+	// First, check if it's too soon to update
+	m.mu.RLock()
+	elapsed := now.Sub(m.lastUpdateTime).Seconds()
 	if elapsed < 0.1 {
 		// Too soon to update
+		m.mu.RUnlock()
 		return
 	}
+	m.mu.RUnlock()
 
+	// Create a snapshot of the current packet counts
+	currentSnapshot := make(map[peer.ID]map[int]int64)
+	lastSnapshot := make(map[peer.ID]map[int]int64)
+
+	m.mu.Lock()
 	// Initialize maps if needed
 	if m.streamThroughput == nil {
 		m.streamThroughput = make(map[peer.ID]map[int]float64)
@@ -66,51 +82,102 @@ func (m *RouterMetrics) updateThroughput() {
 		m.peerThroughput = make(map[peer.ID]float64)
 	}
 
-	// Calculate throughput for each peer and stream
+	// Copy the current and last packet counts
 	for peerID, streamCounts := range m.currentPacketCounts {
-		// Initialize peer maps if needed
-		if m.streamThroughput[peerID] == nil {
-			m.streamThroughput[peerID] = make(map[int]float64)
+		currentSnapshot[peerID] = make(map[int]int64)
+		for streamIndex, count := range streamCounts {
+			currentSnapshot[peerID][streamIndex] = count
 		}
+
+		// Initialize peer maps if needed
 		if m.lastPacketCounts[peerID] == nil {
 			m.lastPacketCounts[peerID] = make(map[int]int64)
 		}
+		if m.streamThroughput[peerID] == nil {
+			m.streamThroughput[peerID] = make(map[int]float64)
+		}
+
+		lastSnapshot[peerID] = make(map[int]int64)
+		for streamIndex, count := range m.lastPacketCounts[peerID] {
+			lastSnapshot[peerID][streamIndex] = count
+		}
+	}
+
+	// Store the current counts as the last counts for next time
+	for peerID, streamCounts := range m.currentPacketCounts {
+		if m.lastPacketCounts[peerID] == nil {
+			m.lastPacketCounts[peerID] = make(map[int]int64)
+		}
+		for streamIndex, count := range streamCounts {
+			m.lastPacketCounts[peerID][streamIndex] = count
+		}
+	}
+
+	// Update last update time
+	lastUpdateTime := m.lastUpdateTime
+	m.lastUpdateTime = now
+	m.mu.Unlock()
+
+	// Calculate throughput for each peer and stream outside the lock
+	newThroughputs := make(map[peer.ID]map[int]float64)
+	newPeerThroughputs := make(map[peer.ID]float64)
+	newHistory := make(map[peer.ID][]float64)
+
+	// Use the actual elapsed time for calculations
+	elapsed = now.Sub(lastUpdateTime).Seconds()
+
+	for peerID, streamCounts := range currentSnapshot {
+		newThroughputs[peerID] = make(map[int]float64)
 
 		// Calculate total throughput for this peer
 		var totalPackets int64
 
 		for streamIndex, count := range streamCounts {
 			// Get previous count
-			lastCount := m.lastPacketCounts[peerID][streamIndex]
+			lastCount := int64(0)
+			if lastSnapshot[peerID] != nil {
+				lastCount = lastSnapshot[peerID][streamIndex]
+			}
 
 			// Calculate packets per second for this stream
 			packetsDelta := count - lastCount
 			throughput := float64(packetsDelta) / elapsed
 
 			// Store throughput
-			m.streamThroughput[peerID][streamIndex] = throughput
+			newThroughputs[peerID][streamIndex] = throughput
 
 			// Add to total
 			totalPackets += packetsDelta
-
-			// Update last count
-			m.lastPacketCounts[peerID][streamIndex] = count
 		}
 
 		// Calculate total throughput for peer
 		peerThroughput := float64(totalPackets) / elapsed
-		m.peerThroughput[peerID] = peerThroughput
+		newPeerThroughputs[peerID] = peerThroughput
 
-		// Store in history (keep last 5 samples)
-		if m.throughputHistory[peerID] == nil {
-			m.throughputHistory[peerID] = make([]float64, 0, 5)
-		}
-		m.throughputHistory[peerID] = append(m.throughputHistory[peerID], peerThroughput)
-		if len(m.throughputHistory[peerID]) > 5 {
-			m.throughputHistory[peerID] = m.throughputHistory[peerID][1:]
+		// Get existing history
+		m.mu.RLock()
+		history := m.throughputHistory[peerID]
+		m.mu.RUnlock()
+
+		// Create a copy of the history
+		newHistory[peerID] = make([]float64, len(history), 5)
+		copy(newHistory[peerID], history)
+
+		// Add new sample
+		newHistory[peerID] = append(newHistory[peerID], peerThroughput)
+		if len(newHistory[peerID]) > 5 {
+			newHistory[peerID] = newHistory[peerID][1:]
 		}
 	}
 
-	// Update last update time
-	m.lastUpdateTime = now
+	// Update the metrics with the new values
+	m.mu.Lock()
+	for peerID, throughputs := range newThroughputs {
+		for streamIndex, throughput := range throughputs {
+			m.streamThroughput[peerID][streamIndex] = throughput
+		}
+		m.peerThroughput[peerID] = newPeerThroughputs[peerID]
+		m.throughputHistory[peerID] = newHistory[peerID]
+	}
+	m.mu.Unlock()
 }

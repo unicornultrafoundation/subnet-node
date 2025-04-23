@@ -55,9 +55,9 @@ type ConnectionRoute struct {
 	connKey      string
 	peerID       peer.ID
 	streamIndex  int
-	lastActivity time.Time
-	packetCount  int64
-	workerID     int // Assigned worker for processing
+	lastActivity int64 // Unix nano timestamp, accessed atomically
+	packetCount  int64 // Accessed atomically
+	workerID     int   // Assigned worker for processing
 }
 
 // PacketTask represents a packet to be processed
@@ -271,10 +271,10 @@ func (r *StreamRouter) DispatchPacket(ctx context.Context, packetData []byte) er
 
 // getOrCreateRoute gets or creates a route for a connection
 func (r *StreamRouter) getOrCreateRoute(connKey string, peerID peer.ID) (*ConnectionRoute, error) {
-	// Try to get from cache
+	// Try to get from cache without locking
 	if routeObj, found := r.connectionCache.Get(connKey); found {
 		route := routeObj.(*ConnectionRoute)
-		route.lastActivity = time.Now()
+		atomic.StoreInt64(&route.lastActivity, time.Now().UnixNano())
 		return route, nil
 	}
 
@@ -289,9 +289,14 @@ func (r *StreamRouter) getOrCreateRoute(connKey string, peerID peer.ID) (*Connec
 		h.Write([]byte(connKey))
 		workerID = int(h.Sum32() % uint32(r.workerPool.GetWorkerCount()))
 
-		// Store the assignment
+		// Store the assignment with double-check to avoid race conditions
 		r.connectionMapMu.Lock()
-		r.connectionToWorker[connKey] = workerID
+		// Check again in case another goroutine created it
+		if existingID, exists := r.connectionToWorker[connKey]; exists {
+			workerID = existingID
+		} else {
+			r.connectionToWorker[connKey] = workerID
+		}
 		r.connectionMapMu.Unlock()
 	}
 
@@ -307,7 +312,7 @@ func (r *StreamRouter) getOrCreateRoute(connKey string, peerID peer.ID) (*Connec
 		connKey:      connKey,
 		peerID:       peerID,
 		streamIndex:  streamIndex,
-		lastActivity: time.Now(),
+		lastActivity: time.Now().UnixNano(),
 		packetCount:  0,
 		workerID:     workerID,
 	}
@@ -394,55 +399,43 @@ func (r *StreamRouter) verifyStreamCounts() {
 
 // evaluateScaling evaluates whether to scale streams up or down
 func (r *StreamRouter) evaluateScaling() {
+	// Get a snapshot of the metrics with minimal lock time
+	peerThroughputSnapshot := make(map[peer.ID]float64)
 	r.metrics.mu.RLock()
-	peerMetrics := make(map[peer.ID]struct {
-		totalThroughput        float64
-		streamCount            int
-		avgThroughputPerStream float64
-	})
-
-	// Calculate metrics for each peer
 	for peerID, throughput := range r.metrics.peerThroughput {
+		peerThroughputSnapshot[peerID] = throughput
+	}
+	r.metrics.mu.RUnlock()
+
+	// Get configuration values
+	config := r.config
+	minStreamsPerPeer := config.MinStreamsPerPeer
+	maxStreamsPerPeer := config.MaxStreamsPerPeer
+	thresholdUp := float64(r.throughputThreshold) * r.scaleUpThreshold
+	thresholdDown := float64(r.throughputThreshold) * r.scaleDownThreshold
+
+	// Process each peer outside the lock
+	for peerID, throughput := range peerThroughputSnapshot {
 		// Get stream stats from the stream manager
 		stats := r.streamManager.GetStreamStats(peerID)
 		streamCount := stats["target_count"].(int)
 
+		// Calculate average throughput
 		avgThroughput := throughput / float64(streamCount)
 
-		peerMetrics[peerID] = struct {
-			totalThroughput        float64
-			streamCount            int
-			avgThroughputPerStream float64
-		}{
-			totalThroughput:        throughput,
-			streamCount:            streamCount,
-			avgThroughputPerStream: avgThroughput,
-		}
-	}
-	r.metrics.mu.RUnlock()
-
-	// Get configuration values from the stream manager
-	config := r.config
-	minStreamsPerPeer := config.MinStreamsPerPeer
-	maxStreamsPerPeer := config.MaxStreamsPerPeer
-
-	// Evaluate scaling for each peer
-	for peerID, metrics := range peerMetrics {
 		// Scale up if average throughput per stream is above threshold
-		if metrics.avgThroughputPerStream > float64(r.throughputThreshold)*r.scaleUpThreshold &&
-			metrics.streamCount < maxStreamsPerPeer {
-			r.scaleStreamsForPeer(peerID, metrics.streamCount+1)
+		if avgThroughput > thresholdUp && streamCount < maxStreamsPerPeer {
+			r.scaleStreamsForPeer(peerID, streamCount+1)
 			log.Infof("Scaling up streams for peer %s from %d to %d (avg throughput: %.2f packets/sec/stream)",
-				peerID.String(), metrics.streamCount, metrics.streamCount+1, metrics.avgThroughputPerStream)
+				peerID.String(), streamCount, streamCount+1, avgThroughput)
 		}
 
 		// Scale down if average throughput per stream is below threshold
 		// and we have more than minimum streams
-		if metrics.avgThroughputPerStream < float64(r.throughputThreshold)*r.scaleDownThreshold &&
-			metrics.streamCount > minStreamsPerPeer {
-			r.scaleStreamsForPeer(peerID, metrics.streamCount-1)
+		if avgThroughput < thresholdDown && streamCount > minStreamsPerPeer {
+			r.scaleStreamsForPeer(peerID, streamCount-1)
 			log.Infof("Scaling down streams for peer %s from %d to %d (avg throughput: %.2f packets/sec/stream)",
-				peerID.String(), metrics.streamCount, metrics.streamCount-1, metrics.avgThroughputPerStream)
+				peerID.String(), streamCount, streamCount-1, avgThroughput)
 		}
 	}
 }
@@ -467,10 +460,10 @@ func (r *StreamRouter) scaleStreamsForPeer(peerID peer.ID, newCount int) {
 // rebalanceConnectionsForPeer rebalances connections when scaling down streams
 func (r *StreamRouter) rebalanceConnectionsForPeer(peerID peer.ID, oldCount, newCount int) {
 	// Find all connections for this peer that need rebalancing
-	r.connectionMapMu.RLock()
+	// No need to lock connectionMapMu here since we're only reading from the cache
 	affectedConnKeys := make([]string, 0)
 
-	// Get all connection keys from the cache
+	// Get all connection keys from the cache - use read locks for each shard
 	for _, shard := range r.connectionCache.shards {
 		shard.mu.RLock()
 		for key, item := range shard.cache.Items() {
@@ -480,25 +473,34 @@ func (r *StreamRouter) rebalanceConnectionsForPeer(peerID peer.ID, oldCount, new
 		}
 		shard.mu.RUnlock()
 	}
-	r.connectionMapMu.RUnlock()
 
-	// Rebalance affected connections
-	for _, connKey := range affectedConnKeys {
-		if routeObj, found := r.connectionCache.Get(connKey); found {
-			route := routeObj.(*ConnectionRoute)
+	// Process in batches to reduce contention
+	batchSize := 100
+	for i := 0; i < len(affectedConnKeys); i += batchSize {
+		end := i + batchSize
+		if end > len(affectedConnKeys) {
+			end = len(affectedConnKeys)
+		}
 
-			// Store old stream index for load tracker
-			oldStreamIndex := route.streamIndex
+		// Process this batch
+		batch := affectedConnKeys[i:end]
+		for _, connKey := range batch {
+			if routeObj, found := r.connectionCache.Get(connKey); found {
+				route := routeObj.(*ConnectionRoute)
 
-			// Recalculate stream index
-			route.streamIndex = route.streamIndex % newCount
+				// Store old stream index for load tracker
+				oldStreamIndex := route.streamIndex
 
-			// Update in cache
-			r.connectionCache.Set(connKey, route, cache.DefaultExpiration)
+				// Recalculate stream index
+				route.streamIndex = route.streamIndex % newCount
 
-			// Notify the stream manager about the connection move
-			r.streamManager.ReleaseStream(route.peerID, oldStreamIndex, route.connKey, true)
-			_, _, _ = r.streamManager.GetStream(route.peerID, route.connKey)
+				// Update in cache
+				r.connectionCache.Set(connKey, route, cache.DefaultExpiration)
+
+				// Notify the stream manager about the connection move
+				r.streamManager.ReleaseStream(route.peerID, oldStreamIndex, route.connKey, true)
+				_, _, _ = r.streamManager.GetStream(route.peerID, route.connKey)
+			}
 		}
 	}
 
