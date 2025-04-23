@@ -9,7 +9,7 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/sirupsen/logrus"
-	streamTypes "github.com/unicornultrafoundation/subnet-node/core/vpn/stream/types"
+	"github.com/unicornultrafoundation/subnet-node/core/vpn/api"
 )
 
 var streamManagerLog = logrus.WithField("service", "vpn-stream-manager")
@@ -25,8 +25,8 @@ type StreamManager struct {
 	streamsPerPeer     map[peer.ID]int // Target number of streams per peer
 	connectionToStream map[string]int  // Maps connection keys to stream indices
 
-	// Shared stream pool for efficient stream management
-	sharedPool *SharedStreamPool
+	// Stream pool for efficient stream management
+	streamPool *RouterStreamPool
 
 	// Configuration
 	minStreamsPerPeer int
@@ -41,7 +41,7 @@ type StreamManager struct {
 // NewStreamManager creates a new stream manager
 func NewStreamManager(
 	ctx context.Context,
-	streamService streamTypes.Service,
+	createStreamFn StreamCreator,
 	minStreamsPerPeer int,
 	maxStreamsPerPeer int,
 ) *StreamManager {
@@ -52,14 +52,14 @@ func NewStreamManager(
 		maxStreamsPerPeer = 10
 	}
 
-	// Create the shared stream pool
-	sharedPool := NewSharedStreamPool(ctx, streamService, minStreamsPerPeer, maxStreamsPerPeer)
+	// Create the router stream pool
+	streamPool := NewRouterStreamPool(ctx, createStreamFn, minStreamsPerPeer, maxStreamsPerPeer)
 
 	return &StreamManager{
 		ctx:                ctx,
 		streamsPerPeer:     make(map[peer.ID]int),
 		connectionToStream: make(map[string]int),
-		sharedPool:         sharedPool,
+		streamPool:         streamPool,
 		minStreamsPerPeer:  minStreamsPerPeer,
 		maxStreamsPerPeer:  maxStreamsPerPeer,
 	}
@@ -67,7 +67,7 @@ func NewStreamManager(
 
 // GetStream gets a stream for a connection
 // It ensures that packets with the same connection key always use the same stream
-func (m *StreamManager) GetStream(peerID peer.ID, connectionKey string) (streamTypes.VPNStream, int, error) {
+func (m *StreamManager) GetStream(peerID peer.ID, connectionKey string) (api.VPNStream, int, error) {
 	m.streamsMu.Lock()
 	defer m.streamsMu.Unlock()
 
@@ -98,8 +98,8 @@ func (m *StreamManager) GetStream(peerID peer.ID, connectionKey string) (streamT
 		}).Debug("Assigned new connection to stream")
 	}
 
-	// Get the stream from the shared pool
-	stream, err := m.sharedPool.GetStream(m.ctx, peerID, streamIndex)
+	// Get the stream from the stream pool
+	stream, err := m.streamPool.GetStreamByIndex(m.ctx, peerID, streamIndex)
 	if err != nil {
 		// If we can't get the stream, log the error
 		streamManagerLog.WithFields(logrus.Fields{
@@ -141,8 +141,8 @@ func (m *StreamManager) ReleaseStream(peerID peer.ID, streamIndex int, connectio
 		}).Debug("Removed connection-to-stream mapping")
 	}
 
-	// Release the stream in the shared pool
-	m.sharedPool.ReleaseStream(peerID, streamIndex, healthy)
+	// Release the stream in the stream pool
+	m.streamPool.ReleaseStreamByIndex(peerID, streamIndex, !healthy)
 
 	// Log the release
 	if !healthy {
@@ -180,8 +180,8 @@ func (m *StreamManager) SetTargetStreamsForPeer(peerID peer.ID, targetCount int)
 	oldCount := m.streamsPerPeer[peerID]
 	m.streamsPerPeer[peerID] = targetCount
 
-	// Notify the shared pool
-	m.sharedPool.SetTargetStreams(peerID, targetCount)
+	// Notify the stream pool
+	m.streamPool.SetTargetStreamsForPeer(peerID, targetCount)
 
 	streamManagerLog.WithFields(logrus.Fields{
 		"peer_id":      peerID.String(),
@@ -207,8 +207,8 @@ func (m *StreamManager) VerifyStreamCounts() {
 			m.streamsPerPeer[peerID] = targetCount
 		}
 
-		// Notify the shared pool
-		m.sharedPool.SetTargetStreams(peerID, targetCount)
+		// Notify the stream pool
+		m.streamPool.SetTargetStreamsForPeer(peerID, targetCount)
 
 		streamManagerLog.WithFields(logrus.Fields{
 			"peer_id":      peerID.String(),
@@ -228,8 +228,8 @@ func (m *StreamManager) GetStreamStats(peerID peer.ID) map[string]interface{} {
 		targetCount = m.minStreamsPerPeer
 	}
 
-	// Get stats from the shared pool
-	sharedPoolStats := m.sharedPool.GetStreamStats(peerID)
+	// Get stats from the stream pool
+	streamPoolStats := m.streamPool.GetStreamStats(peerID)
 
 	// Count connections per stream
 	connectionsPerStream := make(map[int]int)
@@ -249,8 +249,8 @@ func (m *StreamManager) GetStreamStats(peerID peer.ID) map[string]interface{} {
 		"errors":                 atomic.LoadInt64(&m.errorCount),
 	}
 
-	// Add shared pool stats
-	for k, v := range sharedPoolStats {
+	// Add stream pool stats
+	for k, v := range streamPoolStats {
 		stats[k] = v
 	}
 

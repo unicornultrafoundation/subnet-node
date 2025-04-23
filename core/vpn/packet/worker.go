@@ -9,8 +9,8 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/sirupsen/logrus"
+	"github.com/unicornultrafoundation/subnet-node/core/vpn/api"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/resilience"
-	streamTypes "github.com/unicornultrafoundation/subnet-node/core/vpn/stream/types"
 )
 
 var workerLog = logrus.WithField("service", "vpn-packet")
@@ -27,7 +27,7 @@ type Worker struct {
 	// PeerID is the libp2p peer ID associated with this destination
 	PeerID peer.ID
 	// PoolService provides access to the stream pool for network communication
-	PoolService streamTypes.PoolService
+	PoolService api.StreamPoolService
 	// PacketChan is the channel for receiving packets to be processed
 	PacketChan chan *QueuedPacket
 	// LastActivity tracks when this worker last processed a packet
@@ -47,7 +47,7 @@ type Worker struct {
 	// ResilienceService provides circuit breaker and retry functionality
 	ResilienceService *resilience.ResilienceService
 	// CurrentStream is the current stream being used by this worker
-	CurrentStream streamTypes.VPNStream
+	CurrentStream api.VPNStream
 	// StreamMu protects concurrent access to the CurrentStream
 	StreamMu sync.Mutex
 }
@@ -73,7 +73,7 @@ func NewWorker(
 	syncKey string,
 	destIP string,
 	peerID peer.ID,
-	poolService streamTypes.PoolService,
+	poolService api.StreamPoolService,
 	ctx context.Context,
 	cancel context.CancelFunc,
 	bufferSize int,

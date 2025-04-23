@@ -13,7 +13,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/api"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/packet"
-	streamTypes "github.com/unicornultrafoundation/subnet-node/core/vpn/stream/types"
 )
 
 var log = logrus.WithField("service", "vpn-stream-router")
@@ -121,7 +120,7 @@ func DefaultStreamRouterConfig() *StreamRouterConfig {
 }
 
 // NewStreamRouter creates a new stream router
-func NewStreamRouter(config *StreamRouterConfig, streamService streamTypes.Service, peerDiscovery api.PeerDiscoveryService) *StreamRouter {
+func NewStreamRouter(config *StreamRouterConfig, createStreamFn StreamCreator, peerDiscovery api.PeerDiscoveryService) *StreamRouter {
 	if config == nil {
 		config = DefaultStreamRouterConfig()
 	}
@@ -149,10 +148,10 @@ func NewStreamRouter(config *StreamRouterConfig, streamService streamTypes.Servi
 		config.CleanupInterval,
 	)
 
-	// Create stream manager
+	// Create stream manager directly with the createStreamFn
 	streamManager := NewStreamManager(
 		ctx,
-		streamService,
+		createStreamFn,
 		config.MinStreamsPerPeer,
 		config.MaxStreamsPerPeer,
 	)
@@ -320,7 +319,7 @@ func (r *StreamRouter) getOrCreateRoute(connKey string, peerID peer.ID) (*Connec
 }
 
 // getStreamForRoute gets the appropriate stream for a route
-func (r *StreamRouter) getStreamForRoute(route *ConnectionRoute) (streamTypes.VPNStream, error) {
+func (r *StreamRouter) getStreamForRoute(route *ConnectionRoute) (api.VPNStream, error) {
 	// Get stream from the stream manager
 	// The stream manager will ensure the stream index is valid
 	stream, _, err := r.streamManager.GetStream(route.peerID, route.connKey)
@@ -340,7 +339,7 @@ func (r *StreamRouter) getStreamForRoute(route *ConnectionRoute) (streamTypes.VP
 func (r *StreamRouter) releaseStream(peerID peer.ID, streamIndex int) {
 	// Release the unhealthy stream through the stream manager
 	// This will close the stream and ensure a replacement is created
-	r.streamManager.ReleaseStream(peerID, streamIndex, "unhealthy", false)
+	r.streamManager.ReleaseStream(peerID, streamIndex, "", false)
 
 	// Log the release for debugging
 	log.WithFields(logrus.Fields{

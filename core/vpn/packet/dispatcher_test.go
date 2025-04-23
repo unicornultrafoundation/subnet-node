@@ -13,7 +13,6 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/api"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/packet/testutil"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/resilience"
-	"github.com/unicornultrafoundation/subnet-node/core/vpn/stream/types"
 )
 
 // MockPeerDiscovery is a mock implementation of the api.PeerDiscoveryService interface
@@ -64,7 +63,7 @@ type MockStreamService struct {
 	mock.Mock
 }
 
-func (m *MockStreamService) CreateNewVPNStream(ctx context.Context, peerID peer.ID) (types.VPNStream, error) {
+func (m *MockStreamService) CreateNewVPNStream(ctx context.Context, peerID peer.ID) (api.VPNStream, error) {
 	return &MockStream{}, nil
 }
 

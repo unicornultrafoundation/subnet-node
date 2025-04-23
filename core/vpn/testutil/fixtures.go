@@ -11,7 +11,6 @@ import (
 
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/packet"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/resilience"
-	"github.com/unicornultrafoundation/subnet-node/core/vpn/stream"
 )
 
 // TestFixture represents a complete test environment for VPN tests
@@ -21,7 +20,6 @@ type TestFixture struct {
 	MockStreamService    *MockStreamService
 	MockPoolService      *MockPoolService
 	MockDiscoveryService *MockDiscoveryService
-	StreamService        *stream.StreamService
 	ResilienceService    *resilience.ResilienceService
 	Dispatcher           *packet.Dispatcher
 
@@ -125,11 +123,7 @@ func NewTestFixture(t *testing.T, condition *NetworkCondition, peerCount int) *T
 		RetryMaxInterval:               500 * time.Millisecond,
 	})
 
-	// Create a stream service
-	streamService := SetupTestStreamService(t, mockStreamService)
-
-	// Start the stream service
-	streamService.Start()
+	// No stream service needed
 
 	// Create a dispatcher
 	dispatcher := SetupTestDispatcher(t, mockDiscoveryService, mockStreamService, mockPoolService)
@@ -140,7 +134,6 @@ func NewTestFixture(t *testing.T, condition *NetworkCondition, peerCount int) *T
 	// Create cleanup function
 	cleanup := func() {
 		dispatcher.Stop()
-		streamService.Stop()
 	}
 
 	return &TestFixture{
@@ -148,7 +141,6 @@ func NewTestFixture(t *testing.T, condition *NetworkCondition, peerCount int) *T
 		MockStreamService:    mockStreamService,
 		MockPoolService:      mockPoolService,
 		MockDiscoveryService: mockDiscoveryService,
-		StreamService:        streamService,
 		ResilienceService:    resilienceService,
 		Dispatcher:           dispatcher,
 		PeerIDs:              peerIDs,
