@@ -10,63 +10,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"github.com/unicornultrafoundation/subnet-node/core/vpn/api"
 )
-
-// MockStreamService is a mock implementation of the StreamService interface
-type MockStreamService struct {
-	mock.Mock
-}
-
-func (m *MockStreamService) CreateNewVPNStream(ctx context.Context, peerID peer.ID) (api.VPNStream, error) {
-	args := m.Called(ctx, peerID)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(api.VPNStream), args.Error(1)
-}
-
-// MockStream is a mock implementation of the VPNStream interface
-type MockStream struct {
-	mock.Mock
-	closed bool
-}
-
-func (m *MockStream) Read(p []byte) (n int, err error) {
-	args := m.Called(p)
-	return args.Int(0), args.Error(1)
-}
-
-func (m *MockStream) Write(p []byte) (n int, err error) {
-	args := m.Called(p)
-	return args.Int(0), args.Error(1)
-}
-
-func (m *MockStream) Close() error {
-	args := m.Called()
-	m.closed = true
-	return args.Error(0)
-}
-
-func (m *MockStream) Reset() error {
-	args := m.Called()
-	return args.Error(0)
-}
-
-func (m *MockStream) SetDeadline(t time.Time) error {
-	args := m.Called(t)
-	return args.Error(0)
-}
-
-func (m *MockStream) SetReadDeadline(t time.Time) error {
-	args := m.Called(t)
-	return args.Error(0)
-}
-
-func (m *MockStream) SetWriteDeadline(t time.Time) error {
-	args := m.Called(t)
-	return args.Error(0)
-}
 
 func TestStreamPool_GetStreamChannel(t *testing.T) {
 	// Create mocks

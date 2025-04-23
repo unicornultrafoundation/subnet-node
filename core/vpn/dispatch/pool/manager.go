@@ -31,18 +31,6 @@ type StreamManager struct {
 	}
 }
 
-// ConnectionState tracks the state of a connection
-type ConnectionState struct {
-	// The connection key
-	Key types.ConnectionKey
-	// The peer ID
-	PeerID peer.ID
-	// The assigned stream channel
-	StreamChannel *StreamChannel
-	// Last activity time
-	LastActivity int64 // Unix timestamp
-}
-
 // NewStreamManager creates a new stream manager
 func NewStreamManager(streamPool StreamPoolInterface) *StreamManager {
 	ctx, cancel := context.WithCancel(context.Background())

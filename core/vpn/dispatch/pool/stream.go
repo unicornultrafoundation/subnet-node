@@ -61,6 +61,22 @@ type StreamChannel struct {
 	cancel context.CancelFunc
 }
 
+// GetBufferUtilization returns the current buffer utilization as a percentage (0-100)
+func (s *StreamChannel) GetBufferUtilization() int {
+	// Get the current length of the packet channel
+	currentLen := len(s.PacketChan)
+
+	// Get the capacity of the packet channel
+	capacity := cap(s.PacketChan)
+
+	// Calculate utilization percentage
+	if capacity == 0 {
+		return 0
+	}
+
+	return (currentLen * 100) / capacity
+}
+
 // StreamPoolConfig contains configuration for the stream pool
 type StreamPoolConfig struct {
 	MinStreamsPerPeer int
@@ -199,13 +215,45 @@ func (p *StreamPool) GetStreamChannel(ctx context.Context, peerID peer.ID) (*Str
 	}
 
 	if len(streamChannels) > 0 {
-		// Find the least used stream
-		minUsage := int64(^uint64(0) >> 1) // Max int64
+		// Find the least loaded stream based on a combination of usage count and buffer utilization
+		minLoadScore := float64(^uint64(0) >> 1) // Max float64
 		minIndex := 0
 
+		// Define thresholds for creating new streams
+		const (
+			// Buffer utilization threshold (percentage)
+			bufferUtilThreshold = 70
+			// Usage count threshold
+			usageCountThreshold = 100
+		)
+
+		// Track if any stream is approaching capacity
+		streamNearingCapacity := false
+
 		for i, count := range usageCounts {
-			if count < minUsage {
-				minUsage = count
+			// Get buffer utilization for this stream
+			bufferUtil := streamChannels[i].GetBufferUtilization()
+
+			// Calculate a load score that considers both usage count and buffer utilization
+			// This is a weighted score where higher values mean more load
+			loadScore := (float64(count) * 0.7) + (float64(bufferUtil) * 0.3)
+
+			// Check if this stream is nearing capacity
+			if bufferUtil > bufferUtilThreshold || count > usageCountThreshold {
+				streamNearingCapacity = true
+
+				// Log detailed metrics when a stream is nearing capacity
+				streamLog.WithFields(logrus.Fields{
+					"peer_id":            peerIDStr,
+					"stream_index":       i,
+					"buffer_utilization": bufferUtil,
+					"usage_count":        count,
+				}).Info("Stream nearing capacity")
+			}
+
+			// Find the stream with the lowest load score
+			if loadScore < minLoadScore {
+				minLoadScore = loadScore
 				minIndex = i
 			}
 		}
@@ -214,6 +262,21 @@ func (p *StreamPool) GetStreamChannel(ctx context.Context, peerID peer.ID) (*Str
 		healthy := atomic.LoadInt32(&streamChannels[minIndex].healthy) == 1
 
 		if healthy {
+			// Check if we should create a new stream based on resource utilization
+			if streamNearingCapacity &&
+				len(streamChannels) < p.maxStreamsPerPeer &&
+				p.maxStreamsPerPeer > 1 {
+				// Log the decision to create a new stream
+				streamLog.WithFields(logrus.Fields{
+					"peer_id":         peerIDStr,
+					"current_streams": len(streamChannels),
+					"max_streams":     p.maxStreamsPerPeer,
+				}).Info("Creating new stream due to resource utilization")
+
+				// Create a new stream channel
+				return p.createNewStreamChannel(ctx, peerID)
+			}
+
 			// Increment the usage count
 			atomic.AddInt64(&usageCounts[minIndex], 1)
 			return streamChannels[minIndex], nil
@@ -258,10 +321,17 @@ func (p *StreamPool) createNewStreamChannel(ctx context.Context, peerID peer.ID)
 	// Create a new stream context
 	streamCtx, streamCancel := context.WithCancel(p.ctx)
 
-	// Create a new stream channel
+	// Create a new stream channel with configurable buffer size
+	bufferSize := 100 // Default buffer size
+	if config, ok := p.streamCreator.(api.ConfigurableStreamService); ok {
+		if config.GetPacketBufferSize() > 0 {
+			bufferSize = config.GetPacketBufferSize()
+		}
+	}
+
 	streamChannel := &StreamChannel{
 		Stream:       stream,
-		PacketChan:   make(chan *types.QueuedPacket, 100), // Buffer size
+		PacketChan:   make(chan *types.QueuedPacket, bufferSize),
 		lastActivity: time.Now().UnixNano(),
 		healthy:      1, // 1 = healthy
 		ctx:          streamCtx,
@@ -588,10 +658,17 @@ func (p *StreamPool) initializeMinStreams(ctx context.Context, peerID peer.ID) e
 		// Create a new stream context
 		streamCtx, streamCancel := context.WithCancel(p.ctx)
 
-		// Create a new stream channel
+		// Create a new stream channel with configurable buffer size
+		bufferSize := 100 // Default buffer size
+		if config, ok := p.streamCreator.(api.ConfigurableStreamService); ok {
+			if config.GetPacketBufferSize() > 0 {
+				bufferSize = config.GetPacketBufferSize()
+			}
+		}
+
 		streamChannel := &StreamChannel{
 			Stream:       stream,
-			PacketChan:   make(chan *types.QueuedPacket, 100), // Buffer size
+			PacketChan:   make(chan *types.QueuedPacket, bufferSize),
 			lastActivity: time.Now().UnixNano(),
 			healthy:      1, // 1 = healthy
 			ctx:          streamCtx,
@@ -650,4 +727,15 @@ func (p *StreamPool) getPeerMutex(peerIDStr string) *sync.RWMutex {
 func (p *StreamPool) Close() error {
 	p.Stop()
 	return nil
+}
+
+// GetPacketBufferSize returns the packet buffer size for streams
+func (p *StreamPool) GetPacketBufferSize() int {
+	// If the stream creator is configurable, use its buffer size
+	if config, ok := p.streamCreator.(api.ConfigurableStreamService); ok {
+		return config.GetPacketBufferSize()
+	}
+
+	// Otherwise, return a default value
+	return 100
 }
