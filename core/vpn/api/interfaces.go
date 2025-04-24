@@ -160,8 +160,6 @@ type ConfigService interface {
 	// GetWorkerCleanupInterval returns the interval for worker cleanup
 	GetWorkerCleanupInterval() time.Duration
 
-	// GetMinStreamsPerPeer returns the minimum number of streams per peer
-	GetMinStreamsPerPeer() int
 	// GetStreamIdleTimeout returns the stream idle timeout
 	GetStreamIdleTimeout() time.Duration
 	// GetCircuitBreakerFailureThreshold returns the circuit breaker failure threshold

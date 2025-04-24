@@ -20,12 +20,11 @@ vpn:
   # Worker settings - increased for high performance
   worker_idle_timeout: 600      # 10 minutes
   worker_buffer_size: 500       # Larger buffer for high throughput
-  max_workers: 5000             # More workers for parallel processing
+  max_workers_per_peer: 50      # More workers per peer for better parallelism
   worker_cleanup_interval: 120  # 2 minutes
 
   # Stream settings - increased for high performance
-
-  min_streams_per_peer: 5       # Higher minimum for better availability
+  max_streams_per_peer: 50      # Higher maximum for better throughput
   stream_idle_timeout: 600      # 10 minutes
   cleanup_interval: 120         # 2 minutes
 

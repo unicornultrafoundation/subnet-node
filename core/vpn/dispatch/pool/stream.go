@@ -22,7 +22,6 @@ type StreamPool struct {
 	cancel        context.CancelFunc
 
 	// Configuration
-	minStreamsPerPeer int
 	maxStreamsPerPeer int
 	streamIdleTimeout time.Duration
 	cleanupInterval   time.Duration
@@ -79,7 +78,6 @@ func (s *StreamChannel) GetBufferUtilization() int {
 
 // StreamPoolConfig contains configuration for the stream pool
 type StreamPoolConfig struct {
-	MinStreamsPerPeer int
 	MaxStreamsPerPeer int
 	StreamIdleTimeout time.Duration
 	CleanupInterval   time.Duration
@@ -94,7 +92,6 @@ func NewStreamPool(streamCreator api.StreamService, config *StreamPoolConfig) *S
 		streamCreator:     streamCreator,
 		ctx:               ctx,
 		cancel:            cancel,
-		minStreamsPerPeer: config.MinStreamsPerPeer,
 		maxStreamsPerPeer: config.MaxStreamsPerPeer,
 		streamIdleTimeout: config.StreamIdleTimeout,
 		cleanupInterval:   config.CleanupInterval,
@@ -199,7 +196,7 @@ func (p *StreamPool) GetStreamChannel(ctx context.Context, peerID peer.ID) (*Str
 	peerMutex.RUnlock()
 
 	// If this is the first time we're seeing this peer, initialize the minimum number of streams
-	if !exists || len(streamChannels) < p.minStreamsPerPeer {
+	if !exists || len(streamChannels) == 0 {
 		err := p.initializeMinStreams(ctx, peerID)
 		if err != nil {
 			return nil, err
@@ -618,7 +615,7 @@ func (p *StreamPool) initializeMinStreams(ctx context.Context, peerID peer.ID) e
 	peerIDStr := peerID.String()
 	streamLog.WithFields(logrus.Fields{
 		"peer_id":     peerIDStr,
-		"min_streams": p.minStreamsPerPeer,
+		"min_streams": 1,
 	}).Debug("Initializing minimum streams for peer")
 
 	// Get the mutex for this peer
@@ -630,7 +627,7 @@ func (p *StreamPool) initializeMinStreams(ctx context.Context, peerID peer.ID) e
 
 	// Check again in case another goroutine initialized the streams while we were waiting for the lock
 	streamChannels, exists := p.streams[peerIDStr]
-	if exists && len(streamChannels) >= p.minStreamsPerPeer {
+	if exists && len(streamChannels) > 0 {
 		p.streamsMu.Unlock()
 		peerMutex.Unlock()
 		return nil
@@ -638,23 +635,18 @@ func (p *StreamPool) initializeMinStreams(ctx context.Context, peerID peer.ID) e
 
 	// Initialize the maps if they don't exist
 	if !exists {
-		p.streams[peerIDStr] = make([]*StreamChannel, 0, p.minStreamsPerPeer)
-		p.streamUsage[peerIDStr] = make([]int64, 0, p.minStreamsPerPeer)
+		p.streams[peerIDStr] = make([]*StreamChannel, 0, 1)
+		p.streamUsage[peerIDStr] = make([]int64, 0, 1)
 	}
 
-	// Create the minimum number of streams
-	for i := len(p.streams[peerIDStr]); i < p.minStreamsPerPeer; i++ {
-		// Create a new stream
-		stream, err := p.streamCreator.CreateNewVPNStream(ctx, peerID)
-		if err != nil {
-			streamLog.WithFields(logrus.Fields{
-				"peer_id": peerIDStr,
-				"error":   err,
-			}).Warn("Failed to create stream during initialization")
-			// Continue with the streams we've created so far
-			break
-		}
-
+	// Create a new stream
+	stream, err := p.streamCreator.CreateNewVPNStream(ctx, peerID)
+	if err != nil {
+		streamLog.WithFields(logrus.Fields{
+			"peer_id": peerIDStr,
+			"error":   err,
+		}).Warn("Failed to create stream during initialization")
+	} else {
 		// Create a new stream context
 		streamCtx, streamCancel := context.WithCancel(p.ctx)
 
