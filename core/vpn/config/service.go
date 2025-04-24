@@ -21,15 +21,11 @@ type ConfigService interface {
 	// Security settings
 	GetUnallowedPorts() map[string]bool
 
-	// Worker settings
-	GetWorkerIdleTimeout() int
-	GetWorkerBufferSize() int
-	GetWorkerCleanupInterval() time.Duration
-
 	// Stream pool settings
 	GetMaxStreamsPerPeer() int
 	GetStreamIdleTimeout() time.Duration
 	GetCleanupInterval() time.Duration
+	GetPacketBufferSize() int
 
 	// Circuit breaker settings
 	GetCircuitBreakerFailureThreshold() int
@@ -125,29 +121,6 @@ func (c *ConfigServiceImpl) GetUnallowedPorts() map[string]bool {
 	return c.vpnConfig.UnallowedPorts
 }
 
-// Worker settings
-
-// GetWorkerIdleTimeout returns the worker idle timeout
-func (c *ConfigServiceImpl) GetWorkerIdleTimeout() int {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.vpnConfig.WorkerIdleTimeout
-}
-
-// GetWorkerBufferSize returns the worker buffer size
-func (c *ConfigServiceImpl) GetWorkerBufferSize() int {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.vpnConfig.WorkerBufferSize
-}
-
-// GetWorkerCleanupInterval returns the worker cleanup interval
-func (c *ConfigServiceImpl) GetWorkerCleanupInterval() time.Duration {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.vpnConfig.WorkerCleanupInterval
-}
-
 // Stream pool settings
 
 // GetMaxStreamsPerPeer returns the maximum number of streams per peer
@@ -169,6 +142,13 @@ func (c *ConfigServiceImpl) GetCleanupInterval() time.Duration {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.vpnConfig.CleanupInterval
+}
+
+// GetPacketBufferSize returns the packet buffer size
+func (c *ConfigServiceImpl) GetPacketBufferSize() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.vpnConfig.PacketBufferSize
 }
 
 // Circuit breaker settings

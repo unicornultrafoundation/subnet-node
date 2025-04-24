@@ -2,7 +2,6 @@ package vpn
 
 import (
 	"context"
-	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/dispatch"
@@ -21,14 +20,7 @@ func (s *Service) createDispatcher() packet.DispatcherService {
 		MaxStreamsPerPeer:     s.configService.GetMaxStreamsPerPeer(),
 		StreamIdleTimeout:     s.configService.GetStreamIdleTimeout(),
 		StreamCleanupInterval: s.configService.GetCleanupInterval(),
-
-		// Worker pool configuration
-		WorkerIdleTimeout:     time.Duration(s.configService.GetWorkerIdleTimeout()) * time.Second,
-		WorkerCleanupInterval: s.configService.GetWorkerCleanupInterval(),
-		WorkerBufferSize:      s.configService.GetWorkerBufferSize(),
-
-		// Packet buffer size for stream channels
-		PacketBufferSize: s.configService.GetWorkerBufferSize(),
+		PacketBufferSize:      s.configService.GetPacketBufferSize(),
 	}
 
 	// Create and return the new dispatcher

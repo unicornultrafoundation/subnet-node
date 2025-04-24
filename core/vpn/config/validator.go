@@ -23,6 +23,7 @@ var (
 	// Stream pool settings errors
 	ErrInvalidStreamIdleTimeout = errors.New("invalid stream idle timeout (must be greater than 0)")
 	ErrInvalidCleanupInterval   = errors.New("invalid cleanup interval (must be greater than 0)")
+	ErrInvalidPacketBufferSize  = errors.New("invalid packet buffer size (must be greater than 0)")
 
 	// Circuit breaker settings errors
 	ErrInvalidCircuitBreakerFailureThreshold = errors.New("invalid circuit breaker failure threshold (must be greater than 0)")
@@ -44,11 +45,6 @@ func (c *VPNConfig) Validate() error {
 
 	// Validate basic settings
 	if err := c.validateBasicSettings(); err != nil {
-		return err
-	}
-
-	// Validate worker settings
-	if err := c.validateWorkerSettings(); err != nil {
 		return err
 	}
 
@@ -103,26 +99,6 @@ func (c *VPNConfig) validateBasicSettings() error {
 	return nil
 }
 
-// validateWorkerSettings validates the worker settings
-func (c *VPNConfig) validateWorkerSettings() error {
-	// Validate worker idle timeout
-	if c.WorkerIdleTimeout <= 0 {
-		return ErrInvalidWorkerIdleTimeout
-	}
-
-	// Validate worker buffer size
-	if c.WorkerBufferSize <= 0 {
-		return ErrInvalidWorkerBufferSize
-	}
-
-	// Validate worker cleanup interval
-	if c.WorkerCleanupInterval <= 0 {
-		return ErrInvalidWorkerCleanupInterval
-	}
-
-	return nil
-}
-
 // validateStreamPoolSettings validates the stream pool settings
 func (c *VPNConfig) validateStreamPoolSettings() error {
 
@@ -134,6 +110,11 @@ func (c *VPNConfig) validateStreamPoolSettings() error {
 	// Validate cleanup interval
 	if c.CleanupInterval <= 0 {
 		return ErrInvalidCleanupInterval
+	}
+
+	// Validate packet buffer size
+	if c.PacketBufferSize <= 0 {
+		return ErrInvalidPacketBufferSize
 	}
 
 	return nil

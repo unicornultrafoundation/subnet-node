@@ -17,7 +17,8 @@ func TestStreamPool_GetStreamChannel(t *testing.T) {
 
 	// Set up mock expectations
 	testPeerID, _ := peer.Decode("QmYyQSo1c1Ym7orWxLYvCrM2EmxFTANf8wXmmE7DWjhx5N")
-	mockStreamCreator.On("CreateNewVPNStream", mock.Anything, testPeerID).Return(mockStream, nil)
+	// Allow multiple calls to CreateNewVPNStream
+	mockStreamCreator.On("CreateNewVPNStream", mock.Anything, testPeerID).Return(mockStream, nil).Times(10)
 	mockStream.On("Write", mock.Anything).Return(10, nil)
 	mockStream.On("Close").Return(nil)
 
@@ -67,7 +68,8 @@ func TestStreamPool_ReleaseStreamChannel(t *testing.T) {
 
 	// Set up mock expectations
 	testPeerID, _ := peer.Decode("QmYyQSo1c1Ym7orWxLYvCrM2EmxFTANf8wXmmE7DWjhx5N")
-	mockStreamCreator.On("CreateNewVPNStream", mock.Anything, testPeerID).Return(mockStream, nil)
+	// Allow multiple calls to CreateNewVPNStream
+	mockStreamCreator.On("CreateNewVPNStream", mock.Anything, testPeerID).Return(mockStream, nil).Times(10)
 	mockStream.On("Write", mock.Anything).Return(10, nil)
 	mockStream.On("Close").Return(nil)
 
@@ -115,7 +117,8 @@ func TestStreamPool_CleanupIdleStreams(t *testing.T) {
 
 	// Set up mock expectations
 	testPeerID, _ := peer.Decode("QmYyQSo1c1Ym7orWxLYvCrM2EmxFTANf8wXmmE7DWjhx5N")
-	mockStreamCreator.On("CreateNewVPNStream", mock.Anything, testPeerID).Return(mockStream, nil)
+	// Allow multiple calls to CreateNewVPNStream
+	mockStreamCreator.On("CreateNewVPNStream", mock.Anything, testPeerID).Return(mockStream, nil).Times(10)
 	mockStream.On("Write", mock.Anything).Return(10, nil)
 	mockStream.On("Close").Return(nil)
 
