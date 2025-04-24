@@ -3,7 +3,6 @@ package pool
 import (
 	"context"
 	"fmt"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -349,18 +348,9 @@ func (s *StreamChannel) writePacketToStream(packet *types.QueuedPacket) error {
 		// Store the failed packet for retry when stream is recreated
 		s.lastFailedPacket = packet
 
-		// Check for common libp2p stream errors that indicate the stream is broken
-		errStr := err.Error()
-		if strings.Contains(errStr, "stream reset") ||
-			strings.Contains(errStr, "protocol not supported") ||
-			strings.Contains(errStr, "connection closed") ||
-			strings.Contains(errStr, "stream closed") ||
-			strings.Contains(errStr, "deadline exceeded") ||
-			strings.Contains(errStr, "EOF") {
-			// Mark the stream as unhealthy
-			s.SetHealthy(false)
-			streamLog.WithError(err).Debug("Stream marked as unhealthy due to libp2p error")
-		}
+		// Mark the stream as unhealthy
+		s.SetHealthy(false)
+		streamLog.WithError(err).Debug("Stream marked as unhealthy due to libp2p error")
 		return types.NewNetworkError(err, "write", packet.DestIP, "")
 	}
 

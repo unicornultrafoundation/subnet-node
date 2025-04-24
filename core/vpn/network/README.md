@@ -17,7 +17,7 @@ The `TUNService` handles TUN interface operations, including:
 The `ClientService` handles client-side VPN operations, including:
 
 - Reading packets from the TUN interface
-- Dispatching packets to the appropriate worker
+- Dispatching packets to the appropriate stream
 - Managing the buffer pool
 
 ### ServerService

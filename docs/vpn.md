@@ -17,19 +17,18 @@ The VPN service follows a modular architecture with several key components:
 3. **TUNService**: Manages the TUN interface for capturing and injecting network packets.
 4. **ClientService**: Handles outgoing VPN traffic from the local node.
 5. **ServerService**: Processes incoming VPN traffic from remote peers.
-6. **Dispatcher**: Routes packets to the appropriate worker based on destination.
-7. **StreamService**: Manages libp2p streams for communication between peers.
+6. **Dispatcher**: Routes packets to the appropriate stream based on destination and connection key.
+7. **StreamPool**: Manages pools of libp2p streams for efficient communication between peers.
 8. **CircuitBreakerManager**: Provides fault tolerance through circuit breaker pattern.
 9. **RetryManager**: Handles retries for failed operations with exponential backoff.
-10. **MetricsService**: Collects and reports performance metrics.
 
 ### Data Flow
 
 1. **Outgoing Traffic**:
    - Packets are captured by the TUN interface
    - ClientService processes the packets
-   - Dispatcher routes packets to the appropriate peer
-   - StreamService establishes and manages connections to peers
+   - Dispatcher routes packets to the appropriate stream based on connection key
+   - StreamPool establishes and manages connections to peers
    - Packets are sent over encrypted libp2p streams
 
 2. **Incoming Traffic**:
@@ -56,15 +55,11 @@ The VPN service is highly configurable through the configuration service. Key co
 
 ### Performance Settings
 
-- `vpn.worker_idle_timeout`: Timeout for idle workers
-- `vpn.worker_buffer_size`: Buffer size for packet workers
-- `vpn.max_workers`: Maximum number of packet workers
-- `vpn.worker_cleanup_interval`: Interval for cleaning up idle workers
+- `vpn.packet_buffer_size`: Buffer size for packet channels
 
 ### Stream Settings
 
-
-- `vpn.min_streams_per_peer`: Minimum number of streams per peer
+- `vpn.max_streams_per_peer`: Maximum number of streams per peer
 - `vpn.stream_idle_timeout`: Timeout for idle streams
 - `vpn.cleanup_interval`: Interval for cleaning up idle streams
 
@@ -108,25 +103,6 @@ if err != nil {
 }
 ```
 
-### Monitoring VPN Metrics
-
-The VPN service provides metrics for monitoring performance:
-
-```go
-// Get VPN metrics
-metrics := vpnService.GetMetrics()
-
-// Log metrics
-log.WithFields(logrus.Fields{
-    "packets_received": metrics["packets_received"],
-    "packets_sent":     metrics["packets_sent"],
-    "packets_dropped":  metrics["packets_dropped"],
-    "bytes_received":   metrics["bytes_received"],
-    "bytes_sent":       metrics["bytes_sent"],
-    "stream_errors":    metrics["stream_errors"],
-}).Info("VPN metrics")
-```
-
 ## Component Details
 
 ### PeerDiscovery
@@ -161,17 +137,19 @@ The ServerService component:
 ### Dispatcher
 
 The Dispatcher component:
-- Routes packets to the appropriate worker based on destination
-- Manages worker lifecycle
+- Routes packets to the appropriate stream based on destination and connection key
+- Manages stream channel assignment
 - Provides packet buffering and flow control
+- Ensures sequential processing of packets with the same connection key
 
-### StreamService
+### StreamPool
 
-The StreamService component:
+The StreamPool component:
 - Creates and manages libp2p streams
 - Provides stream pooling for performance
-- Implements stream health checking
-- Supports stream multiplexing
+- Dynamically scales streams based on traffic load
+- Supports connection-based routing
+- Ensures proper stream cleanup and resource management
 
 ### CircuitBreakerManager
 
@@ -186,13 +164,6 @@ The RetryManager component:
 - Handles retries for failed operations
 - Implements exponential backoff
 - Limits retry attempts
-
-### MetricsService
-
-The MetricsService component:
-- Collects performance metrics
-- Provides centralized metrics reporting
-- Supports multiple metric types (counters, gauges, etc.)
 
 ## Troubleshooting
 
@@ -210,8 +181,8 @@ The MetricsService component:
 
 3. **Poor Performance**
    - Adjust the MTU setting
-   - Increase the worker buffer size
-   - Tune the number of streams per peer
+   - Increase the packet buffer size
+   - Tune the maximum number of streams per peer
 
 4. **High Packet Loss**
    - Check for circuit breaker activations
@@ -228,22 +199,6 @@ The VPN service uses structured logging with the following fields:
 - `bytes_received`: Number of bytes received
 - `bytes_sent`: Number of bytes sent
 - `stream_errors`: Number of stream errors
-
-### Metrics
-
-The VPN service provides the following metrics:
-- `packets_received`: Number of packets received
-- `packets_sent`: Number of packets sent
-- `packets_dropped`: Number of packets dropped
-- `bytes_received`: Number of bytes received
-- `bytes_sent`: Number of bytes sent
-- `stream_errors`: Number of stream errors
-- `circuit_open_count`: Number of times circuits opened
-- `circuit_close_count`: Number of times circuits closed
-- `circuit_reset_count`: Number of times circuits reset
-- `request_block_count`: Number of requests blocked by circuit breakers
-- `request_allow_count`: Number of requests allowed by circuit breakers
-- `active_breakers`: Number of active circuit breakers
 
 ## Security Considerations
 
@@ -265,9 +220,9 @@ To optimize VPN performance, consider the following tuning options:
 
 1. **MTU Optimization**: Adjust the MTU setting to match your network conditions.
 
-2. **Stream Pooling**: Configure the minimum streams per peer (`min_streams_per_peer`) based on expected traffic patterns.
+2. **Stream Pooling**: Configure the maximum streams per peer (`max_streams_per_peer`) based on expected traffic patterns.
 
-3. **Worker Settings**: Adjust worker buffer size and maximum workers based on system resources.
+3. **Packet Buffer Size**: Adjust packet buffer size based on system resources and traffic patterns.
 
 4. **Circuit Breaker Tuning**: Configure circuit breaker thresholds based on network reliability.
 
@@ -287,16 +242,18 @@ The VPN service uses the adapter pattern extensively to:
 The VPN service implements several resilience patterns:
 - Circuit Breaker: Prevents cascading failures
 - Retry with Exponential Backoff: Handles transient failures
-- Stream Health Checking: Detects and recovers from unhealthy streams
+- Dynamic Stream Scaling: Adjusts the number of streams based on traffic load
 - Stream Pooling: Provides connection reuse and failover
+- Connection-Based Routing: Ensures sequential processing of related packets
 
 ### Concurrency Model
 
 The VPN service uses a combination of:
 - Goroutines for concurrent processing
-- Channels for communication between components
+- Channels for communication between components and packet buffering
 - Mutexes for protecting shared state
 - Atomic operations for high-performance counters
+- Connection-based routing for sequential packet processing
 
 ## Conclusion
 

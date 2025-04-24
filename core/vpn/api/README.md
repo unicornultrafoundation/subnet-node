@@ -27,6 +27,7 @@ Handles peer discovery and mapping, including:
 Handles stream creation and management, including:
 
 - Creating new VPN streams to peers
+- Managing stream lifecycle
 
 ### StreamPoolService
 
@@ -43,13 +44,7 @@ Handles circuit breaker operations, including:
 - Resetting circuit breakers
 - Getting circuit breaker states
 
-### StreamHealthService
 
-Handles stream health monitoring, including:
-
-- Starting and stopping the health checker
-- Starting and stopping the stream warmer
-- Getting health metrics
 
 ### RetryService
 
@@ -69,10 +64,9 @@ Handles metrics collection, including:
 
 Handles configuration retrieval, including:
 
-- Getting worker settings
+- Getting network settings
 - Getting stream pool settings
 - Getting circuit breaker settings
-- Getting health check settings
 - Getting retry settings
 
 ## Usage
@@ -93,18 +87,27 @@ Here's an example of how the interfaces are used in the VPN service:
 // The packet dispatcher depends on the PeerDiscoveryService interface
 type Dispatcher struct {
     peerDiscovery api.PeerDiscoveryService
+    streamService api.StreamService
     // ...
 }
 
 // The dispatcher uses the interface to get peer IDs for destination IPs
-func (d *Dispatcher) dispatchPacket(packet []byte, destIP string) error {
+func (d *Dispatcher) dispatchPacket(ctx context.Context, connKey types.ConnectionKey, destIP string, packet []byte) error {
+    // Get the peer ID for the destination IP
     peerID, err := d.peerDiscovery.GetPeerID(ctx, destIP)
     if err != nil {
         return err
     }
 
-    // Use the peer ID to route the packet
-    // ...
+    // Get a stream from the stream pool
+    stream, err := d.streamService.CreateNewVPNStream(ctx, peerID)
+    if err != nil {
+        return err
+    }
+
+    // Send the packet through the stream
+    _, err = stream.Write(packet)
+    return err
 }
 ```
 

@@ -9,11 +9,12 @@ type Config struct {
 	StreamIdleTimeout     time.Duration
 	StreamCleanupInterval time.Duration
 
-	// Worker pool configuration
-	WorkerIdleTimeout     time.Duration
-	WorkerCleanupInterval time.Duration
-	WorkerBufferSize      int
-
 	// Packet buffer size for stream channels
 	PacketBufferSize int
+
+	// Load balancing configuration
+	UsageCountWeight    float64
+	BufferUtilWeight    float64
+	BufferUtilThreshold int
+	UsageCountThreshold int
 }

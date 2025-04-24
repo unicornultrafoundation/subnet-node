@@ -28,10 +28,10 @@ The VPN package is organized into several subpackages:
 - `dispatch`: Manages packet dispatching and stream pooling
 - `metrics`: Provides metrics collection and reporting
 - `network`: Manages network interfaces and connections
-- `packet`: Handles packet processing and routing
 - `resilience`: Implements resilience patterns like circuit breakers and retries
 - `utils`: Provides common utilities used across the VPN service
 - `validator`: Validates VPN configuration and settings
+- `testutil`: Provides testing utilities for the VPN system
 
 ## Architecture
 
@@ -68,7 +68,6 @@ The VPN configuration is defined in the `config` package. It includes settings f
 - Stream pool settings (max streams per peer, idle timeout, cleanup interval)
 - Packet buffer settings (buffer size for stream channels)
 - Circuit breaker settings (failure threshold, reset timeout, success threshold)
-- Health check settings (interval, timeout, max consecutive failures)
 - Retry settings (max attempts, initial interval, max interval)
 
 ### Packet Processing

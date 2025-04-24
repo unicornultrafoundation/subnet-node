@@ -134,11 +134,51 @@ func createTestIPv4Packet() []byte {
 	return packet
 }
 
-// TestDispatcher_DispatchPacket is temporarily disabled due to channel issues
-// TODO: Fix the test to properly handle channel closing
+// TestDispatcher_DispatchPacket tests the DispatchPacket method
 func TestDispatcher_DispatchPacket(t *testing.T) {
-	// Skip this test for now
-	t.Skip("Temporarily disabled due to channel issues")
+	// Create mocks
+	mockPeerDiscovery := new(MockPeerDiscovery)
+	mockStreamService := new(MockStreamService)
+	mockStream := new(MockStream)
+
+	// Set up mock expectations with a valid peer ID format
+	mockPeerDiscovery.On("GetPeerID", mock.Anything, "192.168.1.1").Return("QmYyQSo1c1Ym7orWxLYvCrM2EmxFTANf8wXmmE7DWjhx5N", nil)
+	mockStreamService.On("CreateNewVPNStream", mock.Anything, mock.Anything).Return(mockStream, nil)
+	mockStream.On("Write", mock.Anything).Return(len(createTestIPv4Packet()), nil)
+	mockStream.On("Close").Return(nil)
+
+	// Create dispatcher config
+	config := &Config{
+		MaxStreamsPerPeer:     10,
+		StreamIdleTimeout:     5 * time.Minute,
+		StreamCleanupInterval: 1 * time.Minute,
+		PacketBufferSize:      100,
+	}
+
+	// Create dispatcher
+	dispatcher := NewDispatcher(mockPeerDiscovery, mockStreamService, config, nil)
+
+	// Start the dispatcher
+	dispatcher.Start()
+	defer dispatcher.Stop()
+
+	// Create a valid IPv4 packet
+	packet := createTestIPv4Packet()
+	connKey := types.ConnectionKey("12345:192.168.1.1:80")
+
+	// Dispatch packet
+	err := dispatcher.DispatchPacket(context.Background(), connKey, "192.168.1.1", packet)
+
+	// Assert no error
+	assert.NoError(t, err)
+
+	// Give some time for async processing
+	time.Sleep(100 * time.Millisecond)
+
+	// Verify metrics
+	metrics := dispatcher.GetMetrics()
+	assert.Equal(t, int64(1), metrics["packets_dispatched"])
+	assert.Equal(t, int64(0), metrics["packets_dropped"])
 }
 
 func TestDispatcher_DispatchPacket_Error(t *testing.T) {
@@ -181,9 +221,61 @@ func TestDispatcher_DispatchPacket_Error(t *testing.T) {
 	assert.Equal(t, int64(1), metrics["packets_dropped"])
 }
 
-// TestDispatcher_DispatchPacketWithCallback is temporarily disabled due to channel issues
-// TODO: Fix the test to properly handle channel closing
+// TestDispatcher_DispatchPacketWithCallback tests the DispatchPacketWithCallback method
 func TestDispatcher_DispatchPacketWithCallback(t *testing.T) {
-	// Skip this test for now
-	t.Skip("Temporarily disabled due to channel issues")
+	// Create mocks
+	mockPeerDiscovery := new(MockPeerDiscovery)
+	mockStreamService := new(MockStreamService)
+	mockStream := new(MockStream)
+
+	// Set up mock expectations with a valid peer ID format
+	mockPeerDiscovery.On("GetPeerID", mock.Anything, "192.168.1.1").Return("QmYyQSo1c1Ym7orWxLYvCrM2EmxFTANf8wXmmE7DWjhx5N", nil)
+	mockStreamService.On("CreateNewVPNStream", mock.Anything, mock.Anything).Return(mockStream, nil)
+	mockStream.On("Write", mock.Anything).Return(len(createTestIPv4Packet()), nil)
+	mockStream.On("Close").Return(nil)
+
+	// Create dispatcher config
+	config := &Config{
+		MaxStreamsPerPeer:     10,
+		StreamIdleTimeout:     5 * time.Minute,
+		StreamCleanupInterval: 1 * time.Minute,
+		PacketBufferSize:      100,
+	}
+
+	// Create dispatcher
+	dispatcher := NewDispatcher(mockPeerDiscovery, mockStreamService, config, nil)
+
+	// Start the dispatcher
+	dispatcher.Start()
+	defer dispatcher.Stop()
+
+	// Create a valid IPv4 packet
+	packet := createTestIPv4Packet()
+	connKey := types.ConnectionKey("12345:192.168.1.1:80")
+
+	// Create a buffered channel for the callback
+	doneCh := make(chan error, 1)
+
+	// Dispatch packet with callback
+	err := dispatcher.DispatchPacketWithCallback(context.Background(), connKey, "192.168.1.1", packet, doneCh)
+
+	// Assert no error from dispatch
+	assert.NoError(t, err)
+
+	// Wait for the callback
+	var callbackErr error
+	select {
+	case callbackErr = <-doneCh:
+		// Got the callback result
+	case <-time.After(2 * time.Second):
+		t.Fatal("Timeout waiting for callback")
+	}
+
+	// Assert no error from callback
+	assert.NoError(t, callbackErr)
+
+	// Verify metrics
+	metrics := dispatcher.GetMetrics()
+	assert.Equal(t, int64(1), metrics["packets_dispatched"])
+	assert.Equal(t, int64(0), metrics["packets_dropped"])
 }
