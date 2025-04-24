@@ -10,7 +10,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	"github.com/unicornultrafoundation/subnet-node/core/vpn/api"
+	"github.com/unicornultrafoundation/subnet-node/core/vpn/dispatch"
+	"github.com/unicornultrafoundation/subnet-node/core/vpn/dispatch/types"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/resilience"
 )
 
@@ -29,23 +30,6 @@ func CreateTestPacket(size int) []byte {
 }
 
 // No longer needed - removed stream package
-
-// SetupTestDispatcher creates a packet dispatcher for testing
-func SetupTestDispatcher(
-	t *testing.T,
-	discoveryService *MockDiscoveryService,
-	streamService api.StreamService,
-	poolService api.StreamPoolService,
-) *DispatcherAdapter {
-	resilienceService := resilience.NewResilienceService(nil)
-
-	return NewDispatcher(
-		discoveryService,
-		streamService,
-		poolService,
-		resilienceService,
-	)
-}
 
 // SetupPeerIDs creates test peer IDs
 func SetupPeerIDs(t *testing.T, count int) []peer.ID {
@@ -113,15 +97,18 @@ func SetupMockStreamService(t *testing.T, config *MockServiceConfig, mockStream 
 }
 
 // VerifyPacketDelivery verifies that a packet was delivered successfully
-func VerifyPacketDelivery(t *testing.T, dispatcher *DispatcherAdapter, syncKey, destIP string, packet []byte) {
+func VerifyPacketDelivery(t *testing.T, dispatcher *dispatch.Dispatcher, syncKey, destIP string, packet []byte) {
 	ctx, cancel := TestContext(t)
 	defer cancel()
 
 	// Create a done channel to get the result
 	doneCh := make(chan error, 1)
 
+	// Convert the syncKey to a ConnectionKey
+	connKey := types.ConnectionKey(syncKey)
+
 	// Dispatch the packet with a callback
-	dispatcher.DispatchPacketWithCallback(ctx, syncKey, destIP, packet, doneCh)
+	dispatcher.DispatchPacketWithCallback(ctx, connKey, destIP, packet, doneCh)
 
 	// Wait for the result or timeout
 	select {

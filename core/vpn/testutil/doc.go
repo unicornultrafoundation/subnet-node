@@ -27,7 +27,7 @@ This package contains a comprehensive set of testing utilities for the VPN packa
   - SetupDiscoveryService: Sets up a mock discovery service with specified configuration
   - SetupResilienceService: Sets up a resilience service with specified configuration
   - SetupTestStreamPool: Sets up a test stream pool
-  - SetupTestDispatcher: Sets up a test packet dispatcher
+  - SetupTestLogger: Sets up a test logger that discards all output
 
 5. Performance Testing:
   - PerformanceConfig: Configuration for performance tests

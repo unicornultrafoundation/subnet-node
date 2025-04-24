@@ -5,6 +5,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/unicornultrafoundation/subnet-node/core/vpn/dispatch"
 )
 
 // FaultInjectionConfig contains configuration for fault injection
@@ -49,7 +51,7 @@ type FaultInjector struct {
 	config            *FaultInjectionConfig
 	mockStreamService *MockStreamService
 	mockDiscovery     *MockDiscoveryService
-	dispatcher        *DispatcherAdapter
+	dispatcher        *dispatch.Dispatcher
 
 	// State
 	active         bool
@@ -62,7 +64,7 @@ func NewFaultInjector(
 	config *FaultInjectionConfig,
 	mockStreamService *MockStreamService,
 	mockDiscovery *MockDiscoveryService,
-	dispatcher *DispatcherAdapter,
+	dispatcher *dispatch.Dispatcher,
 ) *FaultInjector {
 	if config == nil {
 		config = DefaultFaultInjectionConfig()

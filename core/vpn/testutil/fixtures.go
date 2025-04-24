@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/unicornultrafoundation/subnet-node/core/vpn/dispatch"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/resilience"
 )
 
@@ -20,7 +21,7 @@ type TestFixture struct {
 	MockPoolService      *MockPoolService
 	MockDiscoveryService *MockDiscoveryService
 	ResilienceService    *resilience.ResilienceService
-	Dispatcher           *DispatcherAdapter
+	Dispatcher           *dispatch.Dispatcher
 
 	// Test data
 	PeerIDs []peer.ID
@@ -124,8 +125,21 @@ func NewTestFixture(t *testing.T, condition *NetworkCondition, peerCount int) *T
 
 	// No stream service needed
 
-	// Create a dispatcher
-	dispatcher := SetupTestDispatcher(t, mockDiscoveryService, mockStreamService, mockPoolService)
+	// Create a dispatcher config
+	dispatcherConfig := &dispatch.Config{
+		MaxStreamsPerPeer:     10,
+		StreamIdleTimeout:     5 * time.Minute,
+		StreamCleanupInterval: 1 * time.Minute,
+		PacketBufferSize:      100,
+	}
+
+	// Create a dispatcher directly
+	dispatcher := dispatch.NewDispatcher(
+		mockDiscoveryService,
+		mockStreamService,
+		dispatcherConfig,
+		resilienceService,
+	)
 
 	// Start the dispatcher
 	dispatcher.Start()
