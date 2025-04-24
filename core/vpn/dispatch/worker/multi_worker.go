@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -334,22 +335,16 @@ func (w *MultiConnectionWorker) processPacket(packet *types.QueuedPacket, connKe
 	// Create a breaker ID for this operation
 	breakerId := w.ResilienceService.FormatPeerBreakerId(w.PeerID, "send_packet")
 
-	// Add a timeout to the context if none exists
-	ctx := packet.Ctx
-	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
-		// Use a reasonable timeout for packet sending (500ms)
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, 500*time.Millisecond)
-		defer cancel()
-	}
+	// Record start time for performance monitoring
+	startTime := time.Now()
 
-	// Execute with resilience patterns
+	// Execute with resilience patterns using the original context
 	err, retryAttempts := w.ResilienceService.ExecuteWithResilience(
-		ctx,
+		packet.Ctx, // Use the original context without any deadline
 		breakerId,
 		func() error {
 			// Send the packet through the stream manager
-			sendErr := w.StreamManager.SendPacket(ctx, connKey, w.PeerID, packet)
+			sendErr := w.StreamManager.SendPacket(packet.Ctx, connKey, w.PeerID, packet)
 			if sendErr != nil {
 				// Log detailed error information
 				logger.WithError(sendErr).Debug("Error sending packet, will retry if possible")
@@ -357,11 +352,18 @@ func (w *MultiConnectionWorker) processPacket(packet *types.QueuedPacket, connKe
 				// Check if this is a stream-related error that should trigger a new stream
 				if errors.Is(sendErr, types.ErrStreamChannelClosed) ||
 					errors.Is(sendErr, types.ErrNoHealthyStreams) ||
-					errors.Is(sendErr, types.ErrStreamWriteFailed) {
+					errors.Is(sendErr, types.ErrStreamWriteFailed) ||
+					// Check for common libp2p stream errors
+					strings.Contains(sendErr.Error(), "stream reset") ||
+					strings.Contains(sendErr.Error(), "protocol not supported") ||
+					strings.Contains(sendErr.Error(), "connection closed") ||
+					strings.Contains(sendErr.Error(), "stream closed") ||
+					strings.Contains(sendErr.Error(), "deadline exceeded") ||
+					strings.Contains(sendErr.Error(), "EOF") {
 					// Get the stream manager implementation
-					if sm, ok := w.StreamManager.(*pool.StreamManagerV2); ok {
+					if sm, ok := w.StreamManager.(*pool.StreamManager); ok {
 						// Release the connection to force getting a new stream on retry
-						logger.Debug("Releasing connection due to stream error")
+						logger.WithError(sendErr).Debug("Releasing connection due to stream error")
 						sm.ReleaseConnection(connKey, false)
 					}
 				}
@@ -370,9 +372,18 @@ func (w *MultiConnectionWorker) processPacket(packet *types.QueuedPacket, connKe
 		},
 	)
 
-	// Log retry information if there were retries
-	if retryAttempts > 1 {
+	// Calculate processing duration
+	processingDuration := time.Since(startTime)
+
+	// Log performance information
+	if processingDuration > 500*time.Millisecond {
 		logger.WithFields(logrus.Fields{
+			"duration_ms":    processingDuration.Milliseconds(),
+			"retry_attempts": retryAttempts,
+		}).Warn("Packet processing took longer than expected")
+	} else if retryAttempts > 1 {
+		logger.WithFields(logrus.Fields{
+			"duration_ms":    processingDuration.Milliseconds(),
 			"retry_attempts": retryAttempts,
 		}).Debug("Packet required retries")
 	}

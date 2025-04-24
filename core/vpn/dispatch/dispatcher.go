@@ -25,8 +25,8 @@ type Dispatcher struct {
 	streamService api.StreamService
 
 	// Core components
-	streamPool    *pool.StreamPoolV2
-	streamManager *pool.StreamManagerV2
+	streamPool    *pool.StreamPool
+	streamManager *pool.StreamManager
 
 	// Context for the dispatcher
 	ctx    context.Context
@@ -76,10 +76,10 @@ func NewDispatcher(
 		CleanupInterval:   config.StreamCleanupInterval,
 		PacketBufferSize:  config.PacketBufferSize,
 	}
-	streamPool := pool.NewStreamPoolV2(streamService, streamPoolConfig)
+	streamPool := pool.NewStreamPool(streamService, streamPoolConfig)
 
 	// Create stream manager V2
-	streamManager := pool.NewStreamManagerV2(streamPool)
+	streamManager := pool.NewStreamManager(streamPool)
 
 	return &Dispatcher{
 		peerDiscovery:     peerDiscovery,
