@@ -154,9 +154,6 @@ func TestDispatcher_DispatchPacket_Error(t *testing.T) {
 		MaxStreamsPerPeer:     10,
 		StreamIdleTimeout:     5 * time.Minute,
 		StreamCleanupInterval: 1 * time.Minute,
-		WorkerIdleTimeout:     300, // seconds
-		WorkerCleanupInterval: 1 * time.Minute,
-		WorkerBufferSize:      100,
 		PacketBufferSize:      100,
 	}
 

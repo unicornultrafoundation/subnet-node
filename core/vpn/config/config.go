@@ -19,15 +19,11 @@ type VPNConfig struct {
 	// Security settings
 	UnallowedPorts map[string]bool
 
-	// Worker settings
-	WorkerIdleTimeout     int
-	WorkerBufferSize      int
-	WorkerCleanupInterval time.Duration
-
 	// Stream pool settings
 	MaxStreamsPerPeer int
 	StreamIdleTimeout time.Duration
 	CleanupInterval   time.Duration
+	PacketBufferSize  int
 
 	// Circuit breaker settings
 	CircuitBreakerFailureThreshold int
@@ -67,15 +63,13 @@ func New(cfg *config.C) *VPNConfig {
 		// Security settings
 		UnallowedPorts: unallowedPorts,
 
-		// Worker settings
-		WorkerIdleTimeout:     cfg.GetInt("vpn.worker_idle_timeout", 10),                                  // 10 seconds default
-		WorkerBufferSize:      cfg.GetInt("vpn.worker_buffer_size", 500),                                  // 500 packets buffer size
-		WorkerCleanupInterval: time.Duration(cfg.GetInt("vpn.worker_cleanup_interval", 10)) * time.Second, // 10 seconds default
+		// Worker settings removed
 
 		// Stream pool settings
 		MaxStreamsPerPeer: cfg.GetInt("vpn.max_streams_per_peer", 30),                            // 30 streams per peer default
 		StreamIdleTimeout: time.Duration(cfg.GetInt("vpn.stream_idle_timeout", 5)) * time.Second, // 5 seconds default
 		CleanupInterval:   time.Duration(cfg.GetInt("vpn.cleanup_interval", 5)) * time.Second,    // 5 seconds default
+		PacketBufferSize:  cfg.GetInt("vpn.packet_buffer_size", 500),                             // 500 packets buffer size
 
 		// Circuit breaker settings
 		CircuitBreakerFailureThreshold: cfg.GetInt("vpn.circuit_breaker_failure_threshold", 5),                           // 5 failures default
@@ -95,19 +89,9 @@ func New(cfg *config.C) *VPNConfig {
 	}
 }
 
-// GetWorkerBufferSize returns the worker buffer size
-func (c *VPNConfig) GetWorkerBufferSize() int {
-	return c.WorkerBufferSize
-}
-
-// GetWorkerIdleTimeout returns the worker idle timeout in seconds
-func (c *VPNConfig) GetWorkerIdleTimeout() int {
-	return c.WorkerIdleTimeout
-}
-
-// GetWorkerCleanupInterval returns the interval for worker cleanup
-func (c *VPNConfig) GetWorkerCleanupInterval() time.Duration {
-	return c.WorkerCleanupInterval
+// GetPacketBufferSize returns the packet buffer size
+func (c *VPNConfig) GetPacketBufferSize() int {
+	return c.PacketBufferSize
 }
 
 // GetMaxStreamsPerPeer returns the maximum number of streams per peer

@@ -13,11 +13,6 @@ var (
 	ErrNoStreamService        = errors.New("no stream service available")
 	ErrStreamCreationFailed   = errors.New("failed to create stream")
 	ErrStreamWriteFailed      = errors.New("failed to write to stream")
-	ErrWorkerNotFound         = errors.New("worker not found")
-	ErrWorkerQueueFull        = errors.New("worker queue full")
-	ErrWorkerStopped          = errors.New("worker stopped")
-	ErrWorkerChannelFull      = errors.New("worker channel full")
-	ErrWorkerPoolStopped      = errors.New("worker pool stopped")
 	ErrDispatcherStopped      = errors.New("dispatcher stopped")
 	ErrNoPeerMapping          = errors.New("no peer mapping found")
 	ErrInvalidPeerID          = errors.New("invalid peer ID")
@@ -28,9 +23,6 @@ var (
 	ErrContextCancelled       = errors.New("context cancelled")
 	ErrNoHealthyStreams       = errors.New("no healthy streams available")
 	ErrStreamAssignmentFailed = errors.New("failed to assign stream")
-	// Worker manager errors
-	ErrWorkerManagerBusy    = errors.New("worker manager is busy")
-	ErrWorkerManagerTimeout = errors.New("worker manager operation timed out")
 	// Retry and resilience errors
 	ErrMaxRetriesExceeded = errors.New("maximum retries exceeded")
 	ErrCircuitBreakerOpen = errors.New("circuit breaker is open")

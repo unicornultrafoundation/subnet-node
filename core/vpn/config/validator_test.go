@@ -16,14 +16,10 @@ func createValidConfig() *VPNConfig {
 		Routes:    []string{"10.0.0.0/24"},
 		MTU:       1500,
 
-		// Worker settings
-		WorkerIdleTimeout:     300,
-		WorkerBufferSize:      100,
-		WorkerCleanupInterval: 60 * time.Second,
-
 		// Stream pool settings
 		StreamIdleTimeout: 300 * time.Second,
 		CleanupInterval:   60 * time.Second,
+		PacketBufferSize:  500,
 
 		// Circuit breaker settings
 		CircuitBreakerFailureThreshold: 5,
@@ -84,12 +80,6 @@ func TestValidate(t *testing.T) {
 			name:    "MTU too small",
 			modify:  func(cfg *VPNConfig) { cfg.MTU = 500 },
 			wantErr: ErrInvalidMTU,
-		},
-		// Worker settings errors
-		{
-			name:    "invalid worker idle timeout",
-			modify:  func(cfg *VPNConfig) { cfg.WorkerIdleTimeout = 0 },
-			wantErr: ErrInvalidWorkerIdleTimeout,
 		},
 		// Stream pool settings errors
 		// Circuit breaker settings errors
@@ -184,28 +174,7 @@ func TestValidateAllSettings(t *testing.T) {
 				wantErr: ErrInvalidMTU,
 			},
 		},
-		"validateWorkerSettings": {
-			{
-				name:    "valid worker settings",
-				modify:  func(cfg *VPNConfig) {},
-				wantErr: nil,
-			},
-			{
-				name:    "invalid worker idle timeout",
-				modify:  func(cfg *VPNConfig) { cfg.WorkerIdleTimeout = 0 },
-				wantErr: ErrInvalidWorkerIdleTimeout,
-			},
-			{
-				name:    "invalid worker buffer size",
-				modify:  func(cfg *VPNConfig) { cfg.WorkerBufferSize = 0 },
-				wantErr: ErrInvalidWorkerBufferSize,
-			},
-			{
-				name:    "invalid worker cleanup interval",
-				modify:  func(cfg *VPNConfig) { cfg.WorkerCleanupInterval = 0 },
-				wantErr: ErrInvalidWorkerCleanupInterval,
-			},
-		},
+		// Worker settings removed
 		"validateStreamPoolSettings": {
 			{
 				name:    "valid stream pool settings",
@@ -222,6 +191,11 @@ func TestValidateAllSettings(t *testing.T) {
 				name:    "invalid cleanup interval",
 				modify:  func(cfg *VPNConfig) { cfg.CleanupInterval = 0 },
 				wantErr: ErrInvalidCleanupInterval,
+			},
+			{
+				name:    "invalid packet buffer size",
+				modify:  func(cfg *VPNConfig) { cfg.PacketBufferSize = 0 },
+				wantErr: ErrInvalidPacketBufferSize,
 			},
 		},
 		"validateCircuitBreakerSettings": {
@@ -273,7 +247,6 @@ func TestValidateAllSettings(t *testing.T) {
 	// Map of validation functions to test
 	validationFuncs := map[string]func(*VPNConfig) error{
 		"validateBasicSettings":          (*VPNConfig).validateBasicSettings,
-		"validateWorkerSettings":         (*VPNConfig).validateWorkerSettings,
 		"validateStreamPoolSettings":     (*VPNConfig).validateStreamPoolSettings,
 		"validateCircuitBreakerSettings": (*VPNConfig).validateCircuitBreakerSettings,
 		"validateRetrySettings":          (*VPNConfig).validateRetrySettings,
