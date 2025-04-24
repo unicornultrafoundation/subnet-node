@@ -337,8 +337,28 @@ func (p *StreamPool) createNewStreamChannel(ctx context.Context, peerID peer.ID)
 		return nil, types.ErrStreamPoolExhausted
 	}
 
-	// Create a new stream
-	stream, err := p.streamCreator.CreateNewVPNStream(ctx, peerID)
+	// Create a new stream with a context that has no deadline
+	// This allows us to wait as long as needed for the stream to be created
+	streamCtx, cancel := context.WithCancel(context.Background())
+
+	// Set up cancellation if the original context is canceled
+	go func() {
+		select {
+		case <-ctx.Done():
+			// Original context was canceled, cancel our stream context too
+			cancel()
+		case <-streamCtx.Done():
+			// Our context was canceled, nothing to do
+			return
+		}
+	}()
+
+	// Create the stream with the no-deadline context
+	stream, err := p.streamCreator.CreateNewVPNStream(streamCtx, peerID)
+
+	// Cancel the stream context since we're done with it
+	cancel()
+
 	if err != nil {
 		return nil, err
 	}
