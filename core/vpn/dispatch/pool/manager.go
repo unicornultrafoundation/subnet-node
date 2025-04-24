@@ -187,6 +187,15 @@ func (m *StreamManager) ReleaseConnection(connKey types.ConnectionKey, healthy b
 
 	// If the stream is unhealthy, we need to get a new stream and transfer pending packets
 	if !healthy {
+		// Check if there's a failed packet that needs to be retried
+		if oldStreamChannel != nil && oldStreamChannel.GetLastFailedPacket() != nil {
+			managerLog.WithFields(logrus.Fields{
+				"conn_key": string(connKey),
+				"peer_id":  peerID.String(),
+				"dest_ip":  oldStreamChannel.GetLastFailedPacket().DestIP,
+			}).Debug("Found failed packet to retry when replacing unhealthy stream")
+		}
+
 		// Create a new stream for this connection
 		// We need to release the lock first to avoid deadlocks when getting a new stream
 		shard.Unlock()
@@ -213,6 +222,7 @@ func (m *StreamManager) ReleaseConnection(connKey types.ConnectionKey, healthy b
 		}
 
 		// Transfer any pending packets from the old stream to the new one
+		// This will also transfer the failed packet if there is one
 		m.transferPendingPackets(oldStreamChannel, newStreamChannel)
 
 		// Re-acquire the lock to update the connection
@@ -392,6 +402,14 @@ doneDraining:
 	// Log how many packets were transferred
 	if drainCount > 0 {
 		managerLog.WithField("packet_count", drainCount).Debug("Transferred pending packets to new stream")
+	}
+
+	// Check if there's a failed packet that needs to be retried
+	if oldStream.lastFailedPacket != nil {
+		// Add the failed packet to the beginning of our packet list to prioritize it
+		managerLog.Debug("Found failed packet to retry, adding to front of queue")
+		packets = append([]*types.QueuedPacket{oldStream.lastFailedPacket}, packets...)
+		drainCount++
 	}
 
 	// Send the packets to the new stream's channel

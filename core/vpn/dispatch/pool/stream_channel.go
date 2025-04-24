@@ -30,6 +30,8 @@ type StreamChannel struct {
 	ctx context.Context
 	// Cancel function for the stream context
 	cancel context.CancelFunc
+	// Last failed packet (to be retried when stream is recreated)
+	lastFailedPacket *types.QueuedPacket
 }
 
 // GetBufferUtilization returns the current buffer utilization as a percentage (0-100)
@@ -70,6 +72,11 @@ func (s *StreamChannel) GetLastActivity() time.Time {
 // UpdateLastActivity updates the last activity timestamp
 func (s *StreamChannel) UpdateLastActivity() {
 	atomic.StoreInt64(&s.lastActivity, time.Now().UnixNano())
+}
+
+// GetLastFailedPacket returns the last packet that failed to be sent
+func (s *StreamChannel) GetLastFailedPacket() *types.QueuedPacket {
+	return s.lastFailedPacket
 }
 
 // Close closes the stream channel
@@ -178,6 +185,11 @@ func (s *StreamChannel) ProcessPackets(peerID string) {
 				if consecutiveErrors >= maxConsecutiveErrors {
 					logger.WithField("consecutive_errors", consecutiveErrors).Warn("Too many consecutive errors, marking stream as unhealthy")
 					s.SetHealthy(false)
+					// Note: We don't return here immediately to allow the failed packet to be stored
+					// The stream will be replaced and the failed packet will be retried
+					if s.lastFailedPacket != nil {
+						logger.WithField("dest_ip", s.lastFailedPacket.DestIP).Info("Stream marked unhealthy with failed packet to retry")
+					}
 					return
 				}
 			} else {
@@ -212,6 +224,9 @@ func (s *StreamChannel) writePacketToStream(packet *types.QueuedPacket) error {
 	// Write the packet to the stream
 	_, err := s.Stream.Write(packet.Data)
 	if err != nil {
+		// Store the failed packet for retry when stream is recreated
+		s.lastFailedPacket = packet
+
 		// Check for common libp2p stream errors that indicate the stream is broken
 		errStr := err.Error()
 		if strings.Contains(errStr, "stream reset") ||
@@ -226,6 +241,9 @@ func (s *StreamChannel) writePacketToStream(packet *types.QueuedPacket) error {
 		}
 		return types.NewNetworkError(err, "write", packet.DestIP, "")
 	}
+
+	// Clear any previously stored failed packet on success
+	s.lastFailedPacket = nil
 
 	// Calculate processing duration
 	processingDuration := time.Since(startTime)
