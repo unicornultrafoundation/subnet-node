@@ -71,7 +71,6 @@ func NewDispatcher(
 
 	// Create stream pool V2
 	streamPoolConfig := &pool.StreamPoolConfig{
-		MinStreamsPerPeer: config.MinStreamsPerPeer,
 		MaxStreamsPerPeer: config.MaxStreamsPerPeer,
 		StreamIdleTimeout: config.StreamIdleTimeout,
 		CleanupInterval:   config.StreamCleanupInterval,

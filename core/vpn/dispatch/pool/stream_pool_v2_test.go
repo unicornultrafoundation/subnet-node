@@ -23,7 +23,6 @@ func TestStreamPoolV2_GetStreamChannel(t *testing.T) {
 
 	// Create stream pool config
 	config := &StreamPoolConfig{
-		MinStreamsPerPeer: 1,
 		MaxStreamsPerPeer: 5,
 		StreamIdleTimeout: 5 * time.Minute,
 		CleanupInterval:   1 * time.Minute,
@@ -74,7 +73,6 @@ func TestStreamPoolV2_ReleaseStreamChannel(t *testing.T) {
 
 	// Create stream pool config
 	config := &StreamPoolConfig{
-		MinStreamsPerPeer: 1,
 		MaxStreamsPerPeer: 5,
 		StreamIdleTimeout: 5 * time.Minute,
 		CleanupInterval:   1 * time.Minute,
@@ -123,7 +121,6 @@ func TestStreamPoolV2_CleanupIdleStreams(t *testing.T) {
 
 	// Create stream pool config with short idle timeout
 	config := &StreamPoolConfig{
-		MinStreamsPerPeer: 1, // Keep at least 1 stream per peer
 		MaxStreamsPerPeer: 5,
 		StreamIdleTimeout: 100 * time.Millisecond, // Short timeout for testing
 		CleanupInterval:   50 * time.Millisecond,  // Short interval for testing
@@ -147,7 +144,7 @@ func TestStreamPoolV2_CleanupIdleStreams(t *testing.T) {
 	// Wait for the stream to become idle and be cleaned up
 	time.Sleep(200 * time.Millisecond)
 
-	// Verify stream count - the stream should be cleaned up but minStreamsPerPeer should ensure at least 1 stream
+	// Verify stream count - the stream should be cleaned up
 	// Note: In some test environments, the cleanup might not have happened yet, so we'll accept either 0 or 1
 	count := streamPool.GetStreamCount(testPeerID)
 	assert.True(t, count == 0 || count == 1, "Stream count should be 0 or 1, got %d", count)
