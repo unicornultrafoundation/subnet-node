@@ -163,20 +163,3 @@ func (s *ResilienceService) FormatPeerBreakerId(peerID peer.ID, operation string
 func (s *ResilienceService) FormatWorkerBreakerId(syncKey string, operation string) string {
 	return fmt.Sprintf("worker-%s-%s", syncKey, operation)
 }
-
-// GetMetrics returns combined metrics from both circuit breaker and retry managers
-func (s *ResilienceService) GetMetrics() map[string]int64 {
-	cbMetrics := s.circuitBreakerMgr.GetMetrics()
-	retryMetrics := s.retryManager.GetMetrics()
-
-	// Combine metrics
-	metrics := make(map[string]int64)
-	for k, v := range cbMetrics {
-		metrics["cb_"+k] = v
-	}
-	for k, v := range retryMetrics {
-		metrics["retry_"+k] = v
-	}
-
-	return metrics
-}

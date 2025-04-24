@@ -21,15 +21,12 @@ type ServerConfig struct {
 type ServerService struct {
 	// Configuration for the server
 	config *ServerConfig
-	// Metrics for monitoring
-	metrics VPNMetricsInterface
 }
 
 // NewServerService creates a new server service
-func NewServerService(config *ServerConfig, metrics VPNMetricsInterface) *ServerService {
+func NewServerService(config *ServerConfig) *ServerService {
 	return &ServerService{
-		config:  config,
-		metrics: metrics,
+		config: config,
 	}
 }
 
@@ -53,7 +50,6 @@ func (s *ServerService) HandleStream(stream api.VPNStream, iface *water.Interfac
 			packetInfo, err := types.ExtractPacketInfo(buf[:n])
 			if err != nil {
 				log.Debugf("error extracting packet info: %v", err)
-				s.metrics.IncrementPacketsDropped()
 				continue
 			}
 
@@ -63,13 +59,11 @@ func (s *ServerService) HandleStream(stream api.VPNStream, iface *water.Interfac
 				// Reject all requests that are to unallowed ports
 				unallowedPort, exist := s.config.UnallowedPorts[dstPort]
 				if exist && unallowedPort {
-					s.metrics.IncrementPacketsDropped()
 					continue
 				}
 
 				// Reject all requests that are to ports outside the allowed range
 				if *packetInfo.DstPort < 30000 || *packetInfo.DstPort > 65535 {
-					s.metrics.IncrementPacketsDropped()
 					continue
 				}
 			}
@@ -78,12 +72,8 @@ func (s *ServerService) HandleStream(stream api.VPNStream, iface *water.Interfac
 			_, err = iface.Write(buf[:n])
 			if err != nil {
 				log.Errorf("error writing to TUN interface: %v", err)
-				s.metrics.IncrementPacketsDropped()
 				continue
 			}
-
-			// Update metrics
-			s.metrics.IncrementPacketsSent(n)
 		}
 	}()
 }

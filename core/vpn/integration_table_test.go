@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/unicornultrafoundation/subnet-node/core/vpn/metrics"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/resilience"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/testutil"
 )
@@ -115,87 +114,6 @@ func TestTableDrivenIntegration(t *testing.T) {
 				assert.GreaterOrEqual(t, metrics["packets_dispatched"], int64(1),
 					"Should have dispatched at least one packet")
 			}
-		})
-	}
-}
-
-// TestTableDrivenMetrics demonstrates table-driven tests for metrics
-func TestTableDrivenMetrics(t *testing.T) {
-	// Define test cases
-	testCases := []struct {
-		name            string
-		packetsReceived int
-		packetsSent     int
-		packetsDropped  int
-		bytesReceived   int
-		bytesSent       int
-		streamErrors    int
-		circuitDrops    int
-	}{
-		{
-			name:            "Basic Metrics",
-			packetsReceived: 1,
-			packetsSent:     1,
-			packetsDropped:  0,
-			bytesReceived:   100,
-			bytesSent:       200,
-			streamErrors:    0,
-			circuitDrops:    0,
-		},
-		{
-			name:            "Error Metrics",
-			packetsReceived: 10,
-			packetsSent:     8,
-			packetsDropped:  2,
-			bytesReceived:   1000,
-			bytesSent:       800,
-			streamErrors:    1,
-			circuitDrops:    1,
-		},
-	}
-
-	// Run test cases
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			// Create a metrics collector
-			vpnMetrics := metrics.NewVPNMetrics()
-
-			// Record metrics
-			for i := 0; i < tc.packetsReceived; i++ {
-				vpnMetrics.IncrementPacketsReceived(tc.bytesReceived / tc.packetsReceived)
-			}
-
-			for i := 0; i < tc.packetsSent; i++ {
-				vpnMetrics.IncrementPacketsSent(tc.bytesSent / tc.packetsSent)
-			}
-
-			for i := 0; i < tc.packetsDropped; i++ {
-				vpnMetrics.IncrementPacketsDropped()
-			}
-
-			for i := 0; i < tc.streamErrors; i++ {
-				vpnMetrics.IncrementStreamErrors()
-			}
-
-			for i := 0; i < tc.circuitDrops; i++ {
-				vpnMetrics.IncrementCircuitOpenDrops()
-			}
-
-			// Get the metrics
-			metrics := vpnMetrics.GetMetrics()
-
-			// Verify the metrics
-			expectedMetrics := map[string]int64{
-				"packets_received":   int64(tc.packetsReceived),
-				"packets_sent":       int64(tc.packetsSent),
-				"packets_dropped":    int64(tc.packetsDropped),
-				"bytes_received":     int64(tc.bytesReceived),
-				"bytes_sent":         int64(tc.bytesSent),
-				"stream_errors":      int64(tc.streamErrors),
-				"circuit_open_drops": int64(tc.circuitDrops),
-			}
-
-			testutil.VerifyMetrics(t, metrics, expectedMetrics)
 		})
 	}
 }

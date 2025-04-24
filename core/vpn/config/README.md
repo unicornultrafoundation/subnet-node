@@ -22,23 +22,20 @@ The `VPNConfig` struct contains all configuration settings for the VPN system, o
 |---------|-------------|---------|------------|
 | `unallowed_ports` | Ports that are not allowed to be used for VPN traffic | `[]` | Array of port numbers |
 
-### Worker Settings
 
-| Setting | Description | Default | Valid Range |
-|---------|-------------|---------|------------|
-| `worker_idle_timeout` | Timeout in seconds after which an idle worker is terminated | `300` | > 0 |
-| `worker_buffer_size` | Buffer size for worker packet queues | `100` | > 0 |
-| `max_workers` | Maximum number of worker goroutines | `1000` | > 0 |
-| `worker_cleanup_interval` | Interval in seconds for cleaning up idle workers | `60` | > 0 |
 
 ### Stream Pool Settings
 
 | Setting | Description | Default | Valid Range |
 |---------|-------------|---------|------------|
-
-| `min_streams_per_peer` | Minimum number of streams per peer | `3` | > 0 |
-| `stream_idle_timeout` | Timeout in seconds after which an idle stream is closed | `300` | > 0 |
-| `cleanup_interval` | Interval in seconds for cleaning up idle streams | `60` | > 0 |
+| `max_streams_per_peer` | Maximum number of streams per peer | `50` | > 0 |
+| `stream_idle_timeout` | Timeout in seconds after which an idle stream is closed | `5` | > 0 |
+| `cleanup_interval` | Interval in seconds for cleaning up idle streams | `5` | > 0 |
+| `packet_buffer_size` | Size of packet buffer for each stream channel | `500` | > 0 |
+| `usage_count_weight` | Weight for usage count in load balancing score | `0.7` | 0.0-1.0 |
+| `buffer_util_weight` | Weight for buffer utilization in load balancing score | `0.3` | 0.0-1.0 |
+| `buffer_util_threshold` | Threshold percentage for buffer utilization | `70` | 0-100 |
+| `usage_count_threshold` | Threshold for usage count | `100` | > 0 |
 
 ### Circuit Breaker Settings
 
@@ -48,14 +45,7 @@ The `VPNConfig` struct contains all configuration settings for the VPN system, o
 | `circuit_breaker_reset_timeout` | Timeout in seconds before the circuit breaker resets to half-open state | `60` | > 0 |
 | `circuit_breaker_success_threshold` | Number of successes needed to close the circuit breaker | `2` | > 0 |
 
-### Stream Health Settings
 
-| Setting | Description | Default | Valid Range |
-|---------|-------------|---------|------------|
-| `health_check_interval` | Interval in seconds between health checks | `30` | > 0 |
-| `health_check_timeout` | Timeout in seconds for health check operations | `5` | > 0 |
-| `max_consecutive_failures` | Maximum number of consecutive health check failures before marking a resource as unhealthy | `3` | > 0 |
-| `warm_interval` | Interval in seconds for warming up streams | `60` | > 0 |
 
 ### Retry Settings
 
@@ -93,12 +83,25 @@ vpn:
     - "587"  # Submission
     - "465"  # SMTPS
 
-  # Worker settings
-  worker_idle_timeout: 300      # 5 minutes
-  worker_buffer_size: 100
-  max_workers: 1000
+  # Stream settings
+  max_streams_per_peer: 50
+  stream_idle_timeout: 5        # 5 seconds
+  cleanup_interval: 5           # 5 seconds
+  packet_buffer_size: 500       # Size of packet buffer for each stream
+  usage_count_weight: 0.7       # Weight for usage count in load balancing
+  buffer_util_weight: 0.3       # Weight for buffer utilization in load balancing
+  buffer_util_threshold: 70     # Threshold percentage for buffer utilization
+  usage_count_threshold: 100    # Threshold for usage count
 
-  # ... other settings
+  # Circuit breaker settings
+  circuit_breaker_failure_threshold: 5
+  circuit_breaker_reset_timeout: 60    # 1 minute
+  circuit_breaker_success_threshold: 2
+
+  # Retry settings
+  retry_max_attempts: 5
+  retry_initial_interval: 1      # 1 second
+  retry_max_interval: 30         # 30 seconds
 ```
 
 ### Basic Usage

@@ -23,10 +23,14 @@ type StreamPool struct {
 	cancel        context.CancelFunc
 
 	// Configuration
-	maxStreamsPerPeer int
-	streamIdleTimeout time.Duration
-	cleanupInterval   time.Duration
-	packetBufferSize  int
+	maxStreamsPerPeer   int
+	streamIdleTimeout   time.Duration
+	cleanupInterval     time.Duration
+	packetBufferSize    int
+	usageCountWeight    float64
+	bufferUtilWeight    float64
+	bufferUtilThreshold int
+	usageCountThreshold int
 
 	// Lifecycle management
 	active int32 // 0 = inactive, 1 = active
@@ -51,10 +55,14 @@ type StreamPool struct {
 
 // StreamPoolConfig contains configuration for the stream pool
 type StreamPoolConfig struct {
-	MaxStreamsPerPeer int
-	StreamIdleTimeout time.Duration
-	CleanupInterval   time.Duration
-	PacketBufferSize  int
+	MaxStreamsPerPeer   int
+	StreamIdleTimeout   time.Duration
+	CleanupInterval     time.Duration
+	PacketBufferSize    int
+	UsageCountWeight    float64 // Weight for usage count in load score calculation (default: 0.7)
+	BufferUtilWeight    float64 // Weight for buffer utilization in load score calculation (default: 0.3)
+	BufferUtilThreshold int     // Buffer utilization threshold percentage (default: 70)
+	UsageCountThreshold int     // Usage count threshold (default: 100)
 }
 
 // peerShard represents a shard of the peer data
@@ -102,16 +110,41 @@ func NewStreamPool(streamCreator api.StreamService, config *StreamPoolConfig) *S
 		}
 	}
 
+	// Set default values for new configuration parameters if not provided
+	usageCountWeight := config.UsageCountWeight
+	if usageCountWeight <= 0 {
+		usageCountWeight = 0.7 // Default value
+	}
+
+	bufferUtilWeight := config.BufferUtilWeight
+	if bufferUtilWeight <= 0 {
+		bufferUtilWeight = 0.3 // Default value
+	}
+
+	bufferUtilThreshold := config.BufferUtilThreshold
+	if bufferUtilThreshold <= 0 {
+		bufferUtilThreshold = 70 // Default value
+	}
+
+	usageCountThreshold := config.UsageCountThreshold
+	if usageCountThreshold <= 0 {
+		usageCountThreshold = 100 // Default value
+	}
+
 	pool := &StreamPool{
-		streamCreator:     streamCreator,
-		ctx:               ctx,
-		cancel:            cancel,
-		maxStreamsPerPeer: config.MaxStreamsPerPeer,
-		streamIdleTimeout: config.StreamIdleTimeout,
-		cleanupInterval:   config.CleanupInterval,
-		packetBufferSize:  config.PacketBufferSize,
-		opChan:            make(chan streamOp, 100), // Buffer size for operations
-		peerShards:        peerShards,
+		streamCreator:       streamCreator,
+		ctx:                 ctx,
+		cancel:              cancel,
+		maxStreamsPerPeer:   config.MaxStreamsPerPeer,
+		streamIdleTimeout:   config.StreamIdleTimeout,
+		cleanupInterval:     config.CleanupInterval,
+		packetBufferSize:    config.PacketBufferSize,
+		usageCountWeight:    usageCountWeight,
+		bufferUtilWeight:    bufferUtilWeight,
+		bufferUtilThreshold: bufferUtilThreshold,
+		usageCountThreshold: usageCountThreshold,
+		opChan:              make(chan streamOp, 100), // Buffer size for operations
+		peerShards:          peerShards,
 	}
 
 	return pool
@@ -216,14 +249,6 @@ func (p *StreamPool) getStreamChannelInternal(ctx context.Context, peerID peer.I
 	}
 
 	if len(streams) > 0 {
-		// Define thresholds for creating new streams
-		const (
-			// Buffer utilization threshold (percentage)
-			bufferUtilThreshold = 70
-			// Usage count threshold
-			usageCountThreshold = 100
-		)
-
 		// Track if any stream is approaching capacity
 		streamNearingCapacity := false
 
@@ -237,10 +262,10 @@ func (p *StreamPool) getStreamChannelInternal(ctx context.Context, peerID peer.I
 
 			// Calculate a load score that considers both usage count and buffer utilization
 			// This is a weighted score where higher values mean more load
-			loadScore := (float64(count) * 0.7) + (float64(bufferUtil) * 0.3)
+			loadScore := (float64(count) * p.usageCountWeight) + (float64(bufferUtil) * p.bufferUtilWeight)
 
 			// Check if this stream is nearing capacity
-			if bufferUtil > bufferUtilThreshold || count > usageCountThreshold {
+			if bufferUtil > p.bufferUtilThreshold || count > int64(p.usageCountThreshold) {
 				streamNearingCapacity = true
 
 				// Log detailed metrics when a stream is nearing capacity

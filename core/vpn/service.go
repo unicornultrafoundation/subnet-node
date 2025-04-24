@@ -29,7 +29,6 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/discovery"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/dispatch"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/dispatch/pool"
-	"github.com/unicornultrafoundation/subnet-node/core/vpn/metrics"
 	vpnnetwork "github.com/unicornultrafoundation/subnet-node/core/vpn/network"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/resilience"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/utils"
@@ -57,7 +56,6 @@ type Service struct {
 	serverService     *vpnnetwork.ServerService
 	dispatcher        dispatch.DispatcherService
 	resilienceService *resilience.ResilienceService
-	metricsService    *metrics.MetricsServiceImpl
 	bufferPool        *utils.BufferPool
 	streamPool        *pool.StreamPool
 
@@ -80,9 +78,6 @@ func New(cfg *config.C, peerHost host.Host, dht *ddht.DHT, accountService *accou
 	// Create the buffer pool
 	bufferPool := utils.NewBufferPool(configService.GetMTU())
 
-	// Create the metrics service
-	metricsService := metrics.NewMetricsService()
-
 	// Create the resource manager
 	resourceManager := utils.NewResourceManager()
 
@@ -94,7 +89,6 @@ func New(cfg *config.C, peerHost host.Host, dht *ddht.DHT, accountService *accou
 		accountService:  accountService,
 		peerHost:        peerHost,
 		dht:             dht,
-		metricsService:  metricsService,
 		bufferPool:      bufferPool,
 		resourceManager: resourceManager,
 		stopChan:        make(chan struct{}),
@@ -130,10 +124,14 @@ func New(cfg *config.C, peerHost host.Host, dht *ddht.DHT, accountService *accou
 
 	// Create a stream pool config with values from the config service
 	streamPoolConfig := &pool.StreamPoolConfig{
-		MaxStreamsPerPeer: configService.GetMaxStreamsPerPeer(),
-		StreamIdleTimeout: configService.GetStreamIdleTimeout(),
-		CleanupInterval:   configService.GetCleanupInterval(),
-		PacketBufferSize:  configService.GetPacketBufferSize(),
+		MaxStreamsPerPeer:   configService.GetMaxStreamsPerPeer(),
+		StreamIdleTimeout:   configService.GetStreamIdleTimeout(),
+		CleanupInterval:     configService.GetCleanupInterval(),
+		PacketBufferSize:    configService.GetPacketBufferSize(),
+		UsageCountWeight:    configService.GetUsageCountWeight(),
+		BufferUtilWeight:    configService.GetBufferUtilWeight(),
+		BufferUtilThreshold: configService.GetBufferUtilThreshold(),
+		UsageCountThreshold: configService.GetUsageCountThreshold(),
 	}
 
 	// Create the stream pool using the service directly as the stream creator
@@ -149,6 +147,11 @@ func New(cfg *config.C, peerHost host.Host, dht *ddht.DHT, accountService *accou
 		StreamIdleTimeout:     configService.GetStreamIdleTimeout(),
 		StreamCleanupInterval: configService.GetCleanupInterval(),
 		PacketBufferSize:      configService.GetPacketBufferSize(),
+		// Load balancing configuration
+		UsageCountWeight:    configService.GetUsageCountWeight(),
+		BufferUtilWeight:    configService.GetBufferUtilWeight(),
+		BufferUtilThreshold: configService.GetBufferUtilThreshold(),
+		UsageCountThreshold: configService.GetUsageCountThreshold(),
 	}
 	service.dispatcher = dispatch.NewDispatcher(
 		service.peerDiscovery,
@@ -162,14 +165,10 @@ func New(cfg *config.C, peerHost host.Host, dht *ddht.DHT, accountService *accou
 		service.resourceManager.Register(closer)
 	}
 
-	// Create a metrics adapter for the network services
-	metricsAdapter := vpnnetwork.NewMetricsAdapter(service.metricsService)
-
 	// Create the client service
 	service.clientService = vpnnetwork.NewClientService(
 		service.tunService,
 		service.dispatcher,
-		metricsAdapter,
 		service.bufferPool,
 	)
 
@@ -181,7 +180,7 @@ func New(cfg *config.C, peerHost host.Host, dht *ddht.DHT, accountService *accou
 		MTU:            configService.GetMTU(),
 		UnallowedPorts: configService.GetUnallowedPorts(),
 	}
-	service.serverService = vpnnetwork.NewServerService(serverConfig, metricsAdapter)
+	service.serverService = vpnnetwork.NewServerService(serverConfig)
 
 	return service
 }
@@ -321,26 +320,8 @@ func (s *Service) Stop() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Log metrics before stopping
-	metrics := s.metricsService.GetAllMetrics()
-	log.WithFields(logrus.Fields{
-		"packets_received": metrics["packets_received"],
-		"packets_sent":     metrics["packets_sent"],
-		"packets_dropped":  metrics["packets_dropped"],
-		"bytes_received":   metrics["bytes_received"],
-		"bytes_sent":       metrics["bytes_sent"],
-		"stream_errors":    metrics["stream_errors"],
-	}).Info("VPN metrics")
-
-	// Log circuit breaker metrics before stopping
-	log.WithFields(logrus.Fields{
-		"circuit_open_count":  metrics["circuit_open_count"],
-		"circuit_close_count": metrics["circuit_close_count"],
-		"circuit_reset_count": metrics["circuit_reset_count"],
-		"request_block_count": metrics["request_block_count"],
-		"request_allow_count": metrics["request_allow_count"],
-		"active_breakers":     metrics["active_breakers"],
-	}).Info("Circuit breaker metrics")
+	// Log that we're stopping the service
+	log.Info("Stopping VPN service...")
 
 	// Cancel the service context to signal all components to stop
 	// This will automatically cancel all child contexts
@@ -371,8 +352,8 @@ func (s *Service) GetMetrics() map[string]int64 {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	// Get all metrics from the metrics service
-	return s.metricsService.GetAllMetrics()
+	// Return empty metrics map since metrics are disabled
+	return map[string]int64{}
 }
 
 // setupTUNWithRetry attempts to set up the TUN interface with circuit breaker and retry protection.

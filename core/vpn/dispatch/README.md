@@ -4,28 +4,27 @@ This package implements an efficient packet forwarding system using libp2p, desi
 
 ## Design Principles
 
-1. **Stream-Assigned Channels**: Each stream has its own dedicated channel for packet writing, eliminating contention between workers.
+1. **Stream-Assigned Channels**: Each stream has its own dedicated channel for packet writing, eliminating contention between connections.
 
-2. **PeerID-Specific Worker Pools**: Workers are organized by PeerID, allowing concurrent processing of packets destined for different peers.
+2. **PeerID-Specific Stream Pools**: Streams are organized by PeerID, allowing concurrent processing of packets destined for different peers.
 
-3. **Connection Key-Based Packet Assignment**: Packets with the same connection key (sourcePort:destinationIP:destinationPort) are processed by the same worker, ensuring sequential processing when needed.
+3. **Connection Key-Based Packet Assignment**: Packets with the same connection key (sourcePort:destinationIP:destinationPort) are processed sequentially, ensuring proper packet ordering.
 
 4. **No Mutex for Stream Access**: Stream access is managed through dedicated channels, eliminating the need for mutex locking and improving concurrency.
 
-5. **Dynamic Worker and Stream Scaling**: The system can scale workers and streams based on traffic load.
+5. **Dynamic Stream Scaling**: The system can scale streams based on traffic load, adding more streams when needed and removing idle ones.
 
 ## Package Structure
 
 ### Root Package (`dispatch`)
 
-- `dispatcher.go`: Main dispatcher that routes packets to appropriate worker pools
+- `dispatcher.go`: Main dispatcher that routes packets to appropriate streams
 - `interfaces.go`: Defines interfaces for the dispatch components
 
 ### Subpackages
 
 - **`types`**: Contains common data structures and error types
 - **`pool`**: Manages stream pools and connection-to-stream mapping
-- **`worker`**: Handles packet processing workers and worker pools
 
 ## Key Components
 
@@ -33,61 +32,45 @@ This package implements an efficient packet forwarding system using libp2p, desi
 
 The `Dispatcher` is the entry point for packet processing:
 
-- Routes packets to the appropriate worker pool based on destination peer ID
-- Manages worker pools for different peers
+- Routes packets to the appropriate stream based on destination peer ID and connection key
+- Manages stream pools for different peers
 - Provides metrics and monitoring capabilities
 
-### Stream Pool
+### StreamPool
 
 The `StreamPool` manages streams for communication with peers:
 
 - Maintains a pool of streams for each peer
 - Provides load balancing across streams
 - Handles stream health monitoring and cleanup
+- Dynamically scales the number of streams based on traffic load
 
-### Stream Manager
+### StreamChannel
 
-The `StreamManager` manages the mapping between connections and streams:
+The `StreamChannel` manages the communication channel for a stream:
 
-- Assigns streams to connection keys
-- Ensures packets with the same connection key use the same stream
-- Provides metrics for connection and stream usage
-
-### Worker Pool
-
-The `WorkerPool` manages workers for a specific peer:
-
-- Creates and manages workers for different connection keys
-- Routes packets to the appropriate worker
-- Cleans up idle workers to prevent resource leaks
-
-### Worker
-
-The `Worker` processes packets for a specific connection key:
-
-- Ensures sequential processing of packets with the same connection key
+- Buffers packets for sending to ensure non-blocking operation
 - Handles packet sending through the assigned stream
 - Implements resilience patterns for error handling
+- Ensures sequential processing of packets
 
 ## Flow Overview
 
 1. A packet arrives at the `Dispatcher`
-2. The dispatcher determines the destination peer ID and routes the packet to the appropriate `WorkerPool`
-3. The worker pool identifies or creates a `Worker` for the connection key
-4. The worker gets a stream from the `StreamManager` and sends the packet
-5. The stream manager ensures packets with the same connection key use the same stream
+2. The dispatcher determines the destination peer ID and connection key
+3. The dispatcher gets a stream from the `StreamPool` for the peer ID
+4. The dispatcher sends the packet to the stream's channel
+5. The `StreamChannel` processes the packet and sends it through the stream
+6. The stream pool ensures packets with the same connection key use the same stream
 
 ## Usage Example
 
 ```go
 // Create a dispatcher configuration
-config := &dispatch.DispatcherConfig{
+config := &dispatch.Config{
     MaxStreamsPerPeer:     10,
     StreamIdleTimeout:     5 * time.Minute,
     StreamCleanupInterval: 1 * time.Minute,
-    WorkerIdleTimeout:     300, // seconds
-    WorkerCleanupInterval: 1 * time.Minute,
-    WorkerBufferSize:      100,
     PacketBufferSize:      100,
 }
 
@@ -103,7 +86,7 @@ dispatcher := dispatch.NewDispatcher(
 dispatcher.Start()
 
 // Dispatch a packet
-connKey := types.FormatConnectionKey(sourcePort, destIP, destPort)
+connKey := types.ConnectionKey(fmt.Sprintf("%s:%s:%s", sourcePort, destIP, destPort))
 err := dispatcher.DispatchPacket(ctx, connKey, destIP, packetData)
 
 // Dispatch with callback for completion notification
@@ -121,7 +104,8 @@ dispatcher.Stop()
 ## Performance Considerations
 
 - The system is designed to maximize concurrency while ensuring sequential processing when needed
-- Each worker operates independently, reducing contention
+- Each stream operates independently, reducing contention
 - Stream channels provide a buffer for packet processing, preventing backpressure
-- Idle workers and streams are automatically cleaned up to conserve resources
+- Idle streams are automatically cleaned up to conserve resources
 - Load balancing ensures even distribution of traffic across streams
+- Dynamic stream scaling ensures optimal resource utilization based on traffic load
