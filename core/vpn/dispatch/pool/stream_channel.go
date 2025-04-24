@@ -2,6 +2,8 @@ package pool
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -10,8 +12,10 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/dispatch/types"
 )
 
-// StreamChannelV2 represents a channel dedicated to a specific stream
-type StreamChannelV2 struct {
+var streamLog = logrus.WithField("service", "vpn-stream")
+
+// StreamChannel represents a channel dedicated to a specific stream
+type StreamChannel struct {
 	// The actual stream
 	Stream api.VPNStream
 	// Channel for sending packets to the stream
@@ -29,7 +33,7 @@ type StreamChannelV2 struct {
 }
 
 // GetBufferUtilization returns the current buffer utilization as a percentage (0-100)
-func (s *StreamChannelV2) GetBufferUtilization() int {
+func (s *StreamChannel) GetBufferUtilization() int {
 	// Get the current length of the packet channel
 	currentLen := len(s.PacketChan)
 
@@ -45,12 +49,12 @@ func (s *StreamChannelV2) GetBufferUtilization() int {
 }
 
 // IsHealthy returns whether the stream is healthy
-func (s *StreamChannelV2) IsHealthy() bool {
+func (s *StreamChannel) IsHealthy() bool {
 	return atomic.LoadInt32(&s.healthy) == 1
 }
 
 // SetHealthy sets the stream's health status
-func (s *StreamChannelV2) SetHealthy(healthy bool) {
+func (s *StreamChannel) SetHealthy(healthy bool) {
 	var value int32 = 0
 	if healthy {
 		value = 1
@@ -59,24 +63,24 @@ func (s *StreamChannelV2) SetHealthy(healthy bool) {
 }
 
 // GetLastActivity returns the timestamp of the last activity
-func (s *StreamChannelV2) GetLastActivity() time.Time {
+func (s *StreamChannel) GetLastActivity() time.Time {
 	return time.Unix(0, atomic.LoadInt64(&s.lastActivity))
 }
 
 // UpdateLastActivity updates the last activity timestamp
-func (s *StreamChannelV2) UpdateLastActivity() {
+func (s *StreamChannel) UpdateLastActivity() {
 	atomic.StoreInt64(&s.lastActivity, time.Now().UnixNano())
 }
 
 // Close closes the stream channel
-func (s *StreamChannelV2) Close() {
+func (s *StreamChannel) Close() {
 	s.cancel()
 	close(s.PacketChan)
 	s.Stream.Close()
 }
 
 // ProcessPackets starts processing packets from the channel
-func (s *StreamChannelV2) ProcessPackets(peerID string) {
+func (s *StreamChannel) ProcessPackets(peerID string) {
 	logger := streamLog.WithFields(logrus.Fields{
 		"peer_id": peerID,
 	})
@@ -201,36 +205,39 @@ func (s *StreamChannelV2) ProcessPackets(peerID string) {
 }
 
 // writePacketToStream writes a packet to the stream
-func (s *StreamChannelV2) writePacketToStream(packet *types.QueuedPacket) error {
-	// Add a timeout if none exists
-	ctx := packet.Ctx
-	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
-		// Use a reasonable timeout for stream writes (200ms)
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, 200*time.Millisecond)
-		defer cancel()
-	}
+func (s *StreamChannel) writePacketToStream(packet *types.QueuedPacket) error {
+	// Record start time for performance monitoring
+	startTime := time.Now()
 
-	// Create a done channel to handle context cancellation
-	done := make(chan error, 1)
-
-	// Write in a goroutine to allow for context cancellation
-	go func() {
-		// Write the packet to the stream
-		_, err := s.Stream.Write(packet.Data)
-		if err != nil {
-			done <- types.NewNetworkError(err, "write", packet.DestIP, "")
-			return
+	// Write the packet to the stream
+	_, err := s.Stream.Write(packet.Data)
+	if err != nil {
+		// Check for common libp2p stream errors that indicate the stream is broken
+		errStr := err.Error()
+		if strings.Contains(errStr, "stream reset") ||
+			strings.Contains(errStr, "protocol not supported") ||
+			strings.Contains(errStr, "connection closed") ||
+			strings.Contains(errStr, "stream closed") ||
+			strings.Contains(errStr, "deadline exceeded") ||
+			strings.Contains(errStr, "EOF") {
+			// Mark the stream as unhealthy
+			s.SetHealthy(false)
+			streamLog.WithError(err).Debug("Stream marked as unhealthy due to libp2p error")
 		}
-		done <- nil
-	}()
-
-	// Wait for the write to complete or context to be cancelled
-	select {
-	case err := <-done:
-		return err
-	case <-ctx.Done():
-		// Context cancelled or timed out
-		return types.ErrContextCancelled
+		return types.NewNetworkError(err, "write", packet.DestIP, "")
 	}
+
+	// Calculate processing duration
+	processingDuration := time.Since(startTime)
+
+	// Log performance information if write took too long
+	if processingDuration > 200*time.Millisecond {
+		streamLog.WithFields(logrus.Fields{
+			"stream_id":   fmt.Sprintf("%p", s),
+			"dest_ip":     packet.DestIP,
+			"duration_ms": processingDuration.Milliseconds(),
+		}).Warn("Stream write took longer than expected")
+	}
+
+	return nil
 }

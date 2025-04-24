@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-func TestStreamPoolV2_GetStreamChannel(t *testing.T) {
+func TestStreamPool_GetStreamChannel(t *testing.T) {
 	// Create mocks
 	mockStreamCreator := new(MockStreamService)
 	mockStream := new(MockStream)
@@ -30,7 +30,7 @@ func TestStreamPoolV2_GetStreamChannel(t *testing.T) {
 	}
 
 	// Create stream pool
-	streamPool := NewStreamPoolV2(mockStreamCreator, config)
+	streamPool := NewStreamPool(mockStreamCreator, config)
 
 	// Start the stream pool
 	streamPool.Start()
@@ -60,7 +60,7 @@ func TestStreamPoolV2_GetStreamChannel(t *testing.T) {
 	assert.Equal(t, int64(1), metrics[testPeerID.String()]["stream_count"])
 }
 
-func TestStreamPoolV2_ReleaseStreamChannel(t *testing.T) {
+func TestStreamPool_ReleaseStreamChannel(t *testing.T) {
 	// Create mocks
 	mockStreamCreator := new(MockStreamService)
 	mockStream := new(MockStream)
@@ -80,7 +80,7 @@ func TestStreamPoolV2_ReleaseStreamChannel(t *testing.T) {
 	}
 
 	// Create stream pool
-	streamPool := NewStreamPoolV2(mockStreamCreator, config)
+	streamPool := NewStreamPool(mockStreamCreator, config)
 
 	// Start the stream pool
 	streamPool.Start()
@@ -108,7 +108,7 @@ func TestStreamPoolV2_ReleaseStreamChannel(t *testing.T) {
 	assert.NotEqual(t, streamChannel, streamChannel2)
 }
 
-func TestStreamPoolV2_CleanupIdleStreams(t *testing.T) {
+func TestStreamPool_CleanupIdleStreams(t *testing.T) {
 	// Create mocks
 	mockStreamCreator := new(MockStreamService)
 	mockStream := new(MockStream)
@@ -128,7 +128,7 @@ func TestStreamPoolV2_CleanupIdleStreams(t *testing.T) {
 	}
 
 	// Create stream pool
-	streamPool := NewStreamPoolV2(mockStreamCreator, config)
+	streamPool := NewStreamPool(mockStreamCreator, config)
 
 	// Start the stream pool
 	streamPool.Start()

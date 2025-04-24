@@ -13,10 +13,10 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/dispatch/types"
 )
 
-var streamPoolV2Log = logrus.WithField("service", "vpn-stream-pool-v2")
+var streamPoolLog = logrus.WithField("service", "vpn-stream-pool")
 
-// StreamPoolV2 is an improved implementation of StreamPool with reduced mutex usage
-type StreamPoolV2 struct {
+// StreamPool is an improved implementation of StreamPool with reduced mutex usage
+type StreamPool struct {
 	// Core components
 	streamCreator api.StreamService
 	ctx           context.Context
@@ -49,17 +49,25 @@ type StreamPoolV2 struct {
 	peerShards [16]*peerShard
 }
 
+// StreamPoolConfig contains configuration for the stream pool
+type StreamPoolConfig struct {
+	MaxStreamsPerPeer int
+	StreamIdleTimeout time.Duration
+	CleanupInterval   time.Duration
+	PacketBufferSize  int
+}
+
 // peerShard represents a shard of the peer data
 type peerShard struct {
 	sync.RWMutex
 	// Map of peer ID -> peer data
-	peers map[string]*peerDataV2
+	peers map[string]*peerData
 }
 
-// peerDataV2 contains all data for a specific peer
-type peerDataV2 struct {
+// peerData contains all data for a specific peer
+type peerData struct {
 	// Streams for this peer
-	streams []*StreamChannelV2
+	streams []*StreamChannel
 	// Usage counts for each stream
 	usageCounts []int64
 }
@@ -68,7 +76,7 @@ type peerDataV2 struct {
 type streamOp struct {
 	opType     string // "get_stream", "release_stream", "cleanup", "get_metrics", etc.
 	peerID     peer.ID
-	stream     *StreamChannelV2
+	stream     *StreamChannel
 	healthy    bool
 	ctx        context.Context
 	resultChan chan streamOpResult
@@ -76,25 +84,25 @@ type streamOp struct {
 
 // streamOpResult represents the result of a stream operation
 type streamOpResult struct {
-	stream  *StreamChannelV2
+	stream  *StreamChannel
 	metrics map[string]map[string]int64
 	count   int
 	err     error
 }
 
-// NewStreamPoolV2 creates a new stream pool with reduced mutex usage
-func NewStreamPoolV2(streamCreator api.StreamService, config *StreamPoolConfig) *StreamPoolV2 {
+// NewStreamPool creates a new stream pool with reduced mutex usage
+func NewStreamPool(streamCreator api.StreamService, config *StreamPoolConfig) *StreamPool {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Initialize the peer shards
 	peerShards := [16]*peerShard{}
 	for i := 0; i < 16; i++ {
 		peerShards[i] = &peerShard{
-			peers: make(map[string]*peerDataV2),
+			peers: make(map[string]*peerData),
 		}
 	}
 
-	pool := &StreamPoolV2{
+	pool := &StreamPool{
 		streamCreator:     streamCreator,
 		ctx:               ctx,
 		cancel:            cancel,
@@ -110,13 +118,13 @@ func NewStreamPoolV2(streamCreator api.StreamService, config *StreamPoolConfig) 
 }
 
 // Start starts the stream pool and its worker routine
-func (p *StreamPoolV2) Start() {
+func (p *StreamPool) Start() {
 	// Only start if not already active
 	if !atomic.CompareAndSwapInt32(&p.active, 0, 1) {
 		return
 	}
 
-	streamPoolV2Log.Info("Starting stream pool")
+	streamPoolLog.Info("Starting stream pool")
 
 	// Start the worker routine
 	go p.processOperations()
@@ -129,13 +137,13 @@ func (p *StreamPoolV2) Start() {
 }
 
 // Stop stops the stream pool and its worker routine
-func (p *StreamPoolV2) Stop() {
+func (p *StreamPool) Stop() {
 	// Only stop if active
 	if !atomic.CompareAndSwapInt32(&p.active, 1, 0) {
 		return
 	}
 
-	streamPoolV2Log.Info("Stopping stream pool")
+	streamPoolLog.Info("Stopping stream pool")
 	p.cancel()
 
 	// Close the operation channel
@@ -143,7 +151,7 @@ func (p *StreamPoolV2) Stop() {
 }
 
 // processOperations is the main worker routine that processes stream operations
-func (p *StreamPoolV2) processOperations() {
+func (p *StreamPool) processOperations() {
 	for op := range p.opChan {
 		switch op.opType {
 		case "get_stream":
@@ -169,7 +177,7 @@ func (p *StreamPoolV2) processOperations() {
 }
 
 // GetStreamChannel gets a stream channel for a peer
-func (p *StreamPoolV2) GetStreamChannel(ctx context.Context, peerID peer.ID) (*StreamChannelV2, error) {
+func (p *StreamPool) GetStreamChannel(ctx context.Context, peerID peer.ID) (*StreamChannel, error) {
 	// Send the operation to the worker routine
 	resultChan := make(chan streamOpResult, 1)
 	p.opChan <- streamOp{
@@ -185,7 +193,7 @@ func (p *StreamPoolV2) GetStreamChannel(ctx context.Context, peerID peer.ID) (*S
 }
 
 // getStreamChannelInternal is the internal implementation of GetStreamChannel
-func (p *StreamPoolV2) getStreamChannelInternal(ctx context.Context, peerID peer.ID) (*StreamChannelV2, error) {
+func (p *StreamPool) getStreamChannelInternal(ctx context.Context, peerID peer.ID) (*StreamChannel, error) {
 	peerIDStr := peerID.String()
 	shardIdx := p.getPeerShardIndex(peerIDStr)
 	shard := p.peerShards[shardIdx]
@@ -193,7 +201,7 @@ func (p *StreamPoolV2) getStreamChannelInternal(ctx context.Context, peerID peer
 	// Check if we have any streams for this peer
 	shard.RLock()
 	peerData, exists := shard.peers[peerIDStr]
-	var streams []*StreamChannelV2
+	var streams []*StreamChannel
 	var usageCounts []int64
 	if exists {
 		streams = peerData.streams
@@ -236,7 +244,7 @@ func (p *StreamPoolV2) getStreamChannelInternal(ctx context.Context, peerID peer
 				streamNearingCapacity = true
 
 				// Log detailed metrics when a stream is nearing capacity
-				streamPoolV2Log.WithFields(logrus.Fields{
+				streamPoolLog.WithFields(logrus.Fields{
 					"peer_id":            peerIDStr,
 					"stream_index":       i,
 					"buffer_utilization": bufferUtil,
@@ -258,7 +266,7 @@ func (p *StreamPoolV2) getStreamChannelInternal(ctx context.Context, peerID peer
 				len(streams) < p.maxStreamsPerPeer &&
 				p.maxStreamsPerPeer > 1 {
 				// Log the decision to create a new stream
-				streamPoolV2Log.WithFields(logrus.Fields{
+				streamPoolLog.WithFields(logrus.Fields{
 					"peer_id":         peerIDStr,
 					"current_streams": len(streams),
 					"max_streams":     p.maxStreamsPerPeer,
@@ -284,7 +292,7 @@ func (p *StreamPoolV2) getStreamChannelInternal(ctx context.Context, peerID peer
 }
 
 // ReleaseStreamChannel marks a stream channel as unhealthy if it's not healthy
-func (p *StreamPoolV2) ReleaseStreamChannel(peerID peer.ID, streamChannel *StreamChannelV2, healthy bool) {
+func (p *StreamPool) ReleaseStreamChannel(peerID peer.ID, streamChannel *StreamChannel, healthy bool) {
 	// Send the operation to the worker routine
 	resultChan := make(chan streamOpResult, 1)
 	p.opChan <- streamOp{
@@ -300,7 +308,7 @@ func (p *StreamPoolV2) ReleaseStreamChannel(peerID peer.ID, streamChannel *Strea
 }
 
 // releaseStreamChannelInternal is the internal implementation of ReleaseStreamChannel
-func (p *StreamPoolV2) releaseStreamChannelInternal(peerID peer.ID, streamChannel *StreamChannelV2, healthy bool) {
+func (p *StreamPool) releaseStreamChannelInternal(peerID peer.ID, streamChannel *StreamChannel, healthy bool) {
 	if !healthy {
 		// Mark the stream as unhealthy
 		streamChannel.SetHealthy(false)
@@ -311,17 +319,17 @@ func (p *StreamPoolV2) releaseStreamChannelInternal(peerID peer.ID, streamChanne
 }
 
 // createNewStreamChannel creates a new stream channel for a peer
-func (p *StreamPoolV2) createNewStreamChannel(ctx context.Context, peerID peer.ID) (*StreamChannelV2, error) {
+func (p *StreamPool) createNewStreamChannel(ctx context.Context, peerID peer.ID) (*StreamChannel, error) {
 	peerIDStr := peerID.String()
 	shardIdx := p.getPeerShardIndex(peerIDStr)
 	shard := p.peerShards[shardIdx]
 
 	// Check if we've reached the maximum number of streams for this peer
 	shard.RLock()
-	peerData, exists := shard.peers[peerIDStr]
+	peerDataValue, exists := shard.peers[peerIDStr]
 	var streamCount int
 	if exists {
-		streamCount = len(peerData.streams)
+		streamCount = len(peerDataValue.streams)
 	}
 	shard.RUnlock()
 
@@ -345,7 +353,7 @@ func (p *StreamPoolV2) createNewStreamChannel(ctx context.Context, peerID peer.I
 	}
 
 	// Create a new stream channel
-	streamChannel := &StreamChannelV2{
+	streamChannel := &StreamChannel{
 		Stream:       stream,
 		PacketChan:   make(chan *types.QueuedPacket, bufferSize),
 		lastActivity: time.Now().UnixNano(),
@@ -360,15 +368,15 @@ func (p *StreamPoolV2) createNewStreamChannel(ctx context.Context, peerID peer.I
 	// Add the stream to the pool
 	shard.Lock()
 	if !exists {
-		shard.peers[peerIDStr] = &peerDataV2{
-			streams:     make([]*StreamChannelV2, 0, 1), // Start with capacity for 1 stream
+		shard.peers[peerIDStr] = &peerData{
+			streams:     make([]*StreamChannel, 0, 1), // Start with capacity for 1 stream
 			usageCounts: make([]int64, 0, 1),
 		}
 	}
 
-	peerData = shard.peers[peerIDStr]
-	peerData.streams = append(peerData.streams, streamChannel)
-	peerData.usageCounts = append(peerData.usageCounts, 1) // Start with usage count of 1
+	peerDataValue = shard.peers[peerIDStr]
+	peerDataValue.streams = append(peerDataValue.streams, streamChannel)
+	peerDataValue.usageCounts = append(peerDataValue.usageCounts, 1) // Start with usage count of 1
 	shard.Unlock()
 
 	// Update metrics
@@ -379,7 +387,7 @@ func (p *StreamPoolV2) createNewStreamChannel(ctx context.Context, peerID peer.I
 }
 
 // removeStreamAtIndex removes a stream at the specified index
-func (p *StreamPoolV2) removeStreamAtIndex(peerIDStr string, index int, shard *peerShard) {
+func (p *StreamPool) removeStreamAtIndex(peerIDStr string, index int, shard *peerShard) {
 	peerData, exists := shard.peers[peerIDStr]
 	if !exists || index >= len(peerData.streams) {
 		return
@@ -403,7 +411,7 @@ func (p *StreamPoolV2) removeStreamAtIndex(peerIDStr string, index int, shard *p
 }
 
 // cleanupIdleStreams periodically checks for and removes idle streams
-func (p *StreamPoolV2) cleanupIdleStreams() {
+func (p *StreamPool) cleanupIdleStreams() {
 	ticker := time.NewTicker(p.cleanupInterval)
 	defer ticker.Stop()
 
@@ -441,7 +449,7 @@ func (p *StreamPoolV2) cleanupIdleStreams() {
 }
 
 // cleanupIdleStreamsInternal is the internal implementation of cleanupIdleStreams
-func (p *StreamPoolV2) cleanupIdleStreamsInternal() {
+func (p *StreamPool) cleanupIdleStreamsInternal() {
 	now := time.Now()
 
 	// Process each shard
@@ -480,7 +488,7 @@ func (p *StreamPoolV2) cleanupIdleStreamsInternal() {
 }
 
 // GetStreamMetrics returns metrics for all streams
-func (p *StreamPoolV2) GetStreamMetrics() map[string]map[string]int64 {
+func (p *StreamPool) GetStreamMetrics() map[string]map[string]int64 {
 	// Send the operation to the worker routine
 	resultChan := make(chan streamOpResult, 1)
 	p.opChan <- streamOp{
@@ -494,7 +502,7 @@ func (p *StreamPoolV2) GetStreamMetrics() map[string]map[string]int64 {
 }
 
 // getStreamMetricsInternal is the internal implementation of GetStreamMetrics
-func (p *StreamPoolV2) getStreamMetricsInternal() map[string]map[string]int64 {
+func (p *StreamPool) getStreamMetricsInternal() map[string]map[string]int64 {
 	metrics := make(map[string]map[string]int64)
 
 	// Process each shard
@@ -539,7 +547,7 @@ func (p *StreamPoolV2) getStreamMetricsInternal() map[string]map[string]int64 {
 }
 
 // GetStreamCount returns the number of streams for a peer
-func (p *StreamPoolV2) GetStreamCount(peerID peer.ID) int {
+func (p *StreamPool) GetStreamCount(peerID peer.ID) int {
 	// Send the operation to the worker routine
 	resultChan := make(chan streamOpResult, 1)
 	p.opChan <- streamOp{
@@ -554,7 +562,7 @@ func (p *StreamPoolV2) GetStreamCount(peerID peer.ID) int {
 }
 
 // getStreamCountInternal is the internal implementation of GetStreamCount
-func (p *StreamPoolV2) getStreamCountInternal(peerID peer.ID) int {
+func (p *StreamPool) getStreamCountInternal(peerID peer.ID) int {
 	peerIDStr := peerID.String()
 	shardIdx := p.getPeerShardIndex(peerIDStr)
 	shard := p.peerShards[shardIdx]
@@ -571,7 +579,7 @@ func (p *StreamPoolV2) getStreamCountInternal(peerID peer.ID) int {
 }
 
 // GetTotalStreamCount returns the total number of streams
-func (p *StreamPoolV2) GetTotalStreamCount() int {
+func (p *StreamPool) GetTotalStreamCount() int {
 	// Send the operation to the worker routine
 	resultChan := make(chan streamOpResult, 1)
 	p.opChan <- streamOp{
@@ -585,7 +593,7 @@ func (p *StreamPoolV2) GetTotalStreamCount() int {
 }
 
 // getTotalStreamCountInternal is the internal implementation of GetTotalStreamCount
-func (p *StreamPoolV2) getTotalStreamCountInternal() int {
+func (p *StreamPool) getTotalStreamCountInternal() int {
 	count := 0
 
 	// Process each shard
@@ -601,7 +609,7 @@ func (p *StreamPoolV2) getTotalStreamCountInternal() int {
 }
 
 // GetPacketBufferSize returns the packet buffer size for streams
-func (p *StreamPoolV2) GetPacketBufferSize() int {
+func (p *StreamPool) GetPacketBufferSize() int {
 	if p.packetBufferSize > 0 {
 		return p.packetBufferSize
 	}
@@ -609,7 +617,7 @@ func (p *StreamPoolV2) GetPacketBufferSize() int {
 }
 
 // getPeerShardIndex returns the shard index for a peer ID
-func (p *StreamPoolV2) getPeerShardIndex(peerID string) int {
+func (p *StreamPool) getPeerShardIndex(peerID string) int {
 	// Simple hash function to distribute peers across shards
 	var hash uint32
 	for i := 0; i < len(peerID); i++ {
@@ -619,7 +627,7 @@ func (p *StreamPoolV2) getPeerShardIndex(peerID string) int {
 }
 
 // streamStatsLogger periodically logs statistics about streams per peer
-func (p *StreamPoolV2) streamStatsLogger() {
+func (p *StreamPool) streamStatsLogger() {
 	// Create a ticker for periodic logging (every 30 seconds)
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
@@ -641,13 +649,13 @@ func (p *StreamPoolV2) streamStatsLogger() {
 }
 
 // logStreamStats logs detailed statistics about streams per peer
-func (p *StreamPoolV2) logStreamStats() {
+func (p *StreamPool) logStreamStats() {
 	// Get metrics for all peers
 	metrics := p.getStreamMetricsInternal()
 
 	// Log overall stats
 	totalStreams := p.getTotalStreamCountInternal()
-	streamPoolV2Log.WithFields(logrus.Fields{
+	streamPoolLog.WithFields(logrus.Fields{
 		"total_streams":   totalStreams,
 		"active_streams":  atomic.LoadInt64(&p.metrics.ActiveStreams),
 		"streams_created": atomic.LoadInt64(&p.metrics.StreamsCreated),
@@ -693,7 +701,7 @@ func (p *StreamPoolV2) logStreamStats() {
 		shard.RUnlock()
 
 		// Log peer stream stats
-		streamPoolV2Log.WithFields(logrus.Fields{
+		streamPoolLog.WithFields(logrus.Fields{
 			"peer_id":        peerID,
 			"stream_count":   peerMetrics["stream_count"],
 			"packet_count":   peerMetrics["packet_count"],
@@ -705,10 +713,10 @@ func (p *StreamPoolV2) logStreamStats() {
 }
 
 // Close implements io.Closer
-func (p *StreamPoolV2) Close() error {
+func (p *StreamPool) Close() error {
 	p.Stop()
 	return nil
 }
 
-// Ensure StreamPoolV2 implements StreamPoolInterfaceV2
-var _ StreamPoolInterfaceV2 = (*StreamPoolV2)(nil)
+// Ensure StreamPool implements StreamPoolInterface
+var _ StreamPoolInterface = (*StreamPool)(nil)

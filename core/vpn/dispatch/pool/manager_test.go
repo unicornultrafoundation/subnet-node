@@ -11,7 +11,7 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/dispatch/types"
 )
 
-// MockStreamPool is a mock implementation of the StreamPool
+// MockStreamPool is a mock implementation of the StreamPoolInterface
 type MockStreamPool struct {
 	mock.Mock
 }
