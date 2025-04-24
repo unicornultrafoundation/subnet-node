@@ -118,7 +118,7 @@ Performance tests are skipped in short mode. They measure metrics such as:
 - Success/failure rates
 
 Key performance test types:
-- `TestStreamServicePerformance`: Tests stream service performance
+- `TestStreamPoolPerformance`: Tests stream pool performance
 - `TestPacketDispatcherPerformance`: Tests packet dispatcher performance
 - `TestResiliencePerformance`: Tests resilience patterns performance
 
@@ -148,7 +148,7 @@ These tests use the fault injection capabilities in the testutil package to simu
 2. **Run Specific Tests**: Use `-run` flag to run specific tests.
 
    ```bash
-   go test -run TestStreamService ./core/vpn/...
+   go test -run TestStreamPool ./core/vpn/...
    ```
 
 3. **Skip Long-Running Tests**: Use `-short` flag to skip long-running tests.

@@ -9,14 +9,13 @@ This package contains a comprehensive set of testing utilities for the VPN packa
 
 2. Mock Implementations:
   - MockStream: A mock implementation of the Stream interface
-  - MockStreamService: A mock implementation of the StreamService interface
+  - MockStreamService: A mock implementation of the StreamService interface (for testing)
   - MockDiscoveryService: A mock implementation of the DiscoveryService interface
   - MockPoolService: A mock implementation of the PoolService interface
 
 3. Test Helpers:
   - CreateTestPacket: Creates a test packet of a specified size
   - VerifyPacketDelivery: Verifies that a packet was delivered successfully
-  - VerifyWorkerMetrics: Verifies worker metrics
   - VerifyMetrics: Verifies metrics
   - TestContext: Creates a context with timeout for testing
   - TestWithRetry: Runs a test with retries
@@ -27,13 +26,13 @@ This package contains a comprehensive set of testing utilities for the VPN packa
   - SetupMockStreamService: Sets up a mock stream service with specified configuration
   - SetupDiscoveryService: Sets up a mock discovery service with specified configuration
   - SetupResilienceService: Sets up a resilience service with specified configuration
-  - SetupTestStreamService: Sets up a test stream service
+  - SetupTestStreamPool: Sets up a test stream pool
   - SetupTestDispatcher: Sets up a test packet dispatcher
 
 5. Performance Testing:
   - PerformanceConfig: Configuration for performance tests
   - PerformanceResult: Results of a performance test
-  - RunStreamPerformanceTest: Runs a performance test on a stream service
+  - RunStreamPerformanceTest: Runs a performance test on a stream pool
   - RunDispatcherPerformanceTest: Runs a performance test on a packet dispatcher
   - VerifyPerformanceRequirements: Verifies performance requirements
   - DefaultPerformanceConfig: Returns a default performance test configuration

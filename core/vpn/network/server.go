@@ -6,7 +6,7 @@ import (
 
 	"github.com/songgao/water"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/api"
-	"github.com/unicornultrafoundation/subnet-node/core/vpn/packet"
+	"github.com/unicornultrafoundation/subnet-node/core/vpn/dispatch/types"
 )
 
 // ServerConfig contains configuration for the server
@@ -50,7 +50,7 @@ func (s *ServerService) HandleStream(stream api.VPNStream, iface *water.Interfac
 				return
 			}
 
-			packetInfo, err := packet.ExtractIPAndPorts(buf[:n])
+			packetInfo, err := types.ExtractPacketInfo(buf[:n])
 			if err != nil {
 				log.Debugf("error extracting packet info: %v", err)
 				s.metrics.IncrementPacketsDropped()

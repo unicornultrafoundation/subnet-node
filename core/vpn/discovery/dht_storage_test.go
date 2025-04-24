@@ -10,15 +10,16 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/unicornultrafoundation/subnet-node/core/vpn/testutil"
 	subnet_vpn "github.com/unicornultrafoundation/subnet-node/proto/subnet/vpn"
 )
 
 // TestDHTStorage tests both GetVirtualIP and StoreMappingInDHT methods
 func TestDHTStorage(t *testing.T) {
 	// Create mocks
-	mockPeerstoreService := new(MockPeerstoreService)
-	mockHostService := new(MockHostService)
-	mockDHTService := new(MockDHTService)
+	mockPeerstoreService := new(testutil.MockPeerstoreService)
+	mockHostService := new(testutil.MockHostService)
+	mockDHTService := new(testutil.MockDHTService)
 	mockPeerID := peer.ID("peer1")
 
 	// Generate a test key pair

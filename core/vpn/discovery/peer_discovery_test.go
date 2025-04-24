@@ -12,16 +12,17 @@ import (
 	"github.com/patrickmn/go-cache"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/unicornultrafoundation/subnet-node/core/vpn/testutil"
 )
 
 // TestGetPeerID tests the GetPeerID method with caching behavior
 func TestGetPeerID(t *testing.T) {
 	// Create mocks
-	mockAccountService := new(MockAccountService)
-	mockIPRegistry := new(MockIPRegistry)
-	mockHostService := new(MockHostService)
-	mockPeerstoreService := new(MockPeerstoreService)
-	mockDHTService := new(MockDHTService)
+	mockAccountService := new(testutil.MockAccountService)
+	mockIPRegistry := new(testutil.MockIPRegistry)
+	mockHostService := new(testutil.MockHostService)
+	mockPeerstoreService := new(testutil.MockPeerstoreService)
+	mockDHTService := new(testutil.MockDHTService)
 
 	// Setup expectations
 	mockHostService.On("ID").Return(peer.ID("peer1"))

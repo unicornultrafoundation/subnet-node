@@ -14,9 +14,9 @@ The VPN service leverages libp2p for peer-to-peer communication and establishes 
 - **Resilient Connections**: Implements circuit breakers and retries for reliability
 - **Performance Metrics**: Comprehensive metrics for monitoring
 - **Packet Synchronization**: Ensures strict sequential processing of packets
-- **Worker Management**: Automatic cleanup of idle workers
-- **Stream Pooling**: Efficient reuse of P2P streams
+- **Stream Pooling**: Efficient reuse of P2P streams with automatic scaling
 - **Stream Health Monitoring**: Detection and replacement of unhealthy streams
+- **Connection-Based Routing**: Ensures packets with the same connection are processed sequentially
 
 ## Package Structure
 
@@ -25,12 +25,13 @@ The VPN package is organized into several subpackages:
 - `api`: Defines the interfaces for the VPN system
 - `config`: Contains configuration structures and validation
 - `discovery`: Handles peer discovery and mapping
+- `dispatch`: Manages packet dispatching and stream pooling
 - `metrics`: Provides metrics collection and reporting
 - `network`: Manages network interfaces and connections
 - `packet`: Handles packet processing and routing
 - `resilience`: Implements resilience patterns like circuit breakers and retries
-- `stream`: Manages P2P streams and multiplexing
 - `utils`: Provides common utilities used across the VPN service
+- `validator`: Validates VPN configuration and settings
 
 ## Architecture
 
@@ -42,7 +43,7 @@ The VPN service follows a modular architecture with several key components:
 ├─────────────┬─────────────┬─────────────┬─────────────┬─────────┤
 │ PeerDiscovery│  TUNService │ClientService│ServerService│ Metrics │
 ├─────────────┼─────────────┼─────────────┼─────────────┼─────────┤
-│  Dispatcher │StreamService│CircuitBreaker│RetryManager │ Utils   │
+│  Dispatcher │ StreamPool  │CircuitBreaker│RetryManager │ Utils   │
 └─────────────┴─────────────┴─────────────┴─────────────┴─────────┘
 ```
 
@@ -53,8 +54,8 @@ The VPN service follows a modular architecture with several key components:
 - **TUNService**: Manages the TUN interface for capturing and injecting network packets
 - **ClientService**: Handles outgoing VPN traffic from the local node
 - **ServerService**: Processes incoming VPN traffic from remote peers
-- **Dispatcher**: Routes packets to the appropriate worker based on destination
-- **StreamService**: Manages libp2p streams for communication between peers
+- **Dispatcher**: Routes packets to the appropriate stream based on connection key
+- **StreamPool**: Manages pools of libp2p streams for efficient communication between peers
 - **CircuitBreakerManager**: Provides fault tolerance through circuit breaker pattern
 - **RetryManager**: Handles retries for failed operations with exponential backoff
 - **MetricsService**: Collects and reports performance metrics
@@ -64,22 +65,23 @@ The VPN service follows a modular architecture with several key components:
 The VPN configuration is defined in the `config` package. It includes settings for:
 
 - Network configuration (MTU, virtual IP, subnet, routes)
-- Worker settings (idle timeout, buffer size, cleanup interval)
-- Stream pool settings (max/min streams per peer, idle timeout)
+- Stream pool settings (max streams per peer, idle timeout, cleanup interval)
+- Packet buffer settings (buffer size for stream channels)
 - Circuit breaker settings (failure threshold, reset timeout, success threshold)
 - Health check settings (interval, timeout, max consecutive failures)
+- Retry settings (max attempts, initial interval, max interval)
 
 ### Packet Processing
 
-Packets are processed by workers that handle specific destination IP:Port combinations. The workers are managed by a dispatcher that routes packets to the appropriate worker.
+Packets are processed by stream channels that handle specific connection keys (IP:Port combinations). The dispatcher routes packets to the appropriate stream channel based on the connection key, ensuring that packets with the same connection key are processed sequentially.
 
 ```
-TUN Interface -> ClientService -> Dispatcher -> Worker -> P2P Stream -> Peer
+TUN Interface -> ClientService -> Dispatcher -> Stream Channel -> P2P Stream -> Peer
 ```
 
 ### Stream Management
 
-Streams are managed by a pool that maintains connections to peers. The pool can be configured to maintain a minimum number of streams per peer and to automatically clean up idle streams.
+Streams are managed by a pool that maintains connections to peers. The pool dynamically scales the number of streams per peer based on traffic load, up to a configurable maximum. Idle streams are automatically cleaned up after a configurable timeout period. Each stream is monitored for health and replaced if it becomes unhealthy.
 
 ### Resilience
 
@@ -96,8 +98,9 @@ The VPN system collects metrics for monitoring and debugging, including:
 - Packet counts (received, sent, dropped)
 - Byte counts (received, sent)
 - Stream counts (created, closed, errors)
+- Stream pool metrics (streams per peer, active streams)
 - Circuit breaker states and counts
-- Worker counts and states
+- Retry operation metrics (attempts, successes, failures)
 
 ## Usage
 
@@ -136,12 +139,21 @@ vpn:
     - 22
     - 3306
 
-  max_streams_per_peer: 5
-  min_streams_per_peer: 2
-  worker_idle_timeout: 60
-  worker_buffer_size: 1024
-  max_workers: 100
-  worker_cleanup_interval: 30s
+  # Stream settings
+  max_streams_per_peer: 10
+  stream_idle_timeout: 300      # 5 minutes
+  cleanup_interval: 60          # 1 minute
+  packet_buffer_size: 100       # Size of packet buffer for each stream
+
+  # Circuit breaker settings
+  circuit_breaker_failure_threshold: 5
+  circuit_breaker_reset_timeout: 60    # 1 minute
+  circuit_breaker_success_threshold: 2
+
+  # Retry settings
+  retry_max_attempts: 5
+  retry_initial_interval: 1      # 1 second
+  retry_max_interval: 30         # 30 seconds
 ```
 
 ## Testing
@@ -150,11 +162,12 @@ The VPN service includes comprehensive unit and integration tests. Each package 
 
 - Configuration validation
 - Packet processing
-- Worker management
+- Stream pool management
+- Connection-based routing
 - Circuit breaker behavior
 - Retry logic
 - Metrics collection
-- Stream handling
+- Resilience under network failures
 
 ```bash
 # Run all VPN tests
@@ -162,7 +175,7 @@ go test -v ./core/vpn/...
 
 # Run specific component tests
 go test -v ./core/vpn/discovery/...
-go test -v ./core/vpn/stream/...
+go test -v ./core/vpn/dispatch/...
 ```
 
 For more detailed information about testing, see the [TESTING.md](./TESTING.md) file.
@@ -172,8 +185,10 @@ For more detailed information about testing, see the [TESTING.md](./TESTING.md) 
 To optimize VPN performance, consider the following tuning options:
 
 1. **MTU Optimization**: Adjust the MTU setting to match your network conditions
-2. **Stream Pooling**: Configure the stream pool size based on expected traffic patterns
-3. **Worker Settings**: Adjust worker buffer size and maximum workers based on system resources
+2. **Stream Pooling**: Configure the maximum streams per peer based on expected traffic patterns
+3. **Packet Buffer Size**: Adjust the packet buffer size based on expected packet rates
+4. **Retry Settings**: Configure retry parameters based on network reliability
+5. **Circuit Breaker Settings**: Tune circuit breaker parameters for your failure patterns
 
 ## Security Considerations
 
@@ -204,9 +219,10 @@ Key implementation principles include:
 - **Modular Design**: Each component has a clear responsibility and interfaces
 - **Resilience Patterns**: Circuit breakers and retries for handling failures
 - **Metrics Collection**: Comprehensive metrics for monitoring and debugging
-- **Packet Synchronization**: Ensures strict sequential processing of packets
+- **Connection-Based Routing**: Ensures packets with the same connection are processed sequentially
+- **Dynamic Stream Scaling**: Automatically scales streams based on traffic load
 - **Configuration Management**: Centralized configuration with validation
-- **Worker Management**: Automatic cleanup of idle workers
+- **Stream Health Monitoring**: Automatic detection and replacement of unhealthy streams
 
 ## Detailed Documentation
 

@@ -113,9 +113,9 @@ func TestChaosEngineering(t *testing.T) {
 			t.Logf("  Packets sent: %d", packetsSent)
 			t.Logf("  Packet errors: %d (%.2f%%)", packetErrors, float64(packetErrors)/float64(packetsSent)*100)
 
-			// Get worker metrics
-			metrics := fixture.Dispatcher.GetWorkerMetrics()
-			t.Logf("  Worker metrics: %v", metrics)
+			// Get dispatcher metrics
+			metrics := fixture.Dispatcher.GetMetrics()
+			t.Logf("  Dispatcher metrics: %v", metrics)
 
 			// Verify that the system was able to handle some packets successfully
 			assert.Greater(t, packetsSent, 0, "Should have sent at least some packets")
@@ -233,9 +233,9 @@ func TestNetworkPartition(t *testing.T) {
 	// Verify that the system recovered after the partition
 	assert.Less(t, recoveryErrors, 5, "Less than 5 out of 10 packets should fail after recovery")
 
-	// Get worker metrics
-	metrics := fixture.Dispatcher.GetWorkerMetrics()
-	t.Logf("Worker metrics: %v", metrics)
+	// Get dispatcher metrics
+	metrics := fixture.Dispatcher.GetMetrics()
+	t.Logf("Dispatcher metrics: %v", metrics)
 }
 
 // TestHighLatency tests the system's behavior under high latency conditions
@@ -324,7 +324,7 @@ func TestHighLatency(t *testing.T) {
 	t.Log("Waiting for recovery...")
 	time.Sleep(500 * time.Millisecond)
 
-	// Get worker metrics
-	metrics := fixture.Dispatcher.GetWorkerMetrics()
-	t.Logf("Worker metrics: %v", metrics)
+	// Get dispatcher metrics
+	metrics := fixture.Dispatcher.GetMetrics()
+	t.Logf("Dispatcher metrics: %v", metrics)
 }
