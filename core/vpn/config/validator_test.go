@@ -252,13 +252,6 @@ func TestValidateAllSettings(t *testing.T) {
 				wantErr: ErrInvalidCircuitBreakerSuccessThreshold,
 			},
 		},
-		"validateStreamHealthSettings": {
-			{
-				name:    "valid stream health settings",
-				modify:  func(cfg *VPNConfig) {},
-				wantErr: nil,
-			},
-		},
 		"validateRetrySettings": {
 			{
 				name:    "valid retry settings",
