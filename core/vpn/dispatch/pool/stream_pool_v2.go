@@ -2,6 +2,7 @@ package pool
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -122,6 +123,9 @@ func (p *StreamPoolV2) Start() {
 
 	// Start the cleanup routine
 	go p.cleanupIdleStreams()
+
+	// Start the stream stats logger
+	go p.streamStatsLogger()
 }
 
 // Stop stops the stream pool and its worker routine
@@ -612,6 +616,92 @@ func (p *StreamPoolV2) getPeerShardIndex(peerID string) int {
 		hash = hash*31 + uint32(peerID[i])
 	}
 	return int(hash % 16)
+}
+
+// streamStatsLogger periodically logs statistics about streams per peer
+func (p *StreamPoolV2) streamStatsLogger() {
+	// Create a ticker for periodic logging (every 30 seconds)
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-p.ctx.Done():
+			return
+		case <-ticker.C:
+			// Check if the pool is still active
+			if atomic.LoadInt32(&p.active) == 0 {
+				return
+			}
+
+			// Log stream stats for each peer
+			p.logStreamStats()
+		}
+	}
+}
+
+// logStreamStats logs detailed statistics about streams per peer
+func (p *StreamPoolV2) logStreamStats() {
+	// Get metrics for all peers
+	metrics := p.getStreamMetricsInternal()
+
+	// Log overall stats
+	totalStreams := p.getTotalStreamCountInternal()
+	streamPoolV2Log.WithFields(logrus.Fields{
+		"total_streams":   totalStreams,
+		"active_streams":  atomic.LoadInt64(&p.metrics.ActiveStreams),
+		"streams_created": atomic.LoadInt64(&p.metrics.StreamsCreated),
+		"streams_removed": atomic.LoadInt64(&p.metrics.StreamsRemoved),
+	}).Info("Stream pool statistics")
+
+	// Log detailed stats for each peer
+	for peerID, peerMetrics := range metrics {
+		// Get detailed stream information
+		shardIdx := p.getPeerShardIndex(peerID)
+		shard := p.peerShards[shardIdx]
+
+		shard.RLock()
+		peerData, exists := shard.peers[peerID]
+		if !exists {
+			shard.RUnlock()
+			continue
+		}
+
+		// Create a list of stream details
+		streamDetails := make([]map[string]interface{}, 0, len(peerData.streams))
+		for i, stream := range peerData.streams {
+			// Get stream metrics
+			packetCount := atomic.LoadInt64(&stream.Metrics.PacketCount)
+			errorCount := atomic.LoadInt64(&stream.Metrics.ErrorCount)
+			bytesSent := atomic.LoadInt64(&stream.Metrics.BytesSent)
+			bufferUtil := stream.GetBufferUtilization()
+			usageCount := atomic.LoadInt64(&peerData.usageCounts[i])
+			lastActivity := stream.GetLastActivity()
+
+			// Add stream details
+			streamDetails = append(streamDetails, map[string]interface{}{
+				"stream_id":         fmt.Sprintf("%p", stream),
+				"healthy":           stream.IsHealthy(),
+				"buffer_util":       bufferUtil,
+				"usage_count":       usageCount,
+				"packet_count":      packetCount,
+				"error_count":       errorCount,
+				"bytes_sent":        bytesSent,
+				"last_activity_ago": time.Since(lastActivity).String(),
+			})
+		}
+		shard.RUnlock()
+
+		// Log peer stream stats
+		streamPoolV2Log.WithFields(logrus.Fields{
+			"peer_id":        peerID,
+			"stream_count":   peerMetrics["stream_count"],
+			"packet_count":   peerMetrics["packet_count"],
+			"error_count":    peerMetrics["error_count"],
+			"bytes_sent":     peerMetrics["bytes_sent"],
+			"stream_details": streamDetails,
+		}).Info("Peer stream statistics")
+	}
 }
 
 // Close implements io.Closer

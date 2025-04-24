@@ -2,12 +2,14 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/sirupsen/logrus"
+	"github.com/unicornultrafoundation/subnet-node/core/vpn/dispatch/pool"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/dispatch/types"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/resilience"
 )
@@ -136,16 +138,60 @@ func (w *MultiConnectionWorker) run() {
 
 	logger.Debug("Multi-connection worker started")
 
+	// Add panic recovery to prevent worker crashes
 	defer func() {
+		if r := recover(); r != nil {
+			logger.WithField("panic", r).Error("Recovered from panic in worker run loop")
+		}
 		atomic.StoreInt32(&w.running, 0)
 		logger.Debug("Multi-connection worker stopped")
 	}()
+
+	// Track worker statistics
+	var stats struct {
+		packetsProcessed int64
+		packetsDropped   int64
+		errors           int64
+		lastStatsReport  time.Time
+	}
+	stats.lastStatsReport = time.Now()
+
+	// Create a ticker for periodic stats reporting
+	statsTicker := time.NewTicker(1 * time.Minute)
+	defer statsTicker.Stop()
 
 	for {
 		select {
 		case <-w.Ctx.Done():
 			logger.Debug("Worker context cancelled, stopping")
 			return
+
+		case <-statsTicker.C:
+			// Report worker statistics periodically
+			if atomic.LoadInt64(&stats.packetsProcessed) > 0 || atomic.LoadInt64(&stats.errors) > 0 {
+				// Get connection count
+				connCount := 0
+				w.connections.Range(func(_, _ any) bool {
+					connCount++
+					return true
+				})
+
+				logger.WithFields(logrus.Fields{
+					"packets_processed": atomic.LoadInt64(&stats.packetsProcessed),
+					"packets_dropped":   atomic.LoadInt64(&stats.packetsDropped),
+					"errors":            atomic.LoadInt64(&stats.errors),
+					"connections":       connCount,
+					"duration":          time.Since(stats.lastStatsReport).String(),
+					"buffer_util":       w.GetBufferUtilization(),
+				}).Info("Worker statistics")
+
+				// Reset stats
+				atomic.StoreInt64(&stats.packetsProcessed, 0)
+				atomic.StoreInt64(&stats.packetsDropped, 0)
+				atomic.StoreInt64(&stats.errors, 0)
+				stats.lastStatsReport = time.Now()
+			}
+
 		case packet, ok := <-w.PacketChan:
 			if !ok {
 				// Channel was closed
@@ -163,12 +209,20 @@ func (w *MultiConnectionWorker) run() {
 
 				// Signal the error on the done channel if provided
 				if packet.DoneCh != nil {
-					packet.DoneCh <- err
-					close(packet.DoneCh)
+					select {
+					case packet.DoneCh <- err:
+						// Successfully sent the error
+					default:
+						// Channel might be closed or full, don't block
+						logger.Debug("Could not send error to done channel, it might be closed or full")
+					}
+					// Don't close the channel here, let the caller close it
 				}
 
 				// Update error metrics
 				atomic.AddInt64(&w.Metrics.ErrorCount, 1)
+				atomic.AddInt64(&stats.errors, 1)
+				atomic.AddInt64(&stats.packetsDropped, 1)
 				continue
 			}
 
@@ -177,7 +231,7 @@ func (w *MultiConnectionWorker) run() {
 			packetLogger := logger.WithFields(logrus.Fields{
 				"packet_size": packetSize,
 				"dest_ip":     packet.DestIP,
-				"conn_key":    connKey,
+				"conn_key":    string(connKey),
 			})
 
 			// Debug logging only when needed
@@ -192,12 +246,20 @@ func (w *MultiConnectionWorker) run() {
 
 				// Signal the error on the done channel if provided
 				if packet.DoneCh != nil {
-					packet.DoneCh <- err
-					close(packet.DoneCh)
+					select {
+					case packet.DoneCh <- err:
+						// Successfully sent the error
+					default:
+						// Channel might be closed or full, don't block
+						packetLogger.Debug("Could not send error to done channel, it might be closed or full")
+					}
+					// Don't close the channel here, let the caller close it
 				}
 
 				// Update error metrics
 				atomic.AddInt64(&w.Metrics.ErrorCount, 1)
+				atomic.AddInt64(&stats.errors, 1)
+				atomic.AddInt64(&stats.packetsDropped, 1)
 
 				// Update connection-specific metrics
 				if value, ok := w.connections.Load(connKey); ok {
@@ -207,13 +269,20 @@ func (w *MultiConnectionWorker) run() {
 			} else {
 				// Signal success on the done channel if provided
 				if packet.DoneCh != nil {
-					packet.DoneCh <- nil
-					close(packet.DoneCh)
+					select {
+					case packet.DoneCh <- nil:
+						// Successfully sent the result
+					default:
+						// Channel might be closed or full, don't block
+						packetLogger.Debug("Could not send success to done channel, it might be closed or full")
+					}
+					// Don't close the channel here, let the caller close it
 				}
 
 				// Update packet metrics
 				atomic.AddInt64(&w.Metrics.PacketCount, 1)
 				atomic.AddInt64(&w.Metrics.BytesSent, int64(packetSize))
+				atomic.AddInt64(&stats.packetsProcessed, 1)
 
 				// Update connection-specific metrics
 				if value, ok := w.connections.Load(connKey); ok {
@@ -254,18 +323,59 @@ func (w *MultiConnectionWorker) extractConnectionKey(packet *types.QueuedPacket)
 
 // processPacket processes a packet with resilience patterns
 func (w *MultiConnectionWorker) processPacket(packet *types.QueuedPacket, connKey types.ConnectionKey) error {
+	// Create a logger for this operation
+	logger := multiWorkerLog.WithFields(logrus.Fields{
+		"worker_id": w.WorkerID,
+		"peer_id":   w.PeerID.String(),
+		"conn_key":  string(connKey),
+		"dest_ip":   packet.DestIP,
+	})
+
 	// Create a breaker ID for this operation
 	breakerId := w.ResilienceService.FormatPeerBreakerId(w.PeerID, "send_packet")
 
+	// Add a timeout to the context if none exists
+	ctx := packet.Ctx
+	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+		// Use a reasonable timeout for packet sending (500ms)
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, 500*time.Millisecond)
+		defer cancel()
+	}
+
 	// Execute with resilience patterns
-	err, _ := w.ResilienceService.ExecuteWithResilience(
-		packet.Ctx,
+	err, retryAttempts := w.ResilienceService.ExecuteWithResilience(
+		ctx,
 		breakerId,
 		func() error {
 			// Send the packet through the stream manager
-			return w.StreamManager.SendPacket(packet.Ctx, connKey, w.PeerID, packet)
+			sendErr := w.StreamManager.SendPacket(ctx, connKey, w.PeerID, packet)
+			if sendErr != nil {
+				// Log detailed error information
+				logger.WithError(sendErr).Debug("Error sending packet, will retry if possible")
+
+				// Check if this is a stream-related error that should trigger a new stream
+				if errors.Is(sendErr, types.ErrStreamChannelClosed) ||
+					errors.Is(sendErr, types.ErrNoHealthyStreams) ||
+					errors.Is(sendErr, types.ErrStreamWriteFailed) {
+					// Get the stream manager implementation
+					if sm, ok := w.StreamManager.(*pool.StreamManagerV2); ok {
+						// Release the connection to force getting a new stream on retry
+						logger.Debug("Releasing connection due to stream error")
+						sm.ReleaseConnection(connKey, false)
+					}
+				}
+			}
+			return sendErr
 		},
 	)
+
+	// Log retry information if there were retries
+	if retryAttempts > 1 {
+		logger.WithFields(logrus.Fields{
+			"retry_attempts": retryAttempts,
+		}).Debug("Packet required retries")
+	}
 
 	return err
 }

@@ -29,6 +29,12 @@ var (
 	ErrContextCancelled       = errors.New("context cancelled")
 	ErrNoHealthyStreams       = errors.New("no healthy streams available")
 	ErrStreamAssignmentFailed = errors.New("failed to assign stream")
+	// Worker manager errors
+	ErrWorkerManagerBusy    = errors.New("worker manager is busy")
+	ErrWorkerManagerTimeout = errors.New("worker manager operation timed out")
+	// Retry and resilience errors
+	ErrMaxRetriesExceeded = errors.New("maximum retries exceeded")
+	ErrCircuitBreakerOpen = errors.New("circuit breaker is open")
 )
 
 // NetworkError represents a network-related error with context information
