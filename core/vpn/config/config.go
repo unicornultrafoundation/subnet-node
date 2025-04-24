@@ -63,10 +63,8 @@ func New(cfg *config.C) *VPNConfig {
 		// Security settings
 		UnallowedPorts: unallowedPorts,
 
-		// Worker settings removed
-
 		// Stream pool settings
-		MaxStreamsPerPeer: cfg.GetInt("vpn.max_streams_per_peer", 30),                            // 30 streams per peer default
+		MaxStreamsPerPeer: cfg.GetInt("vpn.max_streams_per_peer", 50),                            // 50 streams per peer default
 		StreamIdleTimeout: time.Duration(cfg.GetInt("vpn.stream_idle_timeout", 5)) * time.Second, // 5 seconds default
 		CleanupInterval:   time.Duration(cfg.GetInt("vpn.cleanup_interval", 5)) * time.Second,    // 5 seconds default
 		PacketBufferSize:  cfg.GetInt("vpn.packet_buffer_size", 500),                             // 500 packets buffer size
