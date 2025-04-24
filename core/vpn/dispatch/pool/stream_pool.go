@@ -379,12 +379,15 @@ func (p *StreamPool) createNewStreamChannel(ctx context.Context, peerID peer.ID)
 
 	// Create a new stream channel
 	streamChannel := &StreamChannel{
-		Stream:       stream,
-		PacketChan:   make(chan *types.QueuedPacket, bufferSize),
-		lastActivity: time.Now().UnixNano(),
-		healthy:      1, // 1 = healthy
-		ctx:          streamCtx,
-		cancel:       streamCancel,
+		Stream:                   stream,
+		PacketChan:               make(chan *types.QueuedPacket, bufferSize),
+		lastActivity:             time.Now().UnixNano(),
+		healthy:                  1, // 1 = healthy
+		ctx:                      streamCtx,
+		cancel:                   streamCancel,
+		overflowQueue:            make([]*types.QueuedPacket, 0),
+		overflowSignal:           make(chan struct{}, 1),
+		overflowProcessorRunning: 0,
 	}
 
 	// Start the stream processor

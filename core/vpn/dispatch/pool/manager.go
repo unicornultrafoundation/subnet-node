@@ -316,9 +316,15 @@ func (m *StreamManager) SendPacket(
 		m.ReleaseConnection(connKey, false)
 		return types.ErrStreamChannelClosed
 	default:
-		// Channel full, packet dropped
-		atomic.AddInt64(&m.metrics.Errors, 1)
-		return types.ErrStreamChannelFull
+		// Channel full, add to overflow queue instead of dropping
+		streamChannel.AddToOverflowQueue(packet)
+		managerLog.WithFields(logrus.Fields{
+			"conn_key":      string(connKey),
+			"peer_id":       peerID.String(),
+			"overflow_size": streamChannel.GetOverflowQueueSize(),
+		}).Debug("Added packet to overflow queue")
+		atomic.AddInt64(&m.metrics.PacketsProcessed, 1)
+		return nil
 	}
 }
 
@@ -381,6 +387,13 @@ func (m *StreamManager) transferPendingPackets(oldStream, newStream *StreamChann
 	// Create a temporary buffer to hold packets
 	var packets []*types.QueuedPacket
 
+	// Get any packets from the overflow queue
+	overflowPackets := oldStream.DrainOverflowQueue()
+	if len(overflowPackets) > 0 {
+		managerLog.WithField("packet_count", len(overflowPackets)).Debug("Transferred overflow packets to new stream")
+		packets = append(packets, overflowPackets...)
+	}
+
 	// Try to drain the old stream's packet channel without blocking
 	drainCount := 0
 	for {
@@ -401,7 +414,7 @@ doneDraining:
 
 	// Log how many packets were transferred
 	if drainCount > 0 {
-		managerLog.WithField("packet_count", drainCount).Debug("Transferred pending packets to new stream")
+		managerLog.WithField("packet_count", drainCount).Debug("Transferred pending packets from channel to new stream")
 	}
 
 	// Check if there's a failed packet that needs to be retried
@@ -409,7 +422,6 @@ doneDraining:
 		// Add the failed packet to the beginning of our packet list to prioritize it
 		managerLog.Debug("Found failed packet to retry, adding to front of queue")
 		packets = append([]*types.QueuedPacket{oldStream.lastFailedPacket}, packets...)
-		drainCount++
 	}
 
 	// Send the packets to the new stream's channel
@@ -419,8 +431,9 @@ doneDraining:
 		case newStream.PacketChan <- packets[i]:
 			// Successfully transferred
 		default:
-			// New stream's channel is full, log and continue
-			managerLog.WithField("packet", packets[i]).Warn("Failed to transfer packet to new stream, channel full")
+			// New stream's channel is full, add to overflow queue
+			newStream.AddToOverflowQueue(packets[i])
+			managerLog.WithField("dest_ip", packets[i].DestIP).Debug("Added packet to new stream's overflow queue")
 		}
 	}
 }
@@ -461,6 +474,8 @@ func (m *StreamManager) logConnectionStats() {
 				detail["stream_id"] = fmt.Sprintf("%p", conn.StreamChannel)
 				detail["stream_healthy"] = conn.StreamChannel.IsHealthy()
 				detail["buffer_util"] = conn.StreamChannel.GetBufferUtilization()
+				detail["overflow_size"] = conn.StreamChannel.GetOverflowQueueSize()
+				detail["total_buffer_util"] = conn.StreamChannel.GetTotalBufferUtilization()
 				detail["packet_count"] = atomic.LoadInt64(&conn.StreamChannel.Metrics.PacketCount)
 				detail["error_count"] = atomic.LoadInt64(&conn.StreamChannel.Metrics.ErrorCount)
 			} else {
