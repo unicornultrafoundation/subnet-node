@@ -26,6 +26,10 @@ type ConfigService interface {
 	GetStreamIdleTimeout() time.Duration
 	GetCleanupInterval() time.Duration
 	GetPacketBufferSize() int
+	GetUsageCountWeight() float64
+	GetBufferUtilWeight() float64
+	GetBufferUtilThreshold() int
+	GetUsageCountThreshold() int
 
 	// Circuit breaker settings
 	GetCircuitBreakerFailureThreshold() int
@@ -149,6 +153,34 @@ func (c *ConfigServiceImpl) GetPacketBufferSize() int {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.vpnConfig.PacketBufferSize
+}
+
+// GetUsageCountWeight returns the weight for usage count in load score calculation
+func (c *ConfigServiceImpl) GetUsageCountWeight() float64 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.vpnConfig.UsageCountWeight
+}
+
+// GetBufferUtilWeight returns the weight for buffer utilization in load score calculation
+func (c *ConfigServiceImpl) GetBufferUtilWeight() float64 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.vpnConfig.BufferUtilWeight
+}
+
+// GetBufferUtilThreshold returns the buffer utilization threshold percentage
+func (c *ConfigServiceImpl) GetBufferUtilThreshold() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.vpnConfig.BufferUtilThreshold
+}
+
+// GetUsageCountThreshold returns the usage count threshold
+func (c *ConfigServiceImpl) GetUsageCountThreshold() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.vpnConfig.UsageCountThreshold
 }
 
 // Circuit breaker settings

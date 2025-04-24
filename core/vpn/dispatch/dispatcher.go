@@ -63,10 +63,14 @@ func NewDispatcher(
 
 	// Create stream pool
 	streamPoolConfig := &pool.StreamPoolConfig{
-		MaxStreamsPerPeer: config.MaxStreamsPerPeer,
-		StreamIdleTimeout: config.StreamIdleTimeout,
-		CleanupInterval:   config.StreamCleanupInterval,
-		PacketBufferSize:  config.PacketBufferSize,
+		MaxStreamsPerPeer:   config.MaxStreamsPerPeer,
+		StreamIdleTimeout:   config.StreamIdleTimeout,
+		CleanupInterval:     config.StreamCleanupInterval,
+		PacketBufferSize:    config.PacketBufferSize,
+		UsageCountWeight:    config.UsageCountWeight,
+		BufferUtilWeight:    config.BufferUtilWeight,
+		BufferUtilThreshold: config.BufferUtilThreshold,
+		UsageCountThreshold: config.UsageCountThreshold,
 	}
 	streamPool := pool.NewStreamPool(streamService, streamPoolConfig)
 

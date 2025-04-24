@@ -17,8 +17,6 @@ type ClientService struct {
 	tunService *TUNService
 	// Packet dispatcher for routing packets
 	dispatcher dispatch.DispatcherService
-	// Metrics for monitoring
-	metrics VPNMetricsInterface
 	// Buffer pool for packet processing
 	bufferPool *utils.BufferPool
 	// Stop channel for graceful shutdown
@@ -29,13 +27,11 @@ type ClientService struct {
 func NewClientService(
 	tunService *TUNService,
 	dispatcher dispatch.DispatcherService,
-	metrics VPNMetricsInterface,
 	bufferPool *utils.BufferPool,
 ) *ClientService {
 	return &ClientService{
 		tunService: tunService,
 		dispatcher: dispatcher,
-		metrics:    metrics,
 		bufferPool: bufferPool,
 		stopChan:   make(chan struct{}),
 	}
@@ -96,9 +92,6 @@ func (s *ClientService) listenFromTUN(ctx context.Context, iface *water.Interfac
 				continue
 			}
 
-			// Update metrics
-			s.metrics.IncrementPacketsReceived(n)
-
 			// Create a copy that will persist beyond this function
 			packetData := make([]byte, n)
 			copy(packetData, buf[:n])
@@ -107,7 +100,6 @@ func (s *ClientService) listenFromTUN(ctx context.Context, iface *water.Interfac
 			packetInfo, err := types.ExtractPacketInfo(packetData)
 			if err != nil {
 				log.Debugf("failed to parse the packet info: %v", err)
-				s.metrics.IncrementPacketsDropped()
 				continue
 			}
 

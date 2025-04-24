@@ -1,10 +1,20 @@
 package config
 
 import (
+	"strconv"
 	"time"
 
 	"github.com/unicornultrafoundation/subnet-node/config"
 )
+
+// parseFloat64 parses a string to a float64 or returns the default value if parsing fails
+func parseFloat64(s string, defaultValue float64) float64 {
+	v, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return defaultValue
+	}
+	return v
+}
 
 // VPNConfig encapsulates all configuration settings for the VPN service
 type VPNConfig struct {
@@ -20,10 +30,14 @@ type VPNConfig struct {
 	UnallowedPorts map[string]bool
 
 	// Stream pool settings
-	MaxStreamsPerPeer int
-	StreamIdleTimeout time.Duration
-	CleanupInterval   time.Duration
-	PacketBufferSize  int
+	MaxStreamsPerPeer   int
+	StreamIdleTimeout   time.Duration
+	CleanupInterval     time.Duration
+	PacketBufferSize    int
+	UsageCountWeight    float64
+	BufferUtilWeight    float64
+	BufferUtilThreshold int
+	UsageCountThreshold int
 
 	// Circuit breaker settings
 	CircuitBreakerFailureThreshold int
@@ -64,10 +78,14 @@ func New(cfg *config.C) *VPNConfig {
 		UnallowedPorts: unallowedPorts,
 
 		// Stream pool settings
-		MaxStreamsPerPeer: cfg.GetInt("vpn.max_streams_per_peer", 50),                            // 50 streams per peer default
-		StreamIdleTimeout: time.Duration(cfg.GetInt("vpn.stream_idle_timeout", 5)) * time.Second, // 5 seconds default
-		CleanupInterval:   time.Duration(cfg.GetInt("vpn.cleanup_interval", 5)) * time.Second,    // 5 seconds default
-		PacketBufferSize:  cfg.GetInt("vpn.packet_buffer_size", 500),                             // 500 packets buffer size
+		MaxStreamsPerPeer:   cfg.GetInt("vpn.max_streams_per_peer", 50),                            // 50 streams per peer default
+		StreamIdleTimeout:   time.Duration(cfg.GetInt("vpn.stream_idle_timeout", 5)) * time.Second, // 5 seconds default
+		CleanupInterval:     time.Duration(cfg.GetInt("vpn.cleanup_interval", 5)) * time.Second,    // 5 seconds default
+		PacketBufferSize:    cfg.GetInt("vpn.packet_buffer_size", 500),                             // 500 packets buffer size
+		UsageCountWeight:    parseFloat64(cfg.GetString("vpn.usage_count_weight", "0.7"), 0.7),     // Default weight for usage count
+		BufferUtilWeight:    parseFloat64(cfg.GetString("vpn.buffer_util_weight", "0.3"), 0.3),     // Default weight for buffer utilization
+		BufferUtilThreshold: cfg.GetInt("vpn.buffer_util_threshold", 70),                           // 70% default threshold for buffer utilization
+		UsageCountThreshold: cfg.GetInt("vpn.usage_count_threshold", 100),                          // 100 default threshold for usage count
 
 		// Circuit breaker settings
 		CircuitBreakerFailureThreshold: cfg.GetInt("vpn.circuit_breaker_failure_threshold", 5),                           // 5 failures default
@@ -120,4 +138,24 @@ func (c *VPNConfig) GetCircuitBreakerResetTimeout() time.Duration {
 // GetCircuitBreakerSuccessThreshold returns the circuit breaker success threshold
 func (c *VPNConfig) GetCircuitBreakerSuccessThreshold() int {
 	return c.CircuitBreakerSuccessThreshold
+}
+
+// GetUsageCountWeight returns the weight for usage count in load score calculation
+func (c *VPNConfig) GetUsageCountWeight() float64 {
+	return c.UsageCountWeight
+}
+
+// GetBufferUtilWeight returns the weight for buffer utilization in load score calculation
+func (c *VPNConfig) GetBufferUtilWeight() float64 {
+	return c.BufferUtilWeight
+}
+
+// GetBufferUtilThreshold returns the buffer utilization threshold percentage
+func (c *VPNConfig) GetBufferUtilThreshold() int {
+	return c.BufferUtilThreshold
+}
+
+// GetUsageCountThreshold returns the usage count threshold
+func (c *VPNConfig) GetUsageCountThreshold() int {
+	return c.UsageCountThreshold
 }
