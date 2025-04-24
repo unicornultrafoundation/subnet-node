@@ -444,10 +444,28 @@ func (a *StreamServiceAdapter) CreateNewVPNStream(ctx context.Context, peerID pe
 	// Create a breaker ID for this peer operation
 	breakerId := a.service.resilienceService.FormatPeerBreakerId(peerID, "create_stream")
 
-	err, attempts := a.service.resilienceService.ExecuteWithResilience(ctx, breakerId, func() error {
+	// Create a new context without a deadline, but that can still be canceled if the original context is canceled
+	// This allows us to wait as long as needed for the stream to be created, but still respect cancellation
+	streamCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Set up cancellation if the original context is canceled
+	go func() {
+		select {
+		case <-ctx.Done():
+			// Original context was canceled, cancel our stream context too
+			cancel()
+		case <-streamCtx.Done():
+			// Our context was canceled, nothing to do
+			return
+		}
+	}()
+
+	// Use the standard ExecuteWithResilience method with the context that has no deadline
+	err, attempts := a.service.resilienceService.ExecuteWithResilience(streamCtx, breakerId, func() error {
 		// Attempt to create a new stream to the peer
 		var err error
-		stream, err = a.service.peerHost.NewStream(ctx, peerID, protocol.ID(a.service.configService.GetProtocol()))
+		stream, err = a.service.peerHost.NewStream(streamCtx, peerID, protocol.ID(a.service.configService.GetProtocol()))
 		if err != nil {
 			log.Debugf("Failed to create P2P stream to peer %s, will retry: %v", peerID.String(), err)
 			return err // Return the error to trigger retry
@@ -457,6 +475,11 @@ func (a *StreamServiceAdapter) CreateNewVPNStream(ctx context.Context, peerID pe
 	})
 
 	if err != nil {
+		if ctx.Err() != nil {
+			// If the original context was canceled, report that as the error
+			log.Warnf("Context canceled while creating P2P stream to peer %s after %d attempts", peerID.String(), attempts)
+			return nil, fmt.Errorf("context canceled while creating P2P stream to peer %s: %w", peerID.String(), ctx.Err())
+		}
 		log.Warnf("Failed to create P2P stream to peer %s after %d attempts: %v", peerID.String(), attempts, err)
 		return nil, fmt.Errorf("failed to create P2P stream to peer %s after %d attempts: %w", peerID.String(), attempts, err)
 	} else if attempts > 1 {
