@@ -101,17 +101,19 @@ func TestTableDrivenIntegration(t *testing.T) {
 				testutil.VerifyPacketDelivery(t, fixture.Dispatcher, syncKey, destIP, packet)
 			}
 
-			// Verify worker metrics - in poor network conditions, we might not have all workers
-			metrics := fixture.Dispatcher.GetWorkerMetrics()
-			t.Logf("Worker metrics: %v", metrics)
+			// Get dispatcher metrics
+			metrics := fixture.Dispatcher.GetMetrics()
+			t.Logf("Dispatcher metrics: %v", metrics)
 
 			// For poor network conditions, we're more lenient with our expectations
 			if tc.networkCondition.PacketLoss > 0.05 {
-				// In tests with poor network conditions, we might not have any workers due to simulated failures
+				// In tests with poor network conditions, we might have fewer successful packets
 				// This is expected behavior and we just log the metrics for debugging
 			} else {
-				// For good network conditions, verify the expected number of workers
-				testutil.VerifyWorkerMetrics(t, fixture.Dispatcher, tc.expectedWorkers)
+				// For good network conditions, verify we have processed packets
+				assert.Contains(t, metrics, "packets_dispatched", "Metrics should contain packets_dispatched")
+				assert.GreaterOrEqual(t, metrics["packets_dispatched"], int64(1),
+					"Should have dispatched at least one packet")
 			}
 		})
 	}

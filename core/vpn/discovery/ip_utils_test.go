@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/unicornultrafoundation/subnet-node/core/vpn/testutil"
 )
 
 // TestConvertVirtualIPToNumber tests the ConvertVirtualIPToNumber function
@@ -55,10 +56,10 @@ func TestConvertVirtualIPToNumber(t *testing.T) {
 // TestGetPeerIDByRegistry tests the GetPeerIDByRegistry method with both success and error cases
 func TestGetPeerIDByRegistry(t *testing.T) {
 	// Create mocks
-	mockAccountService := new(MockAccountService)
-	mockIPRegistry := new(MockIPRegistry)
-	mockHostService := new(MockHostService)
-	mockDHTService := new(MockDHTService)
+	mockAccountService := new(testutil.MockAccountService)
+	mockIPRegistry := new(testutil.MockIPRegistry)
+	mockHostService := new(testutil.MockHostService)
+	mockDHTService := new(testutil.MockDHTService)
 
 	// Setup expectations for success case
 	mockAccountService.On("IPRegistry").Return(mockIPRegistry)

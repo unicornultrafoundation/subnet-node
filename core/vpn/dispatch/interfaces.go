@@ -10,7 +10,7 @@ import (
 
 // DispatcherService defines the interface for packet dispatching
 type DispatcherService interface {
-	// DispatchPacket dispatches a packet to the appropriate worker
+	// DispatchPacket dispatches a packet to the appropriate stream
 	DispatchPacket(ctx context.Context, connKey types.ConnectionKey, destIP string, packet []byte) error
 
 	// DispatchPacketWithCallback dispatches a packet and provides a callback channel for the result
@@ -23,21 +23,6 @@ type DispatcherService interface {
 	Stop()
 
 	// GetMetrics returns the dispatcher's metrics
-	GetMetrics() map[string]int64
-}
-
-// WorkerPoolService defines the interface for worker pool management
-type WorkerPoolService interface {
-	// DispatchPacket dispatches a packet to the appropriate worker
-	DispatchPacket(ctx context.Context, connKey types.ConnectionKey, destIP string, packet *types.QueuedPacket) error
-
-	// Start starts the worker pool
-	Start()
-
-	// Stop stops the worker pool
-	Stop()
-
-	// GetMetrics returns the worker pool's metrics
 	GetMetrics() map[string]int64
 }
 
@@ -72,19 +57,4 @@ type StreamPoolService interface {
 
 	// GetStreamMetrics returns metrics for all streams
 	GetStreamMetrics() map[string]map[string]int64
-}
-
-// WorkerService defines the interface for packet processing workers
-type WorkerService interface {
-	// EnqueuePacket adds a packet to the worker's queue
-	EnqueuePacket(packet *types.QueuedPacket) bool
-
-	// Start begins the worker's packet processing loop
-	Start()
-
-	// Stop terminates the worker's processing loop
-	Stop()
-
-	// GetMetrics returns the worker's metrics
-	GetMetrics() types.WorkerMetrics
 }

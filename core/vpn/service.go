@@ -27,9 +27,10 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/api"
 	vpnconfig "github.com/unicornultrafoundation/subnet-node/core/vpn/config"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/discovery"
+	"github.com/unicornultrafoundation/subnet-node/core/vpn/dispatch"
+	"github.com/unicornultrafoundation/subnet-node/core/vpn/dispatch/pool"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/metrics"
 	vpnnetwork "github.com/unicornultrafoundation/subnet-node/core/vpn/network"
-	"github.com/unicornultrafoundation/subnet-node/core/vpn/packet"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/resilience"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/utils"
 )
@@ -54,11 +55,11 @@ type Service struct {
 	tunService        *vpnnetwork.TUNService
 	clientService     *vpnnetwork.ClientService
 	serverService     *vpnnetwork.ServerService
-	dispatcher        packet.DispatcherService
+	dispatcher        dispatch.DispatcherService
 	resilienceService *resilience.ResilienceService
 	metricsService    *metrics.MetricsServiceImpl
 	bufferPool        *utils.BufferPool
-	streamService     *StreamService
+	streamPool        *pool.StreamPool
 
 	// Context management
 	serviceCtx    context.Context
@@ -127,23 +128,34 @@ func New(cfg *config.C, peerHost host.Host, dht *ddht.DHT, accountService *accou
 	}
 	service.resilienceService = resilience.NewResilienceService(resilienceConfig)
 
-	// Create a stream service adapter that implements api.StreamService
-	streamServiceAdapter := &StreamServiceAdapter{service: service}
-
-	// Create a stream service config with values from the config service
-	streamConfig := &StreamServiceConfig{
+	// Create a stream pool config with values from the config service
+	streamPoolConfig := &pool.StreamPoolConfig{
+		MaxStreamsPerPeer: configService.GetMaxStreamsPerPeer(),
 		StreamIdleTimeout: configService.GetStreamIdleTimeout(),
 		CleanupInterval:   configService.GetCleanupInterval(),
+		PacketBufferSize:  configService.GetPacketBufferSize(),
 	}
 
-	// Create the stream service using the adapter and explicit config
-	service.streamService = NewStreamService(streamServiceAdapter, streamConfig)
+	// Create the stream pool using the service directly as the stream creator
+	service.streamPool = pool.NewStreamPool(service, streamPoolConfig)
 
-	// Register the stream service with the resource manager
-	service.resourceManager.Register(service.streamService)
+	// Register the stream pool with the resource manager
+	service.resourceManager.Register(service.streamPool)
 
-	// Create the packet dispatcher (either default or StreamRouter based on config)
-	service.dispatcher = service.createDispatcher()
+	// Create the packet dispatcher
+	config := &dispatch.Config{
+		// Stream pool configuration
+		MaxStreamsPerPeer:     configService.GetMaxStreamsPerPeer(),
+		StreamIdleTimeout:     configService.GetStreamIdleTimeout(),
+		StreamCleanupInterval: configService.GetCleanupInterval(),
+		PacketBufferSize:      configService.GetPacketBufferSize(),
+	}
+	service.dispatcher = dispatch.NewDispatcher(
+		service.peerDiscovery,
+		service, // Use the service directly as it implements api.StreamService
+		config,
+		service.resilienceService,
+	)
 
 	// Only register the dispatcher with the resource manager if it implements io.Closer
 	if closer, ok := service.dispatcher.(io.Closer); ok {
@@ -255,8 +267,8 @@ func (s *Service) waitUntilPeerConnected(ctx context.Context, host host.Host) er
 // start is the internal implementation of the Start method.
 // It initializes and starts all VPN components in sequence.
 func (s *Service) start(_, dhtCtx, tunCtx, clientCtx context.Context) error {
-	// Start the stream service
-	s.streamService.Start()
+	// Start the stream pool
+	s.streamPool.Start()
 
 	// Start the packet dispatcher
 	s.dispatcher.Start()
@@ -428,21 +440,14 @@ func (s *Service) IsEnabled() bool {
 	return s.configService.GetEnable()
 }
 
-// StreamServiceAdapter implements the api.StreamService interface to break the circular
-// dependency between Service and StreamService. It allows the StreamService to create
-// new VPN streams without directly depending on the main Service implementation.
-type StreamServiceAdapter struct {
-	service *Service
-}
-
 // CreateNewVPNStream implements the api.StreamService interface by creating a new
 // libp2p stream to the specified peer using the VPN protocol with circuit breaker and retry protection.
-func (a *StreamServiceAdapter) CreateNewVPNStream(ctx context.Context, peerID peer.ID) (api.VPNStream, error) {
+func (s *Service) CreateNewVPNStream(ctx context.Context, peerID peer.ID) (api.VPNStream, error) {
 	// Use ExecuteWithResilience for better fault tolerance and metrics
 	var stream api.VPNStream
 
 	// Create a breaker ID for this peer operation
-	breakerId := a.service.resilienceService.FormatPeerBreakerId(peerID, "create_stream")
+	breakerId := s.resilienceService.FormatPeerBreakerId(peerID, "create_stream")
 
 	// Create a new context without a deadline, but that can still be canceled if the original context is canceled
 	// This allows us to wait as long as needed for the stream to be created, but still respect cancellation
@@ -462,10 +467,10 @@ func (a *StreamServiceAdapter) CreateNewVPNStream(ctx context.Context, peerID pe
 	}()
 
 	// Use the standard ExecuteWithResilience method with the context that has no deadline
-	err, attempts := a.service.resilienceService.ExecuteWithResilience(streamCtx, breakerId, func() error {
+	err, attempts := s.resilienceService.ExecuteWithResilience(streamCtx, breakerId, func() error {
 		// Attempt to create a new stream to the peer
 		var err error
-		stream, err = a.service.peerHost.NewStream(streamCtx, peerID, protocol.ID(a.service.configService.GetProtocol()))
+		stream, err = s.peerHost.NewStream(streamCtx, peerID, protocol.ID(s.configService.GetProtocol()))
 		if err != nil {
 			log.Debugf("Failed to create P2P stream to peer %s, will retry: %v", peerID.String(), err)
 			return err // Return the error to trigger retry
