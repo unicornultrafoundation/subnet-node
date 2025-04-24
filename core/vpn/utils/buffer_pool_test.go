@@ -1,16 +1,15 @@
-package network
+package utils
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/unicornultrafoundation/subnet-node/core/vpn/utils"
 )
 
 func TestBufferPool(t *testing.T) {
 	// Create a new buffer pool
 	bufferSize := 1500
-	pool := utils.NewBufferPool(bufferSize)
+	pool := NewBufferPool(bufferSize)
 
 	// Test getting a buffer
 	buf1 := pool.Get()
@@ -57,7 +56,7 @@ func TestBufferPool(t *testing.T) {
 func TestBufferPoolConcurrency(t *testing.T) {
 	// Create a new buffer pool
 	bufferSize := 1500
-	pool := utils.NewBufferPool(bufferSize)
+	pool := NewBufferPool(bufferSize)
 
 	// Test concurrent gets and puts
 	done := make(chan bool)
