@@ -106,6 +106,7 @@ func NewStreamPool(streamCreator api.StreamService, config *StreamPoolConfig) *S
 		streamCreator:     streamCreator,
 		ctx:               ctx,
 		cancel:            cancel,
+		maxStreamsPerPeer: config.MaxStreamsPerPeer,
 		streamIdleTimeout: config.StreamIdleTimeout,
 		cleanupInterval:   config.CleanupInterval,
 		packetBufferSize:  config.PacketBufferSize,
@@ -308,6 +309,11 @@ func (p *StreamPool) ReleaseStreamChannel(peerID peer.ID, streamChannel *StreamC
 
 // releaseStreamChannelInternal is the internal implementation of ReleaseStreamChannel
 func (p *StreamPool) releaseStreamChannelInternal(peerID peer.ID, streamChannel *StreamChannel, healthy bool) {
+	// Check if the stream channel is nil
+	if streamChannel == nil {
+		return
+	}
+
 	if !healthy {
 		// Mark the stream as unhealthy
 		streamChannel.SetHealthy(false)

@@ -3,22 +3,19 @@ package dispatch
 import (
 	"context"
 	"fmt"
-	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/api"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/dispatch/pool"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/dispatch/types"
-	"github.com/unicornultrafoundation/subnet-node/core/vpn/dispatch/worker"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/resilience"
 )
 
 var dispatcherLog = logrus.WithField("service", "vpn-dispatcher")
 
-// Dispatcher manages packet routing to appropriate workers using V2 components
+// Dispatcher manages packet routing directly to stream channels
 type Dispatcher struct {
 	// Service references
 	peerDiscovery api.PeerDiscoveryService
@@ -32,10 +29,6 @@ type Dispatcher struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	// Worker pools for each peer ID
-	workerPoolsMu sync.RWMutex
-	workerPools   map[string]any
-
 	// Configuration
 	config *Config
 
@@ -48,10 +41,9 @@ type Dispatcher struct {
 
 	// Metrics
 	metrics struct {
-		PacketsDispatched  int64
-		PacketsDropped     int64
-		WorkerPoolsCreated int64
-		Errors             int64
+		PacketsDispatched int64
+		PacketsDropped    int64
+		Errors            int64
 	}
 }
 
@@ -69,15 +61,16 @@ func NewDispatcher(
 		resilienceService = resilience.NewResilienceService(nil)
 	}
 
-	// Create stream pool V2
+	// Create stream pool
 	streamPoolConfig := &pool.StreamPoolConfig{
+		MaxStreamsPerPeer: config.MaxStreamsPerPeer,
 		StreamIdleTimeout: config.StreamIdleTimeout,
 		CleanupInterval:   config.StreamCleanupInterval,
 		PacketBufferSize:  config.PacketBufferSize,
 	}
 	streamPool := pool.NewStreamPool(streamService, streamPoolConfig)
 
-	// Create stream manager V2
+	// Create stream manager
 	streamManager := pool.NewStreamManager(streamPool)
 
 	return &Dispatcher{
@@ -87,7 +80,6 @@ func NewDispatcher(
 		streamManager:     streamManager,
 		ctx:               ctx,
 		cancel:            cancel,
-		workerPools:       make(map[string]any),
 		config:            config,
 		stopChan:          make(chan struct{}),
 		running:           false,
@@ -124,19 +116,6 @@ func (d *Dispatcher) Stop() {
 
 	// Cancel the context to stop all operations
 	d.cancel()
-
-	// Stop all worker pools
-	d.workerPoolsMu.Lock()
-	for _, pool := range d.workerPools {
-		// Stop the worker pool
-		if p, ok := pool.(*worker.MultiWorkerPool); ok {
-			p.Stop()
-		} else {
-			dispatcherLog.Warnf("Unknown worker pool type: %T", pool)
-		}
-	}
-	d.workerPools = make(map[string]any)
-	d.workerPoolsMu.Unlock()
 
 	// Stop the stream manager
 	d.streamManager.Stop()
@@ -233,17 +212,8 @@ func (d *Dispatcher) dispatchPacketInternal(
 		return err
 	}
 
-	// Get or create a worker pool for this peer ID
-	workerPool, err := d.getOrCreateWorkerPool(peerID)
-	if err != nil {
-		return err
-	}
-
-	// Dispatch the packet to the worker pool
-	if pool, ok := workerPool.(*worker.MultiWorkerPool); ok {
-		return pool.DispatchPacket(ctx, connKey, destIP, packet)
-	}
-	return fmt.Errorf("unknown worker pool type: %T", workerPool)
+	// Send the packet directly to the stream manager
+	return d.streamManager.SendPacket(ctx, connKey, peerID, packet)
 }
 
 // getPeerIDForDestIP gets the peer ID for a destination IP
@@ -263,98 +233,19 @@ func (d *Dispatcher) getPeerIDForDestIP(ctx context.Context, destIP string) (pee
 	return peerID, nil
 }
 
-// getOrCreateWorkerPool gets or creates a worker pool for a peer ID
-func (d *Dispatcher) getOrCreateWorkerPool(peerID peer.ID) (any, error) {
-	peerIDStr := peerID.String()
-
-	// Check if we already have a worker pool for this peer ID
-	d.workerPoolsMu.RLock()
-	workerPool, exists := d.workerPools[peerIDStr]
-	d.workerPoolsMu.RUnlock()
-
-	if exists {
-		return workerPool, nil
-	}
-
-	// Create a new worker pool
-	d.workerPoolsMu.Lock()
-	defer d.workerPoolsMu.Unlock()
-
-	// Check again in case another goroutine created it while we were waiting for the lock
-	if workerPool, exists = d.workerPools[peerIDStr]; exists {
-		return workerPool, nil
-	}
-
-	// Create multi-worker pool configuration
-	multiWorkerPoolConfig := &worker.MultiWorkerPoolConfig{
-		WorkerIdleTimeout:     int(d.config.WorkerIdleTimeout / time.Second),
-		WorkerCleanupInterval: d.config.WorkerCleanupInterval,
-		WorkerBufferSize:      d.config.WorkerBufferSize,
-	}
-
-	// Create a new multi-worker pool
-	multiWorkerPool := worker.NewMultiWorkerPool(
-		peerID,
-		d.streamManager,
-		multiWorkerPoolConfig,
-		d.resilienceService,
-	)
-
-	// Store the worker pool
-	d.workerPools[peerIDStr] = multiWorkerPool
-
-	// Start the worker pool
-	multiWorkerPool.Start()
-
-	// Log the worker mode
-	dispatcherLog.WithFields(logrus.Fields{
-		"peer_id": peerID.String(),
-	}).Info("Created multi-connection worker pool")
-
-	// Update metrics
-	atomic.AddInt64(&d.metrics.WorkerPoolsCreated, 1)
-
-	return multiWorkerPool, nil
-}
-
 // GetMetrics returns the dispatcher's metrics
 func (d *Dispatcher) GetMetrics() map[string]int64 {
 	metrics := map[string]int64{
-		"packets_dispatched":   atomic.LoadInt64(&d.metrics.PacketsDispatched),
-		"packets_dropped":      atomic.LoadInt64(&d.metrics.PacketsDropped),
-		"worker_pools_created": atomic.LoadInt64(&d.metrics.WorkerPoolsCreated),
-		"errors":               atomic.LoadInt64(&d.metrics.Errors),
-		"active_worker_pools":  int64(len(d.workerPools)),
-		"total_streams":        int64(d.streamPool.GetTotalStreamCount()),
-		"total_connections":    int64(d.streamManager.GetConnectionCount()),
+		"packets_dispatched": atomic.LoadInt64(&d.metrics.PacketsDispatched),
+		"packets_dropped":    atomic.LoadInt64(&d.metrics.PacketsDropped),
+		"errors":             atomic.LoadInt64(&d.metrics.Errors),
+		"total_streams":      int64(d.streamPool.GetTotalStreamCount()),
+		"total_connections":  int64(d.streamManager.GetConnectionCount()),
 	}
 
 	// Add stream manager metrics
 	for k, v := range d.streamManager.GetMetrics() {
 		metrics["stream_manager_"+k] = v
-	}
-
-	return metrics
-}
-
-// GetWorkerPoolCount returns the number of active worker pools
-func (d *Dispatcher) GetWorkerPoolCount() int {
-	d.workerPoolsMu.RLock()
-	defer d.workerPoolsMu.RUnlock()
-	return len(d.workerPools)
-}
-
-// GetWorkerMetrics returns metrics for all workers
-func (d *Dispatcher) GetWorkerMetrics() map[string]map[string]int64 {
-	metrics := make(map[string]map[string]int64)
-
-	d.workerPoolsMu.RLock()
-	defer d.workerPoolsMu.RUnlock()
-
-	for peerID, pool := range d.workerPools {
-		if p, ok := pool.(*worker.MultiWorkerPool); ok {
-			metrics[peerID] = p.GetMetrics()
-		}
 	}
 
 	return metrics
