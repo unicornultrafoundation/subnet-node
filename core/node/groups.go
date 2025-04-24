@@ -240,6 +240,7 @@ func Core(cfg *config.C) fx.Option {
 		fx.Invoke(ProxyService),
 		fx.Provide(PeerService),
 		fx.Provide(AppService),
+		fx.Provide(VerifierService),
 		fx.Provide(DockerService),
 		fx.Provide(account.EthereumService),
 	)
