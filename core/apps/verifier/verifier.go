@@ -59,6 +59,7 @@ func NewVerifier(ds datastore.Datastore, ps p2phost.Host, P2P *p2p.P2P, acc *acc
 func (v *Verifier) Register() error {
 	v.ps.SetStreamHandler(atypes.ProtocolAppVerifierUsageReport, v.onUsageReport)
 	v.ps.SetStreamHandler(atypes.ProtocolAppSignatureRequest, v.onSignatureRequest)
+	log.Infof("Verifier service started and registered stream handlers")
 	return nil
 }
 
