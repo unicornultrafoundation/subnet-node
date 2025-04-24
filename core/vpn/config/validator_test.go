@@ -19,7 +19,6 @@ func createValidConfig() *VPNConfig {
 		// Worker settings
 		WorkerIdleTimeout:     300,
 		WorkerBufferSize:      100,
-		MaxWorkersPerPeer:     1000,
 		WorkerCleanupInterval: 60 * time.Second,
 
 		// Stream pool settings
@@ -200,11 +199,6 @@ func TestValidateAllSettings(t *testing.T) {
 				name:    "invalid worker buffer size",
 				modify:  func(cfg *VPNConfig) { cfg.WorkerBufferSize = 0 },
 				wantErr: ErrInvalidWorkerBufferSize,
-			},
-			{
-				name:    "invalid max workers per peer",
-				modify:  func(cfg *VPNConfig) { cfg.MaxWorkersPerPeer = 0 },
-				wantErr: ErrInvalidMaxWorkersPerPeer,
 			},
 			{
 				name:    "invalid worker cleanup interval",

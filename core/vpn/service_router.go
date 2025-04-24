@@ -26,7 +26,6 @@ func (s *Service) createDispatcher() packet.DispatcherService {
 		WorkerIdleTimeout:     time.Duration(s.configService.GetWorkerIdleTimeout()) * time.Second,
 		WorkerCleanupInterval: s.configService.GetWorkerCleanupInterval(),
 		WorkerBufferSize:      s.configService.GetWorkerBufferSize(),
-		MaxWorkersPerPeer:     s.configService.GetMaxWorkersPerPeer(),
 
 		// Packet buffer size for stream channels
 		PacketBufferSize: s.configService.GetWorkerBufferSize(),

@@ -22,7 +22,6 @@ type VPNConfig struct {
 	// Worker settings
 	WorkerIdleTimeout     int
 	WorkerBufferSize      int
-	MaxWorkersPerPeer     int
 	WorkerCleanupInterval time.Duration
 
 	// Stream pool settings
@@ -69,10 +68,9 @@ func New(cfg *config.C) *VPNConfig {
 		UnallowedPorts: unallowedPorts,
 
 		// Worker settings
-		WorkerIdleTimeout:     cfg.GetInt("vpn.worker_idle_timeout", 5),                                  // 5 seconds default
-		WorkerBufferSize:      cfg.GetInt("vpn.worker_buffer_size", 200),                                 // 200 packets buffer size
-		MaxWorkersPerPeer:     cfg.GetInt("vpn.max_workers_per_peer", 100),                               // 100 workers per peer default
-		WorkerCleanupInterval: time.Duration(cfg.GetInt("vpn.worker_cleanup_interval", 5)) * time.Second, // 5 seconds default
+		WorkerIdleTimeout:     cfg.GetInt("vpn.worker_idle_timeout", 10),                                  // 10 seconds default
+		WorkerBufferSize:      cfg.GetInt("vpn.worker_buffer_size", 500),                                  // 500 packets buffer size
+		WorkerCleanupInterval: time.Duration(cfg.GetInt("vpn.worker_cleanup_interval", 10)) * time.Second, // 10 seconds default
 
 		// Stream pool settings
 		MaxStreamsPerPeer: cfg.GetInt("vpn.max_streams_per_peer", 30),                            // 30 streams per peer default
@@ -140,9 +138,4 @@ func (c *VPNConfig) GetCircuitBreakerResetTimeout() time.Duration {
 // GetCircuitBreakerSuccessThreshold returns the circuit breaker success threshold
 func (c *VPNConfig) GetCircuitBreakerSuccessThreshold() int {
 	return c.CircuitBreakerSuccessThreshold
-}
-
-// GetMaxWorkersPerPeer returns the maximum number of workers per peer
-func (c *VPNConfig) GetMaxWorkersPerPeer() int {
-	return c.MaxWorkersPerPeer
 }
