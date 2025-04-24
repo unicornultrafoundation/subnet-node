@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -32,6 +33,14 @@ type StreamChannel struct {
 	cancel context.CancelFunc
 	// Last failed packet (to be retried when stream is recreated)
 	lastFailedPacket *types.QueuedPacket
+	// Overflow queue for when the main channel is full
+	overflowQueue []*types.QueuedPacket
+	// Mutex to protect access to the overflow queue
+	overflowMutex sync.Mutex
+	// Signal channel to notify the overflow processor
+	overflowSignal chan struct{}
+	// Flag to indicate if the overflow processor is running
+	overflowProcessorRunning int32
 }
 
 // GetBufferUtilization returns the current buffer utilization as a percentage (0-100)
@@ -47,6 +56,26 @@ func (s *StreamChannel) GetBufferUtilization() int {
 		return 0
 	}
 
+	return (currentLen * 100) / capacity
+}
+
+// GetTotalBufferUtilization returns the combined buffer utilization including overflow queue
+func (s *StreamChannel) GetTotalBufferUtilization() int {
+	// Get the current length of the packet channel
+	currentLen := len(s.PacketChan)
+
+	// Add the overflow queue size
+	currentLen += s.GetOverflowQueueSize()
+
+	// Get the capacity of the packet channel
+	capacity := cap(s.PacketChan)
+
+	// Calculate utilization percentage
+	if capacity == 0 {
+		return 0
+	}
+
+	// Can exceed 100% if overflow queue is used
 	return (currentLen * 100) / capacity
 }
 
@@ -77,6 +106,99 @@ func (s *StreamChannel) UpdateLastActivity() {
 // GetLastFailedPacket returns the last packet that failed to be sent
 func (s *StreamChannel) GetLastFailedPacket() *types.QueuedPacket {
 	return s.lastFailedPacket
+}
+
+// AddToOverflowQueue adds a packet to the overflow queue
+func (s *StreamChannel) AddToOverflowQueue(packet *types.QueuedPacket) {
+	s.overflowMutex.Lock()
+	s.overflowQueue = append(s.overflowQueue, packet)
+	s.overflowMutex.Unlock()
+
+	// Signal the overflow processor
+	select {
+	case s.overflowSignal <- struct{}{}:
+	default:
+		// Signal channel is full, which is fine as the processor will check the queue anyway
+	}
+
+	// Start the overflow processor if it's not already running
+	if atomic.CompareAndSwapInt32(&s.overflowProcessorRunning, 0, 1) {
+		go s.processOverflowQueue()
+	}
+}
+
+// GetOverflowQueueSize returns the current size of the overflow queue
+func (s *StreamChannel) GetOverflowQueueSize() int {
+	s.overflowMutex.Lock()
+	defer s.overflowMutex.Unlock()
+	return len(s.overflowQueue)
+}
+
+// DrainOverflowQueue returns all packets from the overflow queue and clears it
+func (s *StreamChannel) DrainOverflowQueue() []*types.QueuedPacket {
+	s.overflowMutex.Lock()
+	defer s.overflowMutex.Unlock()
+
+	packets := s.overflowQueue
+	s.overflowQueue = nil
+	return packets
+}
+
+// processOverflowQueue processes packets from the overflow queue
+func (s *StreamChannel) processOverflowQueue() {
+	defer atomic.StoreInt32(&s.overflowProcessorRunning, 0)
+
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-s.ctx.Done():
+			// Stream context is done, exit
+			return
+		case <-s.overflowSignal:
+			// Process the queue
+			s.tryMovePacketsFromOverflow()
+		case <-ticker.C:
+			// Periodically check the queue
+			s.tryMovePacketsFromOverflow()
+		}
+
+		// If the queue is empty, exit
+		if s.GetOverflowQueueSize() == 0 {
+			return
+		}
+	}
+}
+
+// tryMovePacketsFromOverflow tries to move packets from the overflow queue to the main channel
+func (s *StreamChannel) tryMovePacketsFromOverflow() {
+	s.overflowMutex.Lock()
+	defer s.overflowMutex.Unlock()
+
+	// If the queue is empty, return
+	if len(s.overflowQueue) == 0 {
+		return
+	}
+
+	// Try to move packets from the overflow queue to the main channel
+	var i int
+	for i = 0; i < len(s.overflowQueue); i++ {
+		select {
+		case s.PacketChan <- s.overflowQueue[i]:
+			// Successfully moved the packet
+		default:
+			// Channel is still full, stop trying
+			goto doneTrying
+		}
+	}
+doneTrying:
+
+	// Remove the packets that were successfully moved
+	if i > 0 {
+		s.overflowQueue = s.overflowQueue[i:]
+		streamLog.WithField("moved_packets", i).Debug("Moved packets from overflow queue to main channel")
+	}
 }
 
 // Close closes the stream channel
