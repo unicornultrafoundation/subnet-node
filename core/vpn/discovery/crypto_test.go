@@ -8,6 +8,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/assert"
+	"github.com/unicornultrafoundation/subnet-node/core/vpn/testutil"
 	subnet_vpn "github.com/unicornultrafoundation/subnet-node/proto/subnet/vpn"
 )
 
@@ -58,12 +59,12 @@ func TestSigningAndRecordCreation(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Create a mock peerstore service
-	mockPeerstoreService := new(MockPeerstoreService)
+	mockPeerstoreService := new(testutil.MockPeerstoreService)
 	mockPeerID := peer.ID("peer1")
 	mockPeerstoreService.On("PrivKey", mockPeerID).Return(privKey)
 
 	// Create a mock host service
-	mockHostService := new(MockHostService)
+	mockHostService := new(testutil.MockHostService)
 	mockHostService.On("ID").Return(mockPeerID)
 	mockHostService.On("Peerstore").Return(mockPeerstoreService)
 
@@ -102,11 +103,11 @@ func TestSigningAndRecordCreation(t *testing.T) {
 
 	// Test error case - no private key
 	// Create a new mock with no private key
-	mockPeerstoreService2 := new(MockPeerstoreService)
+	mockPeerstoreService2 := new(testutil.MockPeerstoreService)
 	var nilPrivKey crypto.PrivKey
 	mockPeerstoreService2.On("PrivKey", mockPeerID).Return(nilPrivKey)
 
-	mockHostService2 := new(MockHostService)
+	mockHostService2 := new(testutil.MockHostService)
 	mockHostService2.On("ID").Return(mockPeerID)
 	mockHostService2.On("Peerstore").Return(mockPeerstoreService2)
 

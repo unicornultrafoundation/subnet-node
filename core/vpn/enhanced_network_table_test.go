@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/unicornultrafoundation/subnet-node/core/vpn/packet"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/resilience"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/testutil"
 )
@@ -24,7 +23,7 @@ func TestTableDrivenNetworkConditions(t *testing.T) {
 	}
 
 	// Set up test logger to reduce verbosity
-	restore := packet.SetupTestLogger()
+	restore := testutil.SetupTestLogger()
 	defer restore()
 
 	// Define test cases with different network conditions
@@ -89,25 +88,19 @@ func TestTableDrivenNetworkConditions(t *testing.T) {
 			testutil.VerifyPacketDelivery(t, fixture.Dispatcher, "192.168.1.2:80", "192.168.1.2", packet2)
 			testutil.VerifyPacketDelivery(t, fixture.Dispatcher, "192.168.1.3:80", "192.168.1.3", packet3)
 
-			// Verify worker metrics - in poor network conditions, we might not have all workers
-			metrics := fixture.Dispatcher.GetWorkerMetrics()
-			t.Logf("Worker metrics: %v", metrics)
+			// Get dispatcher metrics
+			metrics := fixture.Dispatcher.GetMetrics()
+			t.Logf("Dispatcher metrics: %v", metrics)
 
 			// For poor and terrible network conditions, we're more lenient with our expectations
 			if tc.networkCondition.PacketLoss > 0.05 {
-				// In tests with poor network conditions, we might not have any workers due to simulated failures
+				// In tests with poor network conditions, we might have fewer successful packets
 				// This is expected behavior and we just log the metrics for debugging
 			} else {
-				// For good network conditions, verify we have the expected number of workers
-				// Count the workers with the format we're testing (without the prefix)
-				workerCount := 0
-				for syncKey := range metrics {
-					// Only count workers with the format we're testing (IP:port without prefix)
-					if syncKey == "192.168.1.1:80" || syncKey == "192.168.1.2:80" || syncKey == "192.168.1.3:80" {
-						workerCount++
-					}
-				}
-				assert.Equal(t, tc.expectedWorkers, workerCount, "Should have the expected number of workers")
+				// For good network conditions, verify we have processed packets
+				assert.Contains(t, metrics, "packets_dispatched", "Metrics should contain packets_dispatched")
+				assert.GreaterOrEqual(t, metrics["packets_dispatched"], int64(1),
+					"Should have dispatched at least one packet")
 			}
 
 			// Log statistics
@@ -128,7 +121,7 @@ func TestTableDrivenResilienceWithNetworkConditions(t *testing.T) {
 	}
 
 	// Set up test logger to reduce verbosity
-	restore := packet.SetupTestLogger()
+	restore := testutil.SetupTestLogger()
 	defer restore()
 
 	// Define test cases with different failure rates and resilience configurations

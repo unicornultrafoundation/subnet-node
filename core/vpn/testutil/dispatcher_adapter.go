@@ -20,9 +20,6 @@ func NewDispatcher(
 	discoveryService api.PeerDiscoveryService,
 	streamService api.StreamService,
 	poolService api.StreamPoolService,
-	workerIdleTimeout int,
-	workerCleanupInterval time.Duration,
-	workerBufferSize int,
 	resilienceService *resilience.ResilienceService,
 ) *DispatcherAdapter {
 	// Create a dispatcher config
@@ -30,9 +27,6 @@ func NewDispatcher(
 		MaxStreamsPerPeer:     10,
 		StreamIdleTimeout:     5 * time.Minute,
 		StreamCleanupInterval: 1 * time.Minute,
-		WorkerIdleTimeout:     time.Duration(workerIdleTimeout) * time.Second,
-		WorkerCleanupInterval: workerCleanupInterval,
-		WorkerBufferSize:      workerBufferSize,
 		PacketBufferSize:      100,
 	}
 
@@ -75,32 +69,6 @@ func (a *DispatcherAdapter) Start() {
 // Stop stops the dispatcher
 func (a *DispatcherAdapter) Stop() {
 	a.dispatcher.Stop()
-}
-
-// GetWorkerMetrics returns metrics for all workers
-func (a *DispatcherAdapter) GetWorkerMetrics() map[string]struct {
-	PacketCount int64
-	ErrorCount  int64
-} {
-	// Get the metrics from the dispatcher
-	metrics := a.dispatcher.GetMetrics()
-
-	// Convert the metrics to the expected format
-	result := make(map[string]struct {
-		PacketCount int64
-		ErrorCount  int64
-	})
-
-	// Add some dummy metrics for now
-	result["dummy"] = struct {
-		PacketCount int64
-		ErrorCount  int64
-	}{
-		PacketCount: metrics["packets_dispatched"],
-		ErrorCount:  metrics["errors"],
-	}
-
-	return result
 }
 
 // GetMetrics returns the dispatcher's metrics

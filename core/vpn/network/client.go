@@ -6,7 +6,8 @@ import (
 	"time"
 
 	"github.com/songgao/water"
-	"github.com/unicornultrafoundation/subnet-node/core/vpn/packet"
+	"github.com/unicornultrafoundation/subnet-node/core/vpn/dispatch"
+	"github.com/unicornultrafoundation/subnet-node/core/vpn/dispatch/types"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/utils"
 )
 
@@ -15,7 +16,7 @@ type ClientService struct {
 	// TUN service for managing the TUN interface
 	tunService *TUNService
 	// Packet dispatcher for routing packets
-	dispatcher packet.DispatcherService
+	dispatcher dispatch.DispatcherService
 	// Metrics for monitoring
 	metrics VPNMetricsInterface
 	// Buffer pool for packet processing
@@ -27,7 +28,7 @@ type ClientService struct {
 // NewClientService creates a new client service
 func NewClientService(
 	tunService *TUNService,
-	dispatcher packet.DispatcherService,
+	dispatcher dispatch.DispatcherService,
 	metrics VPNMetricsInterface,
 	bufferPool *utils.BufferPool,
 ) *ClientService {
@@ -103,7 +104,7 @@ func (s *ClientService) listenFromTUN(ctx context.Context, iface *water.Interfac
 			copy(packetData, buf[:n])
 
 			// Extract packet information
-			packetInfo, err := packet.ExtractIPAndPorts(packetData)
+			packetInfo, err := types.ExtractPacketInfo(packetData)
 			if err != nil {
 				log.Debugf("failed to parse the packet info: %v", err)
 				s.metrics.IncrementPacketsDropped()
@@ -122,7 +123,7 @@ func (s *ClientService) listenFromTUN(ctx context.Context, iface *water.Interfac
 			}
 
 			// Dispatch the packet to the appropriate worker
-			s.dispatcher.DispatchPacket(ctx, syncKey, destIP, packetData)
+			s.dispatcher.DispatchPacket(ctx, types.ConnectionKey(syncKey), destIP, packetData)
 		}
 	}
 }
