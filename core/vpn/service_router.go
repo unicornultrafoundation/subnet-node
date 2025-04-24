@@ -18,7 +18,6 @@ func (s *Service) createDispatcher() packet.DispatcherService {
 	// Create dispatcher configuration
 	config := &dispatch.Config{
 		// Stream pool configuration
-		MinStreamsPerPeer:     s.configService.GetMinStreamsPerPeer(),
 		MaxStreamsPerPeer:     s.configService.GetMaxStreamsPerPeer(),
 		StreamIdleTimeout:     s.configService.GetStreamIdleTimeout(),
 		StreamCleanupInterval: s.configService.GetCleanupInterval(),

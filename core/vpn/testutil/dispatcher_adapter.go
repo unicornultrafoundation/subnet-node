@@ -27,7 +27,6 @@ func NewDispatcher(
 ) *DispatcherAdapter {
 	// Create a dispatcher config
 	config := &dispatch.Config{
-		MinStreamsPerPeer:     1,
 		MaxStreamsPerPeer:     10,
 		StreamIdleTimeout:     5 * time.Minute,
 		StreamCleanupInterval: 1 * time.Minute,

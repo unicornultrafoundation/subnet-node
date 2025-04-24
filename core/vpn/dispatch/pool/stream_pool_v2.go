@@ -22,7 +22,6 @@ type StreamPoolV2 struct {
 	cancel        context.CancelFunc
 
 	// Configuration
-	minStreamsPerPeer int
 	maxStreamsPerPeer int
 	streamIdleTimeout time.Duration
 	cleanupInterval   time.Duration
@@ -98,7 +97,6 @@ func NewStreamPoolV2(streamCreator api.StreamService, config *StreamPoolConfig) 
 		streamCreator:     streamCreator,
 		ctx:               ctx,
 		cancel:            cancel,
-		minStreamsPerPeer: config.MinStreamsPerPeer,
 		maxStreamsPerPeer: config.MaxStreamsPerPeer,
 		streamIdleTimeout: config.StreamIdleTimeout,
 		cleanupInterval:   config.CleanupInterval,
@@ -199,19 +197,10 @@ func (p *StreamPoolV2) getStreamChannelInternal(ctx context.Context, peerID peer
 	}
 	shard.RUnlock()
 
-	// If this is the first time we're seeing this peer, initialize the minimum number of streams
-	if !exists || len(streams) < p.minStreamsPerPeer {
-		err := p.initializeMinStreams(ctx, peerID)
-		if err != nil {
-			return nil, err
-		}
-
-		// Refresh our view of the streams
-		shard.RLock()
-		peerData = shard.peers[peerIDStr]
-		streams = peerData.streams
-		usageCounts = peerData.usageCounts
-		shard.RUnlock()
+	// If this is the first time we're seeing this peer, initialize the peer data
+	if !exists || len(streams) == 0 {
+		// Create a new stream directly instead of initializing minimum streams
+		return p.createNewStreamChannel(ctx, peerID)
 	}
 
 	if len(streams) > 0 {
@@ -368,8 +357,8 @@ func (p *StreamPoolV2) createNewStreamChannel(ctx context.Context, peerID peer.I
 	shard.Lock()
 	if !exists {
 		shard.peers[peerIDStr] = &peerDataV2{
-			streams:     make([]*StreamChannelV2, 0, p.minStreamsPerPeer),
-			usageCounts: make([]int64, 0, p.minStreamsPerPeer),
+			streams:     make([]*StreamChannelV2, 0, 1), // Start with capacity for 1 stream
+			usageCounts: make([]int64, 0, 1),
 		}
 	}
 
@@ -383,88 +372,6 @@ func (p *StreamPoolV2) createNewStreamChannel(ctx context.Context, peerID peer.I
 	atomic.AddInt64(&p.metrics.ActiveStreams, 1)
 
 	return streamChannel, nil
-}
-
-// initializeMinStreams creates the minimum number of streams for a peer
-func (p *StreamPoolV2) initializeMinStreams(ctx context.Context, peerID peer.ID) error {
-	peerIDStr := peerID.String()
-	shardIdx := p.getPeerShardIndex(peerIDStr)
-	shard := p.peerShards[shardIdx]
-
-	streamPoolV2Log.WithFields(logrus.Fields{
-		"peer_id":     peerIDStr,
-		"min_streams": p.minStreamsPerPeer,
-	}).Debug("Initializing minimum streams for peer")
-
-	// Lock to prevent concurrent initialization
-	shard.Lock()
-	defer shard.Unlock()
-
-	// Check again in case another goroutine initialized the streams while we were waiting for the lock
-	peerData, exists := shard.peers[peerIDStr]
-	if exists && len(peerData.streams) >= p.minStreamsPerPeer {
-		return nil
-	}
-
-	// Initialize the peer data if it doesn't exist
-	if !exists {
-		shard.peers[peerIDStr] = &peerDataV2{
-			streams:     make([]*StreamChannelV2, 0, p.minStreamsPerPeer),
-			usageCounts: make([]int64, 0, p.minStreamsPerPeer),
-		}
-		peerData = shard.peers[peerIDStr]
-	}
-
-	// Create the minimum number of streams
-	for i := len(peerData.streams); i < p.minStreamsPerPeer; i++ {
-		// Create a new stream
-		stream, err := p.streamCreator.CreateNewVPNStream(ctx, peerID)
-		if err != nil {
-			streamPoolV2Log.WithFields(logrus.Fields{
-				"peer_id": peerIDStr,
-				"error":   err,
-			}).Warn("Failed to create stream during initialization")
-			// Continue with the streams we've created so far
-			break
-		}
-
-		// Create a new stream context
-		streamCtx, streamCancel := context.WithCancel(p.ctx)
-
-		// Determine the buffer size
-		bufferSize := p.packetBufferSize
-		if bufferSize <= 0 {
-			bufferSize = 100 // Default buffer size
-		}
-
-		// Create a new stream channel
-		streamChannel := &StreamChannelV2{
-			Stream:       stream,
-			PacketChan:   make(chan *types.QueuedPacket, bufferSize),
-			lastActivity: time.Now().UnixNano(),
-			healthy:      1, // 1 = healthy
-			ctx:          streamCtx,
-			cancel:       streamCancel,
-		}
-
-		// Start the stream processor
-		go streamChannel.ProcessPackets(peerIDStr)
-
-		// Add the stream to the pool
-		peerData.streams = append(peerData.streams, streamChannel)
-		peerData.usageCounts = append(peerData.usageCounts, 0) // Start with usage count of 0
-
-		// Update metrics
-		atomic.AddInt64(&p.metrics.StreamsCreated, 1)
-		atomic.AddInt64(&p.metrics.ActiveStreams, 1)
-	}
-
-	streamPoolV2Log.WithFields(logrus.Fields{
-		"peer_id":      peerIDStr,
-		"stream_count": len(peerData.streams),
-	}).Debug("Initialized streams for peer")
-
-	return nil
 }
 
 // removeStreamAtIndex removes a stream at the specified index

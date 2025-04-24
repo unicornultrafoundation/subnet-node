@@ -5,7 +5,6 @@ import "time"
 // Config contains configuration for the packet dispatcher
 type Config struct {
 	// Stream pool configuration
-	MinStreamsPerPeer     int
 	MaxStreamsPerPeer     int
 	StreamIdleTimeout     time.Duration
 	StreamCleanupInterval time.Duration

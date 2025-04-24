@@ -20,7 +20,6 @@ type StreamService struct {
 	cancel        context.CancelFunc
 
 	// Configuration
-	minStreamsPerPeer int
 	streamIdleTimeout time.Duration
 	cleanupInterval   time.Duration
 
@@ -35,7 +34,6 @@ type StreamService struct {
 
 // StreamServiceConfig contains configuration for the stream service
 type StreamServiceConfig struct {
-	MinStreamsPerPeer int
 	StreamIdleTimeout time.Duration
 	CleanupInterval   time.Duration
 }
@@ -48,7 +46,6 @@ func NewStreamService(streamCreator api.StreamService, config *StreamServiceConf
 		streamCreator:     streamCreator,
 		ctx:               ctx,
 		cancel:            cancel,
-		minStreamsPerPeer: config.MinStreamsPerPeer,
 		streamIdleTimeout: config.StreamIdleTimeout,
 		cleanupInterval:   config.CleanupInterval,
 		streams:           make(map[string]api.VPNStream),

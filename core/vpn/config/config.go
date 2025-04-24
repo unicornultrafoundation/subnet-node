@@ -26,7 +26,6 @@ type VPNConfig struct {
 	WorkerCleanupInterval time.Duration
 
 	// Stream pool settings
-	MinStreamsPerPeer int
 	MaxStreamsPerPeer int
 	StreamIdleTimeout time.Duration
 	CleanupInterval   time.Duration
@@ -76,7 +75,6 @@ func New(cfg *config.C) *VPNConfig {
 		WorkerCleanupInterval: time.Duration(cfg.GetInt("vpn.worker_cleanup_interval", 5)) * time.Second, // 5 seconds default
 
 		// Stream pool settings
-		MinStreamsPerPeer: cfg.GetInt("vpn.min_streams_per_peer", 1),                             // 1 streams per peer default
 		MaxStreamsPerPeer: cfg.GetInt("vpn.max_streams_per_peer", 30),                            // 30 streams per peer default
 		StreamIdleTimeout: time.Duration(cfg.GetInt("vpn.stream_idle_timeout", 5)) * time.Second, // 5 seconds default
 		CleanupInterval:   time.Duration(cfg.GetInt("vpn.cleanup_interval", 5)) * time.Second,    // 5 seconds default
@@ -112,11 +110,6 @@ func (c *VPNConfig) GetWorkerIdleTimeout() int {
 // GetWorkerCleanupInterval returns the interval for worker cleanup
 func (c *VPNConfig) GetWorkerCleanupInterval() time.Duration {
 	return c.WorkerCleanupInterval
-}
-
-// GetMinStreamsPerPeer returns the minimum number of streams per peer
-func (c *VPNConfig) GetMinStreamsPerPeer() int {
-	return c.MinStreamsPerPeer
 }
 
 // GetMaxStreamsPerPeer returns the maximum number of streams per peer

@@ -132,7 +132,6 @@ func New(cfg *config.C, peerHost host.Host, dht *ddht.DHT, accountService *accou
 
 	// Create a stream service config with values from the config service
 	streamConfig := &StreamServiceConfig{
-		MinStreamsPerPeer: configService.GetMinStreamsPerPeer(),
 		StreamIdleTimeout: configService.GetStreamIdleTimeout(),
 		CleanupInterval:   configService.GetCleanupInterval(),
 	}
