@@ -20,8 +20,7 @@ func (s *Service) RunApp(ctx context.Context, appId *big.Int) (*atypes.App, erro
 		return nil, fmt.Errorf("failed to fetch app details: %w", err)
 	}
 
-	// Return if found app
-	if app.Status != atypes.Stopped {
+	if app.Status == atypes.Stopped {
 		if err := s.RestartContainer(ctx, appId); err != nil {
 			return nil, fmt.Errorf("failed to restart container: %w", err)
 		}
