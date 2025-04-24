@@ -6,7 +6,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 )
 
-// StreamPoolInterface defines the interface for stream pooling
+// StreamPoolInterface defines the interface for stream pooling with reduced mutex usage
 type StreamPoolInterface interface {
 	// GetStreamChannel gets a stream channel for a peer
 	GetStreamChannel(ctx context.Context, peerID peer.ID) (*StreamChannel, error)
