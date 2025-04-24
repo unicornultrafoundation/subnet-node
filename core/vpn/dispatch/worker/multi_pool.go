@@ -137,22 +137,88 @@ func (p *MultiWorkerPool) Start() {
 // workerManager handles worker operations through the operation channel
 func (p *MultiWorkerPool) workerManager() {
 	logger := multiPoolLog.WithField("peer_id", p.PeerID.String())
-	logger.Debug("Worker manager started")
+	logger.Info("Worker manager started")
+
+	// Track operation statistics for monitoring
+	var opStats struct {
+		totalOps        int64
+		dispatchOps     int64
+		successfulOps   int64
+		failedOps       int64
+		lastStatsReport time.Time
+	}
+	opStats.lastStatsReport = time.Now()
+
+	// Create a ticker for periodic stats reporting
+	statsTicker := time.NewTicker(1 * time.Minute)
+	defer statsTicker.Stop()
 
 	for {
 		select {
 		case <-p.StopChan:
 			logger.Debug("Worker manager stopping")
 			return
+
+		case <-statsTicker.C:
+			// Report operation statistics periodically
+			if atomic.LoadInt64(&opStats.totalOps) > 0 {
+				logger.WithFields(logrus.Fields{
+					"total_ops":      atomic.LoadInt64(&opStats.totalOps),
+					"dispatch_ops":   atomic.LoadInt64(&opStats.dispatchOps),
+					"successful_ops": atomic.LoadInt64(&opStats.successfulOps),
+					"failed_ops":     atomic.LoadInt64(&opStats.failedOps),
+					"duration":       time.Since(opStats.lastStatsReport).String(),
+					"active_workers": len(p.workers),
+				}).Info("Worker manager statistics")
+
+				// Reset stats
+				atomic.StoreInt64(&opStats.totalOps, 0)
+				atomic.StoreInt64(&opStats.dispatchOps, 0)
+				atomic.StoreInt64(&opStats.successfulOps, 0)
+				atomic.StoreInt64(&opStats.failedOps, 0)
+				opStats.lastStatsReport = time.Now()
+			}
+
 		case op := <-p.opChan:
+			// Track operation statistics
+			atomic.AddInt64(&opStats.totalOps, 1)
+
+			// Create operation-specific logger
+			opLogger := logger.WithFields(logrus.Fields{
+				"op_type": op.opType,
+			})
+
+			// Add connection details if available
+			if op.connKey != "" {
+				opLogger = opLogger.WithField("conn_key", string(op.connKey))
+			}
+			if op.destIP != "" {
+				opLogger = opLogger.WithField("dest_ip", op.destIP)
+			}
+
+			// Handle the operation
 			switch op.opType {
 			case "get_worker":
 				worker, idx, err := p.getOrCreateWorkerInternal(op.ctx, op.connKey, op.destIP)
 				op.resultChan <- workerOpResult{worker: worker, index: idx, err: err}
+
+				if err != nil {
+					atomic.AddInt64(&opStats.failedOps, 1)
+					opLogger.WithError(err).Warn("Failed to get or create worker")
+				} else {
+					atomic.AddInt64(&opStats.successfulOps, 1)
+					opLogger.WithField("worker_idx", idx).Debug("Successfully got or created worker")
+				}
+
 			case "dispatch":
-				worker, _, err := p.getOrCreateWorkerInternal(op.ctx, op.connKey, op.destIP)
+				atomic.AddInt64(&opStats.dispatchOps, 1)
+
+				// Get or create a worker for this connection
+				worker, workerIdx, err := p.getOrCreateWorkerInternal(op.ctx, op.connKey, op.destIP)
 				if err != nil {
 					atomic.AddInt64(&p.Metrics.Errors, 1)
+					atomic.AddInt64(&opStats.failedOps, 1)
+					opLogger.WithError(err).Warn("Failed to get or create worker for dispatch")
 					op.resultChan <- workerOpResult{err: err}
 					continue
 				}
@@ -160,28 +226,50 @@ func (p *MultiWorkerPool) workerManager() {
 				// Try to add the packet to the worker's queue
 				if !worker.EnqueuePacket(op.packet, op.connKey) {
 					atomic.AddInt64(&p.Metrics.PacketsDropped, 1)
+					atomic.AddInt64(&opStats.failedOps, 1)
+					opLogger.WithField("worker_idx", workerIdx).Warn("Worker queue full, packet dropped")
 					op.resultChan <- workerOpResult{err: types.ErrWorkerQueueFull}
 					continue
 				}
 
 				// Update metrics
 				atomic.AddInt64(&p.Metrics.PacketsHandled, 1)
+				atomic.AddInt64(&opStats.successfulOps, 1)
+				opLogger.WithField("worker_idx", workerIdx).Debug("Successfully dispatched packet to worker")
 				op.resultChan <- workerOpResult{err: nil}
+
 			case "get_count":
 				op.resultChan <- workerOpResult{count: len(p.workers)}
+				atomic.AddInt64(&opStats.successfulOps, 1)
+
 			case "get_metrics":
 				metrics := p.getMetricsInternal()
 				op.resultChan <- workerOpResult{metrics: metrics}
+				atomic.AddInt64(&opStats.successfulOps, 1)
+
 			case "cleanup":
+				opLogger.Debug("Starting worker cleanup")
 				p.cleanupWorkersInternal(op.ctx)
 				op.resultChan <- workerOpResult{}
+				atomic.AddInt64(&opStats.successfulOps, 1)
+				opLogger.WithField("active_workers", len(p.workers)).Debug("Completed worker cleanup")
+
 			case "stop_all":
 				// Stop all workers
-				for _, worker := range p.workers {
+				opLogger.Debug("Stopping all workers")
+				for i, worker := range p.workers {
 					worker.Stop()
+					opLogger.WithField("worker_idx", i).Debug("Stopped worker")
 				}
 				p.workers = make([]MultiConnectionWorkerInterface, 0)
 				op.resultChan <- workerOpResult{}
+				atomic.AddInt64(&opStats.successfulOps, 1)
+				opLogger.Debug("All workers stopped")
+
+			default:
+				opLogger.Warn("Unknown operation type")
+				op.resultChan <- workerOpResult{err: fmt.Errorf("unknown operation type: %s", op.opType)}
+				atomic.AddInt64(&opStats.failedOps, 1)
 			}
 		}
 	}
@@ -214,42 +302,8 @@ func (p *MultiWorkerPool) Stop() {
 	multiPoolLog.WithField("peer_id", p.PeerID.String()).Info("Multi-worker pool stopped")
 }
 
-// getOrCreateWorker gets an existing worker or creates a new one for a connection key
-func (p *MultiWorkerPool) getOrCreateWorker(
-	ctx context.Context,
-	connKey types.ConnectionKey,
-	destIP string,
-) (MultiConnectionWorkerInterface, error) {
-	// Use the worker manager to get or create a worker
-	resultChan := make(chan workerOpResult, 1)
-	p.opChan <- workerOp{
-		opType:     "get_worker",
-		connKey:    connKey,
-		destIP:     destIP,
-		ctx:        ctx,
-		resultChan: resultChan,
-	}
-
-	// Wait for the result
-	result := <-resultChan
-	if result.err != nil {
-		return nil, result.err
-	}
-
-	// Assign the connection key to this worker
-	p.ConnectionMap.Store(connKey, result.index)
-
-	// Log worker assignment for debugging
-	multiPoolLog.WithFields(logrus.Fields{
-		"peer_id":       p.PeerID.String(),
-		"conn_key":      string(connKey),
-		"worker_id":     result.worker.(*MultiConnectionWorker).WorkerID,
-		"worker_idx":    result.index,
-		"total_workers": len(p.workers),
-	}).Debug("Assigned connection to worker")
-
-	return result.worker, nil
-}
+// Note: We've removed the getOrCreateWorker method as it's no longer needed.
+// All worker operations are now handled through the worker manager routine.
 
 // getOrCreateWorkerInternal is the internal implementation of getOrCreateWorker
 // It's called by the worker manager routine
@@ -260,14 +314,27 @@ func (p *MultiWorkerPool) getOrCreateWorkerInternal(
 ) (MultiConnectionWorkerInterface, int64, error) {
 	// Check if we already have a worker assigned to this connection key
 	if workerIdx, ok := p.ConnectionMap.Load(connKey); ok {
-		if int(workerIdx.(int64)) < len(p.workers) {
-			worker := p.workers[workerIdx.(int64)]
+		// Since we're in the worker manager goroutine, we have exclusive access to the workers slice
+		// This eliminates the race condition between checking and using the worker
+		workerIdxInt := int(workerIdx.(int64))
+		if workerIdxInt < len(p.workers) {
+			worker := p.workers[workerIdxInt]
 			if worker.IsRunning() {
+				// Log connection affinity for debugging
+				multiPoolLog.WithFields(logrus.Fields{
+					"peer_id":    p.PeerID.String(),
+					"conn_key":   string(connKey),
+					"worker_idx": workerIdxInt,
+				}).Debug("Maintaining connection affinity to existing worker")
 				return worker, workerIdx.(int64), nil
 			}
 		}
 		// Worker doesn't exist or isn't running, remove the mapping
 		p.ConnectionMap.Delete(connKey)
+		multiPoolLog.WithFields(logrus.Fields{
+			"peer_id":  p.PeerID.String(),
+			"conn_key": string(connKey),
+		}).Debug("Removed mapping for non-existent or stopped worker")
 	}
 
 	// If we have workers, find the least loaded one
@@ -443,20 +510,55 @@ func (p *MultiWorkerPool) DispatchPacket(
 	destIP string,
 	packet *types.QueuedPacket,
 ) error {
+	// Add packet tracking information
+	logger := multiPoolLog.WithFields(logrus.Fields{
+		"peer_id":  p.PeerID.String(),
+		"conn_key": string(connKey),
+		"dest_ip":  destIP,
+	})
+
 	// Use the worker manager to dispatch the packet
 	resultChan := make(chan workerOpResult, 1)
-	p.opChan <- workerOp{
+
+	// Create a context with timeout to prevent blocking indefinitely
+	dispatchCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	// Send the operation to the worker manager
+	select {
+	case p.opChan <- workerOp{
 		opType:     "dispatch",
 		connKey:    connKey,
 		destIP:     destIP,
-		ctx:        ctx,
+		ctx:        ctx, // Use the original context for the actual operation
 		packet:     packet,
 		resultChan: resultChan,
+	}:
+		// Operation sent successfully
+	case <-dispatchCtx.Done():
+		// Timeout or context cancelled
+		atomic.AddInt64(&p.Metrics.PacketsDropped, 1)
+		atomic.AddInt64(&p.Metrics.Errors, 1)
+		logger.Warn("Timed out while trying to dispatch packet to worker manager")
+		return types.ErrWorkerManagerBusy
 	}
 
-	// Wait for the result
-	result := <-resultChan
-	return result.err
+	// Wait for the result with timeout
+	select {
+	case result := <-resultChan:
+		if result.err != nil {
+			logger.WithError(result.err).Debug("Failed to dispatch packet")
+		} else {
+			logger.Debug("Successfully dispatched packet")
+		}
+		return result.err
+	case <-dispatchCtx.Done():
+		// Timeout or context cancelled
+		atomic.AddInt64(&p.Metrics.PacketsDropped, 1)
+		atomic.AddInt64(&p.Metrics.Errors, 1)
+		logger.Warn("Timed out while waiting for dispatch result")
+		return types.ErrWorkerManagerTimeout
+	}
 }
 
 // cleanupInactiveWorkers periodically checks for and removes inactive workers
@@ -512,6 +614,12 @@ func (p *MultiWorkerPool) cleanupWorkersInternal(_ context.Context) {
 		// If the worker has been idle for too long, mark it for removal
 		if now.Sub(lastActivity) > idleTimeout {
 			workersToRemove = append(workersToRemove, i)
+			multiPoolLog.WithFields(logrus.Fields{
+				"peer_id":       p.PeerID.String(),
+				"worker_idx":    i,
+				"idle_duration": now.Sub(lastActivity).String(),
+				"idle_timeout":  idleTimeout.String(),
+			}).Info("Marking idle worker for removal")
 		} else {
 			activeWorkers = append(activeWorkers, worker)
 		}
@@ -525,19 +633,68 @@ func (p *MultiWorkerPool) cleanupWorkersInternal(_ context.Context) {
 
 	// If we have workers to remove, update the workers slice
 	if len(workersToRemove) > 0 {
-		p.workers = activeWorkers
-	}
+		// Create a map of old indices to new indices for connection remapping
+		indexMap := make(map[int]int)
+		newIdx := 0
+		for oldIdx := 0; oldIdx < len(p.workers); oldIdx++ {
+			// Check if this worker is being kept
+			isRemoved := false
+			for _, removedIdx := range workersToRemove {
+				if oldIdx == removedIdx {
+					isRemoved = true
+					break
+				}
+			}
 
-	// Clean up connection map entries for non-existent workers
-	p.ConnectionMap.Range(func(key, value interface{}) bool {
-		workerIdx := value.(int64)
-		validIdx := int(workerIdx) < len(p.workers)
-
-		if !validIdx {
-			p.ConnectionMap.Delete(key)
+			if !isRemoved {
+				// This worker is being kept, map its old index to its new index
+				indexMap[oldIdx] = newIdx
+				newIdx++
+			}
 		}
-		return true
-	})
+
+		// Update the workers slice
+		p.workers = activeWorkers
+
+		// Update connection map with new worker indices
+		p.ConnectionMap.Range(func(key, value any) bool {
+			oldWorkerIdx := int(value.(int64))
+
+			// Check if this worker is still active
+			if newWorkerIdx, exists := indexMap[oldWorkerIdx]; exists {
+				// Update the connection map with the new index
+				p.ConnectionMap.Store(key, int64(newWorkerIdx))
+				multiPoolLog.WithFields(logrus.Fields{
+					"conn_key":       key,
+					"old_worker_idx": oldWorkerIdx,
+					"new_worker_idx": newWorkerIdx,
+				}).Debug("Remapped connection to new worker index")
+			} else {
+				// Worker was removed, delete the connection mapping
+				p.ConnectionMap.Delete(key)
+				multiPoolLog.WithFields(logrus.Fields{
+					"conn_key":   key,
+					"worker_idx": oldWorkerIdx,
+				}).Debug("Removed connection mapping for removed worker")
+			}
+			return true
+		})
+	} else {
+		// Even if no workers were removed, still clean up any invalid mappings
+		p.ConnectionMap.Range(func(key, value any) bool {
+			workerIdx := int(value.(int64))
+			validIdx := workerIdx < len(p.workers)
+
+			if !validIdx {
+				p.ConnectionMap.Delete(key)
+				multiPoolLog.WithFields(logrus.Fields{
+					"conn_key":   key,
+					"worker_idx": workerIdx,
+				}).Debug("Removed connection mapping for invalid worker index")
+			}
+			return true
+		})
+	}
 }
 
 // getMetricsInternal is the internal implementation of GetMetrics
@@ -582,7 +739,7 @@ func (p *MultiWorkerPool) GetWorkerCount() int {
 // GetConnectionCount returns the total number of connections across all workers
 func (p *MultiWorkerPool) GetConnectionCount() int {
 	count := 0
-	p.ConnectionMap.Range(func(_, _ interface{}) bool {
+	p.ConnectionMap.Range(func(_, _ any) bool {
 		count++
 		return true
 	})

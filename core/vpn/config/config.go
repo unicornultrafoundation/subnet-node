@@ -71,7 +71,7 @@ func New(cfg *config.C) *VPNConfig {
 		// Worker settings
 		WorkerIdleTimeout:     cfg.GetInt("vpn.worker_idle_timeout", 5),                                  // 5 seconds default
 		WorkerBufferSize:      cfg.GetInt("vpn.worker_buffer_size", 200),                                 // 200 packets buffer size
-		MaxWorkersPerPeer:     cfg.GetInt("vpn.max_workers_per_peer", 20),                                // 20 workers per peer default
+		MaxWorkersPerPeer:     cfg.GetInt("vpn.max_workers_per_peer", 100),                               // 100 workers per peer default
 		WorkerCleanupInterval: time.Duration(cfg.GetInt("vpn.worker_cleanup_interval", 5)) * time.Second, // 5 seconds default
 
 		// Stream pool settings
@@ -84,7 +84,7 @@ func New(cfg *config.C) *VPNConfig {
 		CircuitBreakerResetTimeout:     time.Duration(cfg.GetInt("vpn.circuit_breaker_reset_timeout", 60)) * time.Second, // 1 minute default
 		CircuitBreakerSuccessThreshold: cfg.GetInt("vpn.circuit_breaker_success_threshold", 2),                           // 2 successes default
 
-		// Retry settingsies
+		// Retry settings
 		RetryMaxAttempts:     cfg.GetInt("vpn.retry_max_attempts", 5),
 		RetryInitialInterval: time.Duration(cfg.GetInt("vpn.retry_initial_interval", 1)) * time.Second,
 		RetryMaxInterval:     time.Duration(cfg.GetInt("vpn.retry_max_interval", 30)) * time.Second,

@@ -2,8 +2,10 @@ package pool
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/sirupsen/logrus"
@@ -61,6 +63,9 @@ func NewStreamManagerV2(streamPool StreamPoolInterfaceV2) *StreamManagerV2 {
 // Start starts the stream manager
 func (m *StreamManagerV2) Start() {
 	managerV2Log.Info("Starting stream manager")
+
+	// Start the connection stats logger
+	go m.connectionStatsLogger()
 }
 
 // Stop stops the stream manager
@@ -288,4 +293,76 @@ func (m *StreamManagerV2) getConnectionShardIndex(connKey types.ConnectionKey) i
 func (m *StreamManagerV2) Close() error {
 	m.Stop()
 	return nil
+}
+
+// connectionStatsLogger periodically logs statistics about connection-to-stream mappings
+func (m *StreamManagerV2) connectionStatsLogger() {
+	// Create a ticker for periodic logging (every 30 seconds)
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-m.ctx.Done():
+			return
+		case <-ticker.C:
+			// Log connection stats
+			m.logConnectionStats()
+		}
+	}
+}
+
+// logConnectionStats logs detailed statistics about connection-to-stream mappings
+func (m *StreamManagerV2) logConnectionStats() {
+	// Log overall stats
+	connCount := m.GetConnectionCount()
+	managerV2Log.WithFields(logrus.Fields{
+		"connection_count":  connCount,
+		"streams_created":   atomic.LoadInt64(&m.metrics.StreamsCreated),
+		"streams_released":  atomic.LoadInt64(&m.metrics.StreamsReleased),
+		"packets_processed": atomic.LoadInt64(&m.metrics.PacketsProcessed),
+		"errors":            atomic.LoadInt64(&m.metrics.Errors),
+	}).Info("Stream manager statistics")
+
+	// Log detailed connection-to-stream mappings
+	for shardIdx, shard := range m.connectionShards {
+		shard.RLock()
+
+		// Skip empty shards
+		if len(shard.connections) == 0 {
+			shard.RUnlock()
+			continue
+		}
+
+		// Create a list of connection details
+		connDetails := make([]map[string]interface{}, 0, len(shard.connections))
+		for connKey, conn := range shard.connections {
+			// Create connection detail
+			detail := map[string]interface{}{
+				"conn_key": string(connKey),
+				"peer_id":  conn.PeerID.String(),
+			}
+
+			// Add stream information if available
+			if conn.StreamChannel != nil {
+				detail["stream_id"] = fmt.Sprintf("%p", conn.StreamChannel)
+				detail["stream_healthy"] = conn.StreamChannel.IsHealthy()
+				detail["buffer_util"] = conn.StreamChannel.GetBufferUtilization()
+				detail["packet_count"] = atomic.LoadInt64(&conn.StreamChannel.Metrics.PacketCount)
+				detail["error_count"] = atomic.LoadInt64(&conn.StreamChannel.Metrics.ErrorCount)
+			} else {
+				detail["stream_id"] = "none"
+			}
+
+			connDetails = append(connDetails, detail)
+		}
+		shard.RUnlock()
+
+		// Log shard connection stats
+		managerV2Log.WithFields(logrus.Fields{
+			"shard_index":      shardIdx,
+			"connection_count": len(connDetails),
+			"connections":      connDetails,
+		}).Info("Connection-to-stream mappings")
+	}
 }
