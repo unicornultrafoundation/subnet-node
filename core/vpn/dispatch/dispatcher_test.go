@@ -157,7 +157,6 @@ func TestDispatcher_DispatchPacket_Error(t *testing.T) {
 		WorkerIdleTimeout:     300, // seconds
 		WorkerCleanupInterval: 1 * time.Minute,
 		WorkerBufferSize:      100,
-		MaxWorkersPerPeer:     10, // Set a positive value
 		PacketBufferSize:      100,
 	}
 

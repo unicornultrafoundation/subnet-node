@@ -71,7 +71,6 @@ func NewDispatcher(
 
 	// Create stream pool V2
 	streamPoolConfig := &pool.StreamPoolConfig{
-		MaxStreamsPerPeer: config.MaxStreamsPerPeer,
 		StreamIdleTimeout: config.StreamIdleTimeout,
 		CleanupInterval:   config.StreamCleanupInterval,
 		PacketBufferSize:  config.PacketBufferSize,
@@ -291,7 +290,6 @@ func (d *Dispatcher) getOrCreateWorkerPool(peerID peer.ID) (any, error) {
 		WorkerIdleTimeout:     int(d.config.WorkerIdleTimeout / time.Second),
 		WorkerCleanupInterval: d.config.WorkerCleanupInterval,
 		WorkerBufferSize:      d.config.WorkerBufferSize,
-		MaxWorkersPerPeer:     d.config.MaxWorkersPerPeer,
 	}
 
 	// Create a new multi-worker pool
@@ -310,8 +308,7 @@ func (d *Dispatcher) getOrCreateWorkerPool(peerID peer.ID) (any, error) {
 
 	// Log the worker mode
 	dispatcherLog.WithFields(logrus.Fields{
-		"peer_id":              peerID.String(),
-		"max_workers_per_peer": d.config.MaxWorkersPerPeer,
+		"peer_id": peerID.String(),
 	}).Info("Created multi-connection worker pool")
 
 	// Update metrics

@@ -24,7 +24,6 @@ type ConfigService interface {
 	// Worker settings
 	GetWorkerIdleTimeout() int
 	GetWorkerBufferSize() int
-	GetMaxWorkersPerPeer() int
 	GetWorkerCleanupInterval() time.Duration
 
 	// Stream pool settings
@@ -140,13 +139,6 @@ func (c *ConfigServiceImpl) GetWorkerBufferSize() int {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.vpnConfig.WorkerBufferSize
-}
-
-// GetMaxWorkersPerPeer returns the maximum number of workers per peer
-func (c *ConfigServiceImpl) GetMaxWorkersPerPeer() int {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.vpnConfig.MaxWorkersPerPeer
 }
 
 // GetWorkerCleanupInterval returns the worker cleanup interval

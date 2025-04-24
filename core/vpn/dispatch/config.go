@@ -13,7 +13,6 @@ type Config struct {
 	WorkerIdleTimeout     time.Duration
 	WorkerCleanupInterval time.Duration
 	WorkerBufferSize      int
-	MaxWorkersPerPeer     int
 
 	// Packet buffer size for stream channels
 	PacketBufferSize int

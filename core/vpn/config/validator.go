@@ -18,7 +18,6 @@ var (
 	// Worker settings errors
 	ErrInvalidWorkerIdleTimeout     = errors.New("invalid worker idle timeout (must be greater than 0)")
 	ErrInvalidWorkerBufferSize      = errors.New("invalid worker buffer size (must be greater than 0)")
-	ErrInvalidMaxWorkersPerPeer     = errors.New("invalid max workers per peer (must be greater than 0)")
 	ErrInvalidWorkerCleanupInterval = errors.New("invalid worker cleanup interval (must be greater than 0)")
 
 	// Stream pool settings errors
@@ -114,11 +113,6 @@ func (c *VPNConfig) validateWorkerSettings() error {
 	// Validate worker buffer size
 	if c.WorkerBufferSize <= 0 {
 		return ErrInvalidWorkerBufferSize
-	}
-
-	// Validate max workers per peer
-	if c.MaxWorkersPerPeer <= 0 {
-		return ErrInvalidMaxWorkersPerPeer
 	}
 
 	// Validate worker cleanup interval

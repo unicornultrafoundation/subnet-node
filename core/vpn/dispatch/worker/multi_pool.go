@@ -54,8 +54,6 @@ type MultiWorkerPool struct {
 	WorkerCleanupInterval time.Duration
 	// Worker buffer size
 	WorkerBufferSize int
-	// Maximum workers per peer
-	MaxWorkersPerPeer int
 	// Channel to signal worker pool shutdown
 	StopChan chan struct{}
 	// Whether the worker pool is running (0 = not running, 1 = running)
@@ -79,7 +77,6 @@ type MultiWorkerPoolConfig struct {
 	WorkerIdleTimeout     int
 	WorkerCleanupInterval time.Duration
 	WorkerBufferSize      int
-	MaxWorkersPerPeer     int
 }
 
 // NewMultiWorkerPool creates a new multi-worker pool for a specific peer ID
@@ -105,7 +102,6 @@ func NewMultiWorkerPool(
 		WorkerIdleTimeout:     config.WorkerIdleTimeout,
 		WorkerCleanupInterval: config.WorkerCleanupInterval,
 		WorkerBufferSize:      config.WorkerBufferSize,
-		MaxWorkersPerPeer:     config.MaxWorkersPerPeer,
 		StopChan:              make(chan struct{}),
 		ResilienceService:     resilienceService,
 		opChan:                make(chan workerOp, 100), // Buffer for operations
@@ -396,19 +392,12 @@ func (p *MultiWorkerPool) getOrCreateWorkerInternal(
 
 		// If we found a running worker, decide whether to use it or create a new one
 		if foundRunningWorker {
-			// Create a new worker if:
-			// 1. We have capacity for more workers (haven't reached MaxWorkersPerPeer)
-			// 2. At least one worker is nearing capacity
-			// 3. MaxWorkersPerPeer is greater than 1 (we're allowed to have multiple workers)
-			if runningWorkers < p.MaxWorkersPerPeer &&
-				p.MaxWorkersPerPeer > 1 &&
-				anyWorkerNearingCapacity &&
-				len(p.workers) < p.MaxWorkersPerPeer {
+			// Create a new worker if at least one worker is nearing capacity
+			if anyWorkerNearingCapacity {
 				// Log the decision to create a new worker
 				multiPoolLog.WithFields(logrus.Fields{
 					"peer_id":         p.PeerID.String(),
 					"running_workers": runningWorkers,
-					"max_workers":     p.MaxWorkersPerPeer,
 				}).Info("Creating new worker due to resource utilization")
 
 				// Create a new worker instead of reusing an existing one
@@ -423,50 +412,6 @@ func (p *MultiWorkerPool) getOrCreateWorkerInternal(
 
 	// Label for creating a new worker
 createNewWorker:
-
-	// Check if we've reached the maximum number of workers
-	if len(p.workers) >= p.MaxWorkersPerPeer {
-		// If we get here, all workers are stopped, so we'll replace the first one
-		if len(p.workers) > 0 {
-			workerIdx := 0
-			// Create a new worker to replace the stopped one
-			workerCtx, workerCancel := context.WithCancel(ctx)
-			workerID := fmt.Sprintf("%s-worker-%d", p.PeerID.String()[:8], workerIdx)
-			worker := NewMultiConnectionWorker(
-				workerID,
-				destIP,
-				p.PeerID,
-				p.StreamManager,
-				workerCtx,
-				workerCancel,
-				p.WorkerBufferSize,
-				p.ResilienceService,
-			)
-
-			// Start the worker
-			worker.Start()
-
-			// Replace the worker
-			p.workers[workerIdx] = worker
-
-			// Update metrics
-			atomic.AddInt64(&p.Metrics.WorkersCreated, 1)
-
-			// Log worker replacement
-			multiPoolLog.WithFields(logrus.Fields{
-				"peer_id":       p.PeerID.String(),
-				"worker_id":     workerID,
-				"worker_idx":    workerIdx,
-				"total_workers": len(p.workers),
-				"max_workers":   p.MaxWorkersPerPeer,
-			}).Info("Replaced worker")
-
-			return worker, int64(workerIdx), nil
-		}
-
-		return nil, 0, fmt.Errorf("maximum number of workers reached for peer %s", p.PeerID.String())
-	}
-
 	// Create a new worker
 	workerIdx := len(p.workers)
 	workerCtx, workerCancel := context.WithCancel(ctx)
@@ -497,7 +442,6 @@ createNewWorker:
 		"worker_id":     workerID,
 		"worker_idx":    workerIdx,
 		"total_workers": len(p.workers),
-		"max_workers":   p.MaxWorkersPerPeer,
 	}).Info("Created new worker")
 
 	return worker, int64(workerIdx), nil
@@ -589,7 +533,6 @@ func (p *MultiWorkerPool) cleanupInactiveWorkers() {
 			multiPoolLog.WithFields(logrus.Fields{
 				"peer_id":         p.PeerID.String(),
 				"active_workers":  metrics["active_workers"],
-				"max_workers":     p.MaxWorkersPerPeer,
 				"connections":     metrics["connection_count"],
 				"packets_handled": metrics["packets_handled"],
 			}).Info("Worker pool status")
