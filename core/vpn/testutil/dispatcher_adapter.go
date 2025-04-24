@@ -33,7 +33,6 @@ func NewDispatcher(
 		WorkerIdleTimeout:     time.Duration(workerIdleTimeout) * time.Second,
 		WorkerCleanupInterval: workerCleanupInterval,
 		WorkerBufferSize:      workerBufferSize,
-		MaxWorkersPerPeer:     10,
 		PacketBufferSize:      100,
 	}
 

@@ -106,7 +106,6 @@ func NewStreamPool(streamCreator api.StreamService, config *StreamPoolConfig) *S
 		streamCreator:     streamCreator,
 		ctx:               ctx,
 		cancel:            cancel,
-		maxStreamsPerPeer: config.MaxStreamsPerPeer,
 		streamIdleTimeout: config.StreamIdleTimeout,
 		cleanupInterval:   config.CleanupInterval,
 		packetBufferSize:  config.PacketBufferSize,

@@ -18,7 +18,6 @@ var (
 	ErrWorkerStopped          = errors.New("worker stopped")
 	ErrWorkerChannelFull      = errors.New("worker channel full")
 	ErrWorkerPoolStopped      = errors.New("worker pool stopped")
-	ErrMaxWorkersReached      = errors.New("maximum number of workers reached")
 	ErrDispatcherStopped      = errors.New("dispatcher stopped")
 	ErrNoPeerMapping          = errors.New("no peer mapping found")
 	ErrInvalidPeerID          = errors.New("invalid peer ID")
