@@ -23,10 +23,10 @@ basic:
       - "465"  # SMTPS
 
     # Stream settings
-    max_streams_per_peer: 10      # Maximum number of streams per peer
-    stream_idle_timeout: 300      # 5 minutes
-    cleanup_interval: 60          # 1 minute
-    packet_buffer_size: 100       # Size of packet buffer for each stream
+    max_streams_per_peer: 20      # Maximum number of streams per peer
+    stream_idle_timeout: 20      # 20 seconds
+    cleanup_interval: 30          # 30 seconds
+    packet_buffer_size: 200       # Size of packet buffer for each stream
 
     # Circuit breaker settings
     circuit_breaker_failure_threshold: 5
@@ -37,7 +37,7 @@ basic:
     health_check_interval: 30      # 30 seconds
     health_check_timeout: 5        # 5 seconds
     max_consecutive_failures: 3
-    warm_interval: 60              # 1 minute
+    warm_interval: 30              # 30 seconds
 
     # Retry settings
     retry_max_attempts: 5
@@ -75,9 +75,9 @@ high_performance:
 
     # Stream settings - increased for high performance
     max_streams_per_peer: 50      # Higher maximum for better throughput
-    stream_idle_timeout: 600      # 10 minutes
-    cleanup_interval: 120         # 2 minutes
-    packet_buffer_size: 500       # Larger buffer for high throughput
+    stream_idle_timeout: 10      # 10 seconds
+    cleanup_interval: 10         # 10 seconds
+    packet_buffer_size: 100       # Smaller buffer to scale up streams quickly
 
     # Circuit breaker settings - more tolerant for high load
     circuit_breaker_failure_threshold: 10  # More failures allowed
@@ -126,9 +126,9 @@ low_resource:
 
     # Stream settings - reduced for lower resource usage
     max_streams_per_peer: 5       # Fewer streams to save resources
-    stream_idle_timeout: 180      # 3 minutes
-    cleanup_interval: 30          # 30 seconds
-    packet_buffer_size: 50        # Smaller buffer to save memory
+    stream_idle_timeout: 10      # 10 seconds
+    cleanup_interval: 10          # 10 seconds
+    packet_buffer_size: 300        # More buffer to let one stream handles more packets
 
     # Circuit breaker settings - more conservative
     circuit_breaker_failure_threshold: 3   # Fewer failures allowed
