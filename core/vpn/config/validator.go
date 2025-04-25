@@ -15,11 +15,6 @@ var (
 	ErrInvalidRoutes    = errors.New("routes are invalid")
 	ErrInvalidMTU       = errors.New("invalid MTU (must be between 576 and 9000)")
 
-	// Worker settings errors
-	ErrInvalidWorkerIdleTimeout     = errors.New("invalid worker idle timeout (must be greater than 0)")
-	ErrInvalidWorkerBufferSize      = errors.New("invalid worker buffer size (must be greater than 0)")
-	ErrInvalidWorkerCleanupInterval = errors.New("invalid worker cleanup interval (must be greater than 0)")
-
 	// Stream pool settings errors
 	ErrInvalidStreamIdleTimeout = errors.New("invalid stream idle timeout (must be greater than 0)")
 	ErrInvalidCleanupInterval   = errors.New("invalid cleanup interval (must be greater than 0)")
