@@ -1,5 +1,5 @@
-//go:build !e2e_testing
-// +build !e2e_testing
+//go:build !android
+// +build !android
 
 package overlay
 
