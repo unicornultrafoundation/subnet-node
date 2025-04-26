@@ -112,5 +112,8 @@ func (s *Service) RunApp(ctx context.Context, appId *big.Int) (*atypes.App, erro
 
 	s.AddNewRunningApp(ctx, appId)
 
+	// save app to dht
+	s.StorePeerIDsInDHT(ctx, app)
+
 	return app, nil
 }
