@@ -65,13 +65,17 @@ func makeRouteTree(l *logrus.Logger, routes []Route, allowMTU bool) (*bart.Table
 
 func parseRoutes(c *config.C, networks []netip.Prefix) ([]Route, error) {
 	var err error
-
 	r := c.Get("tun.routes")
+
+	fmt.Println(22, c.Settings, r)
+
 	if r == nil {
 		return []Route{}, nil
 	}
 
 	rawRoutes, ok := r.([]any)
+	fmt.Println(11111, r, rawRoutes, ok)
+
 	if !ok {
 		return nil, fmt.Errorf("tun.routes is not an array")
 	}

@@ -151,14 +151,14 @@ func (r *SNRepo) Close() error {
 
 // openDatastore returns an error if the config file is not present.
 func (r *SNRepo) openDatastore() error {
-	defaultCfg := map[interface{}]interface{}{
+	defaultCfg := map[string]any{
 		"type": "mount",
-		"mounts": []interface{}{
-			map[interface{}]interface{}{
+		"mounts": []any{
+			map[string]any{
 				"mountpoint": "/",
 				"type":       "measure",
 				"prefix":     "leveldb.datastore",
-				"child": map[interface{}]interface{}{
+				"child": map[string]any{
 					"type":        "levelds",
 					"path":        "datastore",
 					"compression": "none",
