@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -19,17 +18,17 @@ import (
 
 	"dario.cat/mergo"
 	ic "github.com/libp2p/go-libp2p/core/crypto"
-	peer "github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/core/peer"
 	ma "github.com/multiformats/go-multiaddr"
 	"github.com/sirupsen/logrus"
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 )
 
 type C struct {
 	path        string
 	files       []string
-	Settings    map[interface{}]interface{}
-	oldSettings map[interface{}]interface{}
+	Settings    map[string]any
+	oldSettings map[string]any
 	callbacks   []func(*C)
 	l           *logrus.Logger
 	reloadLock  sync.Mutex
@@ -37,7 +36,7 @@ type C struct {
 
 func NewC(l *logrus.Logger) *C {
 	return &C{
-		Settings: make(map[interface{}]interface{}),
+		Settings: make(map[string]any),
 		l:        l,
 	}
 }
@@ -68,7 +67,7 @@ func (c *C) Load(path string) error {
 
 func (c *C) LoadString(raw string) error {
 	if raw == "" {
-		return errors.New("Empty configuration")
+		return errors.New("empty configuration")
 	}
 	return c.parseRaw([]byte(raw))
 }
@@ -97,8 +96,8 @@ func (c *C) HasChanged(k string) bool {
 	}
 
 	var (
-		nv interface{}
-		ov interface{}
+		nv any
+		ov any
 	)
 
 	if k == "" {
@@ -152,7 +151,7 @@ func (c *C) ReloadConfig() {
 	c.reloadLock.Lock()
 	defer c.reloadLock.Unlock()
 
-	c.oldSettings = make(map[interface{}]interface{})
+	c.oldSettings = make(map[string]any)
 	for k, v := range c.Settings {
 		c.oldSettings[k] = v
 	}
@@ -172,7 +171,7 @@ func (c *C) ReloadConfigString(raw string) error {
 	c.reloadLock.Lock()
 	defer c.reloadLock.Unlock()
 
-	c.oldSettings = make(map[interface{}]interface{})
+	c.oldSettings = make(map[string]any)
 	for k, v := range c.Settings {
 		c.oldSettings[k] = v
 	}
@@ -199,49 +198,6 @@ func (c *C) GetString(k, d string) string {
 	return fmt.Sprintf("%v", r)
 }
 
-// GetStrings lấy giá trị từ key và trả về slice string nếu có, nếu không trả về slice d.
-func (c *C) GetStrings(k string, d []string) []string {
-	r := c.Get(k) // Lấy giá trị từ key k
-
-	// Kiểm tra nếu giá trị trả về là nil, trả về giá trị mặc định d
-	if r == nil {
-		return d
-	}
-
-	// Nếu giá trị trả về là kiểu slice, kiểm tra xem đó có phải là slice của string hay không
-	if reflect.TypeOf(r).Kind() == reflect.Slice {
-		// Chuyển giá trị thành slice
-		val := reflect.ValueOf(r)
-		if val.Len() > 0 && reflect.TypeOf(val.Index(0).Interface()).Kind() == reflect.String {
-			strs := make([]string, val.Len())
-			for i := 0; i < val.Len(); i++ {
-				strs[i] = val.Index(i).Interface().(string)
-			}
-			return strs
-		}
-	}
-
-	// Nếu giá trị trả về không phải là slice của string, trả về giá trị mặc định d
-	return d
-}
-
-// GetString will get the string for k or return the default d if not found or invalid
-func (c *C) GetPrivKey(k, d string) (ic.PrivKey, error) {
-	str := c.GetString(k, d)
-	if str == "" {
-		return nil, nil
-	}
-
-	pkb, err := base64.StdEncoding.DecodeString(c.GetString(k, d))
-	if err != nil {
-		return nil, err
-	}
-
-	// currently storing key unencrypted. in the future we need to encrypt it.
-	// TODO(security)
-	return ic.UnmarshalPrivateKey(pkb)
-}
-
 // GetStringSlice will get the slice of strings for k or return the default d if not found or invalid
 func (c *C) GetStringSlice(k string, d []string) []string {
 	r := c.Get(k)
@@ -249,7 +205,7 @@ func (c *C) GetStringSlice(k string, d []string) []string {
 		return d
 	}
 
-	rv, ok := r.([]interface{})
+	rv, ok := r.([]any)
 	if !ok {
 		return d
 	}
@@ -262,28 +218,14 @@ func (c *C) GetStringSlice(k string, d []string) []string {
 	return v
 }
 
-func (c *C) GetAddrsInfo(k string) ([]peer.AddrInfo, error) {
-	addrs := c.Get(k).([]interface{})
-
-	maddrs := make([]ma.Multiaddr, len(addrs))
-	for i, addr := range addrs {
-		var err error
-		maddrs[i], err = ma.NewMultiaddr(addr.(string))
-		if err != nil {
-			return nil, err
-		}
-	}
-	return peer.AddrInfosFromP2pAddrs(maddrs...)
-}
-
 // GetMap will get the map for k or return the default d if not found or invalid
-func (c *C) GetMap(k string, d map[interface{}]interface{}) map[interface{}]interface{} {
+func (c *C) GetMap(k string, d map[string]any) map[string]any {
 	r := c.Get(k)
 	if r == nil {
 		return d
 	}
 
-	v, ok := r.(map[interface{}]interface{})
+	v, ok := r.(map[string]any)
 	if !ok {
 		return d
 	}
@@ -305,7 +247,7 @@ func (c *C) GetInt(k string, d int) int {
 // GetUint32 will get the uint32 for k or return the default d if not found or invalid
 func (c *C) GetUint32(k string, d uint32) uint32 {
 	r := c.GetInt(k, int(d))
-	if uint64(r) > uint64(math.MaxUint32) {
+	if r < 0 || uint64(r) > uint64(math.MaxUint32) {
 		return d
 	}
 	return uint32(r)
@@ -328,6 +270,22 @@ func (c *C) GetBool(k string, d bool) bool {
 	return v
 }
 
+func AsBool(v any) (value bool, ok bool) {
+	switch x := v.(type) {
+	case bool:
+		return x, true
+	case string:
+		switch x {
+		case "y", "yes":
+			return true, true
+		case "n", "no":
+			return false, true
+		}
+	}
+
+	return false, false
+}
+
 // GetDuration will get the duration for k or return the default d if not found or invalid
 func (c *C) GetDuration(k string, d time.Duration) time.Duration {
 	r := c.GetString(k, "")
@@ -338,7 +296,7 @@ func (c *C) GetDuration(k string, d time.Duration) time.Duration {
 	return v
 }
 
-func (c *C) Get(k string) interface{} {
+func (c *C) Get(k string) any {
 	return c.get(k, c.Settings)
 }
 
@@ -346,10 +304,10 @@ func (c *C) IsSet(k string) bool {
 	return c.get(k, c.Settings) != nil
 }
 
-func (c *C) get(k string, v interface{}) interface{} {
+func (c *C) get(k string, v any) any {
 	parts := strings.Split(k, ".")
 	for _, p := range parts {
-		m, ok := v.(map[interface{}]interface{})
+		m, ok := v.(map[string]any)
 		if !ok {
 			return nil
 		}
@@ -408,7 +366,7 @@ func (c *C) addFile(path string, direct bool) error {
 }
 
 func (c *C) parseRaw(b []byte) error {
-	var m map[interface{}]interface{}
+	var m map[string]any
 
 	err := yaml.Unmarshal(b, &m)
 	if err != nil {
@@ -420,7 +378,7 @@ func (c *C) parseRaw(b []byte) error {
 }
 
 func (c *C) parse() error {
-	var m map[interface{}]interface{}
+	var m map[string]any
 
 	for _, path := range c.files {
 		b, err := os.ReadFile(path)
@@ -428,7 +386,7 @@ func (c *C) parse() error {
 			return err
 		}
 
-		var nm map[interface{}]interface{}
+		var nm map[string]any
 		err = yaml.Unmarshal(b, &nm)
 		if err != nil {
 			return err
@@ -461,4 +419,35 @@ func readDirNames(path string) ([]string, error) {
 
 	sort.Strings(paths)
 	return paths, nil
+}
+
+// GetString will get the string for k or return the default d if not found or invalid
+func (c *C) GetPrivKey(k, d string) (ic.PrivKey, error) {
+	str := c.GetString(k, d)
+	if str == "" {
+		return nil, nil
+	}
+
+	pkb, err := base64.StdEncoding.DecodeString(c.GetString(k, d))
+	if err != nil {
+		return nil, err
+	}
+
+	// currently storing key unencrypted. in the future we need to encrypt it.
+	// TODO(security)
+	return ic.UnmarshalPrivateKey(pkb)
+}
+
+func (c *C) GetAddrsInfo(k string) ([]peer.AddrInfo, error) {
+	addrs := c.Get(k).([]interface{})
+
+	maddrs := make([]ma.Multiaddr, len(addrs))
+	for i, addr := range addrs {
+		var err error
+		maddrs[i], err = ma.NewMultiaddr(addr.(string))
+		if err != nil {
+			return nil, err
+		}
+	}
+	return peer.AddrInfosFromP2pAddrs(maddrs...)
 }

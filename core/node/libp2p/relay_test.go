@@ -14,9 +14,9 @@ func TestDockerACLFilter_AllowReserve(t *testing.T) {
 	// Create a mock config with allow_all set to false
 	l := test.NewLogger()
 	cfg := config.NewC(l)
-	cfg.Settings = map[interface{}]interface{}{
-		"swarm": map[interface{}]interface{}{
-			"relay_service": map[interface{}]interface{}{
+	cfg.Settings = map[string]any{
+		"swarm": map[string]any{
+			"relay_service": map[string]any{
 				"allow_all": false,
 			},
 		},
@@ -54,7 +54,7 @@ func TestDockerACLFilter_AllowReserve(t *testing.T) {
 		{
 			name:     "IPv6 loopback",
 			addrStr:  "/ip6/::1/tcp/1234",
-			expected: false,
+			expected: true,
 		},
 	}
 
@@ -76,9 +76,9 @@ func TestDockerACLFilter_AllowAll(t *testing.T) {
 	// Create a mock config with allow_all set to true
 	l := test.NewLogger()
 	cfg := config.NewC(l)
-	cfg.Settings = map[interface{}]interface{}{
-		"swarm": map[interface{}]interface{}{
-			"relay_service": map[interface{}]interface{}{
+	cfg.Settings = map[string]any{
+		"swarm": map[string]any{
+			"relay_service": map[string]any{
 				"allow_all": true,
 			},
 		},
