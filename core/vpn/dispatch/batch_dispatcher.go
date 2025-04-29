@@ -5,7 +5,9 @@ import (
 	"sync/atomic"
 
 	"github.com/sirupsen/logrus"
+	"github.com/unicornultrafoundation/subnet-node/core/vpn/api"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/dispatch/types"
+	"github.com/unicornultrafoundation/subnet-node/core/vpn/resilience"
 )
 
 // BatchDispatcher is an implementation of the Dispatcher interface that supports batch processing
@@ -21,9 +23,9 @@ type BatchDispatcher struct {
 }
 
 // NewBatchDispatcher creates a new batch dispatcher
-func NewBatchDispatcher(config *Config) *BatchDispatcher {
+func NewBatchDispatcher(peerDiscovery api.PeerDiscoveryService, streamService api.StreamService, config *Config, resilienceService *resilience.ResilienceService) *BatchDispatcher {
 	return &BatchDispatcher{
-		Dispatcher: NewDispatcher(nil, nil, config, nil),
+		Dispatcher: NewDispatcher(peerDiscovery, streamService, config, resilienceService),
 	}
 }
 
@@ -101,6 +103,11 @@ func (d *BatchDispatcher) DispatchPacketBatch(
 
 	// Update batch stats
 	atomic.AddInt64(&d.stats.batchesProcessed, 1)
+
+	// Return packets to the pool
+	for _, packet := range packets {
+		types.GlobalPacketPool.Put(packet)
+	}
 
 	return nil
 }

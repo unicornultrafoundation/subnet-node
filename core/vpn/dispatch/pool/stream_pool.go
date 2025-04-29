@@ -2,7 +2,6 @@ package pool
 
 import (
 	"context"
-	"fmt"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -794,40 +793,89 @@ func (p *StreamPool) logStreamStats() {
 			continue
 		}
 
-		// Create a list of stream details
-		streamDetails := make([]map[string]interface{}, 0, len(peerData.streams))
-		for i, stream := range peerData.streams {
-			// Get stream metrics
-			packetCount := atomic.LoadInt64(&stream.Metrics.PacketCount)
-			errorCount := atomic.LoadInt64(&stream.Metrics.ErrorCount)
-			bytesSent := atomic.LoadInt64(&stream.Metrics.BytesSent)
-			bufferUtil := stream.GetBufferUtilization()
-			usageCount := atomic.LoadInt64(&peerData.usageCounts[i])
-			lastActivity := stream.GetLastActivity()
-
-			// Add stream details
-			streamDetails = append(streamDetails, map[string]interface{}{
-				"stream_id":         fmt.Sprintf("%p", stream),
-				"healthy":           stream.IsHealthy(),
-				"buffer_util":       bufferUtil,
-				"usage_count":       usageCount,
-				"packet_count":      packetCount,
-				"error_count":       errorCount,
-				"bytes_sent":        bytesSent,
-				"last_activity_ago": time.Since(lastActivity).String(),
-			})
+		// Count stream statistics instead of logging all details
+		var stats struct {
+			healthyStreams   int
+			unhealthyStreams int
+			highBufferUtil   int // Streams with buffer utilization > 80%
+			highOverflowSize int // Streams with overflow size > 100
+			totalUsageCount  int64
+			maxBufferUtil    int
+			minBufferUtil    int
+			avgBufferUtil    int
+			idleStreams      int // Streams with no activity in the last minute
 		}
+
+		stats.minBufferUtil = 100 // Start with max value
+
+		for i, stream := range peerData.streams {
+			// Count healthy/unhealthy streams
+			if stream.IsHealthy() {
+				stats.healthyStreams++
+			} else {
+				stats.unhealthyStreams++
+			}
+
+			// Get buffer utilization
+			bufferUtil := stream.GetBufferUtilization()
+
+			// Track min/max buffer utilization
+			if bufferUtil > stats.maxBufferUtil {
+				stats.maxBufferUtil = bufferUtil
+			}
+			if bufferUtil < stats.minBufferUtil {
+				stats.minBufferUtil = bufferUtil
+			}
+
+			// Count high buffer utilization
+			if bufferUtil > 80 {
+				stats.highBufferUtil++
+			}
+
+			// Count high overflow size
+			if stream.GetOverflowQueueSize() > 100 {
+				stats.highOverflowSize++
+			}
+
+			// Count total usage
+			usageCount := atomic.LoadInt64(&peerData.usageCounts[i])
+			stats.totalUsageCount += usageCount
+
+			// Count idle streams
+			lastActivity := stream.GetLastActivity()
+			if time.Since(lastActivity) > time.Minute {
+				stats.idleStreams++
+			}
+		}
+
+		// Calculate average buffer utilization
+		if len(peerData.streams) > 0 {
+			totalBufferUtil := 0
+			for _, stream := range peerData.streams {
+				totalBufferUtil += stream.GetBufferUtilization()
+			}
+			stats.avgBufferUtil = totalBufferUtil / len(peerData.streams)
+		}
+
 		shard.RUnlock()
 
-		// Log peer stream stats
+		// Log summarized peer stream stats
 		streamPoolLog.WithFields(logrus.Fields{
-			"peer_id":        peerID,
-			"stream_count":   peerMetrics["stream_count"],
-			"packet_count":   peerMetrics["packet_count"],
-			"error_count":    peerMetrics["error_count"],
-			"bytes_sent":     peerMetrics["bytes_sent"],
-			"stream_details": streamDetails,
-		}).Info("Peer stream statistics")
+			"peer_id":           peerID,
+			"stream_count":      peerMetrics["stream_count"],
+			"packet_count":      peerMetrics["packet_count"],
+			"error_count":       peerMetrics["error_count"],
+			"bytes_sent":        peerMetrics["bytes_sent"],
+			"healthy_streams":   stats.healthyStreams,
+			"unhealthy_streams": stats.unhealthyStreams,
+			"high_buffer_util":  stats.highBufferUtil,
+			"high_overflow":     stats.highOverflowSize,
+			"avg_buffer_util":   stats.avgBufferUtil,
+			"min_buffer_util":   stats.minBufferUtil,
+			"max_buffer_util":   stats.maxBufferUtil,
+			"avg_usage_count":   float64(stats.totalUsageCount) / float64(len(peerData.streams)),
+			"idle_streams":      stats.idleStreams,
+		}).Info("Peer stream statistics summary")
 	}
 }
 

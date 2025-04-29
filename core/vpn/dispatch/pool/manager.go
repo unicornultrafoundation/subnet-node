@@ -719,36 +719,67 @@ func (m *StreamManager) logConnectionStats() {
 		}
 
 		// Create a list of connection details
-		connDetails := make([]map[string]interface{}, 0, len(shard.connections))
-		for connKey, conn := range shard.connections {
-			// Create connection detail
-			detail := map[string]interface{}{
-				"conn_key": string(connKey),
-				"peer_id":  conn.PeerID.String(),
-			}
+		// Count metrics instead of logging all details
+		var stats struct {
+			totalConnections      int
+			connectionsWithStream int
+			healthyStreams        int
+			unhealthyStreams      int
+			totalPackets          int64
+			totalErrors           int64
+			highBufferUtil        int // Connections with buffer utilization > 80%
+			highOverflowSize      int // Connections with overflow size > 100
+		}
 
-			// Add stream information if available
+		// Count unique peer IDs
+		uniquePeers := make(map[string]struct{})
+
+		stats.totalConnections = len(shard.connections)
+
+		for _, conn := range shard.connections {
+			// Count unique peers
+			uniquePeers[conn.PeerID.String()] = struct{}{}
+
+			// Count stream statistics
 			if conn.StreamChannel != nil {
-				detail["stream_id"] = fmt.Sprintf("%p", conn.StreamChannel)
-				detail["stream_healthy"] = conn.StreamChannel.IsHealthy()
-				detail["buffer_util"] = conn.StreamChannel.GetBufferUtilization()
-				detail["overflow_size"] = conn.StreamChannel.GetOverflowQueueSize()
-				detail["total_buffer_util"] = conn.StreamChannel.GetTotalBufferUtilization()
-				detail["packet_count"] = atomic.LoadInt64(&conn.StreamChannel.Metrics.PacketCount)
-				detail["error_count"] = atomic.LoadInt64(&conn.StreamChannel.Metrics.ErrorCount)
-			} else {
-				detail["stream_id"] = "none"
-			}
+				stats.connectionsWithStream++
 
-			connDetails = append(connDetails, detail)
+				// Count healthy/unhealthy streams
+				if conn.StreamChannel.IsHealthy() {
+					stats.healthyStreams++
+				} else {
+					stats.unhealthyStreams++
+				}
+
+				// Count high buffer utilization
+				if conn.StreamChannel.GetBufferUtilization() > 80 {
+					stats.highBufferUtil++
+				}
+
+				// Count high overflow size
+				if conn.StreamChannel.GetOverflowQueueSize() > 100 {
+					stats.highOverflowSize++
+				}
+
+				// Count packets and errors
+				stats.totalPackets += atomic.LoadInt64(&conn.StreamChannel.Metrics.PacketCount)
+				stats.totalErrors += atomic.LoadInt64(&conn.StreamChannel.Metrics.ErrorCount)
+			}
 		}
 		shard.RUnlock()
 
-		// Log shard connection stats
+		// Log summarized shard connection stats
 		managerLog.WithFields(logrus.Fields{
-			"shard_index":      shardIdx,
-			"connection_count": len(connDetails),
-			"connections":      connDetails,
-		}).Info("Connection-to-stream mappings")
+			"shard_index":             shardIdx,
+			"total_connections":       stats.totalConnections,
+			"unique_peers":            len(uniquePeers),
+			"connections_with_stream": stats.connectionsWithStream,
+			"healthy_streams":         stats.healthyStreams,
+			"unhealthy_streams":       stats.unhealthyStreams,
+			"high_buffer_util":        stats.highBufferUtil,
+			"high_overflow_size":      stats.highOverflowSize,
+			"total_packets":           stats.totalPackets,
+			"total_errors":            stats.totalErrors,
+		}).Info("Connection-to-stream mappings summary")
 	}
 }
