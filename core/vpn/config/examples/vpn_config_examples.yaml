@@ -1,0 +1,154 @@
+# VPN Configuration Examples
+# This file contains examples of different VPN configurations for various use cases.
+---
+
+# Basic Configuration
+# This is a standard configuration suitable for most use cases.
+basic:
+  vpn:
+    enable: true
+
+    # Network settings
+    mtu: 1400                     # Maximum Transmission Unit
+    virtual_ip: 10.0.0.1          # Virtual IP for this node
+    subnet: 24                    # CIDR subnet mask
+    routes:
+      - 10.0.0.0/24               # Routes to be added
+    protocol: "/vpn/1.0.0"        # Protocol identifier
+
+    # Security settings
+    unallowed_ports:
+      - "25"   # SMTP
+      - "587"  # Submission
+      - "465"  # SMTPS
+
+    # Stream settings
+    max_streams_per_peer: 20      # Maximum number of streams per peer
+    stream_idle_timeout: 20      # 20 seconds
+    cleanup_interval: 30          # 30 seconds
+    packet_buffer_size: 200       # Size of packet buffer for each stream
+
+    # Circuit breaker settings
+    circuit_breaker_failure_threshold: 5
+    circuit_breaker_reset_timeout: 60    # 1 minute
+    circuit_breaker_success_threshold: 2
+
+    # Stream health settings
+    health_check_interval: 30      # 30 seconds
+    health_check_timeout: 5        # 5 seconds
+    max_consecutive_failures: 3
+    warm_interval: 30              # 30 seconds
+
+    # Retry settings
+    retry_max_attempts: 5
+    retry_initial_interval: 1      # 1 second
+    retry_max_interval: 30         # 30 seconds
+
+    # Timeout settings
+    peer_connection_timeout: 30       # 30 seconds
+    dht_sync_timeout: 60              # 60 seconds
+    tun_setup_timeout: 30             # 30 seconds
+    peer_connection_check_interval: 100  # 100 milliseconds
+    shutdown_grace_period: 50         # 50 milliseconds
+
+---
+
+# High Performance Configuration
+# Optimized for high-throughput, low-latency environments with ample resources.
+high_performance:
+  vpn:
+    enable: true
+
+    # Network settings - optimized for performance
+    mtu: 1500                     # Higher MTU for better throughput
+    virtual_ip: 10.0.0.1
+    subnet: 24
+    routes:
+      - 10.0.0.0/24
+    protocol: "/vpn/1.0.0"
+
+    # Security settings
+    unallowed_ports:
+      - "25"   # SMTP
+      - "587"  # Submission
+      - "465"  # SMTPS
+
+    # Stream settings - increased for high performance
+    max_streams_per_peer: 50      # Higher maximum for better throughput
+    stream_idle_timeout: 10      # 10 seconds
+    cleanup_interval: 10         # 10 seconds
+    packet_buffer_size: 100       # Smaller buffer to scale up streams quickly
+
+    # Circuit breaker settings - more tolerant for high load
+    circuit_breaker_failure_threshold: 10  # More failures allowed
+    circuit_breaker_reset_timeout: 120     # 2 minutes
+    circuit_breaker_success_threshold: 3    # More successes required
+
+    # Stream health settings - more frequent checks
+    health_check_interval: 15     # 15 seconds
+    health_check_timeout: 3       # 3 seconds
+    max_consecutive_failures: 5   # More failures allowed
+    warm_interval: 30             # 30 seconds
+
+    # Retry settings - more aggressive
+    retry_max_attempts: 10           # More retry attempts
+    retry_initial_interval: 1        # 1 second
+    retry_max_interval: 60           # 1 minute
+
+    # Timeout settings - optimized for performance
+    peer_connection_timeout: 60       # 60 seconds - longer timeout for better reliability
+    dht_sync_timeout: 120             # 120 seconds - longer timeout for better reliability
+    tun_setup_timeout: 60             # 60 seconds - longer timeout for better reliability
+    peer_connection_check_interval: 50   # 50 milliseconds - more frequent checks
+    shutdown_grace_period: 100        # 100 milliseconds - longer grace period
+
+---
+
+# Low Resource Configuration
+# Optimized for devices with limited CPU and memory.
+low_resource:
+  vpn:
+    enable: true
+
+    # Network settings - optimized for lower bandwidth
+    mtu: 1200                     # Lower MTU to reduce fragmentation
+    virtual_ip: 10.0.0.1
+    subnet: 24
+    routes:
+      - 10.0.0.0/24
+    protocol: "/vpn/1.0.0"
+
+    # Security settings
+    unallowed_ports:
+      - "25"   # SMTP
+      - "587"  # Submission
+      - "465"  # SMTPS
+
+    # Stream settings - reduced for lower resource usage
+    max_streams_per_peer: 5       # Fewer streams to save resources
+    stream_idle_timeout: 10      # 10 seconds
+    cleanup_interval: 10          # 10 seconds
+    packet_buffer_size: 300        # More buffer to let one stream handles more packets
+
+    # Circuit breaker settings - more conservative
+    circuit_breaker_failure_threshold: 3   # Fewer failures allowed
+    circuit_breaker_reset_timeout: 30      # 30 seconds
+    circuit_breaker_success_threshold: 1   # Only one success required
+
+    # Stream health settings - less frequent checks
+    health_check_interval: 60     # 1 minute
+    health_check_timeout: 10      # 10 seconds
+    max_consecutive_failures: 2   # Fewer failures allowed
+    warm_interval: 120            # 2 minutes
+
+    # Retry settings - more conservative
+    retry_max_attempts: 3         # Fewer retry attempts
+    retry_initial_interval: 2     # 2 seconds
+    retry_max_interval: 15        # 15 seconds
+
+    # Timeout settings - optimized for lower resource usage
+    peer_connection_timeout: 20       # 20 seconds - shorter timeout to save resources
+    dht_sync_timeout: 30              # 30 seconds - shorter timeout to save resources
+    tun_setup_timeout: 20             # 20 seconds - shorter timeout to save resources
+    peer_connection_check_interval: 200  # 200 milliseconds - less frequent checks
+    shutdown_grace_period: 25         # 25 milliseconds - shorter grace period
