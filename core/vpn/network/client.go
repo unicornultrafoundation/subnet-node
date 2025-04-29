@@ -180,6 +180,16 @@ func (s *ClientService) packetReader(ctx context.Context, iface *water.Interface
 					processingTime := time.Since(startTime)
 					adaptiveBatchSizer.RecordProcessingTime(processingTime, len(packets))
 
+					// Record network conditions
+					if err == nil {
+						// Success - record latency and success
+						adaptiveBatchSizer.RecordNetworkLatency(processingTime)
+						adaptiveBatchSizer.RecordPacketResult(true)
+					} else {
+						// Failure - record failure
+						adaptiveBatchSizer.RecordPacketResult(false)
+					}
+
 					// Record metrics
 					metrics.GlobalMetrics.RecordBatchProcessed(len(packets), processingTime)
 
@@ -271,6 +281,16 @@ func (s *ClientService) packetReader(ctx context.Context, iface *water.Interface
 				processingTime := time.Since(startTime)
 				adaptiveBatchSizer.RecordProcessingTime(processingTime, len(packets))
 
+				// Record network conditions
+				if err == nil {
+					// Success - record latency and success
+					adaptiveBatchSizer.RecordNetworkLatency(processingTime)
+					adaptiveBatchSizer.RecordPacketResult(true)
+				} else {
+					// Failure - record failure
+					adaptiveBatchSizer.RecordPacketResult(false)
+				}
+
 				// Record metrics
 				metrics.GlobalMetrics.RecordBatchProcessed(len(packets), processingTime)
 
@@ -285,11 +305,23 @@ func (s *ClientService) packetReader(ctx context.Context, iface *water.Interface
 				contexts = contexts[:0]
 			}
 		} else {
-			// Use regular dispatch for single packets
-			err = s.dispatcher.DispatchPacket(ctx, connKey, destIP, packetData)
+			// Use regular dispatch for single packets with buffer tracking
+			err = s.dispatcher.DispatchPacketWithFuncCallback(ctx, connKey, destIP, packetData,
+				func(err error) {
+					// Always return the buffer to the pool, whether success or error
+					s.bufferPool.Put(packetBuf)
+
+					if err != nil {
+						logger.WithError(err).Debug("Failed to dispatch packet")
+						// Record dropped packet
+						metrics.GlobalMetrics.RecordPacketDropped()
+					}
+				})
+
+			// If there's an immediate error (before the callback), handle it here
 			if err != nil {
-				logger.WithError(err).Debug("Failed to dispatch packet")
-				// Return the buffer to the pool on error
+				logger.WithError(err).Debug("Immediate failure dispatching packet")
+				// Return the buffer to the pool on immediate error
 				s.bufferPool.Put(packetBuf)
 				// Record dropped packet
 				metrics.GlobalMetrics.RecordPacketDropped()

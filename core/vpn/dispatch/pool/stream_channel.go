@@ -139,6 +139,14 @@ func (s *StreamChannel) processOverflowQueue() {
 	ticker := time.NewTicker(50 * time.Millisecond)
 	defer ticker.Stop()
 
+	// Track consecutive empty checks to avoid premature exit
+	consecutiveEmptyChecks := 0
+	maxConsecutiveEmptyChecks := 10 // Wait for 10 consecutive empty checks before exiting
+
+	// Track last activity time to ensure we don't exit too quickly
+	lastActivity := time.Now()
+	minRunTime := 500 * time.Millisecond // Minimum time to run the processor
+
 	for {
 		select {
 		case <-s.ctx.Done():
@@ -146,24 +154,48 @@ func (s *StreamChannel) processOverflowQueue() {
 			return
 		case <-s.overflowSignal:
 			// Process the queue
-			s.tryMovePacketsFromOverflow()
+			moved := s.tryMovePacketsFromOverflow()
+			if moved > 0 {
+				// Reset counters on activity
+				consecutiveEmptyChecks = 0
+				lastActivity = time.Now()
+			}
 		case <-ticker.C:
 			// Periodically check the queue
-			s.tryMovePacketsFromOverflow()
+			moved := s.tryMovePacketsFromOverflow()
+			if moved > 0 {
+				// Reset counters on activity
+				consecutiveEmptyChecks = 0
+				lastActivity = time.Now()
+			} else {
+				// Increment empty check counter
+				consecutiveEmptyChecks++
+			}
 		}
 
-		// If the queue is empty, exit
-		if s.overflowQueue.IsEmpty() {
+		// Only exit if:
+		// 1. The queue is empty
+		// 2. We've had several consecutive empty checks
+		// 3. We've been running for at least the minimum time
+		if s.overflowQueue.IsEmpty() &&
+			consecutiveEmptyChecks >= maxConsecutiveEmptyChecks &&
+			time.Since(lastActivity) >= minRunTime {
+			streamLog.WithFields(logrus.Fields{
+				"stream":                 fmt.Sprintf("%p", s.Stream),
+				"empty_checks":           consecutiveEmptyChecks,
+				"time_since_activity_ms": time.Since(lastActivity).Milliseconds(),
+			}).Debug("Overflow processor exiting after period of inactivity")
 			return
 		}
 	}
 }
 
 // tryMovePacketsFromOverflow tries to move packets from the overflow queue to the main channel
-func (s *StreamChannel) tryMovePacketsFromOverflow() {
+// Returns the number of packets moved
+func (s *StreamChannel) tryMovePacketsFromOverflow() int {
 	// First check if there are any packets to move
 	if s.overflowQueue.IsEmpty() {
-		return
+		return 0
 	}
 
 	// Try to move packets from the overflow queue to the main channel
@@ -189,15 +221,60 @@ func (s *StreamChannel) tryMovePacketsFromOverflow() {
 doneTrying:
 
 	if movedCount > 0 {
-		streamLog.WithField("moved_packets", movedCount).Debug("Moved packets from overflow queue to main channel")
+		streamLog.WithFields(logrus.Fields{
+			"stream":        fmt.Sprintf("%p", s.Stream),
+			"moved_packets": movedCount,
+		}).Debug("Moved packets from overflow queue to main channel")
 	}
+
+	return movedCount
 }
 
-// Close closes the stream channel
+// Close closes the stream channel and properly cleans up resources
 func (s *StreamChannel) Close() {
+	// Cancel the context to signal all goroutines to stop
 	s.cancel()
+
+	// Drain the overflow queue
+	s.drainOverflowQueue()
+
+	// Close the packet channel
 	close(s.PacketChan)
+
+	// Close the underlying stream
 	s.Stream.Close()
+
+	// Log the closure
+	logrus.WithFields(logrus.Fields{
+		"stream": fmt.Sprintf("%p", s.Stream),
+	}).Debug("Stream channel closed and resources cleaned up")
+}
+
+// drainOverflowQueue drains the overflow queue and properly handles any remaining packets
+func (s *StreamChannel) drainOverflowQueue() {
+	// Get all packets from the overflow queue
+	packets := s.overflowQueue.DrainToSlice()
+
+	if len(packets) > 0 {
+		logrus.WithFields(logrus.Fields{
+			"stream":       fmt.Sprintf("%p", s.Stream),
+			"packet_count": len(packets),
+		}).Info("Draining overflow queue during stream channel closure")
+
+		// Process or discard each packet
+		for _, packet := range packets {
+			// If the packet has a done channel, signal that it was dropped
+			if packet.DoneCh != nil {
+				select {
+				case packet.DoneCh <- types.ErrStreamChannelClosed:
+					// Successfully sent the error
+				default:
+					// Channel is full or closed, can't signal
+				}
+				close(packet.DoneCh)
+			}
+		}
+	}
 }
 
 // ProcessPackets starts processing packets from the channel
