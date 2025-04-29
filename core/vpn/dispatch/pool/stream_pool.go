@@ -3,6 +3,7 @@ package pool
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -50,7 +51,8 @@ type StreamPool struct {
 	}
 
 	// Sharded peer data (to reduce contention)
-	peerShards [16]*peerShard
+	peerShards []*peerShard
+	shardMask  uint32 // Mask for fast modulo operation
 }
 
 // StreamPoolConfig contains configuration for the stream pool
@@ -102,9 +104,28 @@ type streamOpResult struct {
 func NewStreamPool(streamCreator api.StreamService, config *StreamPoolConfig) *StreamPool {
 	ctx, cancel := context.WithCancel(context.Background())
 
+	// Calculate optimal shard count based on CPU cores
+	// Use a power of 2 for efficient modulo operations with bit masking
+	numCPU := runtime.NumCPU()
+	shardCount := 16 // Minimum shard count
+
+	// Scale up shards based on CPU count, but keep it a power of 2
+	if numCPU > 4 {
+		shardCount = 32
+	}
+	if numCPU > 8 {
+		shardCount = 64
+	}
+	if numCPU > 16 {
+		shardCount = 128
+	}
+
+	// Calculate the bit mask for fast modulo operations
+	shardMask := uint32(shardCount - 1)
+
 	// Initialize the peer shards
-	peerShards := [16]*peerShard{}
-	for i := 0; i < 16; i++ {
+	peerShards := make([]*peerShard, shardCount)
+	for i := 0; i < shardCount; i++ {
 		peerShards[i] = &peerShard{
 			peers: make(map[string]*peerData),
 		}
@@ -145,8 +166,10 @@ func NewStreamPool(streamCreator api.StreamService, config *StreamPoolConfig) *S
 		usageCountThreshold: usageCountThreshold,
 		opChan:              make(chan streamOp, 100), // Buffer size for operations
 		peerShards:          peerShards,
+		shardMask:           shardMask,
 	}
 
+	streamPoolLog.WithField("shard_count", shardCount).Info("Initialized stream pool with dynamic sharding")
 	return pool
 }
 
@@ -231,89 +254,131 @@ func (p *StreamPool) getStreamChannelInternal(ctx context.Context, peerID peer.I
 	shardIdx := p.getPeerShardIndex(peerIDStr)
 	shard := p.peerShards[shardIdx]
 
-	// Check if we have any streams for this peer
+	// First try to find a healthy stream using the non-blocking algorithm
+	stream := p.findLeastLoadedStreamNonBlocking(peerID)
+	if stream != nil {
+		return stream, nil
+	}
+
+	// If no healthy stream was found, check if we need to create a new one
 	shard.RLock()
 	peerData, exists := shard.peers[peerIDStr]
-	var streams []*StreamChannel
-	var usageCounts []int64
+	var streamCount int
+	var streamNearingCapacity bool
+
 	if exists {
-		streams = peerData.streams
-		usageCounts = peerData.usageCounts
-	}
-	shard.RUnlock()
+		streamCount = len(peerData.streams)
 
-	// If this is the first time we're seeing this peer, initialize the peer data
-	if !exists || len(streams) == 0 {
-		// Create a new stream directly instead of initializing minimum streams
-		return p.createNewStreamChannel(ctx, peerID)
-	}
+		// Check if any existing stream is nearing capacity
+		for i, stream := range peerData.streams {
+			if !stream.IsHealthy() {
+				continue
+			}
 
-	if len(streams) > 0 {
-		// Track if any stream is approaching capacity
-		streamNearingCapacity := false
-
-		// Find the least loaded stream based on a combination of usage count and buffer utilization
-		minLoadScore := float64(^uint64(0) >> 1) // Max float64
-		minIndex := 0
-
-		for i, count := range usageCounts {
-			// Get buffer utilization for this stream
-			bufferUtil := streams[i].GetBufferUtilization()
-
-			// Calculate a load score that considers both usage count and buffer utilization
-			// This is a weighted score where higher values mean more load
-			loadScore := (float64(count) * p.usageCountWeight) + (float64(bufferUtil) * p.bufferUtilWeight)
+			// Get metrics without holding locks
+			bufferUtil := stream.GetBufferUtilization()
+			count := atomic.LoadInt64(&peerData.usageCounts[i])
 
 			// Check if this stream is nearing capacity
 			if bufferUtil > p.bufferUtilThreshold || count > int64(p.usageCountThreshold) {
 				streamNearingCapacity = true
-
-				// Log detailed metrics when a stream is nearing capacity
-				streamPoolLog.WithFields(logrus.Fields{
-					"peer_id":            peerIDStr,
-					"stream_index":       i,
-					"buffer_utilization": bufferUtil,
-					"usage_count":        count,
-				}).Info("Stream nearing capacity")
-			}
-
-			// Find the stream with the lowest load score
-			if loadScore < minLoadScore {
-				minLoadScore = loadScore
-				minIndex = i
+				break
 			}
 		}
+	}
+	shard.RUnlock()
 
-		// Check if the stream is still healthy
-		if streams[minIndex].IsHealthy() {
-			// Check if we should create a new stream based on resource utilization
-			if streamNearingCapacity &&
-				len(streams) < p.maxStreamsPerPeer &&
-				p.maxStreamsPerPeer > 1 {
-				// Log the decision to create a new stream
-				streamPoolLog.WithFields(logrus.Fields{
-					"peer_id":         peerIDStr,
-					"current_streams": len(streams),
-					"max_streams":     p.maxStreamsPerPeer,
-				}).Info("Creating new stream due to resource utilization")
-
-				// Create a new stream channel
-				return p.createNewStreamChannel(ctx, peerID)
-			}
-
-			// Increment the usage count
-			atomic.AddInt64(&usageCounts[minIndex], 1)
-			return streams[minIndex], nil
-		}
-
-		// Stream is unhealthy, remove it
-		shard.Lock()
-		p.removeStreamAtIndex(peerIDStr, minIndex, shard)
-		shard.Unlock()
+	// If this is the first time we're seeing this peer or all streams are unhealthy
+	if !exists || streamCount == 0 {
+		// Create a new stream directly
+		return p.createNewStreamChannel(ctx, peerID)
 	}
 
-	// Create a new stream channel
+	// Check if we should create a new stream based on resource utilization
+	if streamNearingCapacity && streamCount < p.maxStreamsPerPeer && p.maxStreamsPerPeer > 1 {
+		// Log the decision to create a new stream
+		streamPoolLog.WithFields(logrus.Fields{
+			"peer_id":         peerIDStr,
+			"current_streams": streamCount,
+			"max_streams":     p.maxStreamsPerPeer,
+		}).Info("Creating new stream due to resource utilization")
+
+		// Create a new stream channel
+		return p.createNewStreamChannel(ctx, peerID)
+	}
+
+	// Try one more time with the non-blocking algorithm
+	// This handles the case where a stream became healthy while we were checking
+	stream = p.findLeastLoadedStreamNonBlocking(peerID)
+	if stream != nil {
+		return stream, nil
+	}
+
+	// Create a new stream channel as a last resort
 	return p.createNewStreamChannel(ctx, peerID)
+}
+
+// findLeastLoadedStreamNonBlocking finds the least loaded healthy stream without locking
+// Returns nil if no healthy stream is found
+func (p *StreamPool) findLeastLoadedStreamNonBlocking(peerID peer.ID) *StreamChannel {
+	peerIDStr := peerID.String()
+	shardIdx := p.getPeerShardIndex(peerIDStr)
+	shard := p.peerShards[shardIdx]
+
+	// Take a snapshot of the current streams with minimal locking
+	shard.RLock()
+	peerData, exists := shard.peers[peerIDStr]
+	if !exists || len(peerData.streams) == 0 {
+		shard.RUnlock()
+		return nil
+	}
+
+	// Create local copies to work with outside the lock
+	streams := make([]*StreamChannel, len(peerData.streams))
+	copy(streams, peerData.streams)
+	shard.RUnlock()
+
+	// Find the least loaded healthy stream
+	var minLoadScore float64 = float64(^uint64(0) >> 1) // Max float64
+	var selectedStream *StreamChannel
+	var selectedIndex int = -1
+
+	for i, stream := range streams {
+		// Skip unhealthy streams
+		if !stream.IsHealthy() {
+			continue
+		}
+
+		// Get metrics without holding locks
+		bufferUtil := stream.GetBufferUtilization()
+
+		// Get usage count with atomic operation
+		shard.RLock()
+		count := atomic.LoadInt64(&peerData.usageCounts[i])
+		shard.RUnlock()
+
+		// Calculate load score
+		loadScore := (float64(count) * p.usageCountWeight) + (float64(bufferUtil) * p.bufferUtilWeight)
+
+		// Update if this is the least loaded stream
+		if loadScore < minLoadScore {
+			minLoadScore = loadScore
+			selectedStream = stream
+			selectedIndex = i
+		}
+	}
+
+	// If we found a healthy stream, increment its usage count
+	if selectedStream != nil && selectedIndex >= 0 {
+		shard.RLock()
+		if selectedIndex < len(peerData.usageCounts) {
+			atomic.AddInt64(&peerData.usageCounts[selectedIndex], 1)
+		}
+		shard.RUnlock()
+		return selectedStream
+	}
+
+	return nil
 }
 
 // ReleaseStreamChannel marks a stream channel as unhealthy if it's not healthy
@@ -676,7 +741,8 @@ func (p *StreamPool) getPeerShardIndex(peerID string) int {
 	for i := 0; i < len(peerID); i++ {
 		hash = hash*31 + uint32(peerID[i])
 	}
-	return int(hash % 16)
+	// Use bit masking for faster modulo operation (works because shardCount is a power of 2)
+	return int(hash & p.shardMask)
 }
 
 // streamStatsLogger periodically logs statistics about streams per peer
