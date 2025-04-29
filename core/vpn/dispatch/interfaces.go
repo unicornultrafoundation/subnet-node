@@ -16,6 +16,9 @@ type DispatcherService interface {
 	// DispatchPacketWithCallback dispatches a packet and provides a callback channel for the result
 	DispatchPacketWithCallback(ctx context.Context, connKey types.ConnectionKey, destIP string, packet []byte, doneCh chan error) error
 
+	// DispatchPacketWithFuncCallback dispatches a packet and provides a function callback for the result
+	DispatchPacketWithFuncCallback(ctx context.Context, connKey types.ConnectionKey, destIP string, packet []byte, callback func(error)) error
+
 	// Start starts the dispatcher
 	Start()
 

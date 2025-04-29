@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 	"sync/atomic"
+	"time"
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/api"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/dispatch/pool"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/dispatch/types"
+	"github.com/unicornultrafoundation/subnet-node/core/vpn/metrics"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/resilience"
 )
 
@@ -104,6 +106,9 @@ func (d *Dispatcher) Start() {
 
 	// Start the stream manager
 	d.streamManager.Start()
+
+	// Start metrics reporting
+	go d.reportStreamMetrics()
 
 	dispatcherLog.Info("Packet dispatcher started")
 }
@@ -203,6 +208,65 @@ func (d *Dispatcher) DispatchPacketWithCallback(
 	return nil
 }
 
+// DispatchPacketWithFuncCallback dispatches a packet and provides a function callback for the result
+func (d *Dispatcher) DispatchPacketWithFuncCallback(
+	ctx context.Context,
+	connKey types.ConnectionKey,
+	destIP string,
+	packet []byte,
+	callback func(error),
+) error {
+	if !d.running {
+		if callback != nil {
+			callback(types.ErrDispatcherStopped)
+		}
+		return types.ErrDispatcherStopped
+	}
+
+	// Create a done channel for the callback
+	doneCh := make(chan error, 1)
+
+	// Create a packet object with the done channel
+	packetObj := &types.QueuedPacket{
+		Ctx:    ctx,
+		DestIP: destIP,
+		Data:   packet,
+		DoneCh: doneCh,
+	}
+
+	// Start a goroutine to wait for the result and call the callback
+	if callback != nil {
+		go func() {
+			select {
+			case err, ok := <-doneCh:
+				if ok {
+					callback(err)
+				}
+			case <-ctx.Done():
+				callback(ctx.Err())
+			}
+		}()
+	}
+
+	// Dispatch the packet
+	err := d.dispatchPacketInternal(ctx, connKey, destIP, packetObj)
+	if err != nil {
+		atomic.AddInt64(&d.metrics.PacketsDropped, 1)
+		atomic.AddInt64(&d.metrics.Errors, 1)
+
+		// Signal the error on the done channel
+		if callback != nil {
+			doneCh <- err
+			close(doneCh)
+		}
+
+		return err
+	}
+
+	atomic.AddInt64(&d.metrics.PacketsDispatched, 1)
+	return nil
+}
+
 // dispatchPacketInternal handles the actual packet dispatching logic
 func (d *Dispatcher) dispatchPacketInternal(
 	ctx context.Context,
@@ -259,4 +323,46 @@ func (d *Dispatcher) GetMetrics() map[string]int64 {
 func (d *Dispatcher) Close() error {
 	d.Stop()
 	return nil
+}
+
+// reportStreamMetrics periodically reports stream metrics to the global metrics collector
+func (d *Dispatcher) reportStreamMetrics() {
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-d.ctx.Done():
+			return
+		case <-d.stopChan:
+			return
+		case <-ticker.C:
+			// Get stream metrics
+			activeStreams := int64(d.streamPool.GetTotalStreamCount())
+			activeConnections := int64(d.streamManager.GetConnectionCount())
+
+			// Get metrics from the dispatcher
+			dispatcherMetrics := d.GetMetrics()
+
+			// Extract stream creation/removal metrics
+			totalCreated := dispatcherMetrics["stream_manager_streams_created"]
+			totalRemoved := dispatcherMetrics["stream_manager_streams_released"]
+
+			// Update global metrics
+			metrics.UpdateStreamMetrics(
+				activeStreams,
+				totalCreated,
+				totalRemoved,
+				activeConnections,
+			)
+
+			// Log detailed metrics
+			dispatcherLog.WithFields(logrus.Fields{
+				"active_streams":     activeStreams,
+				"active_connections": activeConnections,
+				"streams_created":    totalCreated,
+				"streams_removed":    totalRemoved,
+			}).Debug("Stream metrics updated")
+		}
+	}
 }
