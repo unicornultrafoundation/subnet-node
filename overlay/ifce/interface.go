@@ -10,9 +10,12 @@ import (
 	"sync"
 	"sync/atomic"
 
+	ddht "github.com/libp2p/go-libp2p-kad-dht/dual"
 	p2phost "github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/sirupsen/logrus"
+	"github.com/unicornultrafoundation/subnet-node/core/account"
+	"github.com/unicornultrafoundation/subnet-node/core/vpn/discovery"
 	"github.com/unicornultrafoundation/subnet-node/firewall"
 	"github.com/unicornultrafoundation/subnet-node/overlay"
 )
@@ -20,33 +23,39 @@ import (
 const mtu = 9001
 
 type InterfaceConfig struct {
-	Inside   overlay.Device
-	Routines int
-	P2phost  p2phost.Host
-	Logger   *logrus.Logger
+	Inside        overlay.Device
+	Routines      int
+	P2phost       p2phost.Host
+	Logger        *logrus.Logger
+	Dht           *ddht.DHT
+	IP            string
+	Acc           *account.AccountService
+	PeerDiscovery *discovery.PeerDiscovery
 }
 
 type Interface struct {
-	inside     overlay.Device
-	readers    []io.ReadWriteCloser
-	routines   int
-	closed     atomic.Bool
-	l          *logrus.Logger
-	p2phost    p2phost.Host
-	streams    map[string]network.Stream
-	streamLock sync.Mutex
+	inside        overlay.Device
+	readers       []io.ReadWriteCloser
+	routines      int
+	closed        atomic.Bool
+	l             *logrus.Logger
+	p2phost       p2phost.Host
+	streams       map[string]network.Stream
+	streamLock    sync.Mutex
+	peerDiscovery *discovery.PeerDiscovery
 }
 
 // NewInterface creates a new VPN interface with the given configuration.
 func NewInterface(ctx context.Context, c *InterfaceConfig) *Interface {
 	ifce := &Interface{
-		inside:     c.Inside,
-		readers:    make([]io.ReadWriteCloser, c.Routines),
-		routines:   c.Routines,
-		p2phost:    c.P2phost,
-		l:          c.Logger,
-		streams:    make(map[string]network.Stream),
-		streamLock: sync.Mutex{},
+		inside:        c.Inside,
+		readers:       make([]io.ReadWriteCloser, c.Routines),
+		routines:      c.Routines,
+		p2phost:       c.P2phost,
+		l:             c.Logger,
+		streams:       make(map[string]network.Stream),
+		streamLock:    sync.Mutex{},
+		peerDiscovery: c.PeerDiscovery,
 	}
 	return ifce
 }

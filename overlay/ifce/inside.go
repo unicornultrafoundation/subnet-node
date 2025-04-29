@@ -11,11 +11,6 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/firewall"
 )
 
-var peerMap = map[string]string{
-	"10.0.0.4": "12D3KooWRpm2AqfRPLap3ht9JTYXAEeBXEKrsAfL1FgGKeLvdvGa",
-	"10.0.0.6": "12D3KooWLryZwuZwrPSShjJqMTSjaodVt3tXDUqw7ThbVNZwXtxg",
-}
-
 func (f *Interface) getOrCreateStream(peerId peer.ID, i int) (network.Stream, error) {
 	f.streamLock.Lock()
 	defer f.streamLock.Unlock()
@@ -55,9 +50,9 @@ func (f *Interface) consumeInsidePacket(packet []byte, fwPacket *firewall.Packet
 		return
 	}
 
-	peerIdStr, exists := peerMap[remote]
-	if !exists {
-		f.l.WithField("remoteAddr", remote).Error("Unknown peer address")
+	peerIdStr, err := f.peerDiscovery.GetPeerID(context.Background(), remote)
+	if err != nil {
+		f.l.WithField("remoteAddr", remote).Error("Failed to get peer ID")
 		return
 	}
 
