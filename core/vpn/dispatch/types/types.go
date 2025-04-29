@@ -42,6 +42,9 @@ type QueuedPacket struct {
 	// DoneCh is a channel to signal when packet processing is complete
 	// The error (if any) is sent on this channel
 	DoneCh chan error
+	// ReturnToPool is a function to return the packet data to a buffer pool
+	// This is used to properly manage memory and prevent leaks
+	ReturnToPool func([]byte)
 }
 
 // WorkerMetrics contains metrics for a worker

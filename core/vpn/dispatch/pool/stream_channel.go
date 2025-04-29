@@ -262,14 +262,66 @@ func (s *StreamChannel) Close() {
 	// Drain the overflow queue
 	s.drainOverflowQueue()
 
+	// Drain the packet channel to prevent resource leaks
+	drainCount := 0
+	for {
+		select {
+		case packet, ok := <-s.PacketChan:
+			if !ok {
+				// Channel is already closed
+				goto channelClosed
+			}
+
+			// Handle the packet's done channel
+			if packet.DoneCh != nil {
+				select {
+				case packet.DoneCh <- types.ErrStreamChannelClosed:
+					// Successfully sent the error
+				default:
+					// Channel might be closed or full, don't panic
+				}
+				close(packet.DoneCh)
+			}
+
+			// Return packet data to the pool if applicable
+			if packet.ReturnToPool != nil && packet.Data != nil {
+				packet.ReturnToPool(packet.Data)
+			}
+
+			// Clear references to help with garbage collection
+			packet.Data = nil
+			packet.Ctx = nil
+
+			drainCount++
+		default:
+			// No more packets available without blocking
+			goto doneDraining
+		}
+	}
+doneDraining:
+
+	// Log how many packets were drained
+	if drainCount > 0 {
+		streamLog.WithFields(logrus.Fields{
+			"stream":       fmt.Sprintf("%p", s.Stream),
+			"packet_count": drainCount,
+		}).Debug("Drained packets from channel during close")
+	}
+
+channelClosed:
 	// Close the packet channel
 	close(s.PacketChan)
 
 	// Close the underlying stream
-	s.Stream.Close()
+	if s.Stream != nil {
+		err := s.Stream.Close()
+		if err != nil {
+			streamLog.WithError(err).Debug("Error closing stream")
+		}
+	}
 
 	// Log the closure
-	logrus.WithFields(logrus.Fields{
+	streamLog.WithFields(logrus.Fields{
 		"stream": fmt.Sprintf("%p", s.Stream),
 	}).Debug("Stream channel closed and resources cleaned up")
 }
@@ -295,9 +347,32 @@ func (s *StreamChannel) drainOverflowQueue() {
 				default:
 					// Channel is full or closed, can't signal
 				}
+				// Always close the done channel to prevent leaks
 				close(packet.DoneCh)
 			}
+
+			// Return packet data to the pool if applicable
+			if packet.ReturnToPool != nil {
+				packet.ReturnToPool(packet.Data)
+			}
+
+			// Clear references to help with garbage collection
+			packet.Data = nil
+			packet.Ctx = nil
 		}
+	}
+
+	// Also clear the lastFailedPacket to prevent memory leaks
+	if s.lastFailedPacket != nil {
+		// Return packet data to the pool if applicable
+		if s.lastFailedPacket.ReturnToPool != nil {
+			s.lastFailedPacket.ReturnToPool(s.lastFailedPacket.Data)
+		}
+
+		// Clear references
+		s.lastFailedPacket.Data = nil
+		s.lastFailedPacket.Ctx = nil
+		s.lastFailedPacket = nil
 	}
 }
 
@@ -445,11 +520,23 @@ func (s *StreamChannel) writePacketToStream(packet *types.QueuedPacket) error {
 	// Record start time for performance monitoring
 	startTime := time.Now()
 
+	// Create a deep copy of the packet for lastFailedPacket to avoid memory leaks
+	var packetCopy *types.QueuedPacket
+	if packet != nil {
+		packetCopy = &types.QueuedPacket{
+			Ctx:    packet.Ctx,
+			DestIP: packet.DestIP,
+			Data:   make([]byte, len(packet.Data)),
+			// Don't copy DoneCh to avoid channel leaks
+		}
+		copy(packetCopy.Data, packet.Data)
+	}
+
 	// Write the packet to the stream
 	_, err := s.Stream.Write(packet.Data)
 	if err != nil {
-		// Store the failed packet for retry when stream is recreated
-		s.lastFailedPacket = packet
+		// Store a copy of the failed packet for retry when stream is recreated
+		s.lastFailedPacket = packetCopy
 
 		// Mark the stream as unhealthy
 		s.SetHealthy(false)

@@ -146,12 +146,8 @@ func (d *Dispatcher) DispatchPacket(
 		return types.ErrDispatcherStopped
 	}
 
-	// Create a packet object
-	packetObj := &types.QueuedPacket{
-		Ctx:    ctx,
-		DestIP: destIP,
-		Data:   packet,
-	}
+	// Get a packet from the global packet pool
+	packetObj := types.GlobalPacketPool.GetWithData(ctx, destIP, packet)
 
 	// Dispatch the packet
 	err := d.dispatchPacketInternal(ctx, connKey, destIP, packetObj)
@@ -181,13 +177,10 @@ func (d *Dispatcher) DispatchPacketWithCallback(
 		return types.ErrDispatcherStopped
 	}
 
-	// Create a packet object with the done channel
-	packetObj := &types.QueuedPacket{
-		Ctx:    ctx,
-		DestIP: destIP,
-		Data:   packet,
-		DoneCh: doneCh,
-	}
+	// Get a packet from the global packet pool
+	packetObj := types.GlobalPacketPool.GetWithData(ctx, destIP, packet)
+	// Set the done channel
+	packetObj.DoneCh = doneCh
 
 	// Dispatch the packet
 	err := d.dispatchPacketInternal(ctx, connKey, destIP, packetObj)
@@ -226,13 +219,10 @@ func (d *Dispatcher) DispatchPacketWithFuncCallback(
 	// Create a done channel for the callback
 	doneCh := make(chan error, 1)
 
-	// Create a packet object with the done channel
-	packetObj := &types.QueuedPacket{
-		Ctx:    ctx,
-		DestIP: destIP,
-		Data:   packet,
-		DoneCh: doneCh,
-	}
+	// Get a packet from the global packet pool
+	packetObj := types.GlobalPacketPool.GetWithData(ctx, destIP, packet)
+	// Set the done channel
+	packetObj.DoneCh = doneCh
 
 	// Start a goroutine to wait for the result and call the callback
 	if callback != nil {
