@@ -12,6 +12,7 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/config"
 	"github.com/unicornultrafoundation/subnet-node/core/account"
 	"github.com/unicornultrafoundation/subnet-node/core/node/libp2p"
+	"github.com/unicornultrafoundation/subnet-node/overlay/ifce"
 	"github.com/unicornultrafoundation/subnet-node/p2p"
 	"go.uber.org/fx"
 )
@@ -243,6 +244,7 @@ func Core(cfg *config.C) fx.Option {
 		fx.Provide(VerifierService),
 		fx.Provide(DockerService),
 		fx.Provide(account.EthereumService),
+		fx.Provide(ifce.OverlayService),
 	)
 }
 
