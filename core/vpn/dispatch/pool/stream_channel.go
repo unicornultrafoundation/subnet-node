@@ -3,6 +3,7 @@ package pool
 import (
 	"context"
 	"fmt"
+	"math"
 	"sync/atomic"
 	"time"
 
@@ -73,6 +74,29 @@ func (s *StreamChannel) GetTotalBufferUtilization() int {
 
 	// Can exceed 100% if overflow queue is used
 	return (currentLen * 100) / capacity
+}
+
+// GetUtilizationScore returns a combined utilization score (0-100) based on buffer utilization and overflow queue
+func (s *StreamChannel) GetUtilizationScore() int {
+	// Get buffer utilization
+	bufferUtil := s.GetBufferUtilization()
+
+	// Get overflow queue size
+	overflowSize := s.GetOverflowQueueSize()
+
+	// Calculate overflow impact (0-50)
+	// If overflow queue is being used, it means the buffer is already at capacity
+	var overflowImpact int
+	if overflowSize > 0 {
+		// Cap at 50 to leave room for buffer utilization in the score
+		overflowImpact = int(math.Min(float64(overflowSize), 50))
+	}
+
+	// Calculate total score (buffer utilization + overflow impact)
+	// This can exceed 100 in extreme cases, which is fine as it indicates severe overutilization
+	totalScore := bufferUtil + overflowImpact
+
+	return totalScore
 }
 
 // IsHealthy returns whether the stream is healthy

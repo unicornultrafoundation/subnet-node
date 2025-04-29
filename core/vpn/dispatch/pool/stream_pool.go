@@ -189,6 +189,9 @@ func (p *StreamPool) Start() {
 
 	// Start the stream stats logger
 	go p.streamStatsLogger()
+
+	// Start the proactive scaling routine
+	go p.proactiveScaling()
 }
 
 // Stop stops the stream pool and its worker routine
@@ -264,43 +267,83 @@ func (p *StreamPool) getStreamChannelInternal(ctx context.Context, peerID peer.I
 	peerData, exists := shard.peers[peerIDStr]
 	var streamCount int
 	var streamNearingCapacity bool
+	var totalBufferUtil int
+	var totalUsageCount int64
+	var healthyStreamCount int
 
 	if exists {
 		streamCount = len(peerData.streams)
 
-		// Check if any existing stream is nearing capacity
+		// Check all streams to calculate total utilization
 		for i, stream := range peerData.streams {
 			if !stream.IsHealthy() {
 				continue
 			}
 
+			healthyStreamCount++
+
 			// Get metrics without holding locks
-			bufferUtil := stream.GetBufferUtilization()
+			utilScore := stream.GetUtilizationScore()
 			count := atomic.LoadInt64(&peerData.usageCounts[i])
 
+			// Add to totals
+			totalBufferUtil += utilScore
+			totalUsageCount += count
+
 			// Check if this stream is nearing capacity
-			if bufferUtil > p.bufferUtilThreshold || count > int64(p.usageCountThreshold) {
+			if utilScore > p.bufferUtilThreshold || count > int64(p.usageCountThreshold) {
 				streamNearingCapacity = true
-				break
 			}
 		}
 	}
 	shard.RUnlock()
 
 	// If this is the first time we're seeing this peer or all streams are unhealthy
-	if !exists || streamCount == 0 {
+	if !exists || healthyStreamCount == 0 {
 		// Create a new stream directly
 		return p.createNewStreamChannel(ctx, peerID)
 	}
 
-	// Check if we should create a new stream based on resource utilization
+	// Calculate average utilization across all healthy streams
+	var avgBufferUtil int
+	var avgUsageCount int64
+
+	if healthyStreamCount > 0 {
+		avgBufferUtil = totalBufferUtil / healthyStreamCount
+		avgUsageCount = totalUsageCount / int64(healthyStreamCount)
+	}
+
+	// Check if we should create a new stream based on individual stream capacity
 	if streamNearingCapacity && streamCount < p.maxStreamsPerPeer && p.maxStreamsPerPeer > 1 {
 		// Log the decision to create a new stream
 		streamPoolLog.WithFields(logrus.Fields{
 			"peer_id":         peerIDStr,
 			"current_streams": streamCount,
 			"max_streams":     p.maxStreamsPerPeer,
-		}).Info("Creating new stream due to resource utilization")
+			"reason":          "individual_stream_capacity",
+		}).Info("Creating new stream due to individual stream capacity")
+
+		// Create a new stream channel
+		return p.createNewStreamChannel(ctx, peerID)
+	}
+
+	// Check if we should create a new stream based on overall utilization
+	// Create a new stream if average utilization is above 50% of the threshold
+	// and we have less than half the max streams
+	if healthyStreamCount > 0 &&
+		streamCount < (p.maxStreamsPerPeer/2) &&
+		p.maxStreamsPerPeer > 1 &&
+		(avgBufferUtil > (p.bufferUtilThreshold/2) || avgUsageCount > (int64(p.usageCountThreshold)/2)) {
+
+		// Log the decision to create a new stream
+		streamPoolLog.WithFields(logrus.Fields{
+			"peer_id":         peerIDStr,
+			"current_streams": streamCount,
+			"max_streams":     p.maxStreamsPerPeer,
+			"avg_buffer_util": avgBufferUtil,
+			"avg_usage_count": avgUsageCount,
+			"reason":          "proactive_scaling",
+		}).Info("Proactively creating new stream due to overall utilization")
 
 		// Create a new stream channel
 		return p.createNewStreamChannel(ctx, peerID)
@@ -349,7 +392,7 @@ func (p *StreamPool) findLeastLoadedStreamNonBlocking(peerID peer.ID) *StreamCha
 		}
 
 		// Get metrics without holding locks
-		bufferUtil := stream.GetBufferUtilization()
+		utilScore := stream.GetUtilizationScore()
 
 		// Get usage count with atomic operation
 		shard.RLock()
@@ -357,7 +400,7 @@ func (p *StreamPool) findLeastLoadedStreamNonBlocking(peerID peer.ID) *StreamCha
 		shard.RUnlock()
 
 		// Calculate load score
-		loadScore := (float64(count) * p.usageCountWeight) + (float64(bufferUtil) * p.bufferUtilWeight)
+		loadScore := (float64(count) * p.usageCountWeight) + (float64(utilScore) * p.bufferUtilWeight)
 
 		// Update if this is the least loaded stream
 		if loadScore < minLoadScore {
@@ -766,6 +809,152 @@ func (p *StreamPool) streamStatsLogger() {
 	}
 }
 
+// proactiveScaling periodically checks for peers that might need additional streams
+func (p *StreamPool) proactiveScaling() {
+	// Check every 10 seconds
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-p.ctx.Done():
+			return
+		case <-ticker.C:
+			// Check if the pool is still active
+			if atomic.LoadInt32(&p.active) == 0 {
+				return
+			}
+
+			// Check and scale streams
+			p.checkAndScaleStreams()
+		}
+	}
+}
+
+// checkAndScaleStreams checks all peers and proactively creates additional streams if needed
+func (p *StreamPool) checkAndScaleStreams() {
+	// Process each shard
+	for _, shard := range p.peerShards {
+		// Get a snapshot of peer IDs to avoid holding the lock for too long
+		shard.RLock()
+		peerIDs := make([]string, 0, len(shard.peers))
+		for peerID := range shard.peers {
+			peerIDs = append(peerIDs, peerID)
+		}
+		shard.RUnlock()
+
+		// Process each peer
+		for _, peerIDStr := range peerIDs {
+			// Get peer data with minimal locking
+			shard.RLock()
+			peerData, exists := shard.peers[peerIDStr]
+			if !exists {
+				shard.RUnlock()
+				continue
+			}
+
+			// Calculate metrics
+			streamCount := len(peerData.streams)
+			var healthyStreamCount int
+			var totalBufferUtil int
+			var totalUsageCount int64
+			var highUtilizationStreams int
+
+			// Check all streams to calculate total utilization
+			for i, stream := range peerData.streams {
+				if !stream.IsHealthy() {
+					continue
+				}
+
+				healthyStreamCount++
+
+				// Get metrics without holding locks
+				utilScore := stream.GetUtilizationScore()
+				count := atomic.LoadInt64(&peerData.usageCounts[i])
+
+				// Add to totals
+				totalBufferUtil += utilScore
+				totalUsageCount += count
+
+				// Count high utilization streams
+				if utilScore > p.bufferUtilThreshold || count > int64(p.usageCountThreshold) {
+					highUtilizationStreams++
+				}
+			}
+			shard.RUnlock()
+
+			// Skip if no healthy streams or already at max streams
+			if healthyStreamCount == 0 || streamCount >= p.maxStreamsPerPeer || p.maxStreamsPerPeer <= 1 {
+				continue
+			}
+
+			// Calculate average utilization
+			avgBufferUtil := 0
+			var avgUsageCount int64 = 0
+			if healthyStreamCount > 0 {
+				avgBufferUtil = totalBufferUtil / healthyStreamCount
+				avgUsageCount = totalUsageCount / int64(healthyStreamCount)
+			}
+
+			// Determine if we should scale up
+			shouldScale := false
+			var reason string
+
+			// Scale if more than half of streams are highly utilized
+			if highUtilizationStreams > (healthyStreamCount / 2) {
+				shouldScale = true
+				reason = "high_utilization_ratio"
+			}
+
+			// Scale if average utilization is above 50% of threshold and we have less than half max streams
+			if !shouldScale && streamCount < (p.maxStreamsPerPeer/2) &&
+				(avgBufferUtil > (p.bufferUtilThreshold/2) || avgUsageCount > (int64(p.usageCountThreshold)/2)) {
+				shouldScale = true
+				reason = "high_average_utilization"
+			}
+
+			// Scale if we have high overall traffic and only a few streams
+			if !shouldScale && streamCount < 3 && healthyStreamCount > 0 &&
+				(avgBufferUtil > (p.bufferUtilThreshold/3) || avgUsageCount > (int64(p.usageCountThreshold)/3)) {
+				shouldScale = true
+				reason = "low_stream_count_with_traffic"
+			}
+
+			// Create a new stream if needed
+			if shouldScale {
+				// Log the decision
+				streamPoolLog.WithFields(logrus.Fields{
+					"peer_id":                peerIDStr,
+					"current_streams":        streamCount,
+					"healthy_streams":        healthyStreamCount,
+					"max_streams":            p.maxStreamsPerPeer,
+					"avg_buffer_util":        avgBufferUtil,
+					"avg_usage_count":        avgUsageCount,
+					"high_utilization_count": highUtilizationStreams,
+					"reason":                 reason,
+				}).Info("Proactively scaling up streams")
+
+				// Create a new stream in a separate goroutine to avoid blocking
+				go func(peerIDString string) {
+					// Parse the peer ID
+					peerID, err := peer.Decode(peerIDString)
+					if err != nil {
+						streamPoolLog.WithError(err).Error("Failed to decode peer ID for proactive scaling")
+						return
+					}
+
+					// Create a new stream
+					_, err = p.createNewStreamChannel(context.Background(), peerID)
+					if err != nil {
+						streamPoolLog.WithError(err).WithField("peer_id", peerIDString).
+							Warn("Failed to create new stream during proactive scaling")
+					}
+				}(peerIDStr)
+			}
+		}
+	}
+}
+
 // logStreamStats logs detailed statistics about streams per peer
 func (p *StreamPool) logStreamStats() {
 	// Get metrics for all peers
@@ -803,10 +992,15 @@ func (p *StreamPool) logStreamStats() {
 			maxBufferUtil    int
 			minBufferUtil    int
 			avgBufferUtil    int
+			maxUtilScore     int
+			minUtilScore     int
+			totalUtilScore   int
+			avgUtilScore     int
 			idleStreams      int // Streams with no activity in the last minute
 		}
 
 		stats.minBufferUtil = 100 // Start with max value
+		stats.minUtilScore = 100  // Start with max value
 
 		for i, stream := range peerData.streams {
 			// Count healthy/unhealthy streams
@@ -816,8 +1010,9 @@ func (p *StreamPool) logStreamStats() {
 				stats.unhealthyStreams++
 			}
 
-			// Get buffer utilization
+			// Get utilization metrics
 			bufferUtil := stream.GetBufferUtilization()
+			utilScore := stream.GetUtilizationScore()
 
 			// Track min/max buffer utilization
 			if bufferUtil > stats.maxBufferUtil {
@@ -827,8 +1022,17 @@ func (p *StreamPool) logStreamStats() {
 				stats.minBufferUtil = bufferUtil
 			}
 
+			// Track utilization score
+			if utilScore > stats.maxUtilScore {
+				stats.maxUtilScore = utilScore
+			}
+			if utilScore < stats.minUtilScore {
+				stats.minUtilScore = utilScore
+			}
+			stats.totalUtilScore += utilScore
+
 			// Count high buffer utilization
-			if bufferUtil > 80 {
+			if utilScore > 80 {
 				stats.highBufferUtil++
 			}
 
@@ -848,13 +1052,19 @@ func (p *StreamPool) logStreamStats() {
 			}
 		}
 
-		// Calculate average buffer utilization
+		// Calculate average buffer utilization and utilization score
 		if len(peerData.streams) > 0 {
 			totalBufferUtil := 0
+			totalUtilScore := 0
 			for _, stream := range peerData.streams {
-				totalBufferUtil += stream.GetBufferUtilization()
+				bufferUtil := stream.GetBufferUtilization()
+				utilScore := stream.GetUtilizationScore()
+
+				totalBufferUtil += bufferUtil
+				totalUtilScore += utilScore
 			}
 			stats.avgBufferUtil = totalBufferUtil / len(peerData.streams)
+			stats.avgUtilScore = totalUtilScore / len(peerData.streams)
 		}
 
 		shard.RUnlock()
@@ -873,6 +1083,9 @@ func (p *StreamPool) logStreamStats() {
 			"avg_buffer_util":   stats.avgBufferUtil,
 			"min_buffer_util":   stats.minBufferUtil,
 			"max_buffer_util":   stats.maxBufferUtil,
+			"avg_util_score":    stats.avgUtilScore,
+			"min_util_score":    stats.minUtilScore,
+			"max_util_score":    stats.maxUtilScore,
 			"avg_usage_count":   float64(stats.totalUsageCount) / float64(len(peerData.streams)),
 			"idle_streams":      stats.idleStreams,
 		}).Info("Peer stream statistics summary")

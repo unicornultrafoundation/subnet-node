@@ -81,11 +81,11 @@ func New(cfg *config.C) *VPNConfig {
 		MaxStreamsPerPeer:   cfg.GetInt("vpn.max_streams_per_peer", 50),                            // 50 streams per peer default
 		StreamIdleTimeout:   time.Duration(cfg.GetInt("vpn.stream_idle_timeout", 5)) * time.Second, // 5 seconds default
 		CleanupInterval:     time.Duration(cfg.GetInt("vpn.cleanup_interval", 5)) * time.Second,    // 5 seconds default
-		PacketBufferSize:    cfg.GetInt("vpn.packet_buffer_size", 10),                              // 10 packets buffer size
+		PacketBufferSize:    cfg.GetInt("vpn.packet_buffer_size", 100),                             // 100 packets buffer size
 		UsageCountWeight:    parseFloat64(cfg.GetString("vpn.usage_count_weight", "0.7"), 0.7),     // Default weight for usage count
 		BufferUtilWeight:    parseFloat64(cfg.GetString("vpn.buffer_util_weight", "0.3"), 0.3),     // Default weight for buffer utilization
-		BufferUtilThreshold: cfg.GetInt("vpn.buffer_util_threshold", 70),                           // 70% default threshold for buffer utilization
-		UsageCountThreshold: cfg.GetInt("vpn.usage_count_threshold", 10),                           // 10 default threshold for usage count
+		BufferUtilThreshold: cfg.GetInt("vpn.buffer_util_threshold", 30),                           // 30% default threshold for buffer utilization
+		UsageCountThreshold: cfg.GetInt("vpn.usage_count_threshold", 20),                           // 20 default threshold for usage count
 
 		// Circuit breaker settings
 		CircuitBreakerFailureThreshold: cfg.GetInt("vpn.circuit_breaker_failure_threshold", 5),                           // 5 failures default
