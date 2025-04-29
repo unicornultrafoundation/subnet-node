@@ -3,6 +3,7 @@ package pool
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -22,7 +23,12 @@ type StreamManager struct {
 	cancel     context.CancelFunc
 
 	// Connection management
-	connectionShards [16]*connectionShard
+	connectionShards []*connectionShard
+	shardMask        uint32 // Mask for fast modulo operation
+
+	// Batch packet processing
+	packetBatchChans []chan packetBatchOp
+	batchWorkers     int32
 
 	// Metrics
 	metrics struct {
@@ -30,7 +36,23 @@ type StreamManager struct {
 		StreamsReleased  int64
 		PacketsProcessed int64
 		Errors           int64
+		BatchesProcessed int64
 	}
+}
+
+// packetBatchOp represents a batch operation for packet processing
+type packetBatchOp struct {
+	packets   []*packetOperation
+	resultCh  chan error
+	timestamp int64
+}
+
+// packetOperation represents a single packet operation
+type packetOperation struct {
+	ctx     context.Context
+	connKey types.ConnectionKey
+	peerID  peer.ID
+	packet  *types.QueuedPacket
 }
 
 // ConnectionState represents the state of a connection
@@ -52,34 +74,189 @@ type connectionShard struct {
 func NewStreamManager(streamPool StreamPoolInterface) *StreamManager {
 	ctx, cancel := context.WithCancel(context.Background())
 
+	// Calculate optimal shard count based on CPU cores
+	// Use a power of 2 for efficient modulo operations with bit masking
+	numCPU := runtime.NumCPU()
+	shardCount := 16 // Minimum shard count
+
+	// Scale up shards based on CPU count, but keep it a power of 2
+	if numCPU > 4 {
+		shardCount = 32
+	}
+	if numCPU > 8 {
+		shardCount = 64
+	}
+	if numCPU > 16 {
+		shardCount = 128
+	}
+
+	// Calculate the bit mask for fast modulo operations
+	shardMask := uint32(shardCount - 1)
+
 	// Initialize the connection shards
-	connectionShards := [16]*connectionShard{}
-	for i := 0; i < 16; i++ {
+	connectionShards := make([]*connectionShard, shardCount)
+	for i := 0; i < shardCount; i++ {
 		connectionShards[i] = &connectionShard{
 			connections: make(map[types.ConnectionKey]*ConnectionState),
 		}
 	}
 
-	return &StreamManager{
+	// Initialize batch processing channels
+	// Use one batch channel per CPU core for optimal parallelism
+	batchWorkerCount := numCPU
+	batchChans := make([]chan packetBatchOp, batchWorkerCount)
+	for i := 0; i < batchWorkerCount; i++ {
+		batchChans[i] = make(chan packetBatchOp, 100) // Buffer size for batch operations
+	}
+
+	manager := &StreamManager{
 		streamPool:       streamPool,
 		ctx:              ctx,
 		cancel:           cancel,
 		connectionShards: connectionShards,
+		shardMask:        shardMask,
+		packetBatchChans: batchChans,
+		batchWorkers:     int32(batchWorkerCount),
 	}
+
+	managerLog.WithFields(logrus.Fields{
+		"shard_count":   shardCount,
+		"batch_workers": batchWorkerCount,
+	}).Info("Initialized stream manager with dynamic sharding and batch processing")
+
+	return manager
 }
 
 // Start starts the stream manager
 func (m *StreamManager) Start() {
 	managerLog.Info("Starting stream manager")
 
+	// Start the batch workers
+	batchWorkerCount := int(atomic.LoadInt32(&m.batchWorkers))
+	for i := 0; i < batchWorkerCount; i++ {
+		go m.batchWorker(i)
+	}
+
 	// Start the connection stats logger
 	go m.connectionStatsLogger()
+}
+
+// batchWorker processes batches of packets
+func (m *StreamManager) batchWorker(workerID int) {
+	logger := managerLog.WithField("worker_id", workerID)
+	logger.Debug("Starting batch worker")
+
+	batchChan := m.packetBatchChans[workerID]
+
+	for {
+		select {
+		case <-m.ctx.Done():
+			logger.Debug("Batch worker stopping due to context cancellation")
+			return
+
+		case batch, ok := <-batchChan:
+			if !ok {
+				logger.Debug("Batch channel closed, stopping worker")
+				return
+			}
+
+			// Process the batch
+			m.processBatch(batch, workerID)
+
+			// Update metrics
+			atomic.AddInt64(&m.metrics.BatchesProcessed, 1)
+		}
+	}
+}
+
+// processBatch processes a batch of packet operations
+func (m *StreamManager) processBatch(batch packetBatchOp, workerID int) {
+	// Group packets by connection key to minimize lock contention
+	packetsByConn := make(map[types.ConnectionKey][]*packetOperation)
+
+	// First pass: group packets by connection key
+	for _, op := range batch.packets {
+		packetsByConn[op.connKey] = append(packetsByConn[op.connKey], op)
+	}
+
+	// Second pass: process each connection's packets
+	for connKey, ops := range packetsByConn {
+		// All operations in this group have the same connection key and peer ID
+		peerID := ops[0].peerID
+
+		// Get or create a stream for this connection
+		streamChannel, err := m.GetOrCreateStreamForConnection(ops[0].ctx, connKey, peerID)
+		if err != nil {
+			// Handle error for all packets in this group
+			for _, op := range ops {
+				if op.packet.DoneCh != nil {
+					select {
+					case op.packet.DoneCh <- err:
+					default:
+					}
+				}
+			}
+			atomic.AddInt64(&m.metrics.Errors, int64(len(ops)))
+			continue
+		}
+
+		// Send all packets for this connection
+		for _, op := range ops {
+			// Send the packet to the stream's channel with additional safety checks
+			select {
+			case streamChannel.PacketChan <- op.packet:
+				// Packet sent successfully
+				atomic.AddInt64(&m.metrics.PacketsProcessed, 1)
+			case <-op.ctx.Done():
+				// Context cancelled
+				if op.packet.DoneCh != nil {
+					select {
+					case op.packet.DoneCh <- types.ErrContextCancelled:
+					default:
+					}
+				}
+				atomic.AddInt64(&m.metrics.Errors, 1)
+			case <-streamChannel.ctx.Done():
+				// Stream context cancelled, stream is shutting down
+				if op.packet.DoneCh != nil {
+					select {
+					case op.packet.DoneCh <- types.ErrStreamChannelClosed:
+					default:
+					}
+				}
+				atomic.AddInt64(&m.metrics.Errors, 1)
+				// Mark the stream as unhealthy
+				streamChannel.SetHealthy(false)
+				m.ReleaseConnection(connKey, false)
+			default:
+				// Channel full, add to overflow queue instead of dropping
+				streamChannel.AddToOverflowQueue(op.packet)
+				atomic.AddInt64(&m.metrics.PacketsProcessed, 1)
+			}
+		}
+	}
+
+	// Signal completion
+	if batch.resultCh != nil {
+		select {
+		case batch.resultCh <- nil:
+		default:
+		}
+	}
 }
 
 // Stop stops the stream manager
 func (m *StreamManager) Stop() {
 	managerLog.Info("Stopping stream manager")
+
+	// Cancel the context to signal all workers to stop
 	m.cancel()
+
+	// Close all batch channels to stop the batch workers
+	batchWorkerCount := int(atomic.LoadInt32(&m.batchWorkers))
+	for i := 0; i < batchWorkerCount; i++ {
+		close(m.packetBatchChans[i])
+	}
 
 	// Release all connections
 	for _, shard := range m.connectionShards {
@@ -94,6 +271,8 @@ func (m *StreamManager) Stop() {
 		}
 		shard.Unlock()
 	}
+
+	managerLog.Info("Stream manager stopped")
 }
 
 // GetOrCreateStreamForConnection gets or creates a stream for a connection
@@ -105,60 +284,57 @@ func (m *StreamManager) GetOrCreateStreamForConnection(
 	shardIdx := m.getConnectionShardIndex(connKey)
 	shard := m.connectionShards[shardIdx]
 
-	// Check if we already have a stream for this connection
+	// First, try to get a healthy stream with minimal locking
+	var streamChannel *StreamChannel
+	var needNewStream bool
+	var oldStream *StreamChannel
+
+	// Use a read lock for the initial check
 	shard.RLock()
 	conn, exists := shard.connections[connKey]
-	if exists && conn.StreamChannel != nil {
-		// Check if the stream is still healthy
-		if conn.StreamChannel.IsHealthy() {
-			stream := conn.StreamChannel
-			shard.RUnlock()
-			return stream, nil
-		}
-
-		// Stream is unhealthy, release it
-		if conn.StreamChannel != nil {
-			// We need to release the read lock before calling ReleaseStreamChannel
-			// to avoid potential deadlocks
-			shard.RUnlock()
-			m.streamPool.ReleaseStreamChannel(conn.PeerID, conn.StreamChannel, false)
-
-			// Re-acquire the lock for writing
-			shard.Lock()
-			// Check if the connection still exists
-			conn, exists = shard.connections[connKey]
-			if exists {
-				conn.StreamChannel = nil
-				shard.connections[connKey] = conn
-			}
-			shard.Unlock()
-		} else {
-			shard.RUnlock()
-		}
-	} else {
+	if exists && conn.StreamChannel != nil && conn.StreamChannel.IsHealthy() {
+		// We found a healthy stream, use it
+		streamChannel = conn.StreamChannel
 		shard.RUnlock()
+		return streamChannel, nil
+	} else if exists && conn.StreamChannel != nil {
+		// Stream exists but is unhealthy, remember it for release
+		oldStream = conn.StreamChannel
+		needNewStream = true
+	} else {
+		// No stream or nil stream, need a new one
+		needNewStream = true
+	}
+	shard.RUnlock()
+
+	// If we need to release an unhealthy stream, do it outside the lock
+	if needNewStream && oldStream != nil {
+		m.streamPool.ReleaseStreamChannel(peerID, oldStream, false)
 	}
 
-	// Get a stream from the pool
+	// Get a new stream from the pool
 	streamChannel, err := m.streamPool.GetStreamChannel(ctx, peerID)
 	if err != nil {
 		return nil, err
 	}
 
-	// Create or update the connection state
+	// Create or update the connection state with minimal lock time
 	shard.Lock()
+	// Check again if the connection exists, as it might have been created/updated
+	// while we were getting a new stream
+	conn, exists = shard.connections[connKey]
 	if !exists {
 		// Create a new connection state
-		newConn := &ConnectionState{
+		shard.connections[connKey] = &ConnectionState{
 			Key:           connKey,
 			PeerID:        peerID,
 			StreamChannel: streamChannel,
-			LastActivity:  0, // Will be updated on first packet
+			LastActivity:  time.Now().UnixNano(),
 		}
-		shard.connections[connKey] = newConn
 	} else {
 		// Update the existing connection state
 		conn.StreamChannel = streamChannel
+		conn.LastActivity = time.Now().UnixNano()
 		shard.connections[connKey] = conn
 	}
 	shard.Unlock()
@@ -174,33 +350,44 @@ func (m *StreamManager) ReleaseConnection(connKey types.ConnectionKey, healthy b
 	shardIdx := m.getConnectionShardIndex(connKey)
 	shard := m.connectionShards[shardIdx]
 
-	shard.Lock()
+	// Extract the stream and peer ID with minimal lock time
+	var oldStreamChannel *StreamChannel
+	var peerID peer.ID
+	var hasFailedPacket bool
+	var failedPacketDestIP string
+
+	// Use a read lock first to check if we need to do anything
+	shard.RLock()
 	conn, exists := shard.connections[connKey]
-	if !exists || conn.StreamChannel == nil {
-		shard.Unlock()
+	if exists && conn.StreamChannel != nil {
+		oldStreamChannel = conn.StreamChannel
+		peerID = conn.PeerID
+
+		// Check for failed packets
+		if !healthy && oldStreamChannel.GetLastFailedPacket() != nil {
+			hasFailedPacket = true
+			failedPacketDestIP = oldStreamChannel.GetLastFailedPacket().DestIP
+		}
+	}
+	shard.RUnlock()
+
+	// If no stream to release, return early
+	if oldStreamChannel == nil {
 		return
 	}
 
-	// Get the stream channel and peer ID before releasing the lock
-	oldStreamChannel := conn.StreamChannel
-	peerID := conn.PeerID
+	// Log failed packet info outside the lock
+	if hasFailedPacket {
+		managerLog.WithFields(logrus.Fields{
+			"conn_key": string(connKey),
+			"peer_id":  peerID.String(),
+			"dest_ip":  failedPacketDestIP,
+		}).Debug("Found failed packet to retry when replacing unhealthy stream")
+	}
 
-	// If the stream is unhealthy, we need to get a new stream and transfer pending packets
+	// Handle unhealthy streams - get a new stream and transfer packets
 	if !healthy {
-		// Check if there's a failed packet that needs to be retried
-		if oldStreamChannel != nil && oldStreamChannel.GetLastFailedPacket() != nil {
-			managerLog.WithFields(logrus.Fields{
-				"conn_key": string(connKey),
-				"peer_id":  peerID.String(),
-				"dest_ip":  oldStreamChannel.GetLastFailedPacket().DestIP,
-			}).Debug("Found failed packet to retry when replacing unhealthy stream")
-		}
-
-		// Create a new stream for this connection
-		// We need to release the lock first to avoid deadlocks when getting a new stream
-		shard.Unlock()
-
-		// Get a new stream from the pool
+		// Get a new stream from the pool outside any locks
 		newStreamChannel, err := m.streamPool.GetStreamChannel(context.Background(), peerID)
 		if err != nil {
 			// If we can't get a new stream, log the error and remove the connection
@@ -210,50 +397,53 @@ func (m *StreamManager) ReleaseConnection(connKey types.ConnectionKey, healthy b
 				"error":    err,
 			}).Warn("Failed to get new stream for connection, removing connection")
 
-			// Re-acquire the lock to remove the connection
+			// Remove the connection with minimal lock time
 			shard.Lock()
 			delete(shard.connections, connKey)
 			shard.Unlock()
 
-			// Release the old stream
+			// Release the old stream outside the lock
 			m.streamPool.ReleaseStreamChannel(peerID, oldStreamChannel, false)
 			atomic.AddInt64(&m.metrics.StreamsReleased, 1)
 			return
 		}
 
-		// Transfer any pending packets from the old stream to the new one
-		// This will also transfer the failed packet if there is one
+		// Transfer any pending packets outside any locks
 		m.transferPendingPackets(oldStreamChannel, newStreamChannel)
 
-		// Re-acquire the lock to update the connection
+		// Update the connection with the new stream
 		shard.Lock()
-
-		// Check if the connection still exists
-		conn, exists = shard.connections[connKey]
-		if exists {
-			// Update the connection with the new stream
+		conn, stillExists := shard.connections[connKey]
+		if stillExists {
 			conn.StreamChannel = newStreamChannel
+			conn.LastActivity = time.Now().UnixNano()
 			shard.connections[connKey] = conn
 			shard.Unlock()
+
+			// Release the old stream outside the lock
+			m.streamPool.ReleaseStreamChannel(peerID, oldStreamChannel, false)
+			atomic.AddInt64(&m.metrics.StreamsReleased, 1)
 		} else {
-			// If the connection was removed while we were getting a new stream,
-			// release the new stream as well
+			// Connection was removed while we were getting a new stream
 			shard.Unlock()
+
+			// Release both streams outside the lock
 			m.streamPool.ReleaseStreamChannel(peerID, newStreamChannel, true)
 			m.streamPool.ReleaseStreamChannel(peerID, oldStreamChannel, false)
 			atomic.AddInt64(&m.metrics.StreamsReleased, 2)
-			return
 		}
 	} else {
-		// If the stream is healthy, just clear the stream channel reference
-		conn.StreamChannel = nil
-		shard.connections[connKey] = conn
+		// For healthy streams, just clear the reference
+		shard.Lock()
+		conn, stillExists := shard.connections[connKey]
+		if stillExists && conn.StreamChannel == oldStreamChannel {
+			conn.StreamChannel = nil
+			shard.connections[connKey] = conn
+		}
 		shard.Unlock()
 
-		// Release the old stream
+		// Release the stream outside the lock
 		m.streamPool.ReleaseStreamChannel(peerID, oldStreamChannel, healthy)
-
-		// Update metrics
 		atomic.AddInt64(&m.metrics.StreamsReleased, 1)
 	}
 }
@@ -265,6 +455,9 @@ func (m *StreamManager) SendPacket(
 	peerID peer.ID,
 	packet *types.QueuedPacket,
 ) error {
+	// For single packets, we can either use the batch system or direct sending
+	// Direct sending is more efficient for single packets
+
 	// Get or create a stream for this connection
 	streamChannel, err := m.GetOrCreateStreamForConnection(ctx, connKey, peerID)
 	if err != nil {
@@ -328,13 +521,77 @@ func (m *StreamManager) SendPacket(
 	}
 }
 
+// SendPacketBatch sends a batch of packets through the appropriate streams
+// This is more efficient than sending packets individually when there are many packets
+func (m *StreamManager) SendPacketBatch(
+	packets []*types.QueuedPacket,
+	connKeys []types.ConnectionKey,
+	peerIDs []peer.ID,
+	contexts []context.Context,
+) error {
+	if len(packets) == 0 {
+		return nil
+	}
+
+	// Validate input lengths
+	if len(packets) != len(connKeys) || len(packets) != len(peerIDs) || len(packets) != len(contexts) {
+		return fmt.Errorf("mismatched input lengths: packets=%d, connKeys=%d, peerIDs=%d, contexts=%d",
+			len(packets), len(connKeys), len(peerIDs), len(contexts))
+	}
+
+	// Create packet operations
+	ops := make([]*packetOperation, len(packets))
+	for i := range packets {
+		ops[i] = &packetOperation{
+			ctx:     contexts[i],
+			connKey: connKeys[i],
+			peerID:  peerIDs[i],
+			packet:  packets[i],
+		}
+	}
+
+	// Create a batch operation
+	batch := packetBatchOp{
+		packets:   ops,
+		resultCh:  make(chan error, 1),
+		timestamp: time.Now().UnixNano(),
+	}
+
+	// Select a batch channel based on a simple hash of the first connection key
+	// This helps ensure packets for the same connection tend to go to the same worker
+	var hash uint32
+	for i := 0; i < len(connKeys[0]); i++ {
+		hash = hash*31 + uint32(connKeys[0][i])
+	}
+	workerIdx := int(hash % uint32(atomic.LoadInt32(&m.batchWorkers)))
+
+	// Send the batch to the selected worker
+	select {
+	case m.packetBatchChans[workerIdx] <- batch:
+		// Wait for the result with a timeout
+		select {
+		case err := <-batch.resultCh:
+			return err
+		case <-time.After(100 * time.Millisecond):
+			// Timeout waiting for result, but the batch is still being processed
+			return nil
+		}
+	case <-time.After(50 * time.Millisecond):
+		// Batch channel is full or slow, fall back to processing the batch directly
+		m.processBatch(batch, -1) // -1 indicates direct processing
+		return nil
+	}
+}
+
 // GetMetrics returns the manager's metrics
 func (m *StreamManager) GetMetrics() map[string]int64 {
 	return map[string]int64{
 		"streams_created":   atomic.LoadInt64(&m.metrics.StreamsCreated),
 		"streams_released":  atomic.LoadInt64(&m.metrics.StreamsReleased),
 		"packets_processed": atomic.LoadInt64(&m.metrics.PacketsProcessed),
+		"batches_processed": atomic.LoadInt64(&m.metrics.BatchesProcessed),
 		"errors":            atomic.LoadInt64(&m.metrics.Errors),
+		"batch_workers":     int64(atomic.LoadInt32(&m.batchWorkers)),
 	}
 }
 
@@ -356,7 +613,8 @@ func (m *StreamManager) getConnectionShardIndex(connKey types.ConnectionKey) int
 	for i := 0; i < len(connKey); i++ {
 		hash = hash*31 + uint32(connKey[i])
 	}
-	return int(hash % 16)
+	// Use bit masking for faster modulo operation (works because shardCount is a power of 2)
+	return int(hash & m.shardMask)
 }
 
 // Close implements io.Closer

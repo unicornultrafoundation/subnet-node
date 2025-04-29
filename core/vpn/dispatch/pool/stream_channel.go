@@ -35,11 +35,13 @@ type StreamChannel struct {
 	// Overflow queue for when the main channel is full
 	overflowQueue []*types.QueuedPacket
 	// Mutex to protect access to the overflow queue
-	overflowMutex sync.Mutex
+	overflowMutex sync.RWMutex // Changed to RWMutex for better read concurrency
 	// Signal channel to notify the overflow processor
 	overflowSignal chan struct{}
 	// Flag to indicate if the overflow processor is running
 	overflowProcessorRunning int32
+	// Overflow queue size - maintained with atomic operations
+	overflowQueueSize int32
 }
 
 // GetBufferUtilization returns the current buffer utilization as a percentage (0-100)
@@ -111,7 +113,11 @@ func (s *StreamChannel) GetLastFailedPacket() *types.QueuedPacket {
 func (s *StreamChannel) AddToOverflowQueue(packet *types.QueuedPacket) {
 	s.overflowMutex.Lock()
 	s.overflowQueue = append(s.overflowQueue, packet)
+	queueSize := int32(len(s.overflowQueue))
 	s.overflowMutex.Unlock()
+
+	// Update the atomic queue size counter
+	atomic.StoreInt32(&s.overflowQueueSize, queueSize)
 
 	// Signal the overflow processor
 	select {
@@ -128,18 +134,20 @@ func (s *StreamChannel) AddToOverflowQueue(packet *types.QueuedPacket) {
 
 // GetOverflowQueueSize returns the current size of the overflow queue
 func (s *StreamChannel) GetOverflowQueueSize() int {
-	s.overflowMutex.Lock()
-	defer s.overflowMutex.Unlock()
-	return len(s.overflowQueue)
+	// Use atomic operation to get the queue size without locking
+	return int(atomic.LoadInt32(&s.overflowQueueSize))
 }
 
 // DrainOverflowQueue returns all packets from the overflow queue and clears it
 func (s *StreamChannel) DrainOverflowQueue() []*types.QueuedPacket {
 	s.overflowMutex.Lock()
-	defer s.overflowMutex.Unlock()
-
 	packets := s.overflowQueue
-	s.overflowQueue = nil
+	s.overflowQueue = make([]*types.QueuedPacket, 0)
+	s.overflowMutex.Unlock()
+
+	// Update the atomic queue size counter
+	atomic.StoreInt32(&s.overflowQueueSize, 0)
+
 	return packets
 }
 
@@ -172,11 +180,17 @@ func (s *StreamChannel) processOverflowQueue() {
 
 // tryMovePacketsFromOverflow tries to move packets from the overflow queue to the main channel
 func (s *StreamChannel) tryMovePacketsFromOverflow() {
-	s.overflowMutex.Lock()
-	defer s.overflowMutex.Unlock()
+	// First check if there are any packets to move using atomic operation
+	if atomic.LoadInt32(&s.overflowQueueSize) == 0 {
+		return
+	}
 
-	// If the queue is empty, return
+	// Now acquire the lock to move packets
+	s.overflowMutex.Lock()
+
+	// Double-check if the queue is empty after acquiring the lock
 	if len(s.overflowQueue) == 0 {
+		s.overflowMutex.Unlock()
 		return
 	}
 
@@ -194,10 +208,19 @@ func (s *StreamChannel) tryMovePacketsFromOverflow() {
 doneTrying:
 
 	// Remove the packets that were successfully moved
+	var newSize int32
 	if i > 0 {
 		s.overflowQueue = s.overflowQueue[i:]
+		newSize = int32(len(s.overflowQueue))
 		streamLog.WithField("moved_packets", i).Debug("Moved packets from overflow queue to main channel")
+	} else {
+		newSize = int32(len(s.overflowQueue))
 	}
+
+	s.overflowMutex.Unlock()
+
+	// Update the atomic queue size counter outside the lock
+	atomic.StoreInt32(&s.overflowQueueSize, newSize)
 }
 
 // Close closes the stream channel
