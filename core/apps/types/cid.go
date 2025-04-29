@@ -18,12 +18,3 @@ func (app *App) GenerateCID() (cid.Cid, error) {
 
 	return cid.NewCidV1(cid.DagCBOR, mh), nil
 }
-
-// GetDHTKey returns the DHT key for storing/retrieving peer IDs
-func (app *App) GetDHTKey() (string, error) {
-	c, err := app.GenerateCID()
-	if err != nil {
-		return "", err
-	}
-	return fmt.Sprintf("/app/%s", c.String()), nil
-}

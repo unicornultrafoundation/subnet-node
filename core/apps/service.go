@@ -23,7 +23,6 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ipfs/go-datastore"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
-	ddht "github.com/libp2p/go-libp2p-kad-dht/dual"
 	p2phost "github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/sirupsen/logrus"
@@ -62,7 +61,7 @@ type Service struct {
 	verifier              *verifier.Verifier  // Verifier for resource usage
 	pow                   *verifier.Pow       // Proof of Work for resource usage
 	signatureResponseChan chan *pvtypes.SignatureResponse
-	dht                   *ddht.DHT
+	dht                   *dht.IpfsDHT
 
 	// Caching fields
 	gitHubAppCache  *cache.Cache
@@ -73,15 +72,9 @@ type Service struct {
 // Initializes the Service with Ethereum and docker clients.
 func New(peerHost p2phost.Host, peerId peer.ID, cfg *config.C, P2P *p2p.P2P, ds datastore.Datastore, acc *account.AccountService, docker *docker.Service) *Service {
 	// Create new DHT instance
-	dhtOpts := []ddht.Option{
-		ddht.DHTOption(dht.Mode(dht.ModeServer)),
-		ddht.DHTOption(dht.ProtocolPrefix("/subnet")),
-	}
-
-	kadDHT, err := ddht.New(context.Background(), peerHost, dhtOpts...)
+	kadDHT, err := dht.New(context.Background(), peerHost)
 	if err != nil {
-		log.Errorf("Failed to create dual DHT: %v", err)
-		return nil
+		panic(err)
 	}
 
 	return &Service{
@@ -441,45 +434,29 @@ func (s *Service) getNodeResourceUsage() (atypes.ResourceUsage, error) {
 
 func (s *Service) StorePeerIDsInDHT(ctx context.Context, app *atypes.App) error {
 	// Get DHT key
-	dhtKey, err := app.GetDHTKey()
+	cid, err := app.GenerateCID()
 	if err != nil {
 		return fmt.Errorf("failed to generate DHT key: %w", err)
 	}
 
-	// Convert peer IDs to bytes
-	peerIDsBytes, err := json.Marshal(app.PeerIds)
-	if err != nil {
-		return fmt.Errorf("failed to marshal peer IDs: %w", err)
-	}
-
-	// Store in DHT
-	err = s.dht.PutValue(ctx, dhtKey, peerIDsBytes)
-	if err != nil {
-		return fmt.Errorf("failed to store in DHT: %w", err)
+	if err := s.dht.Provide(ctx, cid, true); err != nil {
+		return fmt.Errorf("failed to provide in DHT: %w", err)
 	}
 
 	return nil
 }
 
-func (s *Service) GetPeerIDsFromDHT(ctx context.Context, app *atypes.App) ([]string, error) {
-	// Get DHT key
-	dhtKey, err := app.GetDHTKey()
+func (s *Service) FindAppProviders(ctx context.Context, app *atypes.App) ([]peer.AddrInfo, error) {
+	cid, err := app.GenerateCID()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate DHT key: %w", err)
 	}
 
-	// Get from DHT
-	value, err := s.dht.GetValue(ctx, dhtKey)
+	// Find Provider from DHT
+	providerAddrs, err := s.dht.FindProviders(ctx, cid)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get from DHT: %w", err)
 	}
 
-	// Unmarshal peer IDs
-	var peerIDs []string
-	err = json.Unmarshal(value, &peerIDs)
-	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal peer IDs: %w", err)
-	}
-
-	return peerIDs, nil
+	return providerAddrs, nil
 }
