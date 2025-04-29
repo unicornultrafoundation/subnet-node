@@ -1,6 +1,7 @@
 package network
 
 import (
+	"runtime"
 	"strconv"
 
 	"github.com/sirupsen/logrus"
@@ -16,9 +17,10 @@ import (
 
 // CreateOptimizedClientService creates a new client service with optimized components
 func CreateOptimizedClientService(cfg *config.VPNConfig, streamService api.StreamService, peerDiscovery api.PeerDiscoveryService) (*ClientService, error) {
-	// Create a standard buffer pool
-	bufferSize := 2048 // Default buffer size
-	bufferPool := utils.NewBufferPool(bufferSize)
+	// Create an enhanced buffer pool for better performance
+	bufferSize := 2048                                               // Default buffer size
+	prealloc := runtime.NumCPU() * 8                                 // Preallocate buffers based on CPU count
+	bufferPool := utils.CreateBufferPool(bufferSize, true, prealloc) // Use enhanced pool
 
 	// Create a TUN service
 	tunConfig := &TUNConfig{
@@ -52,10 +54,10 @@ func CreateOptimizedClientService(cfg *config.VPNConfig, streamService api.Strea
 	}
 	resilienceService := resilience.NewResilienceService(resilienceConfig)
 
-	// Create the dispatcher
-	dispatcher := dispatch.NewDispatcher(peerDiscovery, streamService, dispatcherConfig, resilienceService)
+	// Create the batch dispatcher for improved performance
+	dispatcher := dispatch.NewBatchDispatcher(peerDiscovery, streamService, dispatcherConfig, resilienceService)
 
-	logrus.Info("Created optimized client service with enhanced dispatcher")
+	logrus.Info("Created optimized client service with batch dispatcher")
 
 	// Create the client service
 	return NewClientService(tunService, dispatcher, bufferPool), nil

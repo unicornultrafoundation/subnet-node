@@ -243,23 +243,32 @@ func (s *StreamChannel) ProcessPackets(peerID string) {
 			return
 
 		case <-statsTicker.C:
-			// Report stream statistics periodically
-			if atomic.LoadInt64(&stats.packetsProcessed) > 0 || atomic.LoadInt64(&stats.errors) > 0 {
+			// Get current stats
+			packetsProcessed := atomic.LoadInt64(&stats.packetsProcessed)
+			packetsDropped := atomic.LoadInt64(&stats.packetsDropped)
+			errors := atomic.LoadInt64(&stats.errors)
+			bufferUtil := s.GetBufferUtilization()
+			overflowSize := s.GetOverflowQueueSize()
+
+			// Only log if there's activity or issues
+			if packetsProcessed > 0 || packetsDropped > 0 || errors > 0 ||
+				bufferUtil > 50 || overflowSize > 0 || !s.IsHealthy() {
 				logger.WithFields(logrus.Fields{
-					"packets_processed": atomic.LoadInt64(&stats.packetsProcessed),
-					"packets_dropped":   atomic.LoadInt64(&stats.packetsDropped),
-					"errors":            atomic.LoadInt64(&stats.errors),
+					"packets_processed": packetsProcessed,
+					"packets_dropped":   packetsDropped,
+					"errors":            errors,
 					"duration":          time.Since(stats.lastStatsReport).String(),
-					"buffer_util":       s.GetBufferUtilization(),
+					"buffer_util":       bufferUtil,
+					"overflow_size":     overflowSize,
 					"healthy":           s.IsHealthy(),
 				}).Info("Stream statistics")
-
-				// Reset stats
-				atomic.StoreInt64(&stats.packetsProcessed, 0)
-				atomic.StoreInt64(&stats.packetsDropped, 0)
-				atomic.StoreInt64(&stats.errors, 0)
-				stats.lastStatsReport = time.Now()
 			}
+
+			// Always reset stats, even if we didn't log
+			atomic.StoreInt64(&stats.packetsProcessed, 0)
+			atomic.StoreInt64(&stats.packetsDropped, 0)
+			atomic.StoreInt64(&stats.errors, 0)
+			stats.lastStatsReport = time.Now()
 
 		case packet, ok := <-s.PacketChan:
 			if !ok {

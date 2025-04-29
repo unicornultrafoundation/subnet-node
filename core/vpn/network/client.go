@@ -11,6 +11,7 @@ import (
 	"github.com/songgao/water"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/dispatch"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/dispatch/types"
+	"github.com/unicornultrafoundation/subnet-node/core/vpn/metrics"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/utils"
 )
 
@@ -21,7 +22,7 @@ type ClientService struct {
 	// Packet dispatcher for routing packets
 	dispatcher dispatch.DispatcherService
 	// Buffer pool for packet processing
-	bufferPool *utils.BufferPool
+	bufferPool utils.BufferPoolInterface
 	// Stop channel for graceful shutdown
 	stopChan chan struct{}
 }
@@ -30,7 +31,7 @@ type ClientService struct {
 func NewClientService(
 	tunService *TUNService,
 	dispatcher dispatch.DispatcherService,
-	bufferPool *utils.BufferPool,
+	bufferPool utils.BufferPoolInterface,
 ) *ClientService {
 	return &ClientService{
 		tunService: tunService,
@@ -59,6 +60,9 @@ func (s *ClientService) Start(ctx context.Context, existingIface *water.Interfac
 			return fmt.Errorf("failed to setup TUN interface: %v", err)
 		}
 	}
+
+	// Start metrics collection
+	metrics.StartMetricsCollection()
 
 	// Start listening for packets from the TUN interface
 	go s.listenFromTUN(ctx, iface)
@@ -118,9 +122,11 @@ func (s *ClientService) packetReader(ctx context.Context, iface *water.Interface
 	// Check if the dispatcher supports batch processing
 	batchDispatcher, supportsBatch := s.dispatcher.(types.BatchDispatcher)
 
+	// Create an adaptive batch sizer
+	adaptiveBatchSizer := NewAdaptiveBatchSizer(16, 4, 64, 500) // Initial: 16, Min: 4, Max: 64, Target: 500µs
+
 	// Create batch processing variables if supported
 	var (
-		batchSize     = 16 // Default batch size
 		batchInterval = 5 * time.Millisecond
 		packets       []*types.QueuedPacket
 		connKeys      []types.ConnectionKey
@@ -129,11 +135,12 @@ func (s *ClientService) packetReader(ctx context.Context, iface *water.Interface
 	)
 
 	if supportsBatch {
-		logger.Info("Batch processing enabled")
-		packets = make([]*types.QueuedPacket, 0, batchSize)
-		connKeys = make([]types.ConnectionKey, 0, batchSize)
-		destIPs = make([]string, 0, batchSize)
-		contexts = make([]context.Context, 0, batchSize)
+		logger.Info("Batch processing enabled with adaptive sizing")
+		initialBatchSize := adaptiveBatchSizer.GetBatchSize()
+		packets = make([]*types.QueuedPacket, 0, initialBatchSize)
+		connKeys = make([]types.ConnectionKey, 0, initialBatchSize)
+		destIPs = make([]string, 0, initialBatchSize)
+		contexts = make([]context.Context, 0, initialBatchSize)
 	}
 
 	// Create a ticker for batch flushing if batch processing is supported
@@ -163,7 +170,19 @@ func (s *ClientService) packetReader(ctx context.Context, iface *water.Interface
 			case <-flushTicker.C:
 				// Flush any pending packets
 				if len(packets) > 0 {
+					// Record the start time for adaptive sizing
+					startTime := time.Now()
+
+					// Dispatch the batch
 					err := batchDispatcher.DispatchPacketBatch(packets, connKeys, destIPs, contexts)
+
+					// Record the processing time for adaptive sizing
+					processingTime := time.Since(startTime)
+					adaptiveBatchSizer.RecordProcessingTime(processingTime, len(packets))
+
+					// Record metrics
+					metrics.GlobalMetrics.RecordBatchProcessed(len(packets), processingTime)
+
 					if err != nil {
 						logger.WithError(err).Warn("Failed to dispatch packet batch")
 					}
@@ -190,6 +209,9 @@ func (s *ClientService) packetReader(ctx context.Context, iface *water.Interface
 			continue
 		}
 
+		// Record metrics
+		metrics.GlobalMetrics.RecordPacketProcessed(n)
+
 		// Use zero-copy approach with buffer pool
 		packetBuf := s.bufferPool.Get()
 		copy(packetBuf[:n], buf[:n])
@@ -201,6 +223,8 @@ func (s *ClientService) packetReader(ctx context.Context, iface *water.Interface
 			logger.WithError(err).Debug("Failed to parse packet info")
 			// Return the buffer to the pool
 			s.bufferPool.Put(packetBuf)
+			// Record dropped packet
+			metrics.GlobalMetrics.RecordPacketDropped()
 			continue
 		}
 
@@ -225,12 +249,8 @@ func (s *ClientService) packetReader(ctx context.Context, iface *water.Interface
 
 		// If batch processing is supported, add to batch
 		if supportsBatch {
-			// Create a queued packet
-			packet := &types.QueuedPacket{
-				Ctx:    ctx,
-				DestIP: destIP,
-				Data:   packetData,
-			}
+			// Get a packet from the pool and initialize it
+			packet := types.GlobalPacketPool.GetWithData(ctx, destIP, packetData)
 
 			// Add to batch
 			packets = append(packets, packet)
@@ -239,8 +259,21 @@ func (s *ClientService) packetReader(ctx context.Context, iface *water.Interface
 			contexts = append(contexts, ctx)
 
 			// If batch is full, send it
-			if len(packets) >= batchSize {
+			currentBatchSize := adaptiveBatchSizer.GetBatchSize()
+			if len(packets) >= currentBatchSize {
+				// Record the start time for adaptive sizing
+				startTime := time.Now()
+
+				// Dispatch the batch
 				err := batchDispatcher.DispatchPacketBatch(packets, connKeys, destIPs, contexts)
+
+				// Record the processing time for adaptive sizing
+				processingTime := time.Since(startTime)
+				adaptiveBatchSizer.RecordProcessingTime(processingTime, len(packets))
+
+				// Record metrics
+				metrics.GlobalMetrics.RecordBatchProcessed(len(packets), processingTime)
+
 				if err != nil {
 					logger.WithError(err).Warn("Failed to dispatch packet batch")
 				}
@@ -258,6 +291,8 @@ func (s *ClientService) packetReader(ctx context.Context, iface *water.Interface
 				logger.WithError(err).Debug("Failed to dispatch packet")
 				// Return the buffer to the pool on error
 				s.bufferPool.Put(packetBuf)
+				// Record dropped packet
+				metrics.GlobalMetrics.RecordPacketDropped()
 			}
 		}
 	}
