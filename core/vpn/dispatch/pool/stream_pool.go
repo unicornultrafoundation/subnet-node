@@ -475,7 +475,7 @@ func (p *StreamPool) createNewStreamChannel(ctx context.Context, peerID peer.ID)
 		healthy:                  1, // 1 = healthy
 		ctx:                      streamCtx,
 		cancel:                   streamCancel,
-		overflowQueue:            make([]*types.QueuedPacket, 0),
+		overflowQueue:            NewLockFreeQueue(),
 		overflowSignal:           make(chan struct{}, 1),
 		overflowProcessorRunning: 0,
 	}
