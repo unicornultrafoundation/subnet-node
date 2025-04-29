@@ -458,13 +458,6 @@ func (m *StreamManager) SendPacket(
 	// For single packets, we can either use the batch system or direct sending
 	// Direct sending is more efficient for single packets
 
-	// Get or create a stream for this connection
-	streamChannel, err := m.GetOrCreateStreamForConnection(ctx, connKey, peerID)
-	if err != nil {
-		atomic.AddInt64(&m.metrics.Errors, 1)
-		return err
-	}
-
 	// Add a recovery mechanism to prevent panics from closed channels
 	defer func() {
 		if r := recover(); r != nil {
@@ -474,20 +467,75 @@ func (m *StreamManager) SendPacket(
 				"panic":    r,
 			}).Error("Recovered from panic in SendPacket")
 
-			// Mark the stream as unhealthy
-			if streamChannel != nil {
-				streamChannel.SetHealthy(false)
-				m.ReleaseConnection(connKey, false)
-			}
-
 			// Update error metrics
 			atomic.AddInt64(&m.metrics.Errors, 1)
+
+			// If we have a packet with a done channel, signal the error
+			if packet != nil && packet.DoneCh != nil {
+				select {
+				case packet.DoneCh <- types.ErrInternalError:
+					// Successfully sent the error
+				default:
+					// Channel might be closed or full, don't panic
+				}
+				close(packet.DoneCh)
+			}
+
+			// Return packet to pool if possible
+			if packet != nil && packet.ReturnToPool != nil && packet.Data != nil {
+				packet.ReturnToPool(packet.Data)
+			}
 		}
 	}()
+
+	// Get or create a stream for this connection
+	streamChannel, err := m.GetOrCreateStreamForConnection(ctx, connKey, peerID)
+	if err != nil {
+		atomic.AddInt64(&m.metrics.Errors, 1)
+
+		// Signal the error on the done channel if provided
+		if packet != nil && packet.DoneCh != nil {
+			select {
+			case packet.DoneCh <- err:
+				// Successfully sent the error
+			default:
+				// Channel might be closed or full, don't panic
+			}
+			close(packet.DoneCh)
+		}
+
+		// Return packet to pool if possible
+		if packet != nil && packet.ReturnToPool != nil && packet.Data != nil {
+			packet.ReturnToPool(packet.Data)
+		}
+
+		return err
+	}
 
 	// Check if the stream is still healthy before sending
 	if !streamChannel.IsHealthy() {
 		atomic.AddInt64(&m.metrics.Errors, 1)
+
+		// Signal the error on the done channel if provided
+		if packet != nil && packet.DoneCh != nil {
+			select {
+			case packet.DoneCh <- types.ErrNoHealthyStreams:
+				// Successfully sent the error
+			default:
+				// Channel might be closed or full, don't panic
+			}
+			close(packet.DoneCh)
+		}
+
+		// Return packet to pool if possible
+		if packet != nil && packet.ReturnToPool != nil && packet.Data != nil {
+			packet.ReturnToPool(packet.Data)
+		}
+
+		// Mark the stream as unhealthy and release the connection
+		streamChannel.SetHealthy(false)
+		m.ReleaseConnection(connKey, false)
+
 		return types.ErrNoHealthyStreams
 	}
 
@@ -500,13 +548,48 @@ func (m *StreamManager) SendPacket(
 	case <-ctx.Done():
 		// Context cancelled
 		atomic.AddInt64(&m.metrics.Errors, 1)
+
+		// Signal the error on the done channel if provided
+		if packet != nil && packet.DoneCh != nil {
+			select {
+			case packet.DoneCh <- ctx.Err():
+				// Successfully sent the error
+			default:
+				// Channel might be closed or full, don't panic
+			}
+			close(packet.DoneCh)
+		}
+
+		// Return packet to pool if possible
+		if packet != nil && packet.ReturnToPool != nil && packet.Data != nil {
+			packet.ReturnToPool(packet.Data)
+		}
+
 		return types.ErrContextCancelled
 	case <-streamChannel.ctx.Done():
 		// Stream context cancelled, stream is shutting down
 		atomic.AddInt64(&m.metrics.Errors, 1)
+
 		// Mark the stream as unhealthy
 		streamChannel.SetHealthy(false)
 		m.ReleaseConnection(connKey, false)
+
+		// Signal the error on the done channel if provided
+		if packet != nil && packet.DoneCh != nil {
+			select {
+			case packet.DoneCh <- types.ErrStreamChannelClosed:
+				// Successfully sent the error
+			default:
+				// Channel might be closed or full, don't panic
+			}
+			close(packet.DoneCh)
+		}
+
+		// Return packet to pool if possible
+		if packet != nil && packet.ReturnToPool != nil && packet.Data != nil {
+			packet.ReturnToPool(packet.Data)
+		}
+
 		return types.ErrStreamChannelClosed
 	default:
 		// Channel full, add to overflow queue instead of dropping

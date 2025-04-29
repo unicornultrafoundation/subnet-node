@@ -24,6 +24,7 @@ var (
 	ErrNoHealthyStreams       = errors.New("no healthy streams available")
 	ErrStreamAssignmentFailed = errors.New("failed to assign stream")
 	ErrInvalidBatchInput      = errors.New("invalid batch input: mismatched array lengths")
+	ErrInternalError          = errors.New("internal error")
 	// Retry and resilience errors
 	ErrMaxRetriesExceeded = errors.New("maximum retries exceeded")
 	ErrCircuitBreakerOpen = errors.New("circuit breaker is open")

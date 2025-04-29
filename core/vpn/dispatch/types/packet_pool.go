@@ -62,6 +62,15 @@ func (p *QueuedPacketPool) GetWithData(ctx context.Context, destIP string, data 
 	packet.Ctx = ctx
 	packet.DestIP = destIP
 	packet.Data = data
+
+	// Set the ReturnToPool function to return the data to the appropriate pool
+	packet.ReturnToPool = func(data []byte) {
+		// This is a placeholder for actual buffer pool return logic
+		// The actual implementation would depend on which buffer pool the data came from
+		// For now, we just nil out the data to help with garbage collection
+		// In a real implementation, this would call something like bufferPool.Put(data)
+	}
+
 	return packet
 }
 
@@ -73,10 +82,28 @@ func (p *QueuedPacketPool) Put(packet *QueuedPacket) {
 
 	atomic.AddInt64(&p.stats.puts, 1)
 
-	// Clear the packet to prevent data leakage
+	// Return the data to its original pool if a return function is provided
+	if packet.ReturnToPool != nil && packet.Data != nil {
+		packet.ReturnToPool(packet.Data)
+	}
+
+	// Clear the packet to prevent data leakage and memory leaks
 	packet.Ctx = nil
 	packet.DestIP = ""
 	packet.Data = nil
+	packet.ReturnToPool = nil
+
+	// If there's a done channel, close it to prevent leaks
+	if packet.DoneCh != nil {
+		select {
+		case packet.DoneCh <- nil:
+			// Successfully sent nil (success) to the channel
+		default:
+			// Channel might be full or closed, which is fine
+		}
+		close(packet.DoneCh)
+		packet.DoneCh = nil
+	}
 
 	p.pool.Put(packet)
 }
