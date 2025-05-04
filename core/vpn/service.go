@@ -21,7 +21,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/sirupsen/logrus"
-	"github.com/songgao/water"
 	"github.com/unicornultrafoundation/subnet-node/config"
 	"github.com/unicornultrafoundation/subnet-node/core/account"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/api"
@@ -30,6 +29,7 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/dispatch"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/dispatch/pool"
 	vpnnetwork "github.com/unicornultrafoundation/subnet-node/core/vpn/network"
+	"github.com/unicornultrafoundation/subnet-node/core/vpn/overlay"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/resilience"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/utils"
 )
@@ -357,17 +357,17 @@ func (s *Service) GetMetrics() map[string]int64 {
 }
 
 // setupTUNWithRetry attempts to set up the TUN interface with circuit breaker and retry protection.
-func (s *Service) setupTUNWithRetry(ctx context.Context) (*water.Interface, error) {
+func (s *Service) setupTUNWithRetry(ctx context.Context) (overlay.Device, error) {
 	log.Debug("Setting up TUN interface using resilience service with circuit breaker and retry protection")
 
-	var iface *water.Interface
+	var device overlay.Device
 
 	// Use ExecuteWithResilience for better fault tolerance and metrics
 	breakerId := "tun_setup"
 	err, attempts := s.resilienceService.ExecuteWithResilience(ctx, breakerId, func() error {
 		// Attempt to set up the TUN interface
 		var err error
-		iface, err = s.tunService.SetupTUN()
+		device, err = s.tunService.SetupTUN()
 		if err != nil {
 			log.Warnf("Failed to setup TUN interface with MTU %d, will retry: %v", s.configService.GetMTU(), err)
 			return err // Return the error to trigger retry
@@ -383,7 +383,7 @@ func (s *Service) setupTUNWithRetry(ctx context.Context) (*water.Interface, erro
 		log.Infof("Successfully set up TUN interface after %d attempts", attempts)
 	}
 
-	return iface, err
+	return device, err
 }
 
 // syncPeerIDToDHTWithRetry attempts to sync the peer ID to the DHT with circuit breaker and retry protection.
