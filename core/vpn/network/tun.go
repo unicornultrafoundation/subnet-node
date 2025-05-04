@@ -2,11 +2,11 @@ package network
 
 import (
 	"fmt"
-	"net"
+	"net/netip"
 
 	"github.com/sirupsen/logrus"
-	"github.com/songgao/water"
-	"github.com/vishvananda/netlink"
+	"github.com/unicornultrafoundation/subnet-node/config"
+	"github.com/unicornultrafoundation/subnet-node/core/vpn/overlay"
 )
 
 var log = logrus.WithField("service", "vpn-network")
@@ -27,78 +27,96 @@ type TUNConfig struct {
 type TUNService struct {
 	// Configuration for the TUN interface
 	config *TUNConfig
-	// TUN interface
-	iface *water.Interface
+	// TUN interface using overlay.Device
+	device overlay.Device
+	// Logger
+	logger *logrus.Logger
 }
 
 // NewTUNService creates a new TUN service
 func NewTUNService(config *TUNConfig) *TUNService {
+	// Create a new logger
+	logger := logrus.New()
+
 	return &TUNService{
 		config: config,
+		logger: logger,
 	}
 }
 
-// SetupTUN initializes a TUN device
-func (s *TUNService) SetupTUN() (*water.Interface, error) {
-	config := water.Config{DeviceType: water.TUN}
-	iface, err := water.New(config)
+// createOverlayConfig creates a configuration for the overlay device
+func (s *TUNService) createOverlayConfig() (*config.C, []netip.Prefix, error) {
+	// Parse the virtual IP as a prefix
+	prefix, err := netip.ParsePrefix(fmt.Sprintf("%s/%s", s.config.VirtualIP, s.config.Subnet))
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to parse virtual IP: %w", err)
+	}
+
+	// Create a slice of network prefixes
+	vpnNetworks := []netip.Prefix{prefix}
+
+	// Create a new config for overlay
+	cfg := config.NewC(s.logger)
+
+	// Set TUN configuration
+	cfg.Settings = map[interface{}]interface{}{
+		"tun": map[interface{}]interface{}{
+			"mtu": s.config.MTU,
+		},
+	}
+
+	// Add routes if provided
+	if len(s.config.Routes) > 0 {
+		// Create a properly formatted routes array for the overlay package
+		routesArray := make([]interface{}, 0, len(s.config.Routes))
+		for _, route := range s.config.Routes {
+			routeMap := map[string]interface{}{
+				"mtu":   s.config.MTU, // Use the same MTU as the TUN interface
+				"route": route,
+			}
+			routesArray = append(routesArray, routeMap)
+		}
+
+		// Set the routes in the config
+		tunMap := cfg.Settings["tun"].(map[interface{}]interface{})
+		tunMap["routes"] = routesArray
+	}
+
+	return cfg, vpnNetworks, nil
+}
+
+// SetupTUN initializes a TUN device using overlay package
+func (s *TUNService) SetupTUN() (overlay.Device, error) {
+	// Create overlay configuration
+	cfg, vpnNetworks, err := s.createOverlayConfig()
 	if err != nil {
 		return nil, err
 	}
 
-	s.iface = iface
-
-	link, err := netlink.LinkByName(iface.Name())
+	// Create a new device from config
+	device, err := overlay.NewDeviceFromConfig(cfg, s.logger, vpnNetworks, 1)
 	if err != nil {
-		return nil, fmt.Errorf("failed to find interface: %w", err)
+		return nil, fmt.Errorf("failed to create TUN device: %w", err)
 	}
 
-	// Set MTU
-	if err := netlink.LinkSetMTU(link, s.config.MTU); err != nil {
-		return nil, fmt.Errorf("failed to set MTU: %w", err)
+	// Store the device
+	s.device = device
+
+	// Activate the device
+	if err := device.Activate(); err != nil {
+		device.Close()
+		return nil, fmt.Errorf("failed to activate TUN device: %w", err)
 	}
 
-	// Assign IP address
-	addr, err := netlink.ParseAddr(fmt.Sprintf("%s/%s", s.config.VirtualIP, s.config.Subnet))
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse IP: %w", err)
-	}
-	if err := netlink.AddrAdd(link, addr); err != nil {
-		return nil, fmt.Errorf("failed to assign IP: %w", err)
-	}
+	log.Infof("TUN interface created with name %s", device.Name())
 
-	// Bring the interface up
-	if err := netlink.LinkSetUp(link); err != nil {
-		return nil, fmt.Errorf("failed to bring up interface: %w", err)
-	}
-
-	// Add routes
-	for _, r := range s.config.Routes {
-		_, dst, err := net.ParseCIDR(r)
-		if err != nil {
-			log.Errorf("Invalid route: %s", r)
-			continue
-		}
-
-		route := &netlink.Route{
-			LinkIndex: link.Attrs().Index,
-			Dst:       dst,
-		}
-
-		if err := netlink.RouteReplace(route); err != nil {
-			log.Errorf("Failed to add route %s: %v", dst, err)
-		}
-	}
-
-	log.Infof("TUN interface created with name %s, address %s", iface.Name(), addr.String())
-
-	return iface, nil
+	return device, nil
 }
 
 // Close closes the TUN interface
 func (s *TUNService) Close() error {
-	if s.iface != nil {
-		return s.iface.Close()
+	if s.device != nil {
+		return s.device.Close()
 	}
 	return nil
 }

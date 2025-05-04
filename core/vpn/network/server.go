@@ -4,9 +4,9 @@ import (
 	"io"
 	"strconv"
 
-	"github.com/songgao/water"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/api"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/dispatch/types"
+	"github.com/unicornultrafoundation/subnet-node/core/vpn/overlay"
 )
 
 // ServerConfig contains configuration for the server
@@ -31,7 +31,7 @@ func NewServerService(config *ServerConfig) *ServerService {
 }
 
 // HandleStream handles an incoming P2P stream
-func (s *ServerService) HandleStream(stream api.VPNStream, iface *water.Interface) {
+func (s *ServerService) HandleStream(stream api.VPNStream, device overlay.Device) {
 	go func() {
 		defer stream.Close()
 
@@ -69,7 +69,7 @@ func (s *ServerService) HandleStream(stream api.VPNStream, iface *water.Interfac
 			}
 
 			// Write the packet to the TUN interface
-			_, err = iface.Write(buf[:n])
+			_, err = device.Write(buf[:n])
 			if err != nil {
 				log.Errorf("error writing to TUN interface: %v", err)
 				continue
