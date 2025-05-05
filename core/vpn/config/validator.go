@@ -16,9 +16,8 @@ var (
 	ErrInvalidMTU       = errors.New("invalid MTU (must be between 576 and 9000)")
 
 	// Stream pool settings errors
-	ErrInvalidStreamIdleTimeout = errors.New("invalid stream idle timeout (must be greater than 0)")
-	ErrInvalidCleanupInterval   = errors.New("invalid cleanup interval (must be greater than 0)")
-	ErrInvalidPacketBufferSize  = errors.New("invalid packet buffer size (must be greater than 0)")
+	ErrInvalidStreamIdleTimeout     = errors.New("invalid stream idle timeout (must be greater than 0)")
+	ErrInvalidStreamCleanupInterval = errors.New("invalid cleanup interval (must be greater than 0)")
 
 	// Circuit breaker settings errors
 	ErrInvalidCircuitBreakerFailureThreshold = errors.New("invalid circuit breaker failure threshold (must be greater than 0)")
@@ -103,13 +102,8 @@ func (c *VPNConfig) validateStreamPoolSettings() error {
 	}
 
 	// Validate cleanup interval
-	if c.CleanupInterval <= 0 {
-		return ErrInvalidCleanupInterval
-	}
-
-	// Validate packet buffer size
-	if c.PacketBufferSize <= 0 {
-		return ErrInvalidPacketBufferSize
+	if c.StreamCleanupInterval <= 0 {
+		return ErrInvalidStreamCleanupInterval
 	}
 
 	return nil

@@ -17,7 +17,6 @@ import (
 	"github.com/multiformats/go-multiaddr"
 	"github.com/stretchr/testify/mock"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/api"
-	"github.com/unicornultrafoundation/subnet-node/core/vpn/dispatch/types"
 )
 
 //
@@ -403,107 +402,6 @@ func (s *MockDiscoveryService) GetPeerIDByRegistry(ctx context.Context, destIP s
 }
 
 //
-// Pool Service Mocks
-//
-
-// MockPoolService is a configurable mock implementation of api.StreamPoolService
-type MockPoolService struct {
-	mock.Mock
-	Config MockServiceConfig
-	Stats  struct {
-		StreamsAcquired   int64
-		StreamsReleased   int64
-		AcquisitionErrors int64
-	}
-}
-
-// NewMockPoolService creates a new mock pool service with the given configuration
-func NewMockPoolService(config *MockServiceConfig) *MockPoolService {
-	if config == nil {
-		config = &MockServiceConfig{}
-	}
-	return &MockPoolService{
-		Config: *config,
-	}
-}
-
-// GetStream implements the api.StreamPoolService interface
-func (s *MockPoolService) GetStream(ctx context.Context, peerID peer.ID) (api.VPNStream, error) {
-	// Simulate latency
-	if s.Config.Latency > 0 {
-		time.Sleep(s.Config.Latency)
-	}
-
-	// Simulate jitter
-	if s.Config.Jitter > 0 {
-		jitter := time.Duration(rand.Int63n(int64(s.Config.Jitter)))
-		time.Sleep(jitter)
-	}
-
-	// Simulate failure
-	if s.Config.FailureRate > 0 && rand.Float64() < s.Config.FailureRate {
-		atomic.AddInt64(&s.Stats.AcquisitionErrors, 1)
-		return nil, fmt.Errorf("simulated failure")
-	}
-
-	atomic.AddInt64(&s.Stats.StreamsAcquired, 1)
-	args := s.Called(ctx, peerID)
-	return args.Get(0).(api.VPNStream), args.Error(1)
-}
-
-// ReleaseStream implements the api.StreamPoolService interface
-func (s *MockPoolService) ReleaseStream(peerID peer.ID, stream api.VPNStream, healthy bool) {
-	atomic.AddInt64(&s.Stats.StreamsReleased, 1)
-	s.Called(peerID, stream, healthy)
-}
-
-// GetStats returns the service statistics
-func (s *MockPoolService) GetStats() map[string]int64 {
-	return map[string]int64{
-		"streams_acquired":   atomic.LoadInt64(&s.Stats.StreamsAcquired),
-		"streams_released":   atomic.LoadInt64(&s.Stats.StreamsReleased),
-		"acquisition_errors": atomic.LoadInt64(&s.Stats.AcquisitionErrors),
-	}
-}
-
-//
-// Stream Manager Mocks
-//
-
-// MockStreamManager is a mock implementation of the StreamManagerInterface
-type MockStreamManager struct {
-	mock.Mock
-}
-
-func (m *MockStreamManager) SendPacket(ctx context.Context, connKey types.ConnectionKey, peerID peer.ID, packet *types.QueuedPacket) error {
-	args := m.Called(ctx, connKey, peerID, packet)
-	return args.Error(0)
-}
-
-func (m *MockStreamManager) Start() {
-	m.Called()
-}
-
-func (m *MockStreamManager) Stop() {
-	m.Called()
-}
-
-func (m *MockStreamManager) GetMetrics() map[string]int64 {
-	args := m.Called()
-	return args.Get(0).(map[string]int64)
-}
-
-func (m *MockStreamManager) GetConnectionCount() int {
-	args := m.Called()
-	return args.Int(0)
-}
-
-func (m *MockStreamManager) Close() error {
-	args := m.Called()
-	return args.Error(0)
-}
-
-//
 // Account Service Mocks
 //
 
@@ -751,63 +649,4 @@ func (m *MockPeerstoreService) PrivKey(p peer.ID) crypto.PrivKey {
 		return nil
 	}
 	return args.Get(0).(crypto.PrivKey)
-}
-
-//
-// Pool Manager Mocks
-//
-
-// MockPoolManager is a mock implementation of the pool manager
-type MockPoolManager struct {
-	mock.Mock
-	MinStreamsPerPeer int
-}
-
-func (m *MockPoolManager) GetStream(ctx context.Context, peerID peer.ID) (api.VPNStream, error) {
-	args := m.Called(ctx, peerID)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(api.VPNStream), args.Error(1)
-}
-
-func (m *MockPoolManager) ReleaseStream(peerID peer.ID, s api.VPNStream, healthy bool) {
-	m.Called(peerID, s, healthy)
-}
-
-func (m *MockPoolManager) GetStreamPoolMetrics() map[string]int64 {
-	args := m.Called()
-	return args.Get(0).(map[string]int64)
-}
-
-func (m *MockPoolManager) GetHealthMetrics() map[string]map[string]int64 {
-	args := m.Called()
-	return args.Get(0).(map[string]map[string]int64)
-}
-
-func (m *MockPoolManager) GetStreamCount(peerID peer.ID) int {
-	args := m.Called(peerID)
-	return args.Int(0)
-}
-
-func (m *MockPoolManager) GetActiveStreamCount(peerID peer.ID) int {
-	args := m.Called(peerID)
-	return args.Int(0)
-}
-
-func (m *MockPoolManager) GetMinStreamsPerPeer() int {
-	return m.MinStreamsPerPeer
-}
-
-func (m *MockPoolManager) GetAllPeers() []peer.ID {
-	args := m.Called()
-	return args.Get(0).([]peer.ID)
-}
-
-func (m *MockPoolManager) Start() {
-	m.Called()
-}
-
-func (m *MockPoolManager) Stop() {
-	m.Called()
 }
