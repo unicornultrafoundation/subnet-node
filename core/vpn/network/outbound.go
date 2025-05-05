@@ -6,14 +6,11 @@ import (
 	"io"
 	"os"
 	"runtime"
-	"strings"
 	"sync/atomic"
 
 	"github.com/sirupsen/logrus"
 	vpnconfig "github.com/unicornultrafoundation/subnet-node/core/vpn/config"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/dispatcher"
-	"github.com/unicornultrafoundation/subnet-node/core/vpn/utils"
-	"github.com/unicornultrafoundation/subnet-node/firewall"
 )
 
 // OutboundConfig contains configuration for the outbound packet service
@@ -75,9 +72,6 @@ func (s *OutboundPacketService) listenTUN(ctx context.Context, reader io.ReadWri
 	// Create a buffer for reading packets
 	packet := make([]byte, s.config.MTU)
 
-	// Create a firewall packet for parsing
-	fwPacket := &firewall.Packet{}
-
 	// Read packets from the TUN device
 	for {
 		select {
@@ -98,34 +92,18 @@ func (s *OutboundPacketService) listenTUN(ctx context.Context, reader io.ReadWri
 			}
 
 			// Process the packet
-			s.processOutboundPacket(packet[:n], fwPacket, queueID)
+			s.processOutboundPacket(packet[:n], queueID)
 		}
 	}
 }
 
 // processOutboundPacket processes an outbound packet from the TUN device
-func (s *OutboundPacketService) processOutboundPacket(packet []byte, fwPacket *firewall.Packet, queueID int) {
-	// Parse the packet
-	err := utils.ParsePacket(packet, false, fwPacket)
-	if err != nil {
-		s.logger.WithError(err).Error("Error while parsing outbound packet")
-		return
-	}
-
-	// Get the remote address
-	remote := fwPacket.RemoteAddr.String()
-
-	// Ignore non-10.x.x.x addresses
-	if !strings.HasPrefix(remote, "10.") {
-		return
-	}
-
+func (s *OutboundPacketService) processOutboundPacket(packet []byte, queueID int) {
 	// Dispatch the packet with the queue ID
-	err = s.dispatcher.DispatchPacket(context.Background(), packet, queueID)
+	err := s.dispatcher.DispatchPacket(context.Background(), packet, queueID)
 	if err != nil {
 		s.logger.WithError(err).WithFields(logrus.Fields{
-			"remoteAddr": remote,
-			"queueID":    queueID,
+			"queueID": queueID,
 		}).Error("Failed to dispatch packet")
 		return
 	}
