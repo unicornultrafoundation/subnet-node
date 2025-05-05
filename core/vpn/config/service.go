@@ -17,19 +17,14 @@ type ConfigService interface {
 	GetSubnet() string
 	GetRoutes() []string
 	GetProtocol() string
+	GetRoutines() int
 
 	// Security settings
 	GetUnallowedPorts() map[string]bool
 
 	// Stream pool settings
-	GetMaxStreamsPerPeer() int
 	GetStreamIdleTimeout() time.Duration
-	GetCleanupInterval() time.Duration
-	GetPacketBufferSize() int
-	GetUsageCountWeight() float64
-	GetBufferUtilWeight() float64
-	GetBufferUtilThreshold() int
-	GetUsageCountThreshold() int
+	GetStreamCleanupInterval() time.Duration
 
 	// Circuit breaker settings
 	GetCircuitBreakerFailureThreshold() int
@@ -46,6 +41,9 @@ type ConfigService interface {
 	GetTUNSetupTimeout() time.Duration
 	GetPeerConnectionCheckInterval() time.Duration
 	GetShutdownGracePeriod() time.Duration
+
+	// Metrics settings
+	GetMetricsLogInterval() time.Duration
 
 	// Get the full VPN config
 	GetVPNConfig() *VPNConfig
@@ -116,6 +114,13 @@ func (c *ConfigServiceImpl) GetProtocol() string {
 	return c.vpnConfig.Protocol
 }
 
+// GetRoutines returns the number of reader routines
+func (c *ConfigServiceImpl) GetRoutines() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.vpnConfig.Routines
+}
+
 // Security settings
 
 // GetUnallowedPorts returns the unallowed ports
@@ -125,14 +130,7 @@ func (c *ConfigServiceImpl) GetUnallowedPorts() map[string]bool {
 	return c.vpnConfig.UnallowedPorts
 }
 
-// Stream pool settings
-
-// GetMaxStreamsPerPeer returns the maximum number of streams per peer
-func (c *ConfigServiceImpl) GetMaxStreamsPerPeer() int {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.vpnConfig.MaxStreamsPerPeer
-}
+// Stream settings
 
 // GetStreamIdleTimeout returns the stream idle timeout
 func (c *ConfigServiceImpl) GetStreamIdleTimeout() time.Duration {
@@ -141,46 +139,11 @@ func (c *ConfigServiceImpl) GetStreamIdleTimeout() time.Duration {
 	return c.vpnConfig.StreamIdleTimeout
 }
 
-// GetCleanupInterval returns the cleanup interval
-func (c *ConfigServiceImpl) GetCleanupInterval() time.Duration {
+// GetStreamCleanupInterval returns the stream cleanup interval
+func (c *ConfigServiceImpl) GetStreamCleanupInterval() time.Duration {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	return c.vpnConfig.CleanupInterval
-}
-
-// GetPacketBufferSize returns the packet buffer size
-func (c *ConfigServiceImpl) GetPacketBufferSize() int {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.vpnConfig.PacketBufferSize
-}
-
-// GetUsageCountWeight returns the weight for usage count in load score calculation
-func (c *ConfigServiceImpl) GetUsageCountWeight() float64 {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.vpnConfig.UsageCountWeight
-}
-
-// GetBufferUtilWeight returns the weight for buffer utilization in load score calculation
-func (c *ConfigServiceImpl) GetBufferUtilWeight() float64 {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.vpnConfig.BufferUtilWeight
-}
-
-// GetBufferUtilThreshold returns the buffer utilization threshold percentage
-func (c *ConfigServiceImpl) GetBufferUtilThreshold() int {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.vpnConfig.BufferUtilThreshold
-}
-
-// GetUsageCountThreshold returns the usage count threshold
-func (c *ConfigServiceImpl) GetUsageCountThreshold() int {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.vpnConfig.UsageCountThreshold
+	return c.vpnConfig.StreamCleanupInterval // Reuse the same interval for now
 }
 
 // Circuit breaker settings
@@ -257,6 +220,13 @@ func (c *ConfigServiceImpl) GetShutdownGracePeriod() time.Duration {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.vpnConfig.ShutdownGracePeriod
+}
+
+// GetMetricsLogInterval returns the metrics logging interval
+func (c *ConfigServiceImpl) GetMetricsLogInterval() time.Duration {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.vpnConfig.MetricsLogInterval
 }
 
 // GetVPNConfig returns the full VPN config

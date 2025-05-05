@@ -26,8 +26,7 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/api"
 	vpnconfig "github.com/unicornultrafoundation/subnet-node/core/vpn/config"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/discovery"
-	"github.com/unicornultrafoundation/subnet-node/core/vpn/dispatch"
-	"github.com/unicornultrafoundation/subnet-node/core/vpn/dispatch/pool"
+	"github.com/unicornultrafoundation/subnet-node/core/vpn/dispatcher"
 	vpnnetwork "github.com/unicornultrafoundation/subnet-node/core/vpn/network"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/overlay"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/resilience"
@@ -44,7 +43,6 @@ type Service struct {
 	mu             sync.RWMutex
 	cfg            *config.C
 	configService  vpnconfig.ConfigService
-	isProvider     bool
 	accountService *account.AccountService
 	peerHost       host.Host
 	dht            *ddht.DHT
@@ -52,12 +50,10 @@ type Service struct {
 	// Core components
 	peerDiscovery     *discovery.PeerDiscovery
 	tunService        *vpnnetwork.TUNService
-	clientService     *vpnnetwork.ClientService
-	serverService     *vpnnetwork.ServerService
-	dispatcher        dispatch.DispatcherService
+	outboundService   *vpnnetwork.OutboundPacketService
+	inboundService    *vpnnetwork.InboundPacketService
+	dispatcher        dispatcher.DispatcherService
 	resilienceService *resilience.ResilienceService
-	bufferPool        *utils.BufferPool
-	streamPool        *pool.StreamPool
 
 	// Context management
 	serviceCtx    context.Context
@@ -75,9 +71,6 @@ func New(cfg *config.C, peerHost host.Host, dht *ddht.DHT, accountService *accou
 	// Create the configuration service
 	configService := vpnconfig.NewConfigService(cfg)
 
-	// Create the buffer pool
-	bufferPool := utils.NewBufferPool(configService.GetMTU())
-
 	// Create the resource manager
 	resourceManager := utils.NewResourceManager()
 
@@ -85,11 +78,9 @@ func New(cfg *config.C, peerHost host.Host, dht *ddht.DHT, accountService *accou
 	service := &Service{
 		cfg:             cfg,
 		configService:   configService,
-		isProvider:      cfg.GetBool("provider.enable", false),
 		accountService:  accountService,
 		peerHost:        peerHost,
 		dht:             dht,
-		bufferPool:      bufferPool,
 		resourceManager: resourceManager,
 		stopChan:        make(chan struct{}),
 	}
@@ -108,6 +99,7 @@ func New(cfg *config.C, peerHost host.Host, dht *ddht.DHT, accountService *accou
 		VirtualIP: configService.GetVirtualIP(),
 		Subnet:    configService.GetSubnet(),
 		Routes:    configService.GetRoutes(),
+		Routines:  configService.GetRoutines(),
 	}
 	service.tunService = vpnnetwork.NewTUNService(tunConfig)
 
@@ -122,42 +114,11 @@ func New(cfg *config.C, peerHost host.Host, dht *ddht.DHT, accountService *accou
 	}
 	service.resilienceService = resilience.NewResilienceService(resilienceConfig)
 
-	// Create a stream pool config with values from the config service
-	streamPoolConfig := &pool.StreamPoolConfig{
-		MaxStreamsPerPeer:   configService.GetMaxStreamsPerPeer(),
-		StreamIdleTimeout:   configService.GetStreamIdleTimeout(),
-		CleanupInterval:     configService.GetCleanupInterval(),
-		PacketBufferSize:    configService.GetPacketBufferSize(),
-		UsageCountWeight:    configService.GetUsageCountWeight(),
-		BufferUtilWeight:    configService.GetBufferUtilWeight(),
-		BufferUtilThreshold: configService.GetBufferUtilThreshold(),
-		UsageCountThreshold: configService.GetUsageCountThreshold(),
-	}
-
-	// Create the stream pool using the service directly as the stream creator
-	service.streamPool = pool.NewStreamPool(service, streamPoolConfig)
-
-	// Register the stream pool with the resource manager
-	service.resourceManager.Register(service.streamPool)
-
 	// Create the packet dispatcher
-	config := &dispatch.Config{
-		// Stream pool configuration
-		MaxStreamsPerPeer:     configService.GetMaxStreamsPerPeer(),
-		StreamIdleTimeout:     configService.GetStreamIdleTimeout(),
-		StreamCleanupInterval: configService.GetCleanupInterval(),
-		PacketBufferSize:      configService.GetPacketBufferSize(),
-		// Load balancing configuration
-		UsageCountWeight:    configService.GetUsageCountWeight(),
-		BufferUtilWeight:    configService.GetBufferUtilWeight(),
-		BufferUtilThreshold: configService.GetBufferUtilThreshold(),
-		UsageCountThreshold: configService.GetUsageCountThreshold(),
-	}
-	service.dispatcher = dispatch.NewDispatcher(
+	service.dispatcher = dispatcher.NewDispatcher(
 		service.peerDiscovery,
 		service, // Use the service directly as it implements api.StreamService
-		config,
-		service.resilienceService,
+		service.configService,
 	)
 
 	// Only register the dispatcher with the resource manager if it implements io.Closer
@@ -165,22 +126,22 @@ func New(cfg *config.C, peerHost host.Host, dht *ddht.DHT, accountService *accou
 		service.resourceManager.Register(closer)
 	}
 
-	// Create the client service
-	service.clientService = vpnnetwork.NewClientService(
+	// Create the outbound packet service
+	service.outboundService = vpnnetwork.NewOutboundPacketService(
 		service.tunService,
 		service.dispatcher,
-		service.bufferPool,
+		service.configService,
 	)
 
-	// Register the client service with the resource manager
-	service.resourceManager.Register(service.clientService)
+	// Register the outbound service with the resource manager
+	service.resourceManager.Register(service.outboundService)
 
-	// Create the server service
-	serverConfig := &vpnnetwork.ServerConfig{
+	// Create the inbound packet service
+	inboundConfig := &vpnnetwork.InboundConfig{
 		MTU:            configService.GetMTU(),
 		UnallowedPorts: configService.GetUnallowedPorts(),
 	}
-	service.serverService = vpnnetwork.NewServerService(serverConfig)
+	service.inboundService = vpnnetwork.NewInboundPacketService(service.tunService, inboundConfig)
 
 	return service
 }
@@ -266,8 +227,7 @@ func (s *Service) waitUntilPeerConnected(ctx context.Context, host host.Host) er
 // start is the internal implementation of the Start method.
 // It initializes and starts all VPN components in sequence.
 func (s *Service) start(_, dhtCtx, tunCtx, clientCtx context.Context) error {
-	// Start the stream pool
-	s.streamPool.Start()
+	// No stream pool to start
 
 	// Start the packet dispatcher
 	s.dispatcher.Start()
@@ -298,11 +258,11 @@ func (s *Service) start(_, dhtCtx, tunCtx, clientCtx context.Context) error {
 	// Set up the stream handler for incoming P2P streams
 	s.peerHost.SetStreamHandler(protocol.ID(s.configService.GetProtocol()), func(netStream network.Stream) {
 		// Handle the incoming stream as a VPN stream
-		s.serverService.HandleStream(netStream, iface)
+		s.inboundService.HandleStream(netStream)
 	})
 
-	// Start the client service with its own context and pass the existing TUN interface
-	return s.clientService.Start(clientCtx, iface)
+	// Start the outbound service with its own context
+	return s.outboundService.Start(clientCtx)
 }
 
 // Stop gracefully shuts down the VPN service and all its components.
@@ -370,6 +330,12 @@ func (s *Service) setupTUNWithRetry(ctx context.Context) (overlay.Device, error)
 		device, err = s.tunService.SetupTUN()
 		if err != nil {
 			log.Warnf("Failed to setup TUN interface with MTU %d, will retry: %v", s.configService.GetMTU(), err)
+			return err // Return the error to trigger retry
+		}
+
+		// Set up the inbound service TUN device
+		if err := s.inboundService.SetupTUN(); err != nil {
+			log.Warnf("Failed to setup inbound TUN interface, will retry: %v", err)
 			return err // Return the error to trigger retry
 		}
 

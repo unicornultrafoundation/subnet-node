@@ -17,9 +17,8 @@ func createValidConfig() *VPNConfig {
 		MTU:       1500,
 
 		// Stream pool settings
-		StreamIdleTimeout: 300 * time.Second,
-		CleanupInterval:   60 * time.Second,
-		PacketBufferSize:  500,
+		StreamIdleTimeout:     300 * time.Second,
+		StreamCleanupInterval: 60 * time.Second,
 
 		// Circuit breaker settings
 		CircuitBreakerFailureThreshold: 5,
@@ -188,14 +187,9 @@ func TestValidateAllSettings(t *testing.T) {
 				wantErr: ErrInvalidStreamIdleTimeout,
 			},
 			{
-				name:    "invalid cleanup interval",
-				modify:  func(cfg *VPNConfig) { cfg.CleanupInterval = 0 },
-				wantErr: ErrInvalidCleanupInterval,
-			},
-			{
-				name:    "invalid packet buffer size",
-				modify:  func(cfg *VPNConfig) { cfg.PacketBufferSize = 0 },
-				wantErr: ErrInvalidPacketBufferSize,
+				name:    "invalid stream cleanup interval",
+				modify:  func(cfg *VPNConfig) { cfg.StreamCleanupInterval = 0 },
+				wantErr: ErrInvalidStreamCleanupInterval,
 			},
 		},
 		"validateCircuitBreakerSettings": {

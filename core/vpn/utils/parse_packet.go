@@ -1,13 +1,11 @@
-package ifce
+package utils
 
 import (
 	"encoding/binary"
 	"errors"
-	"io"
 	"net/netip"
 
 	"github.com/google/gopacket/layers"
-	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/firewall"
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
@@ -26,8 +24,8 @@ const (
 	minFwPacketLen = 4
 )
 
-// newPacket validates and parses the interesting bits for the firewall out of the ip and sub protocol headers
-func newPacket(data []byte, incoming bool, fp *firewall.Packet) error {
+// ParsePacket validates and parses the interesting bits for the firewall out of the ip and sub protocol headers
+func ParsePacket(data []byte, incoming bool, fp *firewall.Packet) error {
 	if len(data) < 1 {
 		return ErrPacketTooShort
 	}
@@ -196,50 +194,10 @@ func parseV4(data []byte, incoming bool, fp *firewall.Packet) error {
 	return nil
 }
 
-// readOutsidePackets processes incoming packets from peers and writes them to the TUN device
-// using load balancing across available readers based on peer ID
-func (f *Interface) readOutsidePackets(packet []byte, fwPacket *firewall.Packet, peerIdStr string) {
-	// Parse the packet
-	err := newPacket(packet, true, fwPacket)
-	if err != nil {
-		f.l.WithError(err).Error("Error while parsing inbound packet")
-		return
-	}
-
-	//Reject all requests that are to ports outside the allowed range
-	if fwPacket.RemotePort > 0 && fwPacket.RemotePort < 30000 {
-		return
-	}
-
-	// Determine which reader to use based on peer ID hash for load balancing
-	var readerIdx int
-	if f.routines > 1 && peerIdStr != "" {
-		// Simple hash function - sum the bytes of the peer ID string
-		var hash uint64
-		for i := 0; i < len(peerIdStr); i++ {
-			hash += uint64(peerIdStr[i])
-		}
-		readerIdx = int(hash % uint64(f.routines))
-	}
-
-	// Write the packet to the appropriate reader
-	var writer io.Writer
-	if readerIdx < len(f.readers) && f.readers[readerIdx] != nil {
-		writer = f.readers[readerIdx]
-		f.l.WithFields(logrus.Fields{
-			"peerId": peerIdStr,
-			"queue":  readerIdx,
-		}).Debug("Writing packet to specific TUN queue")
-	} else {
-		// Fallback to main interface if something went wrong with reader selection
-		writer = f.inside
-	}
-
-	_, err = writer.Write(packet)
-	if err != nil {
-		f.l.WithError(err).Error("Failed to write packet to tun device")
-		return
-	}
-
-	f.l.Debug("Packet written to tun device successfully")
+// PrependPacketHeader prepends a 4-byte header indicating the packet size
+func PrependPacketHeader(packet []byte) []byte {
+	packetSize := len(packet)
+	header := make([]byte, 4)
+	binary.BigEndian.PutUint32(header, uint32(packetSize))
+	return append(header, packet...)
 }
