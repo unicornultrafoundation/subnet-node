@@ -7,7 +7,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/config"
-	"github.com/unicornultrafoundation/subnet-node/core/vpn/overlay"
+	"github.com/unicornultrafoundation/subnet-node/overlay"
 )
 
 var log = logrus.WithField("service", "vpn-network")
@@ -120,8 +120,8 @@ func (s *TUNService) createOverlayConfig() (*config.C, []netip.Prefix, error) {
 	cfg := config.NewC(s.logger.Logger)
 
 	// Set TUN configuration
-	cfg.Settings = map[interface{}]interface{}{
-		"tun": map[interface{}]interface{}{
+	cfg.Settings = map[string]any{
+		"tun": map[string]any{
 			"mtu": s.config.MTU,
 		},
 	}
@@ -139,7 +139,7 @@ func (s *TUNService) createOverlayConfig() (*config.C, []netip.Prefix, error) {
 		}
 
 		// Set the routes in the config
-		tunMap := cfg.Settings["tun"].(map[interface{}]interface{})
+		tunMap := cfg.Settings["tun"].(map[string]any)
 		tunMap["routes"] = routesArray
 	}
 
