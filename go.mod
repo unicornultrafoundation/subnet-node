@@ -2,7 +2,7 @@ module github.com/unicornultrafoundation/subnet-node
 
 go 1.23.0
 
-toolchain go1.24.2
+toolchain go1.23.2
 
 require (
 	github.com/gogo/protobuf v1.3.2
@@ -254,7 +254,7 @@ require (
 	github.com/opencontainers/image-spec v1.1.0
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/prometheus/client_golang v1.20.5
-	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475
+	github.com/rcrowley/go-metrics v0.0.0-20250401214520-65e299d6c5c9
 	github.com/sasha-s/go-deadlock v0.3.5
 	github.com/shirou/gopsutil v3.21.4-0.20210419000835-c7a38de76ee5+incompatible
 	github.com/shirou/gopsutil/v4 v4.24.10
