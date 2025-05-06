@@ -4,14 +4,11 @@
 //
 // The VPN service leverages libp2p for peer-to-peer communication and establishes
 // TUN interfaces on participating nodes to route traffic through the secure overlay network.
-//
-// For detailed documentation, see the docs/vpn.md file.
 package vpn
 
 import (
 	"context"
 	"fmt"
-	"io"
 	"sync"
 	"time"
 
@@ -28,7 +25,6 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/discovery"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/dispatcher"
 	vpnnetwork "github.com/unicornultrafoundation/subnet-node/core/vpn/network"
-	"github.com/unicornultrafoundation/subnet-node/core/vpn/overlay"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/resilience"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/utils"
 )
@@ -103,6 +99,9 @@ func New(cfg *config.C, peerHost host.Host, dht *ddht.DHT, accountService *accou
 	}
 	service.tunService = vpnnetwork.NewTUNService(tunConfig)
 
+	// Register the TUN service with the resource manager
+	service.resourceManager.Register(service.tunService)
+
 	// Create the resilience service with configuration from the config service
 	resilienceConfig := &resilience.ResilienceConfig{
 		CircuitBreakerFailureThreshold: configService.GetCircuitBreakerFailureThreshold(),
@@ -121,10 +120,8 @@ func New(cfg *config.C, peerHost host.Host, dht *ddht.DHT, accountService *accou
 		service.configService,
 	)
 
-	// Only register the dispatcher with the resource manager if it implements io.Closer
-	if closer, ok := service.dispatcher.(io.Closer); ok {
-		service.resourceManager.Register(closer)
-	}
+	// Register the dispatcher service with the resource manager
+	service.resourceManager.Register(service.dispatcher)
 
 	// Create the outbound packet service
 	service.outboundService = vpnnetwork.NewOutboundPacketService(
@@ -142,6 +139,9 @@ func New(cfg *config.C, peerHost host.Host, dht *ddht.DHT, accountService *accou
 		UnallowedPorts: configService.GetUnallowedPorts(),
 	}
 	service.inboundService = vpnnetwork.NewInboundPacketService(service.tunService, inboundConfig)
+
+	// Register the inbound service with the resource manager
+	service.resourceManager.Register(service.inboundService)
 
 	return service
 }
@@ -227,8 +227,6 @@ func (s *Service) waitUntilPeerConnected(ctx context.Context, host host.Host) er
 // start is the internal implementation of the Start method.
 // It initializes and starts all VPN components in sequence.
 func (s *Service) start(_, dhtCtx, tunCtx, clientCtx context.Context) error {
-	// No stream pool to start
-
 	// Start the packet dispatcher
 	s.dispatcher.Start()
 
@@ -247,13 +245,10 @@ func (s *Service) start(_, dhtCtx, tunCtx, clientCtx context.Context) error {
 	defer cancel()
 
 	// Setup TUN interface with retry
-	iface, err := s.setupTUNWithRetry(tunSetupCtx)
+	err = s.setupTUNWithRetry(tunSetupCtx)
 	if err != nil {
 		return fmt.Errorf("failed to setup TUN interface: %w", err)
 	}
-
-	// Register the TUN interface with the resource manager
-	s.resourceManager.Register(iface)
 
 	// Set up the stream handler for incoming P2P streams
 	s.peerHost.SetStreamHandler(protocol.ID(s.configService.GetProtocol()), func(netStream network.Stream) {
@@ -317,25 +312,17 @@ func (s *Service) GetMetrics() map[string]int64 {
 }
 
 // setupTUNWithRetry attempts to set up the TUN interface with circuit breaker and retry protection.
-func (s *Service) setupTUNWithRetry(ctx context.Context) (overlay.Device, error) {
+func (s *Service) setupTUNWithRetry(ctx context.Context) error {
 	log.Debug("Setting up TUN interface using resilience service with circuit breaker and retry protection")
-
-	var device overlay.Device
 
 	// Use ExecuteWithResilience for better fault tolerance and metrics
 	breakerId := "tun_setup"
 	err, attempts := s.resilienceService.ExecuteWithResilience(ctx, breakerId, func() error {
 		// Attempt to set up the TUN interface
 		var err error
-		device, err = s.tunService.SetupTUN()
+		err = s.tunService.SetupTUN()
 		if err != nil {
 			log.Warnf("Failed to setup TUN interface with MTU %d, will retry: %v", s.configService.GetMTU(), err)
-			return err // Return the error to trigger retry
-		}
-
-		// Set up the inbound service TUN device
-		if err := s.inboundService.SetupTUN(); err != nil {
-			log.Warnf("Failed to setup inbound TUN interface, will retry: %v", err)
 			return err // Return the error to trigger retry
 		}
 
@@ -349,7 +336,7 @@ func (s *Service) setupTUNWithRetry(ctx context.Context) (overlay.Device, error)
 		log.Infof("Successfully set up TUN interface after %d attempts", attempts)
 	}
 
-	return device, err
+	return err
 }
 
 // syncPeerIDToDHTWithRetry attempts to sync the peer ID to the DHT with circuit breaker and retry protection.
