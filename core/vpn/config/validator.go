@@ -28,10 +28,6 @@ var (
 	ErrInvalidRetryMaxAttempts     = errors.New("invalid retry max attempts (must be greater than 0)")
 	ErrInvalidRetryInitialInterval = errors.New("invalid retry initial interval (must be greater than 0)")
 	ErrInvalidRetryMaxInterval     = errors.New("invalid retry max interval (must be greater than 0)")
-
-	// Metrics settings errors
-	ErrInvalidMetricsLogInterval      = errors.New("invalid metrics log interval (must be greater than 0)")
-	ErrInvalidMetricsSamplingInterval = errors.New("invalid metrics sampling interval (must be greater than 0)")
 )
 
 // Validate checks if the configuration is valid
@@ -58,11 +54,6 @@ func (c *VPNConfig) Validate() error {
 
 	// Validate retry settings
 	if err := c.validateRetrySettings(); err != nil {
-		return err
-	}
-
-	// Validate metrics settings
-	if err := c.validateMetricsSettings(); err != nil {
 		return err
 	}
 
@@ -153,21 +144,6 @@ func (c *VPNConfig) validateRetrySettings() error {
 	// Validate retry max interval
 	if c.RetryMaxInterval <= 0 {
 		return ErrInvalidRetryMaxInterval
-	}
-
-	return nil
-}
-
-// validateMetricsSettings validates the metrics settings
-func (c *VPNConfig) validateMetricsSettings() error {
-	// Validate metrics log interval
-	if c.MetricsLogInterval <= 0 {
-		return ErrInvalidMetricsLogInterval
-	}
-
-	// Validate metrics sampling interval
-	if c.MetricsSamplingInterval <= 0 {
-		return ErrInvalidMetricsSamplingInterval
 	}
 
 	return nil

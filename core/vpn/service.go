@@ -20,7 +20,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/config"
 	"github.com/unicornultrafoundation/subnet-node/core/account"
-	"github.com/unicornultrafoundation/subnet-node/core/vpn/api"
 	vpnconfig "github.com/unicornultrafoundation/subnet-node/core/vpn/config"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/discovery"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/dispatcher"
@@ -81,8 +80,8 @@ func New(cfg *config.C, peerHost host.Host, dht *ddht.DHT, accountService *accou
 		stopChan:        make(chan struct{}),
 	}
 
-	// Create the peer discovery service directly from libp2p components
-	service.peerDiscovery = discovery.NewPeerDiscoveryFromLibp2p(
+	// Create the peer discovery service
+	service.peerDiscovery = discovery.NewPeerDiscovery(
 		peerHost,
 		dht,
 		configService.GetVirtualIP(),
@@ -376,9 +375,9 @@ func (s *Service) IsEnabled() bool {
 
 // CreateNewVPNStream implements the api.StreamService interface by creating a new
 // libp2p stream to the specified peer using the VPN protocol with circuit breaker and retry protection.
-func (s *Service) CreateNewVPNStream(ctx context.Context, peerID peer.ID) (api.VPNStream, error) {
+func (s *Service) CreateNewVPNStream(ctx context.Context, peerID peer.ID) (network.Stream, error) {
 	// Use ExecuteWithResilience for better fault tolerance and metrics
-	var stream api.VPNStream
+	var stream network.Stream
 
 	// Create a breaker ID for this peer operation
 	breakerId := s.resilienceService.FormatPeerBreakerId(peerID, "create_stream")

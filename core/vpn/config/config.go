@@ -49,10 +49,6 @@ type VPNConfig struct {
 	TUNSetupTimeout             time.Duration
 	PeerConnectionCheckInterval time.Duration
 	ShutdownGracePeriod         time.Duration
-
-	// Metrics settings
-	MetricsLogInterval      time.Duration
-	MetricsSamplingInterval time.Duration
 }
 
 // New creates a new VPNConfig with values from the provided config
@@ -96,10 +92,6 @@ func New(cfg *config.C) *VPNConfig {
 		TUNSetupTimeout:             time.Duration(cfg.GetInt("vpn.tun_setup_timeout", 30)) * time.Second,                    // 30 seconds default
 		PeerConnectionCheckInterval: time.Duration(cfg.GetInt("vpn.peer_connection_check_interval", 100)) * time.Millisecond, // 100 milliseconds default
 		ShutdownGracePeriod:         time.Duration(cfg.GetInt("vpn.shutdown_grace_period", 50)) * time.Millisecond,           // 50 milliseconds default
-
-		// Metrics settings
-		MetricsLogInterval:      time.Duration(cfg.GetInt("vpn.metrics_log_interval", 30)) * time.Second,     // 30 seconds default
-		MetricsSamplingInterval: time.Duration(cfg.GetInt("vpn.metrics_sampling_interval", 1)) * time.Second, // 1 second default
 	}
 }
 
@@ -131,14 +123,4 @@ func (c *VPNConfig) GetCircuitBreakerSuccessThreshold() int {
 // GetRoutines returns the number of reader routines
 func (c *VPNConfig) GetRoutines() int {
 	return c.Routines
-}
-
-// GetMetricsLogInterval returns the metrics logging interval
-func (c *VPNConfig) GetMetricsLogInterval() time.Duration {
-	return c.MetricsLogInterval
-}
-
-// GetMetricsSamplingInterval returns the metrics sampling interval
-func (c *VPNConfig) GetMetricsSamplingInterval() time.Duration {
-	return c.MetricsSamplingInterval
 }

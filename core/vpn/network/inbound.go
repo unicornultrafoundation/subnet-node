@@ -139,10 +139,6 @@ func (s *InboundPacketService) processInboundPacket(packet []byte, fwPacket *fir
 	var writer io.Writer
 	if readerIdx < len(readers) && readers[readerIdx] != nil {
 		writer = readers[readerIdx]
-		s.logger.WithFields(logrus.Fields{
-			"peerId": peerID,
-			"queue":  readerIdx,
-		}).Debug("Writing packet to specific TUN queue")
 	} else {
 		// Fallback to main interface if something went wrong with reader selection
 		writer = s.tunService.device
