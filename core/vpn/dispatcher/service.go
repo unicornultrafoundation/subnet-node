@@ -2,7 +2,6 @@ package dispatcher
 
 import (
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -32,36 +31,10 @@ type Dispatcher struct {
 	streams sync.Map // string -> api.VPNStream
 	// Stream cleanup ticker
 	cleanupTicker *time.Ticker
-	// Metrics logging ticker
-	metricsLogTicker *time.Ticker
-	// Metrics sampling ticker
-	metricsSamplingTicker *time.Ticker
 	// Stop channel for background goroutines
 	stopChan chan struct{}
 	// Last used time for each stream
 	lastUsed sync.Map // string -> time.Time
-
-	// Metrics
-	packetsDispatched   atomic.Uint64
-	bytesDispatched     atomic.Uint64
-	streamsCreated      atomic.Uint64
-	streamsClosed       atomic.Uint64
-	streamErrors        atomic.Uint64
-	peerDiscoveryErrors atomic.Uint64
-	packetParseErrors   atomic.Uint64
-
-	packetsDispatchedByPeer sync.Map // string -> *atomic.Uint64
-	bytesDispatchedByPeer   sync.Map // string -> *atomic.Uint64
-	streamErrorsByPeer      sync.Map // string -> *atomic.Uint64
-	activeStreamsByPeer     sync.Map // string -> *atomic.Uint64
-	streamCreationTimes     sync.Map // string -> time.Time
-
-	oldestStreamCreationTime time.Time
-	newestStreamCreationTime time.Time
-
-	// Sampled metrics
-	sampledMetricsMu sync.RWMutex
-	sampledMetrics   *SampledMetrics
 }
 
 // NewDispatcher creates a new dispatcher
@@ -77,10 +50,6 @@ func NewDispatcher(
 		streams:       sync.Map{},
 		stopChan:      make(chan struct{}),
 		lastUsed:      sync.Map{},
-
-		// Initialize time values
-		oldestStreamCreationTime: time.Now(),
-		newestStreamCreationTime: time.Now(),
 	}
 }
 
@@ -96,18 +65,6 @@ func (d *Dispatcher) Start() {
 	go d.cleanupStreams()
 
 	log.Infof("Stream cleanup scheduled every %s", cleanupInterval)
-
-	// Start the metrics sampling
-	d.startMetricsSampling()
-
-	// Start the metrics logging ticker
-	metricsInterval := d.configService.GetMetricsLogInterval()
-	d.metricsLogTicker = time.NewTicker(metricsInterval)
-
-	// Start the metrics logging goroutine
-	go d.logMetricsPeriodically()
-
-	log.Infof("Metrics logging scheduled every %s", metricsInterval)
 }
 
 // Close stops the dispatcher
@@ -117,16 +74,6 @@ func (d *Dispatcher) Close() error {
 	// Stop the cleanup ticker if it exists
 	if d.cleanupTicker != nil {
 		d.cleanupTicker.Stop()
-	}
-
-	// Stop the metrics logging ticker if it exists
-	if d.metricsLogTicker != nil {
-		d.metricsLogTicker.Stop()
-	}
-
-	// Stop the metrics sampling ticker if it exists
-	if d.metricsSamplingTicker != nil {
-		d.metricsSamplingTicker.Stop()
 	}
 
 	// Signal the cleanup goroutine to stop

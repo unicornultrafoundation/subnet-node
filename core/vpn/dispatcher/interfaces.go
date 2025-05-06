@@ -13,7 +13,4 @@ type DispatcherService interface {
 
 	// Close stops the dispatcher
 	Close() error
-
-	// GetMetrics returns the current metrics for the dispatcher
-	GetMetrics() map[string]uint64
 }
