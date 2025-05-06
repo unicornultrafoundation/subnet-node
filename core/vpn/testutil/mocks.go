@@ -16,7 +16,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/stretchr/testify/mock"
-	"github.com/unicornultrafoundation/subnet-node/core/vpn/api"
 )
 
 //
@@ -31,7 +30,7 @@ type MockStreamConfig struct {
 	FailureRate float64
 }
 
-// MockStream is a configurable mock implementation of api.VPNStream
+// MockStream is a configurable mock implementation of network.Stream
 type MockStream struct {
 	mock.Mock
 	Config MockStreamConfig
@@ -153,6 +152,30 @@ func (s *MockStream) SetWriteDeadline(t time.Time) error {
 	return args.Error(0)
 }
 
+// CloseRead implements the network.Stream interface
+func (s *MockStream) CloseRead() error {
+	args := s.Called()
+	return args.Error(0)
+}
+
+// CloseWrite implements the network.Stream interface
+func (s *MockStream) CloseWrite() error {
+	args := s.Called()
+	return args.Error(0)
+}
+
+// ID implements the network.Stream interface
+func (s *MockStream) ID() string {
+	args := s.Called()
+	return args.String(0)
+}
+
+// Protocol implements the network.Stream interface
+func (s *MockStream) Protocol() protocol.ID {
+	args := s.Called()
+	return args.Get(0).(protocol.ID)
+}
+
 //
 // Stream Service Mocks
 //
@@ -195,7 +218,7 @@ func NewMockStreamService(config *MockServiceConfig) *MockStreamService {
 }
 
 // CreateNewVPNStream implements the api.StreamService interface
-func (s *MockStreamService) CreateNewVPNStream(ctx context.Context, peerID peer.ID) (api.VPNStream, error) {
+func (s *MockStreamService) CreateNewVPNStream(ctx context.Context, peerID peer.ID) (network.Stream, error) {
 	// Simulate latency
 	if s.Config.Latency > 0 {
 		time.Sleep(s.Config.Latency)
@@ -215,7 +238,7 @@ func (s *MockStreamService) CreateNewVPNStream(ctx context.Context, peerID peer.
 
 	atomic.AddInt64(&s.Stats.StreamsCreated, 1)
 	args := s.Called(ctx, peerID)
-	return args.Get(0).(api.VPNStream), args.Error(1)
+	return args.Get(0).(network.Stream), args.Error(1)
 }
 
 // GetStats returns the service statistics
@@ -410,9 +433,9 @@ type MockAccountService struct {
 	mock.Mock
 }
 
-func (m *MockAccountService) IPRegistry() api.IPRegistry {
+func (m *MockAccountService) IPRegistry() *MockIPRegistry {
 	args := m.Called()
-	return args.Get(0).(api.IPRegistry)
+	return args.Get(0).(*MockIPRegistry)
 }
 
 // MockIPRegistry is a mock implementation of the api.IPRegistry interface
@@ -633,9 +656,9 @@ func (m *MockHostService) ID() peer.ID {
 	return args.Get(0).(peer.ID)
 }
 
-func (m *MockHostService) Peerstore() api.PeerstoreService {
+func (m *MockHostService) Peerstore() *MockPeerstoreService {
 	args := m.Called()
-	return args.Get(0).(api.PeerstoreService)
+	return args.Get(0).(*MockPeerstoreService)
 }
 
 // MockPeerstoreService is a mock implementation of the api.PeerstoreService interface

@@ -4,6 +4,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/api"
 	vpnconfig "github.com/unicornultrafoundation/subnet-node/core/vpn/config"
@@ -28,7 +29,7 @@ type Dispatcher struct {
 	// Configuration service
 	configService vpnconfig.ConfigService
 	// Map of peer ID to stream
-	streams sync.Map // string -> api.VPNStream
+	streams sync.Map // string -> network.Stream
 	// Stream cleanup ticker
 	cleanupTicker *time.Ticker
 	// Stop channel for background goroutines
@@ -83,16 +84,16 @@ func (d *Dispatcher) Close() error {
 	// Use a slice to collect all streams to close to avoid holding locks during close operations
 	var streamsToClose []struct {
 		streamID string
-		stream   api.VPNStream
+		stream   network.Stream
 	}
 
 	// Collect all streams that need to be closed
 	d.streams.Range(func(key, value interface{}) bool {
 		streamID := key.(string)
-		stream := value.(api.VPNStream)
+		stream := value.(network.Stream)
 		streamsToClose = append(streamsToClose, struct {
 			streamID string
-			stream   api.VPNStream
+			stream   network.Stream
 		}{streamID, stream})
 		return true
 	})

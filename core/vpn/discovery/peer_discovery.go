@@ -3,11 +3,11 @@ package discovery
 import (
 	"context"
 	"fmt"
+	"math/big"
 	"sync"
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/host"
-	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/routing"
 	"github.com/patrickmn/go-cache"
 	"github.com/sirupsen/logrus"
@@ -23,21 +23,21 @@ var _ api.PeerDiscoveryService = (*PeerDiscovery)(nil)
 // PeerDiscovery implements the api.PeerDiscoveryService interface
 type PeerDiscovery struct {
 	// Host for P2P communication
-	host api.HostService
+	host host.Host
 	// DHT for peer discovery
-	dht api.DHTService
+	dht routing.ValueStore
 	// Cache for peer ID lookups
 	peerIDCache *cache.Cache
 	// Virtual IP for this node
 	virtualIP string
 	// Account service for registry lookups
-	accountService api.AccountService
+	accountService *account.AccountService
 	// Mutex for thread safety
 	mu sync.RWMutex
 }
 
 // NewPeerDiscovery creates a new peer discovery service
-func NewPeerDiscovery(host api.HostService, dht api.DHTService, virtualIP string, accountService api.AccountService) *PeerDiscovery {
+func NewPeerDiscovery(host host.Host, dht routing.ValueStore, virtualIP string, accountService *account.AccountService) *PeerDiscovery {
 	return &PeerDiscovery{
 		host:           host,
 		dht:            dht,
@@ -123,17 +123,46 @@ func (p *PeerDiscovery) SyncPeerIDToDHT(ctx context.Context) error {
 	return fmt.Errorf("no virtual IP found for peer ID %s: %w", peerID, verifyErr)
 }
 
-// ParsePeerID parses a peer ID string
-func ParsePeerID(peerIDStr string) (peer.ID, error) {
-	return peer.Decode(peerIDStr)
+// GetPeerIDByRegistry gets the peer ID from the registry
+func (p *PeerDiscovery) GetPeerIDByRegistry(ctx context.Context, virtualIP string) (string, error) {
+	tokenID := ConvertVirtualIPToNumber(virtualIP)
+	if tokenID == 0 {
+		return "", fmt.Errorf("IP %s is not within the range 10.0.0.0/8", virtualIP)
+	}
+
+	return p.accountService.IPRegistry().GetPeer(nil, big.NewInt(int64(tokenID)))
+}
+
+// VerifyVirtualIPHasRegistered verifies if the virtual IP is registered to the current peer ID
+func (p *PeerDiscovery) VerifyVirtualIPHasRegistered(ctx context.Context, virtualIP string) error {
+	if virtualIP == "" {
+		return fmt.Errorf("virtual IP is not set")
+	}
+
+	// Get the current peer ID once to avoid multiple calls
+	currentPeerID := p.host.ID().String()
+
+	// Get the peer ID from the registry
+	peerID, err := p.GetPeerID(ctx, virtualIP)
+	if err != nil {
+		return fmt.Errorf("failed to get peer ID from registry: %w", err)
+	}
+
+	// Compare with the current peer ID
+	if peerID != currentPeerID {
+		return fmt.Errorf("virtual IP %s is registered to peer ID %s, not to this peer ID %s",
+			virtualIP, peerID, currentPeerID)
+	}
+
+	return nil
 }
 
 // NewPeerDiscoveryFromLibp2p creates a new peer discovery service from libp2p components
 func NewPeerDiscoveryFromLibp2p(host host.Host, dht routing.ValueStore, virtualIP string, accountService *account.AccountService) *PeerDiscovery {
 	return NewPeerDiscovery(
-		NewHostAdapter(host),
-		NewDHTAdapter(dht),
+		host,
+		dht,
 		virtualIP,
-		NewAccountAdapter(accountService),
+		accountService,
 	)
 }

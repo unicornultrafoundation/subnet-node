@@ -42,10 +42,6 @@ type ConfigService interface {
 	GetPeerConnectionCheckInterval() time.Duration
 	GetShutdownGracePeriod() time.Duration
 
-	// Metrics settings
-	GetMetricsLogInterval() time.Duration
-	GetMetricsSamplingInterval() time.Duration
-
 	// Get the full VPN config
 	GetVPNConfig() *VPNConfig
 
@@ -221,20 +217,6 @@ func (c *ConfigServiceImpl) GetShutdownGracePeriod() time.Duration {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.vpnConfig.ShutdownGracePeriod
-}
-
-// GetMetricsLogInterval returns the metrics logging interval
-func (c *ConfigServiceImpl) GetMetricsLogInterval() time.Duration {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.vpnConfig.MetricsLogInterval
-}
-
-// GetMetricsSamplingInterval returns the metrics sampling interval
-func (c *ConfigServiceImpl) GetMetricsSamplingInterval() time.Duration {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.vpnConfig.MetricsSamplingInterval
 }
 
 // GetVPNConfig returns the full VPN config

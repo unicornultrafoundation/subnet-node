@@ -7,8 +7,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/unicornultrafoundation/subnet-node/core/vpn/api"
 )
 
 // extractPeerID extracts the peer ID from a stream ID (format: peerID/queueID)
@@ -21,10 +21,10 @@ func extractPeerID(streamID string) string {
 }
 
 // getOrCreateStreamWithID gets an existing stream or creates a new one with a specific ID
-func (d *Dispatcher) getOrCreateStreamWithID(ctx context.Context, peerID peer.ID, streamID string) (api.VPNStream, error) {
+func (d *Dispatcher) getOrCreateStreamWithID(ctx context.Context, peerID peer.ID, streamID string) (network.Stream, error) {
 	// Check if we already have a stream for this ID
 	if value, ok := d.streams.Load(streamID); ok {
-		stream := value.(api.VPNStream)
+		stream := value.(network.Stream)
 
 		// Check if the stream is healthy using a more reliable method
 		// Set a short deadline to check if the stream is responsive
@@ -99,7 +99,7 @@ func (d *Dispatcher) performStreamCleanup() {
 	// Check each stream for idleness and close directly during iteration
 	d.streams.Range(func(key, value interface{}) bool {
 		streamID := key.(string)
-		stream := value.(api.VPNStream)
+		stream := value.(network.Stream)
 
 		// Get last used time
 		lastUsedValue, ok := d.lastUsed.Load(streamID)
