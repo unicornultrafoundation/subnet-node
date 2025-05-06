@@ -60,8 +60,9 @@ func (s *InboundPacketService) HandleStream(stream network.Stream) {
 	fwPacket := &firewall.Packet{}
 
 	for {
-		// Read the packet length (4 bytes)
-		_, err := io.ReadFull(stream, combinedBuf[:4])
+		// Read the packet length and data in potentially multiple operations
+		// but minimize allocations
+		_, err := io.ReadAtLeast(stream, combinedBuf[:4], 4)
 		if err != nil {
 			if err != io.EOF {
 				s.logger.WithError(err).WithField("peer", peer).Error("Error reading packet length")
@@ -114,7 +115,7 @@ func (s *InboundPacketService) processInboundPacket(packet []byte, fwPacket *fir
 	}
 
 	// Check if the port is in the unallowed list
-	if fwPacket.RemotePort > 0 && s.config.UnallowedPorts[strconv.Itoa(int(fwPacket.RemotePort))] {
+	if s.config.UnallowedPorts[strconv.Itoa(int(fwPacket.RemotePort))] {
 		s.logger.WithField("port", fwPacket.RemotePort).Debug("Rejected packet to unallowed port")
 		return
 	}
@@ -153,15 +154,6 @@ func (s *InboundPacketService) processInboundPacket(packet []byte, fwPacket *fir
 		s.logger.WithError(err).Error("Failed to write packet to TUN device")
 		return
 	}
-}
-
-// SetupTUN sets up the TUN device
-func (s *InboundPacketService) SetupTUN() error {
-	// Set up the TUN device
-	if _, err := s.tunService.SetupTUN(); err != nil {
-		return err
-	}
-	return nil
 }
 
 // Close closes the inbound packet service

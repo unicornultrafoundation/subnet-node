@@ -51,7 +51,8 @@ type VPNConfig struct {
 	ShutdownGracePeriod         time.Duration
 
 	// Metrics settings
-	MetricsLogInterval time.Duration
+	MetricsLogInterval      time.Duration
+	MetricsSamplingInterval time.Duration
 }
 
 // New creates a new VPNConfig with values from the provided config
@@ -97,7 +98,8 @@ func New(cfg *config.C) *VPNConfig {
 		ShutdownGracePeriod:         time.Duration(cfg.GetInt("vpn.shutdown_grace_period", 50)) * time.Millisecond,           // 50 milliseconds default
 
 		// Metrics settings
-		MetricsLogInterval: time.Duration(cfg.GetInt("vpn.metrics_log_interval", 60)) * time.Second, // 60 seconds default
+		MetricsLogInterval:      time.Duration(cfg.GetInt("vpn.metrics_log_interval", 30)) * time.Second,     // 30 seconds default
+		MetricsSamplingInterval: time.Duration(cfg.GetInt("vpn.metrics_sampling_interval", 1)) * time.Second, // 1 second default
 	}
 }
 
@@ -134,4 +136,9 @@ func (c *VPNConfig) GetRoutines() int {
 // GetMetricsLogInterval returns the metrics logging interval
 func (c *VPNConfig) GetMetricsLogInterval() time.Duration {
 	return c.MetricsLogInterval
+}
+
+// GetMetricsSamplingInterval returns the metrics sampling interval
+func (c *VPNConfig) GetMetricsSamplingInterval() time.Duration {
+	return c.MetricsSamplingInterval
 }

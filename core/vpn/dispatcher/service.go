@@ -1,7 +1,6 @@
 package dispatcher
 
 import (
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -29,21 +28,20 @@ type Dispatcher struct {
 	streamService api.StreamService
 	// Configuration service
 	configService vpnconfig.ConfigService
-	// Mutex for protecting the streams map
-	mu sync.RWMutex
 	// Map of peer ID to stream
-	streams map[string]api.VPNStream
+	streams sync.Map // string -> api.VPNStream
 	// Stream cleanup ticker
 	cleanupTicker *time.Ticker
 	// Metrics logging ticker
 	metricsLogTicker *time.Ticker
+	// Metrics sampling ticker
+	metricsSamplingTicker *time.Ticker
 	// Stop channel for background goroutines
 	stopChan chan struct{}
 	// Last used time for each stream
-	lastUsed map[string]time.Time
+	lastUsed sync.Map // string -> time.Time
 
 	// Metrics
-	metricsMu           sync.RWMutex
 	packetsDispatched   atomic.Uint64
 	bytesDispatched     atomic.Uint64
 	streamsCreated      atomic.Uint64
@@ -60,6 +58,10 @@ type Dispatcher struct {
 
 	oldestStreamCreationTime time.Time
 	newestStreamCreationTime time.Time
+
+	// Sampled metrics
+	sampledMetricsMu sync.RWMutex
+	sampledMetrics   *SampledMetrics
 }
 
 // NewDispatcher creates a new dispatcher
@@ -72,9 +74,9 @@ func NewDispatcher(
 		peerDiscovery: peerDiscovery,
 		streamService: streamService,
 		configService: configService,
-		streams:       make(map[string]api.VPNStream),
+		streams:       sync.Map{},
 		stopChan:      make(chan struct{}),
-		lastUsed:      make(map[string]time.Time),
+		lastUsed:      sync.Map{},
 
 		// Initialize time values
 		oldestStreamCreationTime: time.Now(),
@@ -95,6 +97,9 @@ func (d *Dispatcher) Start() {
 
 	log.Infof("Stream cleanup scheduled every %s", cleanupInterval)
 
+	// Start the metrics sampling
+	d.startMetricsSampling()
+
 	// Start the metrics logging ticker
 	metricsInterval := d.configService.GetMetricsLogInterval()
 	d.metricsLogTicker = time.NewTicker(metricsInterval)
@@ -105,8 +110,8 @@ func (d *Dispatcher) Start() {
 	log.Infof("Metrics logging scheduled every %s", metricsInterval)
 }
 
-// Stop stops the dispatcher
-func (d *Dispatcher) Stop() {
+// Close stops the dispatcher
+func (d *Dispatcher) Close() error {
 	log.Info("Stopping VPN dispatcher")
 
 	// Stop the cleanup ticker if it exists
@@ -119,30 +124,48 @@ func (d *Dispatcher) Stop() {
 		d.metricsLogTicker.Stop()
 	}
 
+	// Stop the metrics sampling ticker if it exists
+	if d.metricsSamplingTicker != nil {
+		d.metricsSamplingTicker.Stop()
+	}
+
 	// Signal the cleanup goroutine to stop
 	close(d.stopChan)
 
 	// Close all streams
-	d.mu.Lock()
-	defer d.mu.Unlock()
+	// Use a slice to collect all streams to close to avoid holding locks during close operations
+	var streamsToClose []struct {
+		streamID string
+		stream   api.VPNStream
+	}
 
-	for streamID, stream := range d.streams {
-		// Extract peer ID from stream ID (format: peerID/queueID)
-		parts := strings.Split(streamID, "/")
-		peerInfo := streamID
-		if len(parts) > 0 {
-			peerInfo = parts[0]
-		}
+	// Collect all streams that need to be closed
+	d.streams.Range(func(key, value interface{}) bool {
+		streamID := key.(string)
+		stream := value.(api.VPNStream)
+		streamsToClose = append(streamsToClose, struct {
+			streamID string
+			stream   api.VPNStream
+		}{streamID, stream})
+		return true
+	})
 
-		if err := stream.Close(); err != nil {
+	// Close each stream
+	for _, item := range streamsToClose {
+		// Extract peer ID from stream ID
+		peerInfo := extractPeerID(item.streamID)
+
+		if err := item.stream.Close(); err != nil {
 			log.WithError(err).WithFields(logrus.Fields{
-				"streamID": streamID,
+				"streamID": item.streamID,
 				"peer":     peerInfo,
 			}).Error("Error closing stream")
 		}
+
+		// Delete from the maps
+		d.streams.Delete(item.streamID)
+		d.lastUsed.Delete(item.streamID)
 	}
 
-	// Clear the streams map
-	d.streams = make(map[string]api.VPNStream)
-	d.lastUsed = make(map[string]time.Time)
+	return nil
 }

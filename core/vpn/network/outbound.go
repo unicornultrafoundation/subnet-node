@@ -48,11 +48,6 @@ func NewOutboundPacketService(tunService *TUNService, dispatcher dispatcher.Disp
 
 // Start initializes and starts the outbound packet service
 func (s *OutboundPacketService) Start(ctx context.Context) error {
-	// Set up the TUN device and create readers
-	if _, err := s.tunService.SetupTUN(); err != nil {
-		return err
-	}
-
 	// Get the readers from the TUN service
 	readers := s.tunService.GetReaders()
 
@@ -92,15 +87,15 @@ func (s *OutboundPacketService) listenTUN(ctx context.Context, reader io.ReadWri
 			}
 
 			// Process the packet
-			s.processOutboundPacket(packet[:n], queueID)
+			s.processOutboundPacket(ctx, packet[:n], queueID)
 		}
 	}
 }
 
 // processOutboundPacket processes an outbound packet from the TUN device
-func (s *OutboundPacketService) processOutboundPacket(packet []byte, queueID int) {
+func (s *OutboundPacketService) processOutboundPacket(ctx context.Context, packet []byte, queueID int) {
 	// Dispatch the packet with the queue ID
-	err := s.dispatcher.DispatchPacket(context.Background(), packet, queueID)
+	err := s.dispatcher.DispatchPacket(ctx, packet, queueID)
 	if err != nil {
 		s.logger.WithError(err).WithFields(logrus.Fields{
 			"queueID": queueID,

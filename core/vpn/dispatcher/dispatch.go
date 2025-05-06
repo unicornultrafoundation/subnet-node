@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/utils"
 	"github.com/unicornultrafoundation/subnet-node/firewall"
 )
@@ -20,6 +21,7 @@ func (d *Dispatcher) DispatchPacket(ctx context.Context, packet []byte, queueID 
 		// Track packet parse errors using atomic
 		d.packetParseErrors.Add(1)
 
+		log.WithError(err).WithField("packet_size", len(packet)).Error("Failed to parse packet")
 		return fmt.Errorf("failed to parse packet: %w", err)
 	}
 
@@ -37,12 +39,14 @@ func (d *Dispatcher) DispatchPacket(ctx context.Context, packet []byte, queueID 
 		// Track peer discovery errors using atomic
 		d.peerDiscoveryErrors.Add(1)
 
+		log.WithError(err).WithField("remote_ip", remote).Error("Failed to get peer ID")
 		return fmt.Errorf("failed to get peer ID for %s: %w", remote, err)
 	}
 
 	// Decode the peer ID
 	peerID, err := peer.Decode(peerIDStr)
 	if err != nil {
+		log.WithError(err).WithField("peer_id_str", peerIDStr).Error("Failed to decode peer ID")
 		return fmt.Errorf("failed to decode peer ID %s: %w", peerIDStr, err)
 	}
 
@@ -52,6 +56,11 @@ func (d *Dispatcher) DispatchPacket(ctx context.Context, packet []byte, queueID 
 	// Get or create a stream for the peer with the specific queue ID
 	stream, err := d.getOrCreateStreamWithID(ctx, peerID, streamID)
 	if err != nil {
+		log.WithError(err).WithFields(logrus.Fields{
+			"peer_id":   peerID.String(),
+			"queue_id":  queueID,
+			"stream_id": streamID,
+		}).Error("Failed to get or create stream")
 		return fmt.Errorf("failed to get or create stream for peer %s with queue %d: %w", peerID.String(), queueID, err)
 	}
 
@@ -61,10 +70,8 @@ func (d *Dispatcher) DispatchPacket(ctx context.Context, packet []byte, queueID 
 	// Write the packet to the stream
 	if _, err := stream.Write(packetWithHeader); err != nil {
 		// Remove the stream from the map if there's an error
-		d.mu.Lock()
-		delete(d.streams, streamID)
-		delete(d.lastUsed, streamID)
-		d.mu.Unlock()
+		d.streams.Delete(streamID)
+		d.lastUsed.Delete(streamID)
 
 		// Track stream errors - atomic for counter, sync.Map for per-peer tracking
 		d.streamErrors.Add(1)
@@ -75,13 +82,18 @@ func (d *Dispatcher) DispatchPacket(ctx context.Context, packet []byte, queueID 
 		counter := val.(*atomic.Uint64)
 		counter.Add(1)
 
+		log.WithError(err).WithFields(logrus.Fields{
+			"peer_id":     peerID.String(),
+			"queue_id":    queueID,
+			"stream_id":   streamID,
+			"packet_size": len(packetWithHeader),
+		}).Error("Failed to write packet to stream")
+
 		return fmt.Errorf("failed to write packet to stream for peer %s with queue %d: %w", peerID.String(), queueID, err)
 	}
 
 	// Update the last used time for this stream
-	d.mu.Lock()
-	d.lastUsed[streamID] = time.Now()
-	d.mu.Unlock()
+	d.lastUsed.Store(streamID, time.Now())
 
 	// Track successful packet dispatch - atomic for counters
 	d.packetsDispatched.Add(1)

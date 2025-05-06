@@ -60,17 +60,17 @@ func NewTUNService(config *TUNConfig) *TUNService {
 }
 
 // SetupTUN initializes a TUN device using overlay package
-func (s *TUNService) SetupTUN() (overlay.Device, error) {
+func (s *TUNService) SetupTUN() error {
 	// Create overlay configuration
 	cfg, vpnNetworks, err := s.createOverlayConfig()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// Create a new device from config
 	device, err := overlay.NewDeviceFromConfig(cfg, s.logger.Logger, vpnNetworks, s.routines)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create TUN device: %w", err)
+		return fmt.Errorf("failed to create TUN device: %w", err)
 	}
 
 	// Store the device
@@ -79,7 +79,7 @@ func (s *TUNService) SetupTUN() (overlay.Device, error) {
 	// Activate the device
 	if err := device.Activate(); err != nil {
 		device.Close()
-		return nil, fmt.Errorf("failed to activate TUN device: %w", err)
+		return fmt.Errorf("failed to activate TUN device: %w", err)
 	}
 
 	// Prepare reader queues
@@ -94,7 +94,7 @@ func (s *TUNService) SetupTUN() (overlay.Device, error) {
 			if err != nil {
 				s.logger.WithError(err).Error("Failed to create multi-queue reader")
 				device.Close()
-				return nil, fmt.Errorf("failed to create multi-queue reader: %w", err)
+				return fmt.Errorf("failed to create multi-queue reader: %w", err)
 			}
 		}
 		s.readers[i] = reader
@@ -102,7 +102,7 @@ func (s *TUNService) SetupTUN() (overlay.Device, error) {
 
 	log.Infof("TUN interface created with name %s", device.Name())
 
-	return device, nil
+	return nil
 }
 
 // createOverlayConfig creates a configuration for the overlay device

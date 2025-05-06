@@ -44,6 +44,7 @@ type ConfigService interface {
 
 	// Metrics settings
 	GetMetricsLogInterval() time.Duration
+	GetMetricsSamplingInterval() time.Duration
 
 	// Get the full VPN config
 	GetVPNConfig() *VPNConfig
@@ -227,6 +228,13 @@ func (c *ConfigServiceImpl) GetMetricsLogInterval() time.Duration {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.vpnConfig.MetricsLogInterval
+}
+
+// GetMetricsSamplingInterval returns the metrics sampling interval
+func (c *ConfigServiceImpl) GetMetricsSamplingInterval() time.Duration {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.vpnConfig.MetricsSamplingInterval
 }
 
 // GetVPNConfig returns the full VPN config

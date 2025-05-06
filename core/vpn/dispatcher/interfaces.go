@@ -11,8 +11,8 @@ type DispatcherService interface {
 	// Start starts the dispatcher
 	Start()
 
-	// Stop stops the dispatcher
-	Stop()
+	// Close stops the dispatcher
+	Close() error
 
 	// GetMetrics returns the current metrics for the dispatcher
 	GetMetrics() map[string]uint64
