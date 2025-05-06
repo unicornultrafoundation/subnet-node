@@ -41,8 +41,9 @@ func (s *Service) upgradeAppVersion(ctx context.Context) error {
 			continue
 		}
 
-		// Get running Container image version
-		runningImageVersion := container.Image
+		// Get running Container image name and tag
+		// Container.Image contains SHA256 digest, so we need to extract from Config.Image instead
+		runningImageVersion := container.Config.Image
 
 		// Get latest App image version from smart contract
 		app, err := s.GetApp(ctx, appId)
@@ -52,7 +53,12 @@ func (s *Service) upgradeAppVersion(ctx context.Context) error {
 
 		latestImageVersion := app.Metadata.ContainerConfig.Image
 
+		log.Debugf("Checking app %s - current image: %s, latest image: %s",
+			app.Name, runningImageVersion, latestImageVersion)
+
 		if runningImageVersion != latestImageVersion {
+			log.Infof("Upgrading app %s from %s to %s",
+				app.Name, runningImageVersion, latestImageVersion)
 			return s.RestartContainer(ctx, appId) // this will upgrade the container with the new image version
 		}
 	}

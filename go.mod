@@ -1,6 +1,6 @@
 module github.com/unicornultrafoundation/subnet-node
 
-go 1.23
+go 1.23.0
 
 toolchain go1.23.2
 
@@ -173,6 +173,7 @@ require (
 	github.com/tklauser/numcpus v0.6.1 // indirect
 	github.com/ucarion/urlpath v0.0.0-20200424170820-7ccc79b76bbb // indirect
 	github.com/vektah/gqlparser/v2 v2.5.19 // indirect
+	github.com/vishvananda/netns v0.0.4 // indirect
 	github.com/whyrusleeping/base32 v0.0.0-20170828182744-c30ac30633cc // indirect
 	github.com/whyrusleeping/cbor v0.0.0-20171005072247-63513f603b11 // indirect
 	github.com/whyrusleeping/cbor-gen v0.1.2 // indirect
@@ -202,6 +203,7 @@ require (
 	golang.org/x/text v0.21.0 // indirect
 	golang.org/x/tools v0.28.0 // indirect
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
+	golang.zx2c4.com/wireguard/windows v0.5.3 // indirect
 	gonum.org/v1/gonum v0.15.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20241219192143-6b3ec007d9bb // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20241219192143-6b3ec007d9bb // indirect
@@ -223,6 +225,7 @@ require (
 	github.com/docker/docker v27.4.1+incompatible
 	github.com/ethereum/go-ethereum v1.14.12
 	github.com/flynn/noise v1.1.0
+	github.com/gaissmai/bart v0.20.4
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/hashicorp/go-multierror v1.1.1
@@ -255,6 +258,7 @@ require (
 	github.com/multiformats/go-multiaddr-dns v0.4.0
 	github.com/multiformats/go-multihash v0.2.3
 	github.com/prometheus/client_golang v1.20.5
+	github.com/rcrowley/go-metrics v0.0.0-20250401214520-65e299d6c5c9
 	github.com/sasha-s/go-deadlock v0.3.5
 	github.com/shirou/gopsutil/v4 v4.24.10
 	github.com/showwin/speedtest-go v1.7.9
@@ -262,6 +266,7 @@ require (
 	github.com/stretchr/testify v1.10.0
 	github.com/syndtr/goleveldb v1.0.1-0.20210819022825-2ae1ddf74ef7
 	github.com/urfave/cli/v2 v2.27.5
+	github.com/vishvananda/netlink v1.3.0
 	github.com/whyrusleeping/multiaddr-filter v0.0.0-20160516205228-e903e4adabd7
 	go.opencensus.io v0.24.0
 	go.opentelemetry.io/otel v1.33.0

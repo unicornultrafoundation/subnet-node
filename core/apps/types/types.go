@@ -152,7 +152,7 @@ type ContainerConfig struct {
 	Command   []string          `json:"command"`
 	Env       map[string]string `json:"env"`
 	Resources Resources         `json:"resources"`
-	Ports     []Port            `json:"ports"`
+	Ports     []string          `json:"ports"`
 	Volumes   []Volume          `json:"volumes"`
 }
 
@@ -462,7 +462,7 @@ func ProtoToAppMetadata(protoMetadata *pbapp.AppMetadata) *AppMetadata {
 					Storage: protoMetadata.ContainerConfig.Resources.Requests.Storage,
 				},
 			},
-			Ports:   ProtoToPorts(protoMetadata.ContainerConfig.Ports),
+			Ports:   protoMetadata.ContainerConfig.Ports,
 			Volumes: ProtoToVolumes(protoMetadata.ContainerConfig.Volumes),
 		},
 		ContactInfo: ContactInfo{
@@ -493,7 +493,7 @@ func AppMetadataToProto(metadata *AppMetadata) *pbapp.AppMetadata {
 					Storage: metadata.ContainerConfig.Resources.Requests.Storage,
 				},
 			},
-			Ports:   PortsToProto(metadata.ContainerConfig.Ports),
+			Ports:   metadata.ContainerConfig.Ports,
 			Volumes: VolumesToProto(metadata.ContainerConfig.Volumes),
 		},
 		ContactInfo: &pbapp.ContactInfo{

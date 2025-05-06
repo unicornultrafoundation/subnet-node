@@ -65,7 +65,7 @@ message ContainerConfig {
   repeated string command = 2;
   map<string, string> env = 3;
   Resources resources = 4;
-  repeated Port ports = 5;
+  repeated string ports = 5;
   repeated Volume volumes = 6;
 }
 

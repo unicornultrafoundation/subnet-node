@@ -33,7 +33,7 @@ type ProxyConfig struct {
 	Peers  []ProxyPeer `yaml:"peers"`
 }
 
-func ParseProxyConfig(data map[interface{}]interface{}) (ProxyConfig, error) {
+func ParseProxyConfig(data map[string]any) (ProxyConfig, error) {
 	proxyConfig := ProxyConfig{}
 
 	// Parse "enable" field
@@ -42,9 +42,9 @@ func ParseProxyConfig(data map[interface{}]interface{}) (ProxyConfig, error) {
 	}
 
 	// Parse "peers" field
-	if peers, ok := data["peers"].([]interface{}); ok {
+	if peers, ok := data["peers"].([]any); ok {
 		for _, p := range peers {
-			peerMap, ok := p.(map[interface{}]interface{})
+			peerMap, ok := p.(map[string]any)
 			if !ok {
 				continue
 			}
@@ -60,9 +60,9 @@ func ParseProxyConfig(data map[interface{}]interface{}) (ProxyConfig, error) {
 			}
 
 			// Parse "apps" field
-			if apps, ok := peerMap["apps"].([]interface{}); ok {
+			if apps, ok := peerMap["apps"].([]any); ok {
 				for _, a := range apps {
-					appMap, ok := a.(map[interface{}]interface{})
+					appMap, ok := a.(map[string]any)
 					if !ok {
 						continue
 					}
@@ -77,7 +77,7 @@ func ParseProxyConfig(data map[interface{}]interface{}) (ProxyConfig, error) {
 					}
 
 					// Parse "ports" field
-					if ports, ok := appMap["ports"].([]interface{}); ok {
+					if ports, ok := appMap["ports"].([]any); ok {
 						for _, port := range ports {
 							if portStr, ok := port.(string); ok {
 								app.Ports = append(app.Ports, portStr)

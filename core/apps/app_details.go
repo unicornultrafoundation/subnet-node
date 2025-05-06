@@ -32,11 +32,11 @@ func (s *Service) GetApp(ctx context.Context, appId *big.Int) (*atypes.App, erro
 	app.Website = gitHubApp.Website
 	app.Metadata.ContainerConfig = gitHubApp.Container
 
-	// Retrieve metadata from datastore if available
-	metadata, err := s.GetContainerConfigProto(ctx, appId)
-	if err == nil {
-		app.Metadata.ContainerConfig.Env = metadata.ContainerConfig.Env
-	}
+	// // Retrieve metadata from datastore if available
+	// metadata, err := s.GetContainerConfigProto(ctx, appId)
+	// if err == nil {
+	// 	app.Metadata.ContainerConfig.Env = metadata.ContainerConfig.Env
+	// }
 
 	// Fetch the current status of the container
 	appStatus, err := s.GetContainerStatus(ctx, appId)

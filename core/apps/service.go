@@ -48,19 +48,15 @@ const RESOURCE_USAGE_KEY = "resource-usage-v2"
 type Service struct {
 	mu                    sync.Mutex
 	peerId                peer.ID
-	IsProvider            bool
-	IsVerifier            bool
 	cfg                   *config.C
 	ethClient             *ethclient.Client
 	dockerClient          docker.DockerClient
-	dockerService         *docker.Service
 	P2P                   *p2p.P2P
 	PeerHost              p2phost.Host  `optional:"true"` // the network host (server+client)
 	stopChan              chan struct{} // Channel to stop background tasks
 	accountService        *account.AccountService
 	statService           *stats.Stats
 	Datastore             datastore.Datastore // Datastore for storing resource usage
-	verifier              *verifier.Verifier  // Verifier for resource usage
 	pow                   *verifier.Pow       // Proof of Work for resource usage
 	signatureResponseChan chan *pvtypes.SignatureResponse
 	dht                   *dht.IpfsDHT
@@ -91,8 +87,6 @@ func New(peerHost p2phost.Host, peerId peer.ID, cfg *config.C, P2P *p2p.P2P, ds 
 		P2P:                   P2P,
 		cfg:                   cfg,
 		Datastore:             ds,
-		IsProvider:            cfg.GetBool("provider.enable", false),
-		IsVerifier:            cfg.GetBool("verifier.enable", false),
 		stopChan:              make(chan struct{}),
 		accountService:        acc,
 		ethClient:             acc.GetClient(),
@@ -112,35 +106,24 @@ func (s *Service) Start(ctx context.Context) error {
 		// Continue anyway, as this is not a fatal error
 	}
 
-	if s.IsVerifier {
-		s.verifier = verifier.NewVerifier(s.Datastore, s.PeerHost, s.P2P, s.accountService)
-		// Register the P2P protocol for signing
-		if err := s.verifier.Register(); err != nil {
-			return fmt.Errorf("failed to register signing protocol: %w", err)
-		}
+	s.pow = verifier.NewPow(verifier.NodeProvider, s.PeerHost, s.P2P)
+	s.PeerHost.SetStreamHandler(atypes.ProtocollAppSignatureReceive, s.onSignatureReceive)
+
+	// Connect to docker daemon
+	enableProxy := s.cfg.GetBool("provider.proxy", true)
+	if enableProxy {
+		s.RegisterReverseProxyHandler()
 	}
+	s.statService = stats.NewStats(ctx, s.dockerClient)
 
-	if s.IsProvider {
-		s.pow = verifier.NewPow(verifier.NodeProvider, s.PeerHost, s.P2P)
-		s.PeerHost.SetStreamHandler(atypes.ProtocollAppSignatureReceive, s.onSignatureReceive)
+	s.RestartInactiveApps(ctx)
+	s.upgradeAppVersion(ctx)
 
-		// Connect to docker daemon
-		enableProxy := s.cfg.GetBool("provider.proxy", true)
-		if enableProxy {
-			s.RegisterReverseProxyHandler()
-		}
-		s.statService = stats.NewStats(ctx, s.dockerClient)
-
-		s.RestartInactiveApps(ctx)
-		s.upgradeAppVersion(ctx)
-
-		// Start app sub-services
-		go s.startUpgradeAppVersion(ctx)
-		go s.statService.Start()
-		go s.startReportLoop(ctx)
-		go s.handleSignatureResponses(ctx)
-
-	}
+	// Start app sub-services
+	go s.startUpgradeAppVersion(ctx)
+	go s.statService.Start()
+	go s.startReportLoop(ctx)
+	go s.handleSignatureResponses(ctx)
 
 	log.Info("Subnet Apps Service started successfully.")
 	return nil

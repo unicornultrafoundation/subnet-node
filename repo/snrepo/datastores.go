@@ -17,7 +17,7 @@ import (
 )
 
 // ConfigFromMap creates a new datastore config from a map.
-type ConfigFromMap func(map[interface{}]interface{}) (DatastoreConfig, error)
+type ConfigFromMap func(map[string]any) (DatastoreConfig, error)
 
 // DatastoreConfig is an abstraction of a datastore config.  A "spec"
 // is first converted to a DatastoreConfig and then Create() is called
@@ -79,7 +79,7 @@ func AddDatastoreConfigHandler(name string, dsc ConfigFromMap) error {
 
 // AnyDatastoreConfig returns a DatastoreConfig from a spec based on
 // the "type" parameter.
-func AnyDatastoreConfig(params map[interface{}]interface{}) (DatastoreConfig, error) {
+func AnyDatastoreConfig(params map[string]any) (DatastoreConfig, error) {
 	which, ok := params["type"].(string)
 	if !ok {
 		return nil, fmt.Errorf("'type' field missing or not a string")
@@ -101,14 +101,14 @@ type premount struct {
 }
 
 // MountDatastoreConfig returns a mount DatastoreConfig from a spec.
-func MountDatastoreConfig(params map[interface{}]interface{}) (DatastoreConfig, error) {
+func MountDatastoreConfig(params map[string]any) (DatastoreConfig, error) {
 	var res mountDatastoreConfig
-	mounts, ok := params["mounts"].([]interface{})
+	mounts, ok := params["mounts"].([]any)
 	if !ok {
 		return nil, fmt.Errorf("'mounts' field is missing or not an array")
 	}
 	for _, iface := range mounts {
-		cfg, ok := iface.(map[interface{}]interface{})
+		cfg, ok := iface.(map[string]any)
 		if !ok {
 			return nil, fmt.Errorf("expected map for mountpoint")
 		}
@@ -165,11 +165,11 @@ func (c *mountDatastoreConfig) Create(path string) (repo.Datastore, error) {
 }
 
 type memDatastoreConfig struct {
-	cfg map[interface{}]interface{}
+	cfg map[string]any
 }
 
 // MemDatastoreConfig returns a memory DatastoreConfig from a spec.
-func MemDatastoreConfig(params map[interface{}]interface{}) (DatastoreConfig, error) {
+func MemDatastoreConfig(params map[string]any) (DatastoreConfig, error) {
 	return &memDatastoreConfig{params}, nil
 }
 
@@ -187,8 +187,8 @@ type logDatastoreConfig struct {
 }
 
 // LogDatastoreConfig returns a log DatastoreConfig from a spec.
-func LogDatastoreConfig(params map[interface{}]interface{}) (DatastoreConfig, error) {
-	childField, ok := params["child"].(map[interface{}]interface{})
+func LogDatastoreConfig(params map[string]any) (DatastoreConfig, error) {
+	childField, ok := params["child"].(map[string]any)
 	if !ok {
 		return nil, fmt.Errorf("'child' field is missing or not a map")
 	}
@@ -221,8 +221,8 @@ type measureDatastoreConfig struct {
 }
 
 // MeasureDatastoreConfig returns a measure DatastoreConfig from a spec.
-func MeasureDatastoreConfig(params map[interface{}]interface{}) (DatastoreConfig, error) {
-	childField, ok := params["child"].(map[interface{}]interface{})
+func MeasureDatastoreConfig(params map[string]any) (DatastoreConfig, error) {
+	childField, ok := params["child"].(map[string]any)
 	if !ok {
 		return nil, fmt.Errorf("'child' field is missing or not a map")
 	}
@@ -255,7 +255,7 @@ type leveldsDatastoreConfig struct {
 }
 
 // MemDatastoreConfig returns a memory DatastoreConfig from a spec.
-func LevelDatastoreConfig(params map[interface{}]interface{}) (DatastoreConfig, error) {
+func LevelDatastoreConfig(params map[string]any) (DatastoreConfig, error) {
 	var c leveldsDatastoreConfig
 	var ok bool
 
