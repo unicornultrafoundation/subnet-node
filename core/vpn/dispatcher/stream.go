@@ -4,27 +4,12 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/api"
 )
-
-// streamTimeMutex is used to protect access to stream creation time fields
-var streamTimeMutex sync.Mutex
-
-// updateStreamCreationTimes updates the oldest and newest stream creation times atomically
-func updateStreamCreationTimes(d *Dispatcher, now time.Time) {
-	streamTimeMutex.Lock()
-	defer streamTimeMutex.Unlock()
-
-	if d.oldestStreamCreationTime.After(now) {
-		d.oldestStreamCreationTime = now
-	}
-	d.newestStreamCreationTime = now
-}
 
 // extractPeerID extracts the peer ID from a stream ID (format: peerID/queueID)
 func extractPeerID(streamID string) string {
@@ -64,23 +49,6 @@ func (d *Dispatcher) getOrCreateStreamWithID(ctx context.Context, peerID peer.ID
 	now := time.Now()
 	d.streams.Store(streamID, stream)
 	d.lastUsed.Store(streamID, now)
-
-	// Track stream creation metrics - atomic for counter
-	d.streamsCreated.Add(1)
-
-	// Extract peer ID from stream ID
-	peerStr := extractPeerID(streamID)
-
-	// Update active streams count by peer using sync.Map
-	activeVal, _ := d.activeStreamsByPeer.LoadOrStore(peerStr, &atomic.Uint64{})
-	activeCounter := activeVal.(*atomic.Uint64)
-	activeCounter.Add(1)
-
-	// Track stream creation time using sync.Map
-	d.streamCreationTimes.Store(streamID, now)
-
-	// Update oldest and newest stream creation times atomically
-	updateStreamCreationTimes(d, now)
 
 	return stream, nil
 }
@@ -161,20 +129,7 @@ func (d *Dispatcher) performStreamCleanup() {
 			d.streams.Delete(streamID)
 			d.lastUsed.Delete(streamID)
 
-			// Update metrics for stream closure - atomic for counter
-			d.streamsClosed.Add(1)
 			closedCount.Add(1)
-
-			// Update active streams count by peer using sync.Map
-			if val, ok := d.activeStreamsByPeer.Load(peerInfo); ok {
-				counter := val.(*atomic.Uint64)
-				if counter.Load() > 0 {
-					counter.Add(^uint64(0)) // Subtract 1 (using bitwise complement of 0)
-				}
-			}
-
-			// Remove stream creation time using sync.Map
-			d.streamCreationTimes.Delete(streamID)
 
 			// Increment batch counter
 			batch++
