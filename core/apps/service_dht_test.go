@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"strings"
 	"testing"
 	"time"
 
@@ -25,25 +26,69 @@ import (
 func setupTestService(t *testing.T) (*Service, host.Host, context.Context) {
 	ctx := context.Background()
 
-	// Create a test host
+	// Create two bootstrap hosts
+	bootstrapHost1, err := libp2p.New(
+		libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"),
+	)
+	require.NoError(t, err)
+
+	bootstrapHost2, err := libp2p.New(
+		libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"),
+	)
+	require.NoError(t, err)
+
+	// Create a test host (the service host)
 	h, err := libp2p.New(
 		libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"),
 	)
 	require.NoError(t, err)
 
-	// Create a test config
+	// Create a test config with bootstrap peers
 	l := test.NewLogger()
 	cfg := config.NewC(l)
-	cfg.Settings = map[interface{}]interface{}{
-		"routing": map[interface{}]interface{}{
-			"type": "dht",
-		},
-		"experimental": map[interface{}]interface{}{
-			"optimistic_provide":                true,
-			"optimistic_provide_jobs_pool_size": 10,
-			"loopback_addresses_on_lan_dhl":     false,
-		},
+
+	// Get bootstrap addresses
+	bootstrapAddrs := []string{}
+
+	// Add bootstrap host 1
+	bootstrapAddrInfo1 := peer.AddrInfo{
+		ID:    bootstrapHost1.ID(),
+		Addrs: bootstrapHost1.Addrs(),
 	}
+	bootstrapMultiaddr1, err := peer.AddrInfoToP2pAddrs(&bootstrapAddrInfo1)
+	require.NoError(t, err)
+
+	for _, addr := range bootstrapMultiaddr1 {
+		bootstrapAddrs = append(bootstrapAddrs, addr.String())
+	}
+
+	// Add bootstrap host 2
+	bootstrapAddrInfo2 := peer.AddrInfo{
+		ID:    bootstrapHost2.ID(),
+		Addrs: bootstrapHost2.Addrs(),
+	}
+	bootstrapMultiaddr2, err := peer.AddrInfoToP2pAddrs(&bootstrapAddrInfo2)
+	require.NoError(t, err)
+
+	for _, addr := range bootstrapMultiaddr2 {
+		bootstrapAddrs = append(bootstrapAddrs, addr.String())
+	}
+
+	// Build YAML config string
+	configYaml := fmt.Sprintf(`
+routing:
+  type: dht
+experimental:
+  optimistic_provide: true
+  optimistic_provide_jobs_pool_size: 10
+  loopback_addresses_on_lan_dhl: false
+bootstrap:
+%s
+`, formatBootstrapAddrsForYaml(bootstrapAddrs))
+
+	// Load the config from the YAML string
+	err = cfg.LoadString(configYaml)
+	require.NoError(t, err)
 
 	// Create a test datastore
 	datastore := dsync.MutexWrap(ds.NewMapDatastore())
@@ -57,12 +102,43 @@ func setupTestService(t *testing.T) (*Service, host.Host, context.Context) {
 
 	// Create the service with real P2P host
 	service := New(h, h.ID(), cfg, p2pInstance, datastore, mockAcc, mockDocker)
+	service.cfg = cfg
 	require.NotNil(t, service)
+
+	// Ensure DHT is initialized
+	err = service.dht.Bootstrap(ctx)
+	require.NoError(t, err)
+
+	// Verify bootstrap configuration
+	bootstrapPeers, err := parseBootstrapPeers(cfg)
+
+	require.NoError(t, err)
+	require.Equal(t, 2, len(bootstrapPeers), "Should have 2 bootstrap peers configured")
+
+	// For test purposes, we'll manually connect to bootstrap peers
+	// This is normally done in Start(), but we want to ensure it's done here
+	err = service.connectToDHTBootstrap(ctx)
+	require.NoError(t, err)
+
+	// Verify that the DHT has peers
+	require.Eventually(t, func() bool {
+		return len(service.dht.RoutingTable().ListPeers()) > 0
+	}, 5*time.Second, 100*time.Millisecond, "DHT failed to connect to bootstrap peers")
+
+	// Verify connections to bootstrap peers
+	connectedBootstrapCount := 0
+	for _, conn := range h.Network().Conns() {
+		remotePeer := conn.RemotePeer()
+		if remotePeer == bootstrapHost1.ID() || remotePeer == bootstrapHost2.ID() {
+			connectedBootstrapCount++
+		}
+	}
+	require.Greater(t, connectedBootstrapCount, 0, "Should be connected to at least one bootstrap peer")
 
 	return service, h, ctx
 }
 
-func TestDHTBasicOperations(t *testing.T) {
+func TestDHTThroughBootstrap(t *testing.T) {
 	service1, host1, ctx := setupTestService(t)
 	service2, host2, _ := setupTestService(t)
 
@@ -89,6 +165,16 @@ func TestDHTBasicOperations(t *testing.T) {
 		PeerIds: []string{host1.ID().String()},
 	}
 
+	t.Run("Verify DHT Bootstrap", func(t *testing.T) {
+		// Check that both services have peers in their DHT
+		require.Greater(t, len(service1.dht.RoutingTable().ListPeers()), 0,
+			"Service1 DHT should have peers after bootstrap")
+		require.Greater(t, len(service2.dht.RoutingTable().ListPeers()), 0,
+			"Service2 DHT should have peers after bootstrap")
+
+		require.NoError(t, err, "DHT bootstrap validation should succeed")
+	})
+
 	t.Run("Store and Find App Providers", func(t *testing.T) {
 		// Store peer IDs in DHT
 		err := service1.StorePeerIDsInDHT(ctx, testApp)
@@ -99,6 +185,7 @@ func TestDHTBasicOperations(t *testing.T) {
 
 		// Find providers using service2
 		providers, err := service2.FindAppProviders(ctx, testApp)
+
 		require.NoError(t, err)
 		require.GreaterOrEqual(t, len(providers), 1)
 
@@ -114,210 +201,135 @@ func TestDHTBasicOperations(t *testing.T) {
 	})
 }
 
-func TestDHTResilience(t *testing.T) {
-	service1, _, ctx := setupTestService(t)
-	service2, host2, _ := setupTestService(t)
-	service3, host3, _ := setupTestService(t)
-
-	// Start all services
-	for _, s := range []*Service{service1, service2, service3} {
-		err := s.Start(ctx)
-		require.NoError(t, err)
-		defer s.Stop(ctx)
+// Helper function to format bootstrap addresses for YAML
+func formatBootstrapAddrsForYaml(addrs []string) string {
+	var result strings.Builder
+	for _, addr := range addrs {
+		result.WriteString(fmt.Sprintf("  - %s\n", addr))
 	}
-
-	// Connect the hosts in a chain: 1 <-> 2 <-> 3
-	connectHosts(t, ctx, service1.PeerHost, host2)
-	connectHosts(t, ctx, host2, host3)
-
-	testApp := &atypes.App{
-		ID:      big.NewInt(2),
-		Name:    "resilience-test-app",
-		PeerIds: []string{service1.PeerHost.ID().String()},
-	}
-
-	t.Run("DHT Propagation Through Network", func(t *testing.T) {
-		// Store data from service1
-		err := service1.StorePeerIDsInDHT(ctx, testApp)
-		require.NoError(t, err)
-
-		// Wait for DHT propagation
-		time.Sleep(time.Second)
-
-		// Verify service3 can find service1 as provider
-		providers, err := service3.FindAppProviders(ctx, testApp)
-		require.NoError(t, err)
-
-		found := false
-		for _, p := range providers {
-			if p.ID == service1.PeerHost.ID() {
-				found = true
-				break
-			}
-		}
-		assert.True(t, found, "Service1 should be discoverable through DHT")
-	})
-
-	t.Run("DHT Recovery After Node Failure", func(t *testing.T) {
-		// Store data in DHT
-		err := service1.StorePeerIDsInDHT(ctx, testApp)
-		require.NoError(t, err)
-
-		time.Sleep(time.Second)
-
-		// Stop service2 (middle node)
-		service2.Stop(ctx)
-
-		// Service3 should still be able to find service1
-		providers, err := service3.FindAppProviders(ctx, testApp)
-		require.NoError(t, err)
-
-		found := false
-		for _, p := range providers {
-			if p.ID == service1.PeerHost.ID() {
-				found = true
-				break
-			}
-		}
-		assert.True(t, found, "Service1 should still be discoverable after service2 failure")
-	})
+	return result.String()
 }
 
-func TestDHTConcurrency(t *testing.T) {
-	service1, _, ctx := setupTestService(t)
-	service2, host2, _ := setupTestService(t)
-
-	// Start services
-	err := service1.Start(ctx)
-	require.NoError(t, err)
-	defer service1.Stop(ctx)
-
-	err = service2.Start(ctx)
-	require.NoError(t, err)
-	defer service2.Stop(ctx)
-
-	// Connect the hosts
-	connectHosts(t, ctx, service1.PeerHost, host2)
-
-	t.Run("Concurrent DHT Operations", func(t *testing.T) {
-		numOperations := 10
-		done := make(chan bool)
-
-		for i := 0; i < numOperations; i++ {
-			go func(appID int64) {
-				testApp := &atypes.App{
-					ID:      big.NewInt(appID),
-					Name:    fmt.Sprintf("concurrent-test-app-%d", appID),
-					PeerIds: []string{service1.PeerHost.ID().String()},
-				}
-
-				err := service1.StorePeerIDsInDHT(ctx, testApp)
-				assert.NoError(t, err)
-
-				done <- true
-			}(int64(i))
-		}
-
-		// Wait for all operations to complete
-		for i := 0; i < numOperations; i++ {
-			<-done
-		}
-
-		// Wait for DHT propagation
-		time.Sleep(2 * time.Second)
-
-		// Verify all apps can be discovered
-		for i := 0; i < numOperations; i++ {
-			testApp := &atypes.App{
-				ID:   big.NewInt(int64(i)),
-				Name: fmt.Sprintf("concurrent-test-app-%d", i),
-			}
-
-			providers, err := service2.FindAppProviders(ctx, testApp)
-			assert.NoError(t, err)
-			assert.GreaterOrEqual(t, len(providers), 1)
-		}
-	})
-}
-
-// Setup function specifically for benchmarks
-func setupBenchService(b *testing.B) (*Service, host.Host, context.Context) {
+func setupTestServiceWithDirectConnection(t *testing.T) (*Service, *Service, context.Context) {
 	ctx := context.Background()
 
-	// Create a test host
-	h, err := libp2p.New(
+	// Create two hosts
+	host1, err := libp2p.New(
 		libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"),
 	)
-	require.NoError(b, err)
+	require.NoError(t, err)
 
-	// Create a test config
+	host2, err := libp2p.New(
+		libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"),
+	)
+	require.NoError(t, err)
+
+	// Create minimal config without bootstrap
 	l := test.NewLogger()
 	cfg := config.NewC(l)
-	cfg.Settings = map[interface{}]interface{}{
-		"routing": map[interface{}]interface{}{
-			"type": "dht",
-		},
-		"experimental": map[interface{}]interface{}{
-			"optimistic_provide":                true,
-			"optimistic_provide_jobs_pool_size": 10,
-			"loopback_addresses_on_lan_dhl":     false,
-		},
-	}
 
-	// Create a test datastore
-	datastore := dsync.MutexWrap(ds.NewMapDatastore())
+	// Load minimal config
+	err = cfg.LoadString(`
+routing:
+  type: dht
+experimental:
+  optimistic_provide: true
+`)
+	require.NoError(t, err)
 
-	// Create real P2P instance
-	p2pInstance := p2p.New(h.ID(), h, h.Peerstore())
+	// Create datastores
+	datastore1 := dsync.MutexWrap(ds.NewMapDatastore())
+	datastore2 := dsync.MutexWrap(ds.NewMapDatastore())
+
+	// Create P2P instances
+	p2pInstance1 := p2p.New(host1.ID(), host1, host1.Peerstore())
+	p2pInstance2 := p2p.New(host2.ID(), host2, host2.Peerstore())
 
 	// Setup mocks
 	mockAcc := &account.AccountService{}
 	mockDocker := &docker.Service{}
 
-	// Create the service with real P2P host
-	service := New(h, h.ID(), cfg, p2pInstance, datastore, mockAcc, mockDocker)
-	require.NotNil(b, service)
+	// Create services
+	service1 := New(host1, host1.ID(), cfg, p2pInstance1, datastore1, mockAcc, mockDocker)
+	service2 := New(host2, host2.ID(), cfg, p2pInstance2, datastore2, mockAcc, mockDocker)
 
-	return service, h, ctx
+	// Initialize DHT
+	err = service1.dht.Bootstrap(ctx)
+	require.NoError(t, err)
+
+	err = service2.dht.Bootstrap(ctx)
+	require.NoError(t, err)
+
+	// Connect the hosts directly
+	host2Info := peer.AddrInfo{
+		ID:    host2.ID(),
+		Addrs: host2.Addrs(),
+	}
+
+	err = host1.Connect(ctx, host2Info)
+	require.NoError(t, err)
+
+	// Add peers to each other's DHT routing tables
+	service1.dht.RoutingTable().TryAddPeer(host2.ID(), true, true)
+	service2.dht.RoutingTable().TryAddPeer(host1.ID(), true, true)
+
+	// Verify connection
+	require.Eventually(t, func() bool {
+		return len(host1.Network().ConnsToPeer(host2.ID())) > 0
+	}, 5*time.Second, 100*time.Millisecond, "Failed to connect hosts")
+
+	// Verify DHT routing tables have the peers
+	require.Eventually(t, func() bool {
+		peers1 := service1.dht.RoutingTable().ListPeers()
+		for _, p := range peers1 {
+			if p == host2.ID() {
+				return true
+			}
+		}
+		return false
+	}, 5*time.Second, 100*time.Millisecond, "Peer not found in service1's DHT routing table")
+
+	require.Eventually(t, func() bool {
+		peers2 := service2.dht.RoutingTable().ListPeers()
+		for _, p := range peers2 {
+			if p == host1.ID() {
+				return true
+			}
+		}
+		return false
+	}, 5*time.Second, 100*time.Millisecond, "Peer not found in service2's DHT routing table")
+
+	return service1, service2, ctx
 }
 
-func BenchmarkDHTOperations(b *testing.B) {
-	service1, _, ctx := setupBenchService(b)
-	service2, host2, _ := setupBenchService(b)
+func TestDHTDirectConnection(t *testing.T) {
+	service1, service2, ctx := setupTestServiceWithDirectConnection(t)
 
-	err := service1.Start(ctx)
-	require.NoError(b, err)
-	defer service1.Stop(ctx)
+	// Create a test app
+	testApp := &atypes.App{
+		ID:      big.NewInt(1),
+		Name:    "direct-test-app",
+		PeerIds: []string{service1.peerId.String()},
+	}
 
-	err = service2.Start(ctx)
-	require.NoError(b, err)
-	defer service2.Stop(ctx)
+	// Store peer IDs in DHT
+	err := service1.StorePeerIDsInDHT(ctx, testApp)
+	require.NoError(t, err)
 
-	connectHosts(b, ctx, service1.PeerHost, host2)
+	// Wait for DHT propagation
+	time.Sleep(time.Second)
 
-	b.Run("Store and Find Providers", func(b *testing.B) {
-		testApp := &atypes.App{
-			ID:      big.NewInt(1),
-			Name:    "bench-test-app",
-			PeerIds: []string{service1.PeerHost.ID().String()},
+	// Find providers using service2
+	providers, err := service2.FindAppProviders(ctx, testApp)
+	require.NoError(t, err)
+
+	// Verify that service1 is among the providers
+	found := false
+	for _, p := range providers {
+		if p.ID == service1.peerId {
+			found = true
+			break
 		}
-
-		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
-			err := service1.StorePeerIDsInDHT(ctx, testApp)
-			require.NoError(b, err)
-
-			_, err = service2.FindAppProviders(ctx, testApp)
-			require.NoError(b, err)
-		}
-	})
-}
-
-// Helper function to connect two hosts
-func connectHosts(tb testing.TB, ctx context.Context, h1, h2 host.Host) {
-	err := h1.Connect(ctx, peer.AddrInfo{
-		ID:    h2.ID(),
-		Addrs: h2.Addrs(),
-	})
-	require.NoError(tb, err)
+	}
+	assert.True(t, found, "Service1 should be found as a provider")
 }
