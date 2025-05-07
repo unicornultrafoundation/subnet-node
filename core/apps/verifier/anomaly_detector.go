@@ -48,7 +48,7 @@ func (a *AnomalyDetector) computeMeanStd() {
 	// Collect data
 	for _, log := range a.Logs {
 		peerStats["CPU"] = append(peerStats["CPU"], float64(log.Cpu))
-		peerStats["GPU"] = append(peerStats["GPU"], float64(log.Cpu))
+		peerStats["GPU"] = append(peerStats["GPU"], float64(log.Gpu))
 		peerStats["Memory"] = append(peerStats["Memory"], float64(log.Memory))
 		peerStats["UploadBytes"] = append(peerStats["UploadBytes"], float64(log.UploadBytes))
 		peerStats["DownloadBytes"] = append(peerStats["DownloadBytes"], float64(log.DownloadBytes))
