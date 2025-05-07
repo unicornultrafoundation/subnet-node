@@ -15,6 +15,7 @@ import (
 
 	"github.com/dustin/go-humanize"
 	"github.com/gogo/protobuf/proto"
+	ddht "github.com/libp2p/go-libp2p-kad-dht/dual"
 	"github.com/patrickmn/go-cache"
 	"github.com/shirou/gopsutil/cpu"
 	"github.com/shirou/gopsutil/disk"
@@ -22,10 +23,10 @@ import (
 
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ipfs/go-datastore"
-	dht "github.com/libp2p/go-libp2p-kad-dht"
 	p2phost "github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/sirupsen/logrus"
+	"github.com/unicornultrafoundation/subnet-node/common/cidutil"
 	"github.com/unicornultrafoundation/subnet-node/config"
 	"github.com/unicornultrafoundation/subnet-node/core/account"
 	"github.com/unicornultrafoundation/subnet-node/core/apps/verifier"
@@ -33,7 +34,6 @@ import (
 
 	"github.com/moby/moby/errdefs"
 
-	ma "github.com/multiformats/go-multiaddr"
 	"github.com/unicornultrafoundation/subnet-node/core/apps/stats"
 	atypes "github.com/unicornultrafoundation/subnet-node/core/apps/types"
 	"github.com/unicornultrafoundation/subnet-node/p2p"
@@ -59,7 +59,8 @@ type Service struct {
 	Datastore             datastore.Datastore // Datastore for storing resource usage
 	pow                   *verifier.Pow       // Proof of Work for resource usage
 	signatureResponseChan chan *pvtypes.SignatureResponse
-	dht                   *dht.IpfsDHT
+
+	dht *ddht.DHT `optional:"true"`
 
 	// Caching fields
 	gitHubAppCache  *cache.Cache
@@ -68,18 +69,7 @@ type Service struct {
 }
 
 // Initializes the Service with Ethereum and docker clients.
-func New(peerHost p2phost.Host, peerId peer.ID, cfg *config.C, P2P *p2p.P2P, ds datastore.Datastore, acc *account.AccountService, docker *docker.Service) *Service {
-
-	dhtOpts := []dht.Option{
-		dht.Mode(dht.ModeServer),
-		dht.ProtocolPrefix("/subnet-dht"), // Use a consistent protocol prefix
-	}
-
-	// Create new DHT instance
-	kadDHT, err := dht.New(context.Background(), peerHost, dhtOpts...)
-	if err != nil {
-		panic(err)
-	}
+func New(peerHost p2phost.Host, peerId peer.ID, cfg *config.C, P2P *p2p.P2P, ds datastore.Datastore, acc *account.AccountService, docker *docker.Service, DHT *ddht.DHT) *Service {
 
 	return &Service{
 		peerId:                peerId,
@@ -95,16 +85,11 @@ func New(peerHost p2phost.Host, peerId peer.ID, cfg *config.C, P2P *p2p.P2P, ds 
 		gitHubAppCache:        cache.New(1*time.Minute, 2*time.Minute),
 		subnetAppCache:        cache.New(1*time.Minute, 2*time.Minute),
 		gitHubAppsCache:       cache.New(1*time.Minute, 2*time.Minute),
-		dht:                   kadDHT,
+		dht:                   DHT,
 	}
 }
 
 func (s *Service) Start(ctx context.Context) error {
-	// Connect to bootstrap peers for DHT
-	if err := s.connectToDHTBootstrap(ctx); err != nil {
-		log.Warnf("Failed to connect to bootstrap peers: %v", err)
-		// Continue anyway, as this is not a fatal error
-	}
 
 	s.pow = verifier.NewPow(verifier.NodeProvider, s.PeerHost, s.P2P)
 	s.PeerHost.SetStreamHandler(atypes.ProtocollAppSignatureReceive, s.onSignatureReceive)
@@ -432,18 +417,10 @@ func (s *Service) getNodeResourceUsage() (atypes.ResourceUsage, error) {
 
 func (s *Service) StorePeerIDsInDHT(ctx context.Context, app *atypes.App) error {
 	// Get DHT key
-	cid, err := app.GenerateCID()
+	cid, err := cidutil.GenerateCID(app.ID.Bytes())
+
 	if err != nil {
 		return fmt.Errorf("failed to generate DHT key: %w", err)
-	}
-
-	// Check if we have peers in the DHT routing table
-	peers := s.dht.RoutingTable().ListPeers()
-	if len(peers) == 0 {
-		log.Warn("No peers in DHT routing table, DHT operations may not work")
-		// Continue anyway, we'll try to provide
-	} else {
-		log.Infof("DHT routing table has %d peers", len(peers))
 	}
 
 	// Provide the CID to the DHT
@@ -455,21 +432,11 @@ func (s *Service) StorePeerIDsInDHT(ctx context.Context, app *atypes.App) error 
 	return nil
 }
 
-func (s *Service) FindAppProviders(ctx context.Context, app *atypes.App) ([]peer.AddrInfo, error) {
+func (s *Service) FindAppProviders(ctx context.Context, appId *big.Int) ([]peer.AddrInfo, error) {
 	// Get DHT key
-	cid, err := app.GenerateCID()
+	cid, err := cidutil.GenerateCID(appId.Bytes())
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate DHT key: %w", err)
-	}
-
-	// Check if we have peers in the DHT routing table
-	peers := s.dht.RoutingTable().ListPeers()
-
-	if len(peers) == 0 {
-		log.Warn("No peers in DHT routing table, DHT operations may not work")
-		// Continue anyway, we'll try to find providers
-	} else {
-		log.Infof("DHT routing table has %d peers", len(peers))
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
@@ -484,144 +451,4 @@ func (s *Service) FindAppProviders(ctx context.Context, app *atypes.App) ([]peer
 	}
 
 	return result, nil
-}
-
-// connectToDHTBootstrap connects to bootstrap peers from config and adds them to the DHT
-func (s *Service) connectToDHTBootstrap(ctx context.Context) error {
-	// Get bootstrap peers from config
-	bootstrapPeers, err := parseBootstrapPeers(s.cfg)
-	if err != nil {
-		return fmt.Errorf("failed to parse bootstrap peers: %w", err)
-	}
-
-	if len(bootstrapPeers) == 0 {
-		log.Warn("No bootstrap peers configured")
-		return nil
-	}
-
-	log.Infof("Connecting to %d bootstrap peers for DHT", len(bootstrapPeers))
-
-	// Track successful connections
-	var connectedCount int
-
-	// Connect to each bootstrap peer
-	for _, peer := range bootstrapPeers {
-		// Create a timeout context for the connection attempt
-		connectCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-
-		// Try to connect to the bootstrap peer
-		err := s.PeerHost.Connect(connectCtx, peer)
-		cancel()
-
-		if err != nil {
-			log.Debugf("Failed to connect to bootstrap peer %s: %v", peer.ID, err)
-			continue
-		}
-
-		log.Debugf("Connected to bootstrap peer: %s", peer.ID)
-		connectedCount++
-
-		// Add the peer to the DHT routing table directly
-		s.dht.RoutingTable().TryAddPeer(peer.ID, true, true)
-	}
-
-	// Check if we connected to any bootstrap peers
-	if connectedCount == 0 {
-		return fmt.Errorf("failed to connect to any bootstrap peers")
-	}
-
-	log.Infof("Successfully connected to %d/%d bootstrap peers", connectedCount, len(bootstrapPeers))
-
-	// Bootstrap the DHT
-	err = s.dht.Bootstrap(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to bootstrap DHT: %w", err)
-	}
-
-	// Wait a moment for the DHT to update its routing table
-	time.Sleep(1 * time.Second)
-
-	// Check if we have peers in the routing table
-	peers := s.dht.RoutingTable().ListPeers()
-	log.Infof("DHT routing table has %d peers after bootstrap", len(peers))
-
-	// If still no peers, try to manually add the bootstrap peers
-	if len(peers) == 0 {
-		log.Warn("No peers in DHT routing table after bootstrap, manually adding bootstrap peers")
-		for _, peer := range bootstrapPeers {
-			s.dht.RoutingTable().TryAddPeer(peer.ID, true, true)
-		}
-
-		// Check again
-		peers = s.dht.RoutingTable().ListPeers()
-		log.Infof("DHT routing table has %d peers after manual addition", len(peers))
-	}
-
-	return nil
-}
-
-// ParseBootstrapPeers parses a bootstrap list from the config into a list of AddrInfos.
-func parseBootstrapPeers(cfg *config.C) ([]peer.AddrInfo, error) {
-	return parsePeers(cfg, "bootstrap")
-}
-
-func parsePeers(cfg *config.C, k string) ([]peer.AddrInfo, error) {
-	// Retrieve the bootstrap list from config and check its type
-	rawBootstrap := cfg.GetStringSlice(k, []string{})
-	if len(rawBootstrap) == 0 {
-		return nil, fmt.Errorf("no %s peers found in config", k)
-	}
-
-	// Create a list of Multiaddr from the string addresses
-	maddrs := make([]ma.Multiaddr, len(rawBootstrap))
-	for i, addr := range rawBootstrap {
-		var err error
-		maddrs[i], err = ma.NewMultiaddr(addr)
-		if err != nil {
-			return nil, fmt.Errorf("invalid multiaddr at index %d (%s): %w", i, addr, err)
-		}
-	}
-
-	// Convert Multiaddr to AddrInfo
-	addrInfos, err := peer.AddrInfosFromP2pAddrs(maddrs...)
-	if err != nil {
-		return nil, fmt.Errorf("error converting to AddrInfo: %w", err)
-	}
-
-	return addrInfos, nil
-}
-
-// ConnectToPeer connects directly to a peer and adds it to the DHT routing table
-func (s *Service) ConnectToPeer(ctx context.Context, peerInfo peer.AddrInfo) error {
-	// Don't try to connect to self
-	if peerInfo.ID == s.peerId {
-		return nil
-	}
-
-	log.Infof("Connecting directly to peer: %s", peerInfo.ID)
-
-	// Connect to the peer
-	err := s.PeerHost.Connect(ctx, peerInfo)
-	if err != nil {
-		return fmt.Errorf("failed to connect to peer %s: %w", peerInfo.ID, err)
-	}
-
-	// Add the peer to the DHT routing table
-	added, err := s.dht.RoutingTable().TryAddPeer(peerInfo.ID, true, true)
-	if err != nil {
-		return fmt.Errorf("failed to add peer %s to routing table: %w", peerInfo.ID, err)
-	}
-	log.Debugf("Added peer %s to routing table: %v", peerInfo.ID, added)
-
-	// Bootstrap the DHT to ensure it's active
-	err = s.dht.Bootstrap(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to bootstrap DHT after connecting to peer: %w", err)
-	}
-
-	// Verify the peer is in the routing table
-	peers := s.dht.RoutingTable().ListPeers()
-	log.Infof("DHT routing table now has %d peers", len(peers))
-
-	return nil
 }

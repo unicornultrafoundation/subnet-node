@@ -3,14 +3,18 @@ package peers
 import (
 	"context"
 	"fmt"
+	"math/big"
 	"net/http"
+	"strings"
+	"time"
 
 	gql "github.com/Khan/genqlient/graphql"
+	ddht "github.com/libp2p/go-libp2p-kad-dht/dual"
 	p2phost "github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/sirupsen/logrus"
+	"github.com/unicornultrafoundation/subnet-node/common/cidutil"
 	"github.com/unicornultrafoundation/subnet-node/config"
-	"github.com/unicornultrafoundation/subnet-node/graphql"
 )
 
 var log = logrus.WithField("service", "peers")
@@ -21,15 +25,17 @@ type Service struct {
 	gqlUrl   string
 	client   gql.Client
 	enable   bool
+	dht      *ddht.DHT `optional:"true"`
 }
 
 // Initializes the Service
-func New(cfg *config.C, peerHost p2phost.Host) *Service {
+func New(cfg *config.C, peerHost p2phost.Host, dht *ddht.DHT) *Service {
 	return &Service{
 		cfg:      cfg,
 		PeerHost: peerHost,
 		gqlUrl:   cfg.GetString("subgraph.graphql_url", ""),
 		enable:   cfg.GetBool("subgraph.enable", false),
+		dht:      dht,
 	}
 }
 
@@ -66,30 +72,39 @@ func (s *Service) GetPeerMultiaddresses(peerID string) ([]string, error) {
 }
 
 func (s *Service) GetAppPeers(ctx context.Context, appId string) ([]PeerMultiAddress, error) {
-	var peers []PeerMultiAddress
+	appId = strings.TrimPrefix(appId, "0x")
 
-	peersData, err := graphql.GetAppPeers(ctx, s.client, appId)
+	appIdInt, ok := new(big.Int).SetString(appId, 16)
+	if !ok {
+		return nil, fmt.Errorf("invalid app id: %s", appId)
+	}
+
+	// Get DHT key
+	cid, err := cidutil.GenerateCID(appIdInt.Bytes())
 	if err != nil {
-		return peers, fmt.Errorf("failed to get app peers: %v", peersData)
+		return nil, fmt.Errorf("failed to generate DHT key: %w", err)
 	}
 
-	if len(peersData.AppPeers) == 0 {
-		return peers, nil
-	}
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
 
-	peers = make([]PeerMultiAddress, len(peersData.AppPeers))
+	providers := s.dht.FindProvidersAsync(ctx, cid, 100)
 
-	for index, peer := range peersData.AppPeers {
-		peers[index].PeerID = peer.Peer.PeerId
-
-		multiaddrs, err := s.GetPeerMultiaddresses(peer.Peer.PeerId)
+	// Collect providers
+	var result []PeerMultiAddress
+	for p := range providers {
+		multiAddrs, err := s.GetPeerMultiaddresses(p.ID.String())
 		if err != nil {
 			log.Debugf("failed to get multiaddrs for appId %v: %v", appId, err)
 			continue
 		}
 
-		peers[index].MultiAddresses = multiaddrs
+		result = append(result, PeerMultiAddress{
+			PeerID:         p.ID.String(),
+			MultiAddresses: multiAddrs,
+		})
 	}
 
-	return peers, nil
+	return result, nil
+
 }

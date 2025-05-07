@@ -119,8 +119,9 @@ func (s *Service) RunApp(ctx context.Context, appId *big.Int) (*atypes.App, erro
 
 	s.AddNewRunningApp(ctx, appId)
 
-	// save app to dht
-	s.StorePeerIDsInDHT(ctx, app)
+	if err := s.StorePeerIDsInDHT(ctx, app); err != nil {
+		return nil, fmt.Errorf("failed to store peer IDs in DHT: %w", err)
+	}
 
 	return app, nil
 }

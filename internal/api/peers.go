@@ -17,5 +17,6 @@ func NewPeersAPI(peersService *peers.Service) *PeersAPI {
 
 // GetPeers retrieves the Peers's Multiaddress of the appId
 func (api *PeersAPI) GetAppPeers(ctx context.Context, appId string) ([]peers.PeerMultiAddress, error) {
+
 	return api.peersService.GetAppPeers(ctx, appId)
 }

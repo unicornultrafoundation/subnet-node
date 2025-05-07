@@ -1,4 +1,4 @@
-package apps
+package cidutil
 
 import (
 	"fmt"
@@ -7,10 +7,9 @@ import (
 	"github.com/multiformats/go-multihash"
 )
 
-// GenerateCID creates a CID using only the app ID
-func (app *App) GenerateCID() (cid.Cid, error) {
-	idBytes := app.ID.Bytes()
-
+// GenerateCID creates a CID using the provided bytes
+// It uses SHA2-256 hash and DagCBOR codec by default
+func GenerateCID(idBytes []byte) (cid.Cid, error) {
 	mh, err := multihash.Sum(idBytes, multihash.SHA2_256, -1)
 	if err != nil {
 		return cid.Cid{}, fmt.Errorf("failed to create multihash: %w", err)

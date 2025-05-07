@@ -16,6 +16,7 @@ const APIPath = "/"
 func APIOption() ServeOption {
 	return func(n *core.SubnetNode, _ net.Listener, smux *http.ServeMux) (*http.ServeMux, error) {
 		capi, err := coreapi.NewCoreAPI(n)
+
 		if err != nil {
 			return nil, err
 		}
