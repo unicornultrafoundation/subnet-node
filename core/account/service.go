@@ -23,14 +23,16 @@ var log = logrus.WithField("service", "account")
 
 // AccountService is a service to handle Ethereum transactions
 type AccountService struct {
-	privateKey         *ecdsa.PrivateKey
-	client             *ethclient.Client
-	chainID            *big.Int
-	subnetProvider     *contracts.SubnetProvider
-	subnetProviderAddr string
-	subnetAppStore     *contracts.SubnetAppStore
-	subnetAppStoreAddr string
-	providerID         int64
+	privateKey           *ecdsa.PrivateKey
+	client               *ethclient.Client
+	chainID              *big.Int
+	subnetProvider       *contracts.SubnetProvider
+	subnetProviderAddr   string
+	subnetAppStore       *contracts.SubnetAppStore
+	subnetAppStoreAddr   string
+	subnetIPRegistry     *contracts.SubnetIPRegistry
+	subnetIPRegistryAddr string
+	providerID           int64
 }
 
 // NewAccountService initializes a new AccountService
@@ -68,14 +70,26 @@ func NewAccountService(cfg *config.C) (*AccountService, error) {
 		return nil, err
 	}
 
+	subnetIPRegistryAddr := cfg.GetString("apps.subnet_ip_registry", config.DefaultSubnetVerifier)
+	subnetIPRegistry, err := contracts.NewSubnetIPRegistry(
+		common.HexToAddress(subnetIPRegistryAddr),
+		client,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
 	s := &AccountService{
-		privateKey:         privateKey,
-		client:             client,
-		chainID:            chainID,
-		subnetProvider:     subnetRegistry,
-		subnetProviderAddr: subnetProviderAddr,
-		subnetAppStore:     subnetAppStore,
-		subnetAppStoreAddr: subnetAppStoreAddr,
+		privateKey:           privateKey,
+		client:               client,
+		chainID:              chainID,
+		subnetProvider:       subnetRegistry,
+		subnetProviderAddr:   subnetProviderAddr,
+		subnetAppStore:       subnetAppStore,
+		subnetAppStoreAddr:   subnetAppStoreAddr,
+		subnetIPRegistry:     subnetIPRegistry,
+		subnetIPRegistryAddr: subnetIPRegistryAddr,
 	}
 	s.updateProviderID(cfg)
 	s.registerReloadCallback(cfg)
@@ -120,6 +134,10 @@ func (s *AccountService) AppStore() *contracts.SubnetAppStore {
 	return s.subnetAppStore
 }
 
+func (s *AccountService) IPRegistry() *contracts.SubnetIPRegistry {
+	return s.subnetIPRegistry
+}
+
 func (s *AccountService) GetChainID() *big.Int {
 	return s.chainID
 }
@@ -130,6 +148,10 @@ func (s *AccountService) AppStoreAddr() string {
 
 func (s *AccountService) ProviderAddr() string {
 	return s.subnetProviderAddr
+}
+
+func (s *AccountService) IPRegistryAddr() string {
+	return s.subnetIPRegistryAddr
 }
 
 // GetAddress retrieves the Ethereum address from the private key
