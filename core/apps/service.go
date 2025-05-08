@@ -15,6 +15,7 @@ import (
 
 	"github.com/dustin/go-humanize"
 	"github.com/gogo/protobuf/proto"
+	ddht "github.com/libp2p/go-libp2p-kad-dht/dual"
 	"github.com/patrickmn/go-cache"
 	"github.com/shirou/gopsutil/cpu"
 	"github.com/shirou/gopsutil/disk"
@@ -25,12 +26,14 @@ import (
 	p2phost "github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/sirupsen/logrus"
+	"github.com/unicornultrafoundation/subnet-node/common/cidutil"
 	"github.com/unicornultrafoundation/subnet-node/config"
 	"github.com/unicornultrafoundation/subnet-node/core/account"
 	"github.com/unicornultrafoundation/subnet-node/core/apps/verifier"
 	"github.com/unicornultrafoundation/subnet-node/core/docker"
 
 	"github.com/moby/moby/errdefs"
+
 	"github.com/unicornultrafoundation/subnet-node/core/apps/stats"
 	atypes "github.com/unicornultrafoundation/subnet-node/core/apps/types"
 	"github.com/unicornultrafoundation/subnet-node/p2p"
@@ -57,6 +60,8 @@ type Service struct {
 	pow                   *verifier.Pow       // Proof of Work for resource usage
 	signatureResponseChan chan *pvtypes.SignatureResponse
 
+	dht *ddht.DHT `optional:"true"`
+
 	// Caching fields
 	gitHubAppCache  *cache.Cache
 	subnetAppCache  *cache.Cache
@@ -64,7 +69,8 @@ type Service struct {
 }
 
 // Initializes the Service with Ethereum and docker clients.
-func New(peerHost p2phost.Host, peerId peer.ID, cfg *config.C, P2P *p2p.P2P, ds datastore.Datastore, acc *account.AccountService, docker *docker.Service) *Service {
+func New(peerHost p2phost.Host, peerId peer.ID, cfg *config.C, P2P *p2p.P2P, ds datastore.Datastore, acc *account.AccountService, docker *docker.Service, DHT *ddht.DHT) *Service {
+
 	return &Service{
 		peerId:                peerId,
 		PeerHost:              peerHost,
@@ -79,11 +85,11 @@ func New(peerHost p2phost.Host, peerId peer.ID, cfg *config.C, P2P *p2p.P2P, ds 
 		gitHubAppCache:        cache.New(1*time.Minute, 2*time.Minute),
 		subnetAppCache:        cache.New(1*time.Minute, 2*time.Minute),
 		gitHubAppsCache:       cache.New(1*time.Minute, 2*time.Minute),
+		dht:                   DHT,
 	}
 }
 
 func (s *Service) Start(ctx context.Context) error {
-
 	s.pow = verifier.NewPow(verifier.NodeProvider, s.PeerHost, s.P2P)
 	s.PeerHost.SetStreamHandler(atypes.ProtocollAppSignatureReceive, s.onSignatureReceive)
 
@@ -102,6 +108,11 @@ func (s *Service) Start(ctx context.Context) error {
 	go s.statService.Start()
 	go s.startReportLoop(ctx)
 	go s.handleSignatureResponses(ctx)
+
+	// Start DHT refresh loop if DHT is available
+	if s.dht != nil {
+		go s.startDHTRefreshLoop(ctx)
+	}
 
 	log.Info("Subnet Apps Service started successfully.")
 	return nil
@@ -406,4 +417,110 @@ func (s *Service) getNodeResourceUsage() (atypes.ResourceUsage, error) {
 		UsedMemory:  big.NewInt(0),
 		UsedStorage: big.NewInt(0),
 	}, nil
+}
+
+func (s *Service) StorePeerIDsInDHT(ctx context.Context, app *atypes.App) error {
+	// Get DHT key
+	cid, err := cidutil.GenerateCID(app.ID.Bytes())
+
+	if err != nil {
+		return fmt.Errorf("failed to generate DHT key: %w", err)
+	}
+
+	// Provide the CID to the DHT
+	if err := s.dht.Provide(ctx, cid, true); err != nil {
+		return fmt.Errorf("failed to provide in DHT: %w", err)
+	}
+
+	log.Infof("Successfully provided app %s (CID: %s) to DHT", app.Name, cid.String())
+	return nil
+}
+
+func (s *Service) FindAppProviders(ctx context.Context, appId *big.Int) ([]peer.AddrInfo, error) {
+	// Get DHT key
+	cid, err := cidutil.GenerateCID(appId.Bytes())
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate DHT key: %w", err)
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	providers := s.dht.FindProvidersAsync(ctx, cid, 100)
+
+	// Collect providers
+	var result []peer.AddrInfo
+	for p := range providers {
+		result = append(result, p)
+	}
+
+	return result, nil
+}
+
+// RefreshDHTEntries refreshes DHT entries for all running apps
+func (s *Service) RefreshDHTEntries(ctx context.Context) error {
+
+	// Check if DHT is available
+	if s.dht == nil {
+		return fmt.Errorf("DHT is not available")
+	}
+
+	// Get list of running apps
+	runningApps, err := s.GetRunningAppListProto(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get running apps: %w", err)
+	}
+
+	// Re-provide each running app in the DHT
+	for _, appIdBytes := range runningApps.AppIds {
+		// Get DHT key
+		cid, err := cidutil.GenerateCID(appIdBytes)
+		if err != nil {
+			log.Warnf("Failed to generate DHT key for app Id %s: %v", appIdBytes, err)
+			continue
+		}
+
+		// Provide the CID to the DHT
+		if err := s.dht.Provide(ctx, cid, true); err != nil {
+			log.Warnf("Failed to provide app Id %s to DHT: %v", appIdBytes, err)
+			continue
+		}
+
+	}
+
+	return nil
+}
+
+// startDHTRefreshLoop starts a loop to refresh DHT entries periodically
+func (s *Service) startDHTRefreshLoop(ctx context.Context) {
+
+	// Perform an initial refresh
+	if err := s.RefreshDHTEntries(ctx); err != nil {
+		log.Warnf("Failed to perform initial DHT refresh: %v", err)
+	}
+
+	// Define the refresh interval (12 hours)
+	refreshInterval := 12 * time.Hour
+
+	// Create a ticker that triggers every 12 hours
+	ticker := time.NewTicker(refreshInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			// Refresh DHT entries
+			if err := s.RefreshDHTEntries(ctx); err != nil {
+				log.Warnf("Failed to refresh DHT entries: %v", err)
+			}
+		case <-s.stopChan:
+			// Stop the loop when the service is stopped
+			log.Info("Stopping DHT refresh loop")
+			return
+		case <-ctx.Done():
+			// Stop the loop when the context is canceled
+			log.Info("Context canceled, stopping DHT refresh loop")
+			return
+		}
+	}
 }
