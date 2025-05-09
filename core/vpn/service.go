@@ -26,6 +26,7 @@ import (
 	vpnnetwork "github.com/unicornultrafoundation/subnet-node/core/vpn/network"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/resilience"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/utils"
+	"github.com/unicornultrafoundation/subnet-node/firewall"
 )
 
 // Logger for the VPN service
@@ -134,8 +135,7 @@ func New(cfg *config.C, peerHost host.Host, dht *ddht.DHT, accountService *accou
 
 	// Create the inbound packet service
 	inboundConfig := &vpnnetwork.InboundConfig{
-		MTU:            configService.GetMTU(),
-		UnallowedPorts: configService.GetUnallowedPorts(),
+		MTU: configService.GetMTU(),
 	}
 	service.inboundService = vpnnetwork.NewInboundPacketService(service.tunService, inboundConfig)
 
@@ -247,6 +247,21 @@ func (s *Service) start(_, dhtCtx, tunCtx, clientCtx context.Context) error {
 	err = s.setupTUNWithRetry(tunSetupCtx)
 	if err != nil {
 		return fmt.Errorf("failed to setup TUN interface: %w", err)
+	}
+
+	if s.configService.GetEnableFirewall() {
+		// Get VPN networks from TUN service
+		vpnNetworks := s.tunService.GetVPNNetworks()
+
+		// Create firewall instance using NewFirewallFromConfig
+		fw, err := firewall.NewFirewallFromConfig(log.WithField("service", "vpn-firewall").Logger, s.cfg, vpnNetworks)
+		if err != nil {
+			return fmt.Errorf("failed to create firewall: %w", err)
+		}
+
+		// Set the firewall for the outbound and inbound services
+		s.outboundService.SetFirewall(fw)
+		s.inboundService.SetFirewall(fw)
 	}
 
 	// Set up the stream handler for incoming P2P streams

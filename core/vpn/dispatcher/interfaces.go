@@ -6,7 +6,7 @@ import "context"
 type DispatcherService interface {
 	// DispatchPacket dispatches a packet to the appropriate stream
 	// queueID is used to select the appropriate stream for the packet
-	DispatchPacket(ctx context.Context, packet []byte, queueID int) error
+	DispatchPacket(ctx context.Context, packet []byte, remoteAddr string, queueID int) error
 
 	// Start starts the dispatcher
 	Start()

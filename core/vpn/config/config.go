@@ -1,20 +1,10 @@
 package config
 
 import (
-	"strconv"
 	"time"
 
 	"github.com/unicornultrafoundation/subnet-node/config"
 )
-
-// parseFloat64 parses a string to a float64 or returns the default value if parsing fails
-func parseFloat64(s string, defaultValue float64) float64 {
-	v, err := strconv.ParseFloat(s, 64)
-	if err != nil {
-		return defaultValue
-	}
-	return v
-}
 
 // VPNConfig encapsulates all configuration settings for the VPN service
 type VPNConfig struct {
@@ -28,7 +18,7 @@ type VPNConfig struct {
 	Routines  int
 
 	// Security settings
-	UnallowedPorts map[string]bool
+	EnableFirewall bool
 
 	// Stream settings
 	StreamIdleTimeout     time.Duration
@@ -53,13 +43,6 @@ type VPNConfig struct {
 
 // New creates a new VPNConfig with values from the provided config
 func New(cfg *config.C) *VPNConfig {
-	// Get unallowed ports
-	unallowedPortList := cfg.GetStringSlice("vpn.unallowed_ports", []string{})
-	unallowedPorts := make(map[string]bool, len(unallowedPortList))
-	for _, port := range unallowedPortList {
-		unallowedPorts[port] = true
-	}
-
 	return &VPNConfig{
 		// Basic settings
 		Enable:    cfg.GetBool("vpn.enable", false),
@@ -71,7 +54,7 @@ func New(cfg *config.C) *VPNConfig {
 		Routines:  cfg.GetInt("vpn.routines", 1), // Default to 1 routine
 
 		// Security settings
-		UnallowedPorts: unallowedPorts,
+		EnableFirewall: cfg.GetBool("vpn.firewall.enable", false),
 
 		// Stream pool settings
 		StreamIdleTimeout:     time.Duration(cfg.GetInt("vpn.stream_idle_timeout", 10)) * time.Second,

@@ -11,6 +11,8 @@ import (
 	"github.com/sirupsen/logrus"
 	vpnconfig "github.com/unicornultrafoundation/subnet-node/core/vpn/config"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/dispatcher"
+	"github.com/unicornultrafoundation/subnet-node/core/vpn/utils"
+	"github.com/unicornultrafoundation/subnet-node/firewall"
 )
 
 // OutboundConfig contains configuration for the outbound packet service
@@ -31,6 +33,8 @@ type OutboundPacketService struct {
 	logger *logrus.Entry
 	// Flag to indicate if the service is closed
 	closed atomic.Bool
+	// Firewall instance
+	firewall *firewall.Firewall
 }
 
 // NewOutboundPacketService creates a new outbound packet service
@@ -40,10 +44,17 @@ func NewOutboundPacketService(tunService *TUNService, dispatcher dispatcher.Disp
 	return &OutboundPacketService{
 		tunService: tunService,
 		dispatcher: dispatcher,
-		config:     &OutboundConfig{MTU: configService.GetMTU()},
-		logger:     logger,
-		closed:     atomic.Bool{},
+		config: &OutboundConfig{
+			MTU: configService.GetMTU(),
+		},
+		logger: logger,
+		closed: atomic.Bool{},
 	}
+}
+
+// SetFirewall sets the firewall instance for the outbound service
+func (s *OutboundPacketService) SetFirewall(fw *firewall.Firewall) {
+	s.firewall = fw
 }
 
 // Start initializes and starts the outbound packet service
@@ -94,11 +105,33 @@ func (s *OutboundPacketService) listenTUN(ctx context.Context, reader io.ReadWri
 
 // processOutboundPacket processes an outbound packet from the TUN device
 func (s *OutboundPacketService) processOutboundPacket(ctx context.Context, packet []byte, queueID int) {
+	// Parse the packet for firewall checks
+	fwPacket := &firewall.Packet{}
+	err := utils.ParsePacket(packet, false, fwPacket)
+	if err != nil {
+		s.logger.WithError(err).Error("Error while parsing outbound packet")
+		return
+	}
+
+	// Check firewall rules for outbound traffic
+	if s.firewall != nil {
+		err := s.firewall.Drop(*fwPacket, false, nil)
+		if err != nil {
+			s.logger.WithFields(logrus.Fields{
+				"error": err,
+				"port":  fwPacket.RemotePort,
+			}).Debug("Packet dropped by firewall")
+			return
+		}
+	}
+
 	// Dispatch the packet with the queue ID
-	err := s.dispatcher.DispatchPacket(ctx, packet, queueID)
+	err = s.dispatcher.DispatchPacket(ctx, packet, fwPacket.RemoteAddr.String(), queueID)
 	if err != nil {
 		s.logger.WithError(err).WithFields(logrus.Fields{
 			"queueID": queueID,
+			"remote":  fwPacket.RemoteAddr.String(),
+			"port":    fwPacket.RemotePort,
 		}).Error("Failed to dispatch packet")
 		return
 	}

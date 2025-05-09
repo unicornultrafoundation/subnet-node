@@ -23,6 +23,7 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/core/apps/verifier"
 	"github.com/unicornultrafoundation/subnet-node/core/node/resource"
 	"github.com/unicornultrafoundation/subnet-node/core/peers"
+	"github.com/unicornultrafoundation/subnet-node/core/vpn"
 	"github.com/unicornultrafoundation/subnet-node/p2p"
 	"github.com/unicornultrafoundation/subnet-node/repo"
 	irouting "github.com/unicornultrafoundation/subnet-node/routing"
@@ -48,6 +49,7 @@ type SubnetNode struct {
 	Resource        *resource.Service  `optional:"true"`
 	Apps            *apps.Service      `optional:"true"`
 	Verifier        *verifier.Verifier `optional:"true"`
+	VPN             *vpn.Service       `optional:"true"`
 
 	Account *account.AccountService `optional:"true"`
 	Peers   *peers.Service          `optional:"true"`

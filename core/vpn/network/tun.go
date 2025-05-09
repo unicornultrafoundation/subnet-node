@@ -36,6 +36,8 @@ type TUNService struct {
 	readers []io.ReadWriteCloser
 	// Number of reader routines
 	routines int
+	// VPN networks
+	vpnNetworks []netip.Prefix
 	// Logger
 	logger *logrus.Entry
 }
@@ -52,10 +54,11 @@ func NewTUNService(config *TUNConfig) *TUNService {
 	}
 
 	return &TUNService{
-		config:   config,
-		readers:  make([]io.ReadWriteCloser, 0, routines),
-		routines: routines,
-		logger:   logger,
+		config:      config,
+		readers:     make([]io.ReadWriteCloser, 0, routines),
+		routines:    routines,
+		vpnNetworks: make([]netip.Prefix, 0),
+		logger:      logger,
 	}
 }
 
@@ -66,6 +69,7 @@ func (s *TUNService) SetupTUN() error {
 	if err != nil {
 		return err
 	}
+	s.vpnNetworks = vpnNetworks
 
 	// Create a new device from config
 	device, err := overlay.NewDeviceFromConfig(cfg, s.logger.Logger, vpnNetworks, s.routines)
@@ -175,4 +179,9 @@ func (s *TUNService) GetReaders() []io.ReadWriteCloser {
 // GetRoutines returns the number of reader routines
 func (s *TUNService) GetRoutines() int {
 	return s.routines
+}
+
+// GetVPNNetworks returns the VPN networks
+func (s *TUNService) GetVPNNetworks() []netip.Prefix {
+	return s.vpnNetworks
 }

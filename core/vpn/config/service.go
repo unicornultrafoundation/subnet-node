@@ -20,7 +20,7 @@ type ConfigService interface {
 	GetRoutines() int
 
 	// Security settings
-	GetUnallowedPorts() map[string]bool
+	GetEnableFirewall() bool
 
 	// Stream pool settings
 	GetStreamIdleTimeout() time.Duration
@@ -120,11 +120,11 @@ func (c *ConfigServiceImpl) GetRoutines() int {
 
 // Security settings
 
-// GetUnallowedPorts returns the unallowed ports
-func (c *ConfigServiceImpl) GetUnallowedPorts() map[string]bool {
+// GetEnableFirewall returns whether the firewall is enabled
+func (c *ConfigServiceImpl) GetEnableFirewall() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	return c.vpnConfig.UnallowedPorts
+	return c.vpnConfig.EnableFirewall
 }
 
 // Stream settings

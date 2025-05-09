@@ -3,7 +3,6 @@ package network
 import (
 	"encoding/binary"
 	"io"
-	"strconv"
 
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/sirupsen/logrus"
@@ -15,8 +14,6 @@ import (
 type InboundConfig struct {
 	// MTU for the TUN interface
 	MTU int
-	// Map of unallowed ports
-	UnallowedPorts map[string]bool
 }
 
 // InboundPacketService handles inbound packets from the network to the TUN device
@@ -27,6 +24,8 @@ type InboundPacketService struct {
 	config *InboundConfig
 	// Logger
 	logger *logrus.Entry
+	// Firewall instance
+	firewall *firewall.Firewall
 }
 
 // NewInboundPacketService creates a new inbound packet service
@@ -39,6 +38,11 @@ func NewInboundPacketService(tunService *TUNService, config *InboundConfig) *Inb
 		config:     config,
 		logger:     logger,
 	}
+}
+
+// SetFirewall sets the firewall instance for the inbound service
+func (s *InboundPacketService) SetFirewall(fw *firewall.Firewall) {
+	s.firewall = fw
 }
 
 // HandleStream handles an incoming stream from a peer
@@ -108,16 +112,17 @@ func (s *InboundPacketService) processInboundPacket(packet []byte, fwPacket *fir
 		return
 	}
 
-	// Reject requests to unallowed ports
-	if fwPacket.RemotePort > 0 && fwPacket.RemotePort < 30000 {
-		s.logger.WithField("port", fwPacket.RemotePort).Debug("Rejected packet to unallowed port")
-		return
-	}
-
-	// Check if the port is in the unallowed list
-	if s.config.UnallowedPorts[strconv.Itoa(int(fwPacket.RemotePort))] {
-		s.logger.WithField("port", fwPacket.RemotePort).Debug("Rejected packet to unallowed port")
-		return
+	// Check firewall rules for inbound traffic
+	if s.firewall != nil {
+		err := s.firewall.Drop(*fwPacket, true, nil)
+		if err != nil {
+			s.logger.WithFields(logrus.Fields{
+				"error": err,
+				"peer":  peerID,
+				"port":  fwPacket.RemotePort,
+			}).Debug("Packet dropped by firewall")
+			return
+		}
 	}
 
 	// Get the readers from the TUN service
