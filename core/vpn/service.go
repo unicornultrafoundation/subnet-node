@@ -134,10 +134,7 @@ func New(cfg *config.C, peerHost host.Host, dht *ddht.DHT, accountService *accou
 	service.resourceManager.Register(service.outboundService)
 
 	// Create the inbound packet service
-	inboundConfig := &vpnnetwork.InboundConfig{
-		MTU: configService.GetMTU(),
-	}
-	service.inboundService = vpnnetwork.NewInboundPacketService(service.tunService, inboundConfig)
+	service.inboundService = vpnnetwork.NewInboundPacketService(service.tunService, configService)
 
 	// Register the inbound service with the resource manager
 	service.resourceManager.Register(service.inboundService)

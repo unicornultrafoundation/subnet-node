@@ -7,6 +7,7 @@ import (
 	"os"
 	"runtime"
 	"sync/atomic"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	vpnconfig "github.com/unicornultrafoundation/subnet-node/core/vpn/config"
@@ -19,6 +20,8 @@ import (
 type OutboundConfig struct {
 	// MTU for the TUN interface
 	MTU int
+	// Conntrack timeout
+	ctCacheTimeout time.Duration
 }
 
 // OutboundPacketService handles outbound packets from the TUN device to the network
@@ -45,7 +48,8 @@ func NewOutboundPacketService(tunService *TUNService, dispatcher dispatcher.Disp
 		tunService: tunService,
 		dispatcher: dispatcher,
 		config: &OutboundConfig{
-			MTU: configService.GetMTU(),
+			MTU:            configService.GetMTU(),
+			ctCacheTimeout: configService.GetConntrackCacheTimeout(),
 		},
 		logger: logger,
 		closed: atomic.Bool{},
@@ -78,6 +82,9 @@ func (s *OutboundPacketService) listenTUN(ctx context.Context, reader io.ReadWri
 	// Create a buffer for reading packets
 	packet := make([]byte, s.config.MTU)
 
+	// Create a conntrack cache
+	ctCache := firewall.NewConntrackCacheTicker(s.config.ctCacheTimeout)
+
 	// Read packets from the TUN device
 	for {
 		select {
@@ -98,13 +105,13 @@ func (s *OutboundPacketService) listenTUN(ctx context.Context, reader io.ReadWri
 			}
 
 			// Process the packet
-			s.processOutboundPacket(ctx, packet[:n], queueID)
+			s.processOutboundPacket(ctx, packet[:n], queueID, ctCache.Get(s.logger.Logger))
 		}
 	}
 }
 
 // processOutboundPacket processes an outbound packet from the TUN device
-func (s *OutboundPacketService) processOutboundPacket(ctx context.Context, packet []byte, queueID int) {
+func (s *OutboundPacketService) processOutboundPacket(ctx context.Context, packet []byte, queueID int, conntrackCache firewall.ConntrackCache) {
 	// Parse the packet for firewall checks
 	fwPacket := &firewall.Packet{}
 	err := utils.ParsePacket(packet, false, fwPacket)
@@ -115,7 +122,7 @@ func (s *OutboundPacketService) processOutboundPacket(ctx context.Context, packe
 
 	// Check firewall rules for outbound traffic
 	if s.firewall != nil {
-		err := s.firewall.Drop(*fwPacket, false, nil)
+		err := s.firewall.Drop(*fwPacket, false, conntrackCache)
 		if err != nil {
 			s.logger.WithFields(logrus.Fields{
 				"error": err,

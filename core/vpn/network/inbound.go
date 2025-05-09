@@ -3,9 +3,11 @@ package network
 import (
 	"encoding/binary"
 	"io"
+	"time"
 
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/sirupsen/logrus"
+	vpnconfig "github.com/unicornultrafoundation/subnet-node/core/vpn/config"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/utils"
 	"github.com/unicornultrafoundation/subnet-node/firewall"
 )
@@ -14,6 +16,8 @@ import (
 type InboundConfig struct {
 	// MTU for the TUN interface
 	MTU int
+	// Conntrack cache timeout
+	ctCacheTimeout time.Duration
 }
 
 // InboundPacketService handles inbound packets from the network to the TUN device
@@ -29,14 +33,17 @@ type InboundPacketService struct {
 }
 
 // NewInboundPacketService creates a new inbound packet service
-func NewInboundPacketService(tunService *TUNService, config *InboundConfig) *InboundPacketService {
+func NewInboundPacketService(tunService *TUNService, configService vpnconfig.ConfigService) *InboundPacketService {
 	// Create a new logger
 	logger := logrus.WithField("service", "vpn-inbound")
 
 	return &InboundPacketService{
 		tunService: tunService,
-		config:     config,
-		logger:     logger,
+		config: &InboundConfig{
+			MTU:            configService.GetMTU(),
+			ctCacheTimeout: configService.GetConntrackCacheTimeout(),
+		},
+		logger: logger,
 	}
 }
 
@@ -62,6 +69,9 @@ func (s *InboundPacketService) HandleStream(stream network.Stream) {
 	// Pre-allocate all buffers to reduce GC pressure
 	combinedBuf := make([]byte, s.config.MTU+4) // 4 bytes for length + max packet size
 	fwPacket := &firewall.Packet{}
+
+	// Create a conntrack cache
+	ctCache := firewall.NewConntrackCacheTicker(s.config.ctCacheTimeout)
 
 	for {
 		// Read the packet length and data in potentially multiple operations
@@ -99,12 +109,12 @@ func (s *InboundPacketService) HandleStream(stream network.Stream) {
 		packetCopy := make([]byte, packetLength)
 		copy(packetCopy, combinedBuf[4:4+packetLength])
 
-		s.processInboundPacket(packetCopy, fwPacket, peer)
+		s.processInboundPacket(packetCopy, fwPacket, peer, ctCache.Get(s.logger.Logger))
 	}
 }
 
 // processInboundPacket processes an inbound packet from a peer
-func (s *InboundPacketService) processInboundPacket(packet []byte, fwPacket *firewall.Packet, peerID string) {
+func (s *InboundPacketService) processInboundPacket(packet []byte, fwPacket *firewall.Packet, peerID string, conntrackCache firewall.ConntrackCache) {
 	// Parse the packet
 	err := utils.ParsePacket(packet, true, fwPacket)
 	if err != nil {
@@ -114,7 +124,7 @@ func (s *InboundPacketService) processInboundPacket(packet []byte, fwPacket *fir
 
 	// Check firewall rules for inbound traffic
 	if s.firewall != nil {
-		err := s.firewall.Drop(*fwPacket, true, nil)
+		err := s.firewall.Drop(*fwPacket, true, conntrackCache)
 		if err != nil {
 			s.logger.WithFields(logrus.Fields{
 				"error": err,
