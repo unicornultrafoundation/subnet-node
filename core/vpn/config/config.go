@@ -17,9 +17,6 @@ type VPNConfig struct {
 	Protocol  string
 	Routines  int
 
-	// Security settings
-	EnableFirewall bool
-
 	// Stream settings
 	StreamIdleTimeout     time.Duration
 	StreamCleanupInterval time.Duration
@@ -52,9 +49,6 @@ func New(cfg *config.C) *VPNConfig {
 		Routes:    cfg.GetStringSlice("vpn.routes", []string{"10.0.0.0/8"}),
 		Protocol:  cfg.GetString("vpn.protocol", "/vpn/1.0.0"),
 		Routines:  cfg.GetInt("vpn.routines", 1), // Default to 1 routine
-
-		// Security settings
-		EnableFirewall: cfg.GetBool("vpn.firewall.enable", false),
 
 		// Stream pool settings
 		StreamIdleTimeout:     time.Duration(cfg.GetInt("vpn.stream_idle_timeout", 10)) * time.Second,

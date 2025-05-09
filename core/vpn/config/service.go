@@ -19,9 +19,6 @@ type ConfigService interface {
 	GetProtocol() string
 	GetRoutines() int
 
-	// Security settings
-	GetEnableFirewall() bool
-
 	// Stream pool settings
 	GetStreamIdleTimeout() time.Duration
 	GetStreamCleanupInterval() time.Duration
@@ -116,15 +113,6 @@ func (c *ConfigServiceImpl) GetRoutines() int {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.vpnConfig.Routines
-}
-
-// Security settings
-
-// GetEnableFirewall returns whether the firewall is enabled
-func (c *ConfigServiceImpl) GetEnableFirewall() bool {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.vpnConfig.EnableFirewall
 }
 
 // Stream settings

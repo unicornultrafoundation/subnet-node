@@ -178,12 +178,10 @@ func (s *Service) Start(ctx context.Context) error {
 	tunCtx := s.serviceCtx
 	clientCtx := s.serviceCtx
 
-	go func() {
-		err := s.start(s.serviceCtx, dhtCtx, tunCtx, clientCtx)
-		if err != nil {
-			log.Errorf("Something went wrong when running VPN: %v", err)
-		}
-	}()
+	err := s.start(s.serviceCtx, dhtCtx, tunCtx, clientCtx)
+	if err != nil {
+		return fmt.Errorf("something went wrong when running VPN: %v", err)
+	}
 
 	return nil
 }
@@ -226,9 +224,6 @@ func (s *Service) waitUntilPeerConnected(ctx context.Context, host host.Host) er
 // start is the internal implementation of the Start method.
 // It initializes and starts all VPN components in sequence.
 func (s *Service) start(_, dhtCtx, tunCtx, clientCtx context.Context) error {
-	// Start the packet dispatcher
-	s.dispatcher.Start()
-
 	// Create a context with timeout for DHT sync
 	dhtSyncCtx, cancel := context.WithTimeout(dhtCtx, s.configService.GetDHTSyncTimeout())
 	defer cancel()
@@ -249,26 +244,27 @@ func (s *Service) start(_, dhtCtx, tunCtx, clientCtx context.Context) error {
 		return fmt.Errorf("failed to setup TUN interface: %w", err)
 	}
 
-	if s.configService.GetEnableFirewall() {
-		// Get VPN networks from TUN service
-		vpnNetworks := s.tunService.GetVPNNetworks()
+	// Get VPN networks from TUN service
+	vpnNetworks := s.tunService.GetVPNNetworks()
 
-		// Create firewall instance using NewFirewallFromConfig
-		fw, err := firewall.NewFirewallFromConfig(log.WithField("service", "vpn-firewall").Logger, s.cfg, vpnNetworks)
-		if err != nil {
-			return fmt.Errorf("failed to create firewall: %w", err)
-		}
-
-		// Set the firewall for the outbound and inbound services
-		s.outboundService.SetFirewall(fw)
-		s.inboundService.SetFirewall(fw)
+	// Create firewall instance using NewFirewallFromConfig
+	fw, err := firewall.NewFirewallFromConfig(log.WithField("service", "vpn-firewall").Logger, s.cfg, vpnNetworks)
+	if err != nil {
+		return fmt.Errorf("failed to create firewall: %w", err)
 	}
+
+	// Set the firewall for the outbound and inbound services
+	s.outboundService.SetFirewall(fw)
+	s.inboundService.SetFirewall(fw)
 
 	// Set up the stream handler for incoming P2P streams
 	s.peerHost.SetStreamHandler(protocol.ID(s.configService.GetProtocol()), func(netStream network.Stream) {
 		// Handle the incoming stream as a VPN stream
 		s.inboundService.HandleStream(netStream)
 	})
+
+	// Start the packet dispatcher
+	s.dispatcher.Start()
 
 	// Start the outbound service with its own context
 	return s.outboundService.Start(clientCtx)
