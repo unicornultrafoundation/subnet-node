@@ -6,9 +6,13 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"fmt"
+	"math/big"
 	"testing"
 	"time"
 
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p-kad-dht/dual"
 	"github.com/libp2p/go-libp2p/core/crypto"
@@ -20,6 +24,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unicornultrafoundation/subnet-node/config"
 	"github.com/unicornultrafoundation/subnet-node/core/account"
+	"github.com/unicornultrafoundation/subnet-node/core/contracts"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/testutil"
 	"github.com/unicornultrafoundation/subnet-node/test"
@@ -183,11 +188,114 @@ func createTestConfig(virtualIP string, subnet int) *config.C {
 	return cfg
 }
 
+// MockAccountServiceWrapper wraps the MockAccountService to implement account.Service interface
+type MockAccountServiceWrapper struct {
+	*testutil.MockAccountService
+	client               *ethclient.Client
+	chainID              *big.Int
+	subnetProvider       *contracts.SubnetProvider
+	subnetProviderAddr   string
+	subnetAppStore       *contracts.SubnetAppStore
+	subnetAppStoreAddr   string
+	subnetIPRegistry     *contracts.SubnetIPRegistry
+	subnetIPRegistryAddr string
+	providerID           int64
+}
+
+// GetClient retrieves the ethclient instance
+func (m *MockAccountServiceWrapper) GetClient() *ethclient.Client {
+	return m.client
+}
+
+// Provider returns the subnet provider contract
+func (m *MockAccountServiceWrapper) Provider() *contracts.SubnetProvider {
+	return m.subnetProvider
+}
+
+// AppStore returns the subnet app store contract
+func (m *MockAccountServiceWrapper) AppStore() *contracts.SubnetAppStore {
+	return m.subnetAppStore
+}
+
+// IPRegistry returns the subnet IP registry contract
+func (m *MockAccountServiceWrapper) IPRegistry() *contracts.SubnetIPRegistry {
+	return m.subnetIPRegistry
+}
+
+// GetChainID returns the chain ID
+func (m *MockAccountServiceWrapper) GetChainID() *big.Int {
+	return m.chainID
+}
+
+// AppStoreAddr returns the subnet app store address
+func (m *MockAccountServiceWrapper) AppStoreAddr() string {
+	return m.subnetAppStoreAddr
+}
+
+// ProviderAddr returns the subnet provider address
+func (m *MockAccountServiceWrapper) ProviderAddr() string {
+	return m.subnetProviderAddr
+}
+
+// IPRegistryAddr returns the subnet IP registry address
+func (m *MockAccountServiceWrapper) IPRegistryAddr() string {
+	return m.subnetIPRegistryAddr
+}
+
+// GetAddress retrieves the Ethereum address from the private key
+func (m *MockAccountServiceWrapper) GetAddress() common.Address {
+	return common.Address{}
+}
+
+// GetBalance retrieves the Ether balance of the account
+func (m *MockAccountServiceWrapper) GetBalance(address common.Address) (*big.Int, error) {
+	return big.NewInt(0), nil
+}
+
+// NewKeyedTransactor returns a new keyed transactor
+func (m *MockAccountServiceWrapper) NewKeyedTransactor() (*bind.TransactOpts, error) {
+	return nil, nil
+}
+
+// ProviderID returns the provider ID
+func (m *MockAccountServiceWrapper) ProviderID() int64 {
+	return m.providerID
+}
+
+// SignAndSendTransaction creates, signs, and sends a transaction
+func (m *MockAccountServiceWrapper) SignAndSendTransaction(toAddress string, value *big.Int, gasLimit uint64, gasPrice *big.Int, data []byte) (string, error) {
+	return "", nil
+}
+
+// Sign signs the hash using ECDSA
+func (m *MockAccountServiceWrapper) Sign(hash []byte) ([]byte, error) {
+	return []byte{}, nil
+}
+
 // createMockAccountService creates a mock account service for testing
 func createMockAccountService() *account.AccountService {
-	// In a real test, you would create a proper mock
-	// For simplicity, we're returning nil here
-	return nil
+	// Create a new AccountService with default values
+	cfg := config.NewC(test.NewLogger())
+	cfg.Settings["account"] = map[string]any{
+		"private_key": "0000000000000000000000000000000000000000000000000000000000000001",
+		"rpc":         "http://localhost:8545",
+		"chainid":     1,
+	}
+	cfg.Settings["apps"] = map[string]any{
+		"subnet_app_store":   "0x0000000000000000000000000000000000000001",
+		"subnet_provider":    "0x0000000000000000000000000000000000000002",
+		"subnet_ip_registry": "0x0000000000000000000000000000000000000003",
+	}
+	cfg.Settings["provider"] = map[string]any{
+		"id": "0x1",
+	}
+
+	service, err := account.NewAccountService(cfg)
+	if err != nil {
+		panic(err)
+	}
+
+	return service
 }
 
 // testPacketTransmission tests packet transmission between two VPN services
