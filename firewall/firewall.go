@@ -164,7 +164,7 @@ func NewFirewall(l *logrus.Logger, tcpTimeout, UDPTimeout, defaultTimeout time.D
 	}
 }
 
-func NewFirewallFromConfig(l *logrus.Logger, c *config.C, networks []netip.Prefix, unsafeNetworks []netip.Prefix) (*Firewall, error) {
+func NewFirewallFromConfig(l *logrus.Logger, c *config.C, networks []netip.Prefix) (*Firewall, error) {
 	fw := NewFirewall(
 		l,
 		c.GetDuration("firewall.conntrack.tcp_timeout", time.Minute*12),
