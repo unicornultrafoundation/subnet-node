@@ -3,7 +3,6 @@ package dispatcher
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -13,11 +12,6 @@ import (
 
 // DispatchPacket dispatches a packet to the appropriate stream
 func (d *Dispatcher) DispatchPacket(ctx context.Context, packet []byte, remoteAddr string, queueID int) error {
-	// Ignore non-10.x.x.x addresses
-	if !strings.HasPrefix(remoteAddr, "10.") {
-		return nil
-	}
-
 	// Get the peer ID for the destination IP
 	peerIDStr, err := d.peerDiscovery.GetPeerID(ctx, remoteAddr)
 	if err != nil {
