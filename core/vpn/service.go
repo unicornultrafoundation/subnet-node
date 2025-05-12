@@ -242,10 +242,10 @@ func (s *Service) start(_, dhtCtx, tunCtx, clientCtx context.Context) error {
 	}
 
 	// Get VPN networks from TUN service
-	vpnNetworks := s.tunService.GetVPNNetworks()
+	cidr := s.tunService.GetCIDR()
 
 	// Create firewall instance using NewFirewallFromConfig
-	fw, err := firewall.NewFirewallFromConfig(log.WithField("service", "vpn-firewall").Logger, s.cfg, vpnNetworks)
+	fw, err := firewall.NewFirewallFromConfig(log.WithField("service", "vpn-firewall").Logger, s.cfg, cidr)
 	if err != nil {
 		return fmt.Errorf("failed to create firewall: %w", err)
 	}
