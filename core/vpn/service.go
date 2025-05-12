@@ -9,6 +9,7 @@ package vpn
 import (
 	"context"
 	"fmt"
+	"net/netip"
 	"sync"
 	"time"
 
@@ -245,7 +246,7 @@ func (s *Service) start(_, dhtCtx, tunCtx, clientCtx context.Context) error {
 	cidr := s.tunService.GetCIDR()
 
 	// Create firewall instance using NewFirewallFromConfig
-	fw, err := firewall.NewFirewallFromConfig(log.WithField("service", "vpn-firewall").Logger, s.cfg, cidr)
+	fw, err := firewall.NewFirewallFromConfig(log.WithField("service", "vpn-firewall").Logger, s.cfg, []netip.Prefix{cidr})
 	if err != nil {
 		return fmt.Errorf("failed to create firewall: %w", err)
 	}

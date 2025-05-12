@@ -395,41 +395,41 @@ func TestNewFirewallFromConfig(t *testing.T) {
 
 	conf := config.NewC(l)
 	conf.Settings["firewall"] = map[string]any{"outbound": "asdf"}
-	_, err := NewFirewallFromConfig(l, conf, netip.Prefix{})
+	_, err := NewFirewallFromConfig(l, conf, []netip.Prefix{})
 	require.EqualError(t, err, "firewall.outbound failed to parse, should be an array of rules")
 
 	// Test both port and code
 	conf = config.NewC(l)
 	conf.Settings["firewall"] = map[string]any{"outbound": []any{map[string]any{"port": "1", "code": "2"}}}
-	_, err = NewFirewallFromConfig(l, conf, netip.Prefix{})
+	_, err = NewFirewallFromConfig(l, conf, []netip.Prefix{})
 	require.EqualError(t, err, "firewall.outbound rule #0; only one of port or code should be provided")
 
 	// Test code/port error
 	conf = config.NewC(l)
 	conf.Settings["firewall"] = map[string]any{"outbound": []any{map[string]any{"code": "a", "cidr": "testh"}}}
-	_, err = NewFirewallFromConfig(l, conf, netip.Prefix{})
+	_, err = NewFirewallFromConfig(l, conf, []netip.Prefix{})
 	require.EqualError(t, err, "firewall.outbound rule #0; code was not a number; `a`")
 
 	conf.Settings["firewall"] = map[string]any{"outbound": []any{map[string]any{"port": "a", "cidr": "testh"}}}
-	_, err = NewFirewallFromConfig(l, conf, netip.Prefix{})
+	_, err = NewFirewallFromConfig(l, conf, []netip.Prefix{})
 	require.EqualError(t, err, "firewall.outbound rule #0; port was not a number; `a`")
 
 	// Test proto error
 	conf = config.NewC(l)
 	conf.Settings["firewall"] = map[string]any{"outbound": []any{map[string]any{"code": "1", "cidr": "testh"}}}
-	_, err = NewFirewallFromConfig(l, conf, netip.Prefix{})
+	_, err = NewFirewallFromConfig(l, conf, []netip.Prefix{})
 	require.EqualError(t, err, "firewall.outbound rule #0; proto was not understood; ``")
 
 	// Test cidr parse error
 	conf = config.NewC(l)
 	conf.Settings["firewall"] = map[string]any{"outbound": []any{map[string]any{"code": "1", "cidr": "testh", "proto": "any"}}}
-	_, err = NewFirewallFromConfig(l, conf, netip.Prefix{})
+	_, err = NewFirewallFromConfig(l, conf, []netip.Prefix{})
 	require.EqualError(t, err, "firewall.outbound rule #0; cidr did not parse; netip.ParsePrefix(\"testh\"): no '/'")
 
 	// Test local_cidr parse error
 	conf = config.NewC(l)
 	conf.Settings["firewall"] = map[string]any{"outbound": []any{map[string]any{"code": "1", "cidr": "testh", "proto": "any"}}}
-	_, err = NewFirewallFromConfig(l, conf, netip.Prefix{})
+	_, err = NewFirewallFromConfig(l, conf, []netip.Prefix{})
 	require.EqualError(t, err, "firewall.outbound rule #0; cidr did not parse; netip.ParsePrefix(\"testh\"): no '/'")
 }
 
@@ -439,28 +439,28 @@ func TestAddFirewallRulesFromConfig(t *testing.T) {
 	conf := config.NewC(l)
 	mf := &mockFirewall{}
 	conf.Settings["firewall"] = map[string]any{"outbound": []any{map[string]any{"port": "1", "proto": "tcp", "cidr": "127.0.0.1/32"}}}
-	require.NoError(t, AddFirewallRulesFromConfig(l, false, conf, mf, netip.Prefix{}))
+	require.NoError(t, AddFirewallRulesFromConfig(l, false, conf, mf))
 	assert.Equal(t, addRuleCall{incoming: false, proto: ProtoTCP, startPort: 1, endPort: 1, ip: netip.MustParsePrefix("127.0.0.1/32")}, mf.lastCall)
 
 	// Test adding udp rule
 	conf = config.NewC(l)
 	mf = &mockFirewall{}
 	conf.Settings["firewall"] = map[string]any{"outbound": []any{map[string]any{"port": "1", "proto": "udp", "cidr": "127.0.0.1/32"}}}
-	require.NoError(t, AddFirewallRulesFromConfig(l, false, conf, mf, netip.Prefix{}))
+	require.NoError(t, AddFirewallRulesFromConfig(l, false, conf, mf))
 	assert.Equal(t, addRuleCall{incoming: false, proto: ProtoUDP, startPort: 1, endPort: 1, ip: netip.MustParsePrefix("127.0.0.1/32")}, mf.lastCall)
 
 	// Test adding icmp rule
 	conf = config.NewC(l)
 	mf = &mockFirewall{}
 	conf.Settings["firewall"] = map[string]any{"outbound": []any{map[string]any{"port": "1", "proto": "icmp", "cidr": "127.0.0.1/32"}}}
-	require.NoError(t, AddFirewallRulesFromConfig(l, false, conf, mf, netip.Prefix{}))
+	require.NoError(t, AddFirewallRulesFromConfig(l, false, conf, mf))
 	assert.Equal(t, addRuleCall{incoming: false, proto: ProtoICMP, startPort: 1, endPort: 1, ip: netip.MustParsePrefix("127.0.0.1/32")}, mf.lastCall)
 
 	// Test adding any rule
 	conf = config.NewC(l)
 	mf = &mockFirewall{}
 	conf.Settings["firewall"] = map[string]any{"inbound": []any{map[string]any{"port": "1", "proto": "any", "cidr": "127.0.0.1/32"}}}
-	require.NoError(t, AddFirewallRulesFromConfig(l, true, conf, mf, netip.Prefix{}))
+	require.NoError(t, AddFirewallRulesFromConfig(l, true, conf, mf))
 	assert.Equal(t, addRuleCall{incoming: true, proto: ProtoAny, startPort: 1, endPort: 1, ip: netip.MustParsePrefix("127.0.0.1/32")}, mf.lastCall)
 
 	// Test adding rule with cidr
@@ -468,7 +468,7 @@ func TestAddFirewallRulesFromConfig(t *testing.T) {
 	conf = config.NewC(l)
 	mf = &mockFirewall{}
 	conf.Settings["firewall"] = map[string]any{"inbound": []any{map[string]any{"port": "1", "proto": "any", "cidr": cidr.String()}}}
-	require.NoError(t, AddFirewallRulesFromConfig(l, true, conf, mf, netip.Prefix{}))
+	require.NoError(t, AddFirewallRulesFromConfig(l, true, conf, mf))
 	assert.Equal(t, addRuleCall{incoming: true, proto: ProtoAny, startPort: 1, endPort: 1, ip: cidr}, mf.lastCall)
 
 	// Test Add error
@@ -476,7 +476,7 @@ func TestAddFirewallRulesFromConfig(t *testing.T) {
 	mf = &mockFirewall{}
 	mf.nextCallReturn = errors.New("test error")
 	conf.Settings["firewall"] = map[string]any{"inbound": []any{map[string]any{"port": "1", "proto": "any", "cidr": "127.0.0.1/32"}}}
-	require.EqualError(t, AddFirewallRulesFromConfig(l, true, conf, mf, netip.Prefix{}), "firewall.inbound rule #0; `test error`")
+	require.EqualError(t, AddFirewallRulesFromConfig(l, true, conf, mf), "firewall.inbound rule #0; `test error`")
 }
 
 type addRuleCall struct {

@@ -164,13 +164,13 @@ func NewFirewall(l *logrus.Logger, tcpTimeout, UDPTimeout, defaultTimeout time.D
 	}
 }
 
-func NewFirewallFromConfig(l *logrus.Logger, c *config.C, cidr netip.Prefix) (*Firewall, error) {
+func NewFirewallFromConfig(l *logrus.Logger, c *config.C, networks []netip.Prefix) (*Firewall, error) {
 	fw := NewFirewall(
 		l,
 		c.GetDuration("firewall.conntrack.tcp_timeout", time.Minute*12),
 		c.GetDuration("firewall.conntrack.udp_timeout", time.Minute*3),
 		c.GetDuration("firewall.conntrack.default_timeout", time.Minute*10),
-		[]netip.Prefix{cidr},
+		networks,
 		//TODO: max_connections
 	)
 
@@ -198,12 +198,12 @@ func NewFirewallFromConfig(l *logrus.Logger, c *config.C, cidr netip.Prefix) (*F
 		fw.OutSendReject = false
 	}
 
-	err := AddFirewallRulesFromConfig(l, false, c, fw, cidr)
+	err := AddFirewallRulesFromConfig(l, false, c, fw)
 	if err != nil {
 		return nil, err
 	}
 
-	err = AddFirewallRulesFromConfig(l, true, c, fw, cidr)
+	err = AddFirewallRulesFromConfig(l, true, c, fw)
 	if err != nil {
 		return nil, err
 	}
@@ -279,7 +279,7 @@ func (f *Firewall) GetRuleHashes() string {
 	return "SHA:" + f.GetRuleHash() + ",FNV:" + strconv.FormatUint(uint64(f.GetRuleHashFNV()), 10)
 }
 
-func AddFirewallRulesFromConfig(l *logrus.Logger, inbound bool, c *config.C, fw FirewallInterface, cidr netip.Prefix) error {
+func AddFirewallRulesFromConfig(l *logrus.Logger, inbound bool, c *config.C, fw FirewallInterface) error {
 	var table string
 	if inbound {
 		table = "firewall.inbound"
@@ -297,11 +297,6 @@ func AddFirewallRulesFromConfig(l *logrus.Logger, inbound bool, c *config.C, fw 
 		return fmt.Errorf("%s failed to parse, should be an array of rules", table)
 	}
 
-	defaultCidr := "0.0.0.0/0"
-	if cidr.IsValid() {
-		defaultCidr = cidr.String()
-	}
-
 	for i, t := range rs {
 		r, err := convertRule(l, t, table, i)
 		if err != nil {
@@ -310,10 +305,6 @@ func AddFirewallRulesFromConfig(l *logrus.Logger, inbound bool, c *config.C, fw 
 
 		if r.Code != "" && r.Port != "" {
 			return fmt.Errorf("%s rule #%v; only one of port or code should be provided", table, i)
-		}
-
-		if r.Cidr == "" {
-			r.Cidr = defaultCidr
 		}
 
 		var sPort, errPort string
