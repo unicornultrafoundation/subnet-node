@@ -9,13 +9,14 @@ import (
 // VPNConfig encapsulates all configuration settings for the VPN service
 type VPNConfig struct {
 	// Basic settings
-	Enable    bool
-	MTU       int
-	VirtualIP string
-	Subnet    int
-	Routes    []string
-	Protocol  string
-	Routines  int
+	Enable      bool
+	MTU         int
+	VirtualIP   string
+	Subnet      int
+	Routes      []string
+	Protocol    string
+	Routines    int
+	TUNDisabled bool // For testing
 
 	// Security settings
 	ConntrackCacheTimeout time.Duration // Timeout for the conntrack cache for each routine
@@ -57,13 +58,14 @@ func New(cfg *config.C) *VPNConfig {
 
 	return &VPNConfig{
 		// Basic settings
-		Enable:    cfg.GetBool("vpn.enable", false),
-		MTU:       cfg.GetInt("vpn.mtu", 1400),
-		VirtualIP: cfg.GetString("vpn.virtual_ip", ""),
-		Subnet:    cfg.GetInt("vpn.subnet", 8),
-		Routes:    cfg.GetStringSlice("vpn.routes", []string{"10.0.0.0/8"}),
-		Protocol:  cfg.GetString("vpn.protocol", "/vpn/1.0.0"),
-		Routines:  routines,
+		Enable:      cfg.GetBool("vpn.enable", false),
+		MTU:         cfg.GetInt("vpn.mtu", 1400),
+		VirtualIP:   cfg.GetString("vpn.virtual_ip", ""),
+		Subnet:      cfg.GetInt("vpn.subnet", 8),
+		Routes:      cfg.GetStringSlice("vpn.routes", []string{"10.0.0.0/8"}),
+		Protocol:    cfg.GetString("vpn.protocol", "/vpn/1.0.0"),
+		Routines:    routines,
+		TUNDisabled: cfg.GetBool("vpn.tun_disabled", false),
 
 		// Security settings
 		ConntrackCacheTimeout: conntrackCacheTimeout,

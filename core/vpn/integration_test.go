@@ -14,11 +14,11 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/libp2p/go-libp2p"
-	"github.com/libp2p/go-libp2p-kad-dht/dual"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/peerstore"
+	"github.com/libp2p/go-libp2p/core/routing"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -26,7 +26,9 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/core/account"
 	"github.com/unicornultrafoundation/subnet-node/core/contracts"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn"
+	"github.com/unicornultrafoundation/subnet-node/core/vpn/discovery"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/testutil"
+	"github.com/unicornultrafoundation/subnet-node/firewall"
 	"github.com/unicornultrafoundation/subnet-node/test"
 )
 
@@ -51,22 +53,24 @@ func TestVPNIntegration(t *testing.T) {
 	require.NoError(t, err, "Failed to connect hosts")
 
 	// Create DHT instances for both hosts
-	dht1, err := dual.New(ctx, host1)
-	require.NoError(t, err, "Failed to create DHT for host1")
-	dht2, err := dual.New(ctx, host2)
-	require.NoError(t, err, "Failed to create DHT for host2")
+	var _ routing.ValueStore = &mockDHT{} // ensure interface compliance
+	dht1 := &mockDHT{store: map[string][]byte{}}
+	dht2 := &mockDHT{store: map[string][]byte{}}
 
 	// Create account services
-	accountService1 := createMockAccountService()
-	accountService2 := createMockAccountService()
+	accountService1 := createMockAccountServiceForPeer("10.0.0.1", host1.ID().String())
+	accountService2 := createMockAccountServiceForPeer("10.0.0.2", host2.ID().String())
 
 	// Create configurations for both VPN services
 	cfg1 := createTestConfig("10.0.0.1", 24)
 	cfg2 := createTestConfig("10.0.0.2", 24)
 
+	firewall1 := firewall.MockFirewall{}
+	firewall2 := firewall.MockFirewall{}
+
 	// Create VPN services
-	vpnService1 := vpn.New(cfg1, host1, dht1, accountService1)
-	vpnService2 := vpn.New(cfg2, host2, dht2, accountService2)
+	vpnService1 := vpn.New(cfg1, host1, dht1, accountService1, &firewall1)
+	vpnService2 := vpn.New(cfg2, host2, dht2, accountService2, &firewall2)
 
 	// Start the VPN services
 	err = vpnService1.Start(ctx)
@@ -156,6 +160,7 @@ func createTestConfig(virtualIP string, subnet int) *config.C {
 	vpnSettings["subnet"] = subnet
 	vpnSettings["protocol"] = "/subnet/vpn/1.0.0"
 	vpnSettings["routines"] = 1
+	vpnSettings["tun_disabled"] = true // Use disabled TUN for testing
 
 	// Set unallowed ports
 	vpnSettings["unallowed_ports"] = map[string]bool{
@@ -180,122 +185,116 @@ func createTestConfig(virtualIP string, subnet int) *config.C {
 	// Add settings to config
 	cfg.Settings["vpn"] = vpnSettings
 
-	// Set TUN settings for testing
-	tunSettings := make(map[string]any)
-	tunSettings["disabled"] = true // Use disabled TUN for testing
-	cfg.Settings["tun"] = tunSettings
-
 	return cfg
 }
 
-// MockAccountServiceWrapper wraps the MockAccountService to implement account.Service interface
-type MockAccountServiceWrapper struct {
-	*testutil.MockAccountService
+// MockAccountService is a mock implementation of account.Service
+type MockAccountService struct {
 	client               *ethclient.Client
 	chainID              *big.Int
 	subnetProvider       *contracts.SubnetProvider
 	subnetProviderAddr   string
 	subnetAppStore       *contracts.SubnetAppStore
 	subnetAppStoreAddr   string
-	subnetIPRegistry     *contracts.SubnetIPRegistry
+	subnetIPRegistry     account.IPRegistry
 	subnetIPRegistryAddr string
 	providerID           int64
 }
 
-// GetClient retrieves the ethclient instance
-func (m *MockAccountServiceWrapper) GetClient() *ethclient.Client {
+func (m *MockAccountService) GetClient() *ethclient.Client {
 	return m.client
 }
 
-// Provider returns the subnet provider contract
-func (m *MockAccountServiceWrapper) Provider() *contracts.SubnetProvider {
+func (m *MockAccountService) Provider() *contracts.SubnetProvider {
 	return m.subnetProvider
 }
 
-// AppStore returns the subnet app store contract
-func (m *MockAccountServiceWrapper) AppStore() *contracts.SubnetAppStore {
+func (m *MockAccountService) AppStore() *contracts.SubnetAppStore {
 	return m.subnetAppStore
 }
 
-// IPRegistry returns the subnet IP registry contract
-func (m *MockAccountServiceWrapper) IPRegistry() *contracts.SubnetIPRegistry {
+func (m *MockAccountService) IPRegistry() account.IPRegistry {
 	return m.subnetIPRegistry
 }
 
-// GetChainID returns the chain ID
-func (m *MockAccountServiceWrapper) GetChainID() *big.Int {
+func (m *MockAccountService) GetChainID() *big.Int {
 	return m.chainID
 }
 
-// AppStoreAddr returns the subnet app store address
-func (m *MockAccountServiceWrapper) AppStoreAddr() string {
+func (m *MockAccountService) AppStoreAddr() string {
 	return m.subnetAppStoreAddr
 }
 
-// ProviderAddr returns the subnet provider address
-func (m *MockAccountServiceWrapper) ProviderAddr() string {
+func (m *MockAccountService) ProviderAddr() string {
 	return m.subnetProviderAddr
 }
 
-// IPRegistryAddr returns the subnet IP registry address
-func (m *MockAccountServiceWrapper) IPRegistryAddr() string {
+func (m *MockAccountService) IPRegistryAddr() string {
 	return m.subnetIPRegistryAddr
 }
 
-// GetAddress retrieves the Ethereum address from the private key
-func (m *MockAccountServiceWrapper) GetAddress() common.Address {
-	return common.Address{}
+func (m *MockAccountService) GetAddress() common.Address {
+	return common.HexToAddress("0x0000000000000000000000000000000000000001")
 }
 
-// GetBalance retrieves the Ether balance of the account
-func (m *MockAccountServiceWrapper) GetBalance(address common.Address) (*big.Int, error) {
+func (m *MockAccountService) GetBalance(address common.Address) (*big.Int, error) {
 	return big.NewInt(0), nil
 }
 
-// NewKeyedTransactor returns a new keyed transactor
-func (m *MockAccountServiceWrapper) NewKeyedTransactor() (*bind.TransactOpts, error) {
-	return nil, nil
+func (m *MockAccountService) NewKeyedTransactor() (*bind.TransactOpts, error) {
+	return &bind.TransactOpts{}, nil
 }
 
-// ProviderID returns the provider ID
-func (m *MockAccountServiceWrapper) ProviderID() int64 {
+func (m *MockAccountService) ProviderID() int64 {
 	return m.providerID
 }
 
-// SignAndSendTransaction creates, signs, and sends a transaction
-func (m *MockAccountServiceWrapper) SignAndSendTransaction(toAddress string, value *big.Int, gasLimit uint64, gasPrice *big.Int, data []byte) (string, error) {
-	return "", nil
+func (m *MockAccountService) SignAndSendTransaction(toAddress string, value *big.Int, gasLimit uint64, gasPrice *big.Int, data []byte) (string, error) {
+	return "0x0000000000000000000000000000000000000000000000000000000000000001", nil
 }
 
-// Sign signs the hash using ECDSA
-func (m *MockAccountServiceWrapper) Sign(hash []byte) ([]byte, error) {
+func (m *MockAccountService) Sign(hash []byte) ([]byte, error) {
 	return []byte{}, nil
 }
 
+// MockSubnetIPRegistry is a mock for contracts.SubnetIPRegistryCaller
+// that overrides GetPeer to return a fixed value.
+type MockSubnetIPRegistry struct {
+	peerIDByToken map[string]string
+}
+
+func (m *MockSubnetIPRegistry) GetPeer(opts *bind.CallOpts, tokenID *big.Int) (string, error) {
+	if m.peerIDByToken != nil {
+		if peerID, ok := m.peerIDByToken[tokenID.String()]; ok {
+			return peerID, nil
+		}
+	}
+	return "", nil
+}
+
 // createMockAccountService creates a mock account service for testing
-func createMockAccountService() *account.AccountService {
-	// Create a new AccountService with default values
-	cfg := config.NewC(test.NewLogger())
-	cfg.Settings["account"] = map[string]any{
-		"private_key": "0000000000000000000000000000000000000000000000000000000000000001",
-		"rpc":         "http://localhost:8545",
-		"chainid":     1,
+func createMockAccountServiceForPeer(virtualIP, peerID string) account.Service {
+	mockIPRegistry := &MockSubnetIPRegistry{
+		peerIDByToken: map[string]string{},
 	}
-	cfg.Settings["apps"] = map[string]any{
-		"subnet_app_store":   "0x0000000000000000000000000000000000000001",
-		"subnet_provider":    "0x0000000000000000000000000000000000000002",
-		"subnet_ip_registry": "0x0000000000000000000000000000000000000003",
-	}
-	cfg.Settings["provider"] = map[string]any{
-		"id": "0x1",
+	// Convert virtualIP to tokenID (as in production code)
+	tokenID := discovery.ConvertVirtualIPToNumber(virtualIP)
+	mockIPRegistry.peerIDByToken[big.NewInt(int64(tokenID)).String()] = peerID
+
+	// Create a mock that implements the account.Service interface
+	mock := &MockAccountService{
+		client:               &ethclient.Client{},
+		chainID:              big.NewInt(1),
+		subnetProvider:       &contracts.SubnetProvider{},
+		subnetProviderAddr:   "0x0000000000000000000000000000000000000002",
+		subnetAppStore:       &contracts.SubnetAppStore{},
+		subnetAppStoreAddr:   "0x0000000000000000000000000000000000000001",
+		subnetIPRegistry:     mockIPRegistry,
+		subnetIPRegistryAddr: "0x0000000000000000000000000000000000000003",
+		providerID:           1,
 	}
 
-	service, err := account.NewAccountService(cfg)
-	if err != nil {
-		panic(err)
-	}
-
-	return service
+	return mock
 }
 
 // testPacketTransmission tests packet transmission between two VPN services
@@ -503,4 +502,28 @@ func testStreamManagement(t *testing.T, _ context.Context, _, _ *vpn.Service, _,
 			assert.Greater(t, count, 0, "Stream %d should have received packets", i)
 		}
 	})
+}
+
+// mockDHT is a simple in-memory mock for routing.ValueStore
+// used to bypass DHT errors in integration tests
+type mockDHT struct {
+	store map[string][]byte
+}
+
+func (m *mockDHT) GetValue(_ context.Context, key string, _ ...routing.Option) ([]byte, error) {
+	if v, ok := m.store[key]; ok {
+		return v, nil
+	}
+	return nil, nil
+}
+
+func (m *mockDHT) PutValue(_ context.Context, key string, value []byte, _ ...routing.Option) error {
+	m.store[key] = value
+	return nil
+}
+
+func (m *mockDHT) SearchValue(_ context.Context, key string, _ ...routing.Option) (<-chan []byte, error) {
+	ch := make(chan []byte)
+	close(ch)
+	return ch, nil
 }

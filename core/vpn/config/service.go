@@ -21,6 +21,7 @@ type ConfigService interface {
 	GetRoutes() []string
 	GetProtocol() string
 	GetRoutines() int
+	GetTUNDisabled() bool
 
 	// Security settings
 	GetConntrackCacheTimeout() time.Duration
@@ -119,6 +120,13 @@ func (c *ConfigServiceImpl) GetRoutines() int {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.vpnConfig.Routines
+}
+
+// GetTUNDisabled returns whether TUN is disabled
+func (c *ConfigServiceImpl) GetTUNDisabled() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.vpnConfig.TUNDisabled
 }
 
 // Security settings

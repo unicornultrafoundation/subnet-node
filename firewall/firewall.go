@@ -21,6 +21,8 @@ import (
 
 type FirewallInterface interface {
 	AddRule(incoming bool, proto uint8, startPort int32, endPort int32, groups []string, addr, localAddr netip.Prefix) error
+	AddNetwork(network netip.Prefix) error
+	Drop(fp Packet, incoming bool, localCache ConntrackCache) error
 }
 
 type conn struct {
@@ -279,6 +281,12 @@ func (f *Firewall) AddRule(incoming bool, proto uint8, startPort int32, endPort 
 	return fp.addRule(f, startPort, endPort, groups, ip, localIp)
 }
 
+func (f *Firewall) AddNetwork(network netip.Prefix) error {
+	f.routableNetworks.Insert(network)
+	f.assignedNetworks = append(f.assignedNetworks, network)
+	return nil
+}
+
 // GetRuleHash returns a hash representation of all inbound and outbound rules
 func (f *Firewall) GetRuleHash() string {
 	sum := sha256.Sum256([]byte(f.rules))
@@ -439,10 +447,16 @@ func (f *Firewall) metrics(incoming bool) firewallMetrics {
 	}
 }
 
+// Start starts the firewall service.
+func (f *Firewall) Start() error {
+	return nil
+}
+
 // Destroy cleans up any known cyclical references so the object can be free'd my GC. This should be called if a new
 // firewall object is created
-func (f *Firewall) Destroy() {
+func (f *Firewall) Destroy() error {
 	//TODO: clean references if/when needed
+	return nil
 }
 
 func (f *Firewall) EmitStats() {

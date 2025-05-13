@@ -31,13 +31,13 @@ type PeerDiscovery struct {
 	// Virtual IP for this node
 	virtualIP string
 	// Account service for registry lookups
-	accountService *account.AccountService
+	accountService account.Service
 	// Mutex for thread safety
 	mu sync.RWMutex
 }
 
 // NewPeerDiscovery creates a new peer discovery service
-func NewPeerDiscovery(host host.Host, dht routing.ValueStore, virtualIP string, accountService *account.AccountService) *PeerDiscovery {
+func NewPeerDiscovery(host host.Host, dht routing.ValueStore, virtualIP string, accountService account.Service) *PeerDiscovery {
 	return &PeerDiscovery{
 		host:           host,
 		dht:            dht,
@@ -158,7 +158,7 @@ func (p *PeerDiscovery) VerifyVirtualIPHasRegistered(ctx context.Context, virtua
 }
 
 // NewPeerDiscoveryFromLibp2p creates a new peer discovery service from libp2p components
-func NewPeerDiscoveryFromLibp2p(host host.Host, dht routing.ValueStore, virtualIP string, accountService *account.AccountService) *PeerDiscovery {
+func NewPeerDiscoveryFromLibp2p(host host.Host, dht routing.ValueStore, virtualIP string, accountService account.Service) *PeerDiscovery {
 	return NewPeerDiscovery(
 		host,
 		dht,

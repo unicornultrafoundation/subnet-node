@@ -29,11 +29,11 @@ type InboundPacketService struct {
 	// Logger
 	logger *logrus.Entry
 	// Firewall instance
-	firewall *firewall.Firewall
+	firewall firewall.FirewallInterface
 }
 
 // NewInboundPacketService creates a new inbound packet service
-func NewInboundPacketService(tunService *TUNService, configService vpnconfig.ConfigService) *InboundPacketService {
+func NewInboundPacketService(tunService *TUNService, configService vpnconfig.ConfigService, firewall firewall.FirewallInterface) *InboundPacketService {
 	// Create a new logger
 	logger := logrus.WithField("service", "vpn-inbound")
 
@@ -43,13 +43,9 @@ func NewInboundPacketService(tunService *TUNService, configService vpnconfig.Con
 			MTU:            configService.GetMTU(),
 			ctCacheTimeout: configService.GetConntrackCacheTimeout(),
 		},
-		logger: logger,
+		logger:   logger,
+		firewall: firewall,
 	}
-}
-
-// SetFirewall sets the firewall instance for the inbound service
-func (s *InboundPacketService) SetFirewall(fw *firewall.Firewall) {
-	s.firewall = fw
 }
 
 // HandleStream handles an incoming stream from a peer

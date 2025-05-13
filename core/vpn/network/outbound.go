@@ -37,11 +37,11 @@ type OutboundPacketService struct {
 	// Flag to indicate if the service is closed
 	closed atomic.Bool
 	// Firewall instance
-	firewall *firewall.Firewall
+	firewall firewall.FirewallInterface
 }
 
 // NewOutboundPacketService creates a new outbound packet service
-func NewOutboundPacketService(tunService *TUNService, dispatcher dispatcher.DispatcherService, configService vpnconfig.ConfigService) *OutboundPacketService {
+func NewOutboundPacketService(tunService *TUNService, dispatcher dispatcher.DispatcherService, configService vpnconfig.ConfigService, firewall firewall.FirewallInterface) *OutboundPacketService {
 	logger := logrus.WithField("service", "vpn-outbound")
 
 	return &OutboundPacketService{
@@ -51,14 +51,10 @@ func NewOutboundPacketService(tunService *TUNService, dispatcher dispatcher.Disp
 			MTU:            configService.GetMTU(),
 			ctCacheTimeout: configService.GetConntrackCacheTimeout(),
 		},
-		logger: logger,
-		closed: atomic.Bool{},
+		logger:   logger,
+		closed:   atomic.Bool{},
+		firewall: firewall,
 	}
-}
-
-// SetFirewall sets the firewall instance for the outbound service
-func (s *OutboundPacketService) SetFirewall(fw *firewall.Firewall) {
-	s.firewall = fw
 }
 
 // Start initializes and starts the outbound packet service

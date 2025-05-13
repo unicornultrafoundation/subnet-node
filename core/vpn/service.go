@@ -9,15 +9,14 @@ package vpn
 import (
 	"context"
 	"fmt"
-	"net/netip"
 	"sync"
 	"time"
 
-	ddht "github.com/libp2p/go-libp2p-kad-dht/dual"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
+	"github.com/libp2p/go-libp2p/core/routing"
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/config"
 	"github.com/unicornultrafoundation/subnet-node/core/account"
@@ -40,9 +39,9 @@ type Service struct {
 	mu             sync.RWMutex
 	cfg            *config.C
 	configService  vpnconfig.ConfigService
-	accountService *account.AccountService
+	accountService account.Service
 	peerHost       host.Host
-	dht            *ddht.DHT
+	dht            routing.ValueStore
 
 	// Core components
 	peerDiscovery     *discovery.PeerDiscovery
@@ -51,6 +50,7 @@ type Service struct {
 	inboundService    *vpnnetwork.InboundPacketService
 	dispatcher        dispatcher.DispatcherService
 	resilienceService *resilience.ResilienceService
+	firewall          firewall.FirewallInterface
 
 	// Context management
 	serviceCtx    context.Context
@@ -64,7 +64,7 @@ type Service struct {
 }
 
 // New creates a new VPN service with the provided configuration and dependencies.
-func New(cfg *config.C, peerHost host.Host, dht *ddht.DHT, accountService *account.AccountService) *Service {
+func New(cfg *config.C, peerHost host.Host, dht routing.ValueStore, accountService account.Service, firewall firewall.FirewallInterface) *Service {
 	// Create the configuration service
 	configService := vpnconfig.NewConfigService(cfg)
 
@@ -80,6 +80,7 @@ func New(cfg *config.C, peerHost host.Host, dht *ddht.DHT, accountService *accou
 		dht:             dht,
 		resourceManager: resourceManager,
 		stopChan:        make(chan struct{}),
+		firewall:        firewall,
 	}
 
 	// Create the peer discovery service
@@ -129,13 +130,14 @@ func New(cfg *config.C, peerHost host.Host, dht *ddht.DHT, accountService *accou
 		service.tunService,
 		service.dispatcher,
 		service.configService,
+		service.firewall,
 	)
 
 	// Register the outbound service with the resource manager
 	service.resourceManager.Register(service.outboundService)
 
 	// Create the inbound packet service
-	service.inboundService = vpnnetwork.NewInboundPacketService(service.tunService, configService)
+	service.inboundService = vpnnetwork.NewInboundPacketService(service.tunService, configService, service.firewall)
 
 	// Register the inbound service with the resource manager
 	service.resourceManager.Register(service.inboundService)
@@ -232,28 +234,24 @@ func (s *Service) start(_, dhtCtx, tunCtx, clientCtx context.Context) error {
 		return fmt.Errorf("failed to sync peer ID to DHT: %w", err)
 	}
 
-	// Set up the TUN interface with retry
-	tunSetupCtx, cancel := context.WithTimeout(tunCtx, s.configService.GetTUNSetupTimeout())
-	defer cancel()
+	// Check if TUN is disabled
+	if s.configService.GetTUNDisabled() {
+		log.Infoln("TUN interface is disabled, skipping setup")
+	} else {
+		// Set up the TUN interface with retry
+		tunSetupCtx, cancel := context.WithTimeout(tunCtx, s.configService.GetTUNSetupTimeout())
+		defer cancel()
 
-	// Setup TUN interface with retry
-	err = s.setupTUNWithRetry(tunSetupCtx)
-	if err != nil {
-		return fmt.Errorf("failed to setup TUN interface: %w", err)
+		// Setup TUN interface with retry
+		err = s.setupTUNWithRetry(tunSetupCtx)
+		if err != nil {
+			return fmt.Errorf("failed to setup TUN interface: %w", err)
+		}
+
+		// Get VPN networks from TUN service
+		cidr := s.tunService.GetCIDR()
+		s.firewall.AddNetwork(cidr)
 	}
-
-	// Get VPN networks from TUN service
-	cidr := s.tunService.GetCIDR()
-
-	// Create firewall instance using NewFirewallFromConfig
-	fw, err := firewall.NewFirewallFromConfig(log.WithField("service", "vpn-firewall").Logger, s.cfg, []netip.Prefix{cidr})
-	if err != nil {
-		return fmt.Errorf("failed to create firewall: %w", err)
-	}
-
-	// Set the firewall for the outbound and inbound services
-	s.outboundService.SetFirewall(fw)
-	s.inboundService.SetFirewall(fw)
 
 	// Set up the stream handler for incoming P2P streams
 	s.peerHost.SetStreamHandler(protocol.ID(s.configService.GetProtocol()), func(netStream network.Stream) {
