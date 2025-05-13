@@ -3,37 +3,20 @@ package dispatcher
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/utils"
-	"github.com/unicornultrafoundation/subnet-node/firewall"
 )
 
 // DispatchPacket dispatches a packet to the appropriate stream
-func (d *Dispatcher) DispatchPacket(ctx context.Context, packet []byte, queueID int) error {
-	// Parse the packet to get the destination IP
-	fwPacket := &firewall.Packet{}
-	if err := utils.ParsePacket(packet, false, fwPacket); err != nil {
-		log.WithError(err).WithField("packet_size", len(packet)).Error("Failed to parse packet")
-		return fmt.Errorf("failed to parse packet: %w", err)
-	}
-
-	// Get the remote address
-	remote := fwPacket.RemoteAddr.String()
-
-	// Ignore non-10.x.x.x addresses
-	if !strings.HasPrefix(remote, "10.") {
-		return nil
-	}
-
+func (d *Dispatcher) DispatchPacket(ctx context.Context, packet []byte, remoteAddr string, queueID int) error {
 	// Get the peer ID for the destination IP
-	peerIDStr, err := d.peerDiscovery.GetPeerID(ctx, remote)
+	peerIDStr, err := d.peerDiscovery.GetPeerID(ctx, remoteAddr)
 	if err != nil {
-		log.WithError(err).WithField("remote_ip", remote).Error("Failed to get peer ID")
-		return fmt.Errorf("failed to get peer ID for %s: %w", remote, err)
+		log.WithError(err).WithField("remote_ip", remoteAddr).Error("Failed to get peer ID")
+		return fmt.Errorf("failed to get peer ID for %s: %w", remoteAddr, err)
 	}
 
 	// Decode the peer ID

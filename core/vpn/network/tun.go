@@ -36,6 +36,8 @@ type TUNService struct {
 	readers []io.ReadWriteCloser
 	// Number of reader routines
 	routines int
+	// Cidr for the TUN interface
+	cidr netip.Prefix
 	// Logger
 	logger *logrus.Entry
 }
@@ -62,13 +64,14 @@ func NewTUNService(config *TUNConfig) *TUNService {
 // SetupTUN initializes a TUN device using overlay package
 func (s *TUNService) SetupTUN() error {
 	// Create overlay configuration
-	cfg, vpnNetworks, err := s.createOverlayConfig()
+	cfg, cidr, err := s.createOverlayConfig()
 	if err != nil {
 		return err
 	}
+	s.cidr = cidr
 
 	// Create a new device from config
-	device, err := overlay.NewDeviceFromConfig(cfg, s.logger.Logger, vpnNetworks, s.routines)
+	device, err := overlay.NewDeviceFromConfig(cfg, s.logger.Logger, []netip.Prefix{cidr}, s.routines)
 	if err != nil {
 		return fmt.Errorf("failed to create TUN device: %w", err)
 	}
@@ -106,15 +109,12 @@ func (s *TUNService) SetupTUN() error {
 }
 
 // createOverlayConfig creates a configuration for the overlay device
-func (s *TUNService) createOverlayConfig() (*config.C, []netip.Prefix, error) {
+func (s *TUNService) createOverlayConfig() (*config.C, netip.Prefix, error) {
 	// Parse the virtual IP as a prefix
-	prefix, err := netip.ParsePrefix(fmt.Sprintf("%s/%s", s.config.VirtualIP, s.config.Subnet))
+	cidr, err := netip.ParsePrefix(fmt.Sprintf("%s/%s", s.config.VirtualIP, s.config.Subnet))
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to parse virtual IP: %w", err)
+		return nil, netip.Prefix{}, fmt.Errorf("failed to parse virtual IP: %w", err)
 	}
-
-	// Create a slice of network prefixes
-	vpnNetworks := []netip.Prefix{prefix}
 
 	// Create a new config for overlay
 	cfg := config.NewC(s.logger.Logger)
@@ -143,7 +143,7 @@ func (s *TUNService) createOverlayConfig() (*config.C, []netip.Prefix, error) {
 		tunMap["routes"] = routesArray
 	}
 
-	return cfg, vpnNetworks, nil
+	return cfg, cidr, nil
 }
 
 // Close closes the TUN interface and all readers
@@ -175,4 +175,9 @@ func (s *TUNService) GetReaders() []io.ReadWriteCloser {
 // GetRoutines returns the number of reader routines
 func (s *TUNService) GetRoutines() int {
 	return s.routines
+}
+
+// GetCIDR returns the CIDR for the TUN interface
+func (s *TUNService) GetCIDR() netip.Prefix {
+	return s.cidr
 }

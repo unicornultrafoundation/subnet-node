@@ -12,11 +12,11 @@ import (
 	"sync"
 	"time"
 
-	ddht "github.com/libp2p/go-libp2p-kad-dht/dual"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
+	"github.com/libp2p/go-libp2p/core/routing"
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/config"
 	"github.com/unicornultrafoundation/subnet-node/core/account"
@@ -26,6 +26,7 @@ import (
 	vpnnetwork "github.com/unicornultrafoundation/subnet-node/core/vpn/network"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/resilience"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/utils"
+	"github.com/unicornultrafoundation/subnet-node/firewall"
 )
 
 // Logger for the VPN service
@@ -38,9 +39,9 @@ type Service struct {
 	mu             sync.RWMutex
 	cfg            *config.C
 	configService  vpnconfig.ConfigService
-	accountService *account.AccountService
+	accountService account.Service
 	peerHost       host.Host
-	dht            *ddht.DHT
+	dht            routing.ValueStore
 
 	// Core components
 	peerDiscovery     *discovery.PeerDiscovery
@@ -49,6 +50,7 @@ type Service struct {
 	inboundService    *vpnnetwork.InboundPacketService
 	dispatcher        dispatcher.DispatcherService
 	resilienceService *resilience.ResilienceService
+	firewall          firewall.FirewallInterface
 
 	// Context management
 	serviceCtx    context.Context
@@ -62,7 +64,7 @@ type Service struct {
 }
 
 // New creates a new VPN service with the provided configuration and dependencies.
-func New(cfg *config.C, peerHost host.Host, dht *ddht.DHT, accountService *account.AccountService) *Service {
+func New(cfg *config.C, peerHost host.Host, dht routing.ValueStore, accountService account.Service, firewall firewall.FirewallInterface) *Service {
 	// Create the configuration service
 	configService := vpnconfig.NewConfigService(cfg)
 
@@ -78,6 +80,7 @@ func New(cfg *config.C, peerHost host.Host, dht *ddht.DHT, accountService *accou
 		dht:             dht,
 		resourceManager: resourceManager,
 		stopChan:        make(chan struct{}),
+		firewall:        firewall,
 	}
 
 	// Create the peer discovery service
@@ -127,17 +130,14 @@ func New(cfg *config.C, peerHost host.Host, dht *ddht.DHT, accountService *accou
 		service.tunService,
 		service.dispatcher,
 		service.configService,
+		service.firewall,
 	)
 
 	// Register the outbound service with the resource manager
 	service.resourceManager.Register(service.outboundService)
 
 	// Create the inbound packet service
-	inboundConfig := &vpnnetwork.InboundConfig{
-		MTU:            configService.GetMTU(),
-		UnallowedPorts: configService.GetUnallowedPorts(),
-	}
-	service.inboundService = vpnnetwork.NewInboundPacketService(service.tunService, inboundConfig)
+	service.inboundService = vpnnetwork.NewInboundPacketService(service.tunService, configService, service.firewall)
 
 	// Register the inbound service with the resource manager
 	service.resourceManager.Register(service.inboundService)
@@ -178,12 +178,10 @@ func (s *Service) Start(ctx context.Context) error {
 	tunCtx := s.serviceCtx
 	clientCtx := s.serviceCtx
 
-	go func() {
-		err := s.start(s.serviceCtx, dhtCtx, tunCtx, clientCtx)
-		if err != nil {
-			log.Errorf("Something went wrong when running VPN: %v", err)
-		}
-	}()
+	err := s.start(s.serviceCtx, dhtCtx, tunCtx, clientCtx)
+	if err != nil {
+		return fmt.Errorf("something went wrong when running VPN: %v", err)
+	}
 
 	return nil
 }
@@ -226,9 +224,6 @@ func (s *Service) waitUntilPeerConnected(ctx context.Context, host host.Host) er
 // start is the internal implementation of the Start method.
 // It initializes and starts all VPN components in sequence.
 func (s *Service) start(_, dhtCtx, tunCtx, clientCtx context.Context) error {
-	// Start the packet dispatcher
-	s.dispatcher.Start()
-
 	// Create a context with timeout for DHT sync
 	dhtSyncCtx, cancel := context.WithTimeout(dhtCtx, s.configService.GetDHTSyncTimeout())
 	defer cancel()
@@ -239,14 +234,23 @@ func (s *Service) start(_, dhtCtx, tunCtx, clientCtx context.Context) error {
 		return fmt.Errorf("failed to sync peer ID to DHT: %w", err)
 	}
 
-	// Set up the TUN interface with retry
-	tunSetupCtx, cancel := context.WithTimeout(tunCtx, s.configService.GetTUNSetupTimeout())
-	defer cancel()
+	// Check if TUN is disabled
+	if s.configService.GetTUNDisabled() {
+		log.Infoln("TUN interface is disabled, skipping setup")
+	} else {
+		// Set up the TUN interface with retry
+		tunSetupCtx, cancel := context.WithTimeout(tunCtx, s.configService.GetTUNSetupTimeout())
+		defer cancel()
 
-	// Setup TUN interface with retry
-	err = s.setupTUNWithRetry(tunSetupCtx)
-	if err != nil {
-		return fmt.Errorf("failed to setup TUN interface: %w", err)
+		// Setup TUN interface with retry
+		err = s.setupTUNWithRetry(tunSetupCtx)
+		if err != nil {
+			return fmt.Errorf("failed to setup TUN interface: %w", err)
+		}
+
+		// Get VPN networks from TUN service
+		cidr := s.tunService.GetCIDR()
+		s.firewall.AddNetwork(cidr)
 	}
 
 	// Set up the stream handler for incoming P2P streams
@@ -254,6 +258,9 @@ func (s *Service) start(_, dhtCtx, tunCtx, clientCtx context.Context) error {
 		// Handle the incoming stream as a VPN stream
 		s.inboundService.HandleStream(netStream)
 	})
+
+	// Start the packet dispatcher
+	s.dispatcher.Start()
 
 	// Start the outbound service with its own context
 	return s.outboundService.Start(clientCtx)

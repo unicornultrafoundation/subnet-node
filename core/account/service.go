@@ -30,7 +30,7 @@ type AccountService struct {
 	subnetProviderAddr   string
 	subnetAppStore       *contracts.SubnetAppStore
 	subnetAppStoreAddr   string
-	subnetIPRegistry     *contracts.SubnetIPRegistry
+	subnetIPRegistry     IPRegistry
 	subnetIPRegistryAddr string
 	providerID           int64
 }
@@ -80,6 +80,8 @@ func NewAccountService(cfg *config.C) (*AccountService, error) {
 		return nil, err
 	}
 
+	var ipRegistry IPRegistry = subnetIPRegistry
+
 	s := &AccountService{
 		privateKey:           privateKey,
 		client:               client,
@@ -88,7 +90,7 @@ func NewAccountService(cfg *config.C) (*AccountService, error) {
 		subnetProviderAddr:   subnetProviderAddr,
 		subnetAppStore:       subnetAppStore,
 		subnetAppStoreAddr:   subnetAppStoreAddr,
-		subnetIPRegistry:     subnetIPRegistry,
+		subnetIPRegistry:     ipRegistry,
 		subnetIPRegistryAddr: subnetIPRegistryAddr,
 	}
 	s.updateProviderID(cfg)
@@ -134,7 +136,7 @@ func (s *AccountService) AppStore() *contracts.SubnetAppStore {
 	return s.subnetAppStore
 }
 
-func (s *AccountService) IPRegistry() *contracts.SubnetIPRegistry {
+func (s *AccountService) IPRegistry() IPRegistry {
 	return s.subnetIPRegistry
 }
 

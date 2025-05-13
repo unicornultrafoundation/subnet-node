@@ -5,8 +5,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/config"
 )
+
+var log = logrus.WithField("service", "vpn-config")
 
 // ConfigService is the interface for the centralized configuration service
 type ConfigService interface {
@@ -18,9 +21,10 @@ type ConfigService interface {
 	GetRoutes() []string
 	GetProtocol() string
 	GetRoutines() int
+	GetTUNDisabled() bool
 
 	// Security settings
-	GetUnallowedPorts() map[string]bool
+	GetConntrackCacheTimeout() time.Duration
 
 	// Stream pool settings
 	GetStreamIdleTimeout() time.Duration
@@ -118,13 +122,20 @@ func (c *ConfigServiceImpl) GetRoutines() int {
 	return c.vpnConfig.Routines
 }
 
-// Security settings
-
-// GetUnallowedPorts returns the unallowed ports
-func (c *ConfigServiceImpl) GetUnallowedPorts() map[string]bool {
+// GetTUNDisabled returns whether TUN is disabled
+func (c *ConfigServiceImpl) GetTUNDisabled() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	return c.vpnConfig.UnallowedPorts
+	return c.vpnConfig.TUNDisabled
+}
+
+// Security settings
+
+// GetConntrackCacheTimeout returns the conntrack cache timeout
+func (c *ConfigServiceImpl) GetConntrackCacheTimeout() time.Duration {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.vpnConfig.ConntrackCacheTimeout
 }
 
 // Stream settings
