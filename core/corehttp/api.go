@@ -16,6 +16,7 @@ const APIPath = "/"
 func APIOption() ServeOption {
 	return func(n *core.SubnetNode, _ net.Listener, smux *http.ServeMux) (*http.ServeMux, error) {
 		capi, err := coreapi.NewCoreAPI(n)
+
 		if err != nil {
 			return nil, err
 		}
@@ -27,7 +28,11 @@ func APIOption() ServeOption {
 		server.RegisterName("routing", api.NewRoutingAPI(capi.Routing()))
 		server.RegisterName("node", api.NewNodeAPI(capi.Resource(), n.Apps, n))
 		server.RegisterName("pubsub", api.NewPubsubAPI(capi.PubSub()))
-		server.RegisterName("app", api.NewAppAPI(n.Apps))
+
+		if cfg.GetBool("provider.enable", false) {
+			server.RegisterName("app", api.NewAppAPI(n.Apps))
+		}
+
 		server.RegisterName("account", api.NewAccountAPI(n.Account))
 		server.RegisterName("config", api.NewConfigAPI(n.Repo))
 		server.RegisterName("version", api.NewVersionAPI()) // Register the VersionAPI

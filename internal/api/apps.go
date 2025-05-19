@@ -159,6 +159,7 @@ func (api *AppAPI) RunApp(ctx context.Context, appId hexutil.Big) (*appResult, e
 	if err != nil {
 		return nil, err
 	}
+
 	return convertToAppResult(subnetApp), nil
 }
 

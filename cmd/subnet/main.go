@@ -9,6 +9,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	ninit "github.com/unicornultrafoundation/subnet-node/cmd/init"
+	"github.com/unicornultrafoundation/subnet-node/cmd/subnet/config"
 	"github.com/unicornultrafoundation/subnet-node/subnet"
 )
 
@@ -49,6 +50,19 @@ func main() {
 		fmt.Println("-datadir flag must be set")
 		flag.Usage()
 		os.Exit(1)
+	}
+
+	// Check for subcommand
+	if len(flag.Args()) > 0 {
+		subcommand := flag.Args()[0]
+
+		if subcommand == "edit-config" {
+			if err := config.EditConfig(*dataPath, flag.Args()[1:]); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				os.Exit(1)
+			}
+			os.Exit(0)
+		}
 	}
 
 	if *initFlag {

@@ -19,7 +19,7 @@ type CORSOptions struct {
 }
 
 // convertToStringSlice converts a slice of interface{} to a slice of string.
-func convertToStringSlice(slice []interface{}) []string {
+func convertToStringSlice(slice []any) []string {
 	strSlice := make([]string, len(slice))
 	for i, v := range slice {
 		strSlice[i] = v.(string)
@@ -111,15 +111,15 @@ func WithAuth(cfg *config.C, next http.Handler) http.Handler {
 func parseAuthorizationsFromConfig(cfg *config.C) map[string]Authorization {
 	// authorizations is a map where we can just check for the header value to match.
 	authorizations := map[string]Authorization{}
-	authScopes := cfg.GetMap("api.authorizations", map[interface{}]interface{}{})
+	authScopes := cfg.GetMap("api.authorizations", map[string]any{})
 
 	for user, authScope := range authScopes {
-		if scopeMap, ok := authScope.(map[interface{}]interface{}); ok {
+		if scopeMap, ok := authScope.(map[string]any); ok {
 			expectedHeader := base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", user, scopeMap["auth_secret"])))
 			// Encode the auth secret to base64
 			authorizations[expectedHeader] = Authorization{
 				AuthSecret:     scopeMap["auth_secret"].(string),
-				AllowedMethods: convertToStringSlice(scopeMap["allowed_methods"].([]interface{})),
+				AllowedMethods: convertToStringSlice(scopeMap["allowed_methods"].([]any)),
 			}
 		}
 	}

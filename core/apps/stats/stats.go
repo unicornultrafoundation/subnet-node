@@ -324,11 +324,6 @@ func (s *Stats) updateAllRunningContainersStats() {
 	for _, container := range containers {
 		// Get container ID (assuming appID is same as container ID)
 		containerId := strings.TrimPrefix(container.Names[0], "/")
-
-		if !strings.HasPrefix(containerId, "subnet-") {
-			continue
-		}
-
 		if err := s.updateStats(ctx, containerId); err != nil {
 			log.Errorf("failed to update stats for container %s: %v\n", containerId, err)
 		}

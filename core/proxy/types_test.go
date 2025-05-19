@@ -11,15 +11,15 @@ import (
 func TestParseProxyConfig(t *testing.T) {
 	// Mock YAML data as map[interface{}]interface{}
 	peerId := "12D3KooWNNtWuCNRJQxyxJwqMqgSqcKcwXg2N2U5aghbRfp3JS2x"
-	yamlData := map[interface{}]interface{}{
+	yamlData := map[string]any{
 		"enable": true,
-		"peers": []interface{}{
-			map[interface{}]interface{}{
+		"peers": []any{
+			map[string]any{
 				"id": peerId,
-				"apps": []interface{}{
-					map[interface{}]interface{}{
+				"apps": []any{
+					map[string]any{
 						"id":    "2",
-						"ports": []interface{}{"9933:8080", "9934:8080", "9935:8080"},
+						"ports": []any{"9933:8080", "9934:8080", "9935:8080"},
 					},
 				},
 			},

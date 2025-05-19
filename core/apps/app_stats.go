@@ -59,11 +59,6 @@ func (s *Service) GetAllRunningContainersUsage(ctx context.Context) (*atypes.Res
 	// Iterate over each container and aggregate its resource usage
 	for _, container := range containers {
 		containerId := strings.TrimPrefix(container.Names[0], "/")
-
-		if !strings.HasPrefix(containerId, "subnet-") {
-			continue
-		}
-
 		appId, err := atypes.GetAppIdFromContainerId(containerId)
 
 		if err != nil {

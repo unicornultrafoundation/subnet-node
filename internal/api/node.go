@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/base64"
+	"fmt"
 	"sort"
 
 	ic "github.com/libp2p/go-libp2p/core/crypto"
@@ -25,11 +26,10 @@ func NewNodeAPI(resource *resource.Service, appS *apps.Service, node *core.Subne
 }
 
 func (api *NodeAPI) GetResource(ctx context.Context) (*resource.ResourceInfo, error) {
-	return api.resource.GetResource(), nil
-}
-
-func (api *NodeAPI) GetPeerId(ctx context.Context) (string, error) {
-	return api.resource.PeerId().String(), nil
+	if api.resource == nil {
+		return nil, fmt.Errorf("api.resource is not supported")
+	}
+	return api.resource.GetResource()
 }
 
 func (api *NodeAPI) Restart(ctx context.Context) error {
@@ -45,7 +45,7 @@ type IdOutput struct { // nolint
 }
 
 func (api *NodeAPI) Id(ctx context.Context) (*IdOutput, error) {
-	p := api.resource.PeerId()
+	p := api.node.Identity
 	info := new(IdOutput)
 	info.ID = p.String()
 	ps := api.node.Peerstore

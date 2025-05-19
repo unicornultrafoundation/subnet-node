@@ -25,7 +25,7 @@ type Service struct {
 
 // Initializes the Peer Service.
 func New(peerHost p2phost.Host, peerId peer.ID, cfg *config.C) (*Service, error) {
-	parsedConfig, err := ParseProxyConfig(cfg.GetMap("proxy", map[interface{}]interface{}{}))
+	parsedConfig, err := ParseProxyConfig(cfg.GetMap("proxy", map[string]any{}))
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse proxy config: %v", err)

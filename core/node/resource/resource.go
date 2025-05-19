@@ -9,6 +9,7 @@ import (
 	"github.com/hashicorp/go-multierror"
 	"github.com/ipinfo/go/v2/ipinfo"
 	"github.com/shirou/gopsutil/v4/cpu"
+	"github.com/shirou/gopsutil/v4/disk"
 	"github.com/shirou/gopsutil/v4/mem"
 	"github.com/showwin/speedtest-go/speedtest"
 	"github.com/sirupsen/logrus"
@@ -17,12 +18,13 @@ import (
 var log = logrus.WithField("node", "resource")
 
 type ResourceInfo struct {
-	Region    RegionInfo    `json:"region"`
-	PeerID    string        `json:"peer_id"`
-	CPU       CpuInfo       `json:"cpu"`       // CPU cores
-	GPU       GpuInfo       `json:"gpu"`       // GPU cores
-	Memory    MemoryInfo    `json:"memory"`    // RAM (MB)
-	Bandwidth BandwidthInfo `json:"bandwidth"` // Bandwidth (Mbps)
+	Region     RegionInfo    `json:"region"`
+	CPU        CpuInfo       `json:"cpu"`       // CPU cores
+	GPU        GpuInfo       `json:"gpu"`       // GPU cores
+	Memory     MemoryInfo    `json:"memory"`    // RAM (MB)
+	Bandwidth  BandwidthInfo `json:"bandwidth"` // Bandwidth (Mbps)
+	Storage    StorageInfo   `json:"storage"`   // Storage (MB)
+	LastUpdate time.Time     `json:"last_update"`
 }
 
 type RegionInfo struct {
@@ -32,7 +34,6 @@ type RegionInfo struct {
 
 type MemoryInfo struct {
 	Total uint64 `json:"total"`
-	Used  uint64 `json:"used"`
 }
 
 type CpuInfo struct {
@@ -49,6 +50,10 @@ type BandwidthInfo struct {
 	Latency       time.Duration `json:"latency"`
 	UploadSpeed   uint64        `json:"upload"`
 	DownloadSpeed uint64        `json:"download"`
+}
+
+type StorageInfo struct {
+	Total uint64 `json:"total"`
 }
 
 func (r *ResourceInfo) Topic() string {
@@ -111,6 +116,16 @@ func getBandwidth() (BandwidthInfo, error) {
 	}, nil
 }
 
+func getStorage() (StorageInfo, error) {
+	usage, err := disk.Usage("/")
+	if err != nil {
+		return StorageInfo{}, err
+	}
+	return StorageInfo{
+		Total: usage.Total,
+	}, nil
+}
+
 func GetResource() (*ResourceInfo, error) {
 	var (
 		wg       sync.WaitGroup
@@ -134,17 +149,19 @@ func GetResource() (*ResourceInfo, error) {
 		},
 		Memory: MemoryInfo{
 			Total: 0,
-			Used:  0,
 		},
 		Bandwidth: BandwidthInfo{
 			Latency:       0,
 			UploadSpeed:   0,
 			DownloadSpeed: 0,
 		},
+		Storage: StorageInfo{
+			Total: 0,
+		},
 	}
 
 	// Run resource fetchers in parallel
-	wg.Add(4)
+	wg.Add(5)
 
 	go func() {
 		defer wg.Done()
@@ -180,7 +197,6 @@ func GetResource() (*ResourceInfo, error) {
 		} else {
 			resource.Memory = MemoryInfo{
 				Total: v.Total,
-				Used:  v.Used,
 			}
 		}
 	}()
@@ -194,6 +210,18 @@ func GetResource() (*ResourceInfo, error) {
 			errs = multierror.Append(err)
 		} else {
 			resource.Bandwidth = bandwidth
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		storage, err := getStorage()
+		mutex.Lock()
+		defer mutex.Unlock()
+		if err != nil {
+			errs = multierror.Append(err)
+		} else {
+			resource.Storage = storage
 		}
 	}()
 
@@ -215,6 +243,8 @@ func GetResource() (*ResourceInfo, error) {
 			}
 		}
 	}
+
+	resource.LastUpdate = time.Now()
 
 	// Return the result and aggregated errors
 	return &resource, errs.ErrorOrNil()

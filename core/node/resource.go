@@ -2,8 +2,8 @@ package node
 
 import (
 	"context"
-	"time"
 
+	"github.com/ipfs/go-datastore"
 	ddht "github.com/libp2p/go-libp2p-kad-dht/dual"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -12,13 +12,19 @@ import (
 	"go.uber.org/fx"
 )
 
-func ResourceService(lc fx.Lifecycle, id peer.ID, pubsub *pubsub.PubSub, DHT *ddht.DHT, cfg *config.C) *resource.Service {
+func ResourceService(lc fx.Lifecycle, id peer.ID, ds datastore.Datastore, pubsub *pubsub.PubSub, DHT *ddht.DHT, cfg *config.C) *resource.Service {
+	isProvider := cfg.GetBool("provider.enable", false)
+
+	if !isProvider {
+		return nil
+	}
+
 	srv := &resource.Service{
 		Identity:   id,
 		PubSub:     pubsub,
 		DHT:        DHT,
-		UpdateFreq: 1 * time.Minute,
-		IsProvider: cfg.GetBool("provider.enable", false),
+		UpdateFreq: 0,
+		DS:         ds,
 	}
 	lc.Append(fx.Hook{
 		OnStop: func(ctx context.Context) error {

@@ -246,14 +246,14 @@ func setupRealP2P(t *testing.T, portMappings []string) (*proxy.Service, *Service
 	}
 
 	senderCfg := &config.C{
-		Settings: map[interface{}]interface{}{
-			"proxy": map[interface{}]interface{}{
+		Settings: map[string]any{
+			"proxy": map[string]any{
 				"enable": true,
-				"peers": []interface{}{
-					map[interface{}]interface{}{
+				"peers": []any{
+					map[string]any{
 						"id": receiverPeer.ID().String(),
-						"apps": []interface{}{
-							map[interface{}]interface{}{
+						"apps": []any{
+							map[string]any{
 								"id":    "1",
 								"ports": toInterfaceSlice(portMappings),
 							},

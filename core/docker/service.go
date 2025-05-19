@@ -20,7 +20,7 @@ func NewDockerService(cfg *config.C) (*Service, error) {
 	}
 
 	s := Service{
-		client: client,
+		client: &RealDockerClient{client: client},
 	}
 	return &s, nil
 }

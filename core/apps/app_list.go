@@ -43,9 +43,8 @@ func (s *Service) GetApps(ctx context.Context, start *big.Int, end *big.Int, fil
 		return nil, 0, err
 	}
 	apps := make([]*atypes.App, 0)
-	for i, gitHubApp := range gitHubApps {
+	for _, gitHubApp := range gitHubApps {
 		appId := big.NewInt(gitHubApp.ID)
-		appId.Add(appId, big.NewInt(int64(i)))
 		appStatus, err := s.GetContainerStatus(ctx, appId)
 		if err != nil {
 			return nil, 0, err

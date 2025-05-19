@@ -20,6 +20,13 @@ func (s *Service) RunApp(ctx context.Context, appId *big.Int) (*atypes.App, erro
 		return nil, fmt.Errorf("failed to fetch app details: %w", err)
 	}
 
+	if app.Status == atypes.Stopped {
+		if err := s.RestartContainer(ctx, appId); err != nil {
+			return nil, fmt.Errorf("failed to restart container: %w", err)
+		}
+		return s.GetApp(ctx, appId)
+	}
+
 	// Return if found app
 	if app.Status != atypes.NotFound {
 		return app, nil
@@ -111,6 +118,10 @@ func (s *Service) RunApp(ctx context.Context, appId *big.Int) (*atypes.App, erro
 	}
 
 	s.AddNewRunningApp(ctx, appId)
+
+	if err := s.StorePeerIDsInDHT(ctx, app); err != nil {
+		return nil, fmt.Errorf("failed to store peer IDs in DHT: %w", err)
+	}
 
 	return app, nil
 }

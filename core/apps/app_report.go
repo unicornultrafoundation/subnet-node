@@ -55,9 +55,6 @@ func (s *Service) reportAllRunningContainers(ctx context.Context) {
 
 	for _, container := range containers {
 		containerId := strings.TrimPrefix(container.Names[0], "/")
-		if !strings.HasPrefix(containerId, "subnet-") {
-			continue
-		}
 		containerChan <- containerId
 	}
 	close(containerChan)
@@ -136,7 +133,7 @@ func (s *Service) processReportContainer(ctx context.Context, containerId string
 
 	ok := s.sendProtoMessage(veriferPeerID, atypes.ProtocolAppVerifierUsageReport, usage)
 	if !ok {
-		log.Errorf("Failed to send usage report for app %d", appId)
+		log.Errorf("Failed to send usage report for app %d peer %s", appId, veriferPeerID)
 	}
 
 	s.statService.ClearFinalStats(containerId)
