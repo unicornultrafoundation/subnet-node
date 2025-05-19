@@ -13,7 +13,6 @@ import (
 	lru "github.com/hashicorp/golang-lru"
 	"github.com/ipfs/go-datastore"
 	"github.com/ipfs/go-datastore/query"
-	ddht "github.com/libp2p/go-libp2p-kad-dht/dual"
 	p2phost "github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -38,30 +37,33 @@ type Verifier struct {
 	p2p           *p2p.P2P
 	acc           *account.AccountService
 	ps            p2phost.Host // the network host (server+client)
-	dht           *ddht.DHT    // Dual DHT for distributed storage
 	previousTimes *lru.Cache
 	pow           *Pow
-	mu            sync.RWMutex
+	rs            *ReputationService
 }
 
 // NewVerifier creates a new instance of Verifier
-func NewVerifier(ds datastore.Datastore, ps p2phost.Host, P2P *p2p.P2P, acc *account.AccountService, dht *ddht.DHT) *Verifier {
+func NewVerifier(ds datastore.Datastore, ps p2phost.Host, P2P *p2p.P2P, acc *account.AccountService) *Verifier {
 	cache, _ := lru.New(128)
+
+	rs := NewReputationService(ds, ps, P2P)
+	err := rs.Register()
+
+	if err != nil {
+		log.Errorf("Failed to register reputation service: %v", err)
+		return nil
+	}
+
 	v := &Verifier{
 		ds:            ds,
 		p2p:           P2P,
 		acc:           acc,
 		ps:            ps,
-		dht:           dht,
 		previousTimes: cache,
 		pow:           NewPow(NodeVerifier, ps, P2P),
+		rs:            rs,
 	}
 	go v.periodicCheck(DefaultCheckInterval)
-
-	// Start periodic publishing of scores to DHT if DHT is available
-	if dht != nil {
-		v.StartPeriodicScorePublishing(1 * time.Hour)
-	}
 
 	return v
 }
@@ -69,9 +71,6 @@ func NewVerifier(ds datastore.Datastore, ps p2phost.Host, P2P *p2p.P2P, acc *acc
 func (v *Verifier) Register() error {
 	v.ps.SetStreamHandler(atypes.ProtocolAppVerifierUsageReport, v.onUsageReport)
 	v.ps.SetStreamHandler(atypes.ProtocolAppSignatureRequest, v.onSignatureRequest)
-
-	// Register peer score handlers
-	v.RegisterPeerScoreHandlers()
 
 	log.Infof("Verifier service started and registered stream handlers")
 	return nil
@@ -266,10 +265,27 @@ func (v *Verifier) processUsageReports(usagesByAppId map[int64][]*pvtypes.UsageR
 		detector := AnomalyDetector{Logs: filteredLogs, Threshold: 2}
 		peerScores := detector.detect()
 
-		// Store peer scores in datastore
+		// Map to track providers by their peer IDs
+		providerMap := make(map[string]int64)
+
+		// Store provider scores directly from peer scores
+		for _, log := range filteredLogs {
+			// Map peer ID to provider ID
+			providerMap[log.PeerId] = log.ProviderId
+		}
+
+		// Store scores for each peer's provider
 		for peerId, score := range peerScores {
-			if err := v.StorePeerScore(appId, peerId, score); err != nil {
-				log.Errorf("Failed to store peer score: %v", err)
+			providerId, exists := providerMap[peerId]
+			if exists {
+				// Store the raw score directly
+				err := v.rs.StoreProviderScore(appId, fmt.Sprintf("%d", providerId), score)
+				if err != nil {
+					log.Errorf("Failed to store provider score: %v", err)
+				} else {
+					log.Infof("Stored score %d for provider %d (app %d) based on peer %s",
+						score, providerId, appId, peerId)
+				}
 			}
 		}
 
@@ -282,6 +298,7 @@ func (v *Verifier) processUsageReports(usagesByAppId map[int64][]*pvtypes.UsageR
 				usagesByPeer[log.PeerId] = append(usagesByPeer[log.PeerId], log)
 			}
 		}
+
 		for peerId, peerLogs := range usagesByPeer {
 			if len(peerLogs) == 0 {
 				continue

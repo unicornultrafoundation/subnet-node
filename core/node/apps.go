@@ -34,11 +34,11 @@ func AppService(lc fx.Lifecycle, cfg *config.C, P2P *p2p.P2P, dataStore datastor
 	return srv
 }
 
-func VerifierService(lc fx.Lifecycle, cfg *config.C, P2P *p2p.P2P, dataStore datastore.Datastore, acc *account.AccountService, peerId peer.ID, peerHost p2phost.Host, docker *docker.Service, dht *ddht.DHT) *verifier.Verifier {
+func VerifierService(lc fx.Lifecycle, cfg *config.C, P2P *p2p.P2P, dataStore datastore.Datastore, acc *account.AccountService, peerId peer.ID, peerHost p2phost.Host, docker *docker.Service) *verifier.Verifier {
 	if !cfg.GetBool("verifier.enable", false) {
 		return nil
 	}
-	srv := verifier.NewVerifier(dataStore, peerHost, P2P, acc, dht)
+	srv := verifier.NewVerifier(dataStore, peerHost, P2P, acc)
 	lc.Append(fx.Hook{
 		OnStop: func(ctx context.Context) error {
 			return nil

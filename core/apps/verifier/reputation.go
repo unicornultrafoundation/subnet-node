@@ -4,413 +4,431 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"strconv"
-	"strings"
+	"sync"
 	"time"
 
+	lru "github.com/hashicorp/golang-lru"
 	"github.com/ipfs/go-datastore"
-	"github.com/ipfs/go-datastore/query"
+	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/libp2p/go-libp2p/core/protocol"
+	"github.com/sirupsen/logrus"
+	atypes "github.com/unicornultrafoundation/subnet-node/core/apps/types"
+	"github.com/unicornultrafoundation/subnet-node/p2p"
 )
 
-// Protocol IDs for reputation exchange
+var reputationLog = logrus.WithField("service", "reputation-service")
+
 const (
-	ProtocolPeerScoreQuery    = protocol.ID("/subnet/peer-score/query/1.0.0")
-	ProtocolPeerScoreResponse = protocol.ID("/subnet/peer-score/response/1.0.0")
-
-	// Datastore key prefix for peer scores
-	PeerScorePrefix = "/peer_scores/"
+	ReputationCacheExpiry = 30 * time.Minute
+	MaxResponses          = 10
+	ResponseTimeout       = 10 * time.Second
 )
 
-// PeerScore represents a peer's reputation score
-type PeerScore struct {
-	PeerID    string    `json:"peer_id"`
-	AppID     int64     `json:"app_id"`
-	Score     int       `json:"score"`
-	Timestamp time.Time `json:"timestamp"`
+type ReputationQuery struct {
+	AppID      int64  `json:"app_id"`
+	ProviderID string `json:"provider_id"`
+	Timestamp  int64  `json:"timestamp"`
+	RequestID  string `json:"request_id"`
+	VerifierID string `json:"verifier_id"`
 }
 
-// StorePeerScore stores a peer's score in the datastore and publishes it to the DHT
-func (v *Verifier) StorePeerScore(appID int64, peerID string, score int) error {
-	peerScore := &PeerScore{
-		PeerID:    peerID,
-		AppID:     appID,
-		Score:     score,
-		Timestamp: time.Now(),
+type ReputationResponse struct {
+	AppID      int64  `json:"app_id"`
+	ProviderID string `json:"provider_id"`
+	Score      int    `json:"score"`
+	Timestamp  int64  `json:"timestamp"`
+	VerifierID string `json:"verifier_id"`
+	RequestID  string `json:"request_id"`
+}
+
+type ReputationService struct {
+	ds             datastore.Datastore
+	p2p            *p2p.P2P
+	host           host.Host
+	scoreCache     *lru.Cache
+	pendingQueries sync.Map
+}
+
+type ReputationQueryResponse struct {
+	Responses []ReputationResponse
+	Error     error
+	Done      chan struct{}
+}
+
+// NewReputationService creates a new instance of ReputationService
+func NewReputationService(ds datastore.Datastore, host host.Host, p2p *p2p.P2P) *ReputationService {
+	cache, _ := lru.New(1024)
+	rs := &ReputationService{
+		ds:         ds,
+		p2p:        p2p,
+		host:       host,
+		scoreCache: cache,
 	}
 
-	data, err := json.Marshal(peerScore)
-	if err != nil {
-		return fmt.Errorf("failed to marshal peer score: %v", err)
-	}
+	return rs
+}
 
-	// Store locally
-	key := datastore.NewKey(fmt.Sprintf("%s%d/%s", PeerScorePrefix, appID, peerID))
-	err = v.ds.Put(context.Background(), key, data)
-	if err != nil {
-		return fmt.Errorf("failed to store peer score in datastore: %v", err)
-	}
+// Register registers protocol handlers for reputation service
+func (rs *ReputationService) Register() error {
+	rs.host.SetStreamHandler(atypes.ProtocolAppVerifierProviderScoreRequest, rs.handleReputationQuery)
+	rs.host.SetStreamHandler(atypes.ProtocolAppVerifierProviderScoreResponse, rs.handleReputationResponse)
 
-	// Publish to DHT for other verifiers to discover
-	err = v.publishPeerScoreToDHT(appID, peerID, peerScore)
-	if err != nil {
-		log.Warnf("Failed to publish peer score to DHT: %v", err)
-		// Continue even if DHT publish fails - local storage succeeded
-	}
-
-	log.Infof("Stored score %d for peer %s (app %d)", score, peerID, appID)
+	reputationLog.Info("Reputation service registered protocol handlers")
 	return nil
 }
 
-// GetPeerScore retrieves a peer's score from the datastore
-func (v *Verifier) GetPeerScore(appID int64, peerID string) (*PeerScore, error) {
-	key := datastore.NewKey(fmt.Sprintf("%s%d/%s", PeerScorePrefix, appID, peerID))
-	data, err := v.ds.Get(context.Background(), key)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get peer score from datastore: %v", err)
+// QueryReputationScore queries reputation scores for a provider from other verifiers
+func (rs *ReputationService) QueryReputationScore(appID int64, providerID string, verifierID string) (int, error) {
+	// Check cache first
+	cacheKey := fmt.Sprintf("%d-%s", appID, providerID)
+	if cachedScore, found := rs.scoreCache.Get(cacheKey); found {
+		reputationLog.Debugf("Found cached reputation score for app %d provider %s: %d",
+			appID, providerID, cachedScore.(int))
+		return cachedScore.(int), nil
 	}
 
-	peerScore := &PeerScore{}
-	err = json.Unmarshal(data, peerScore)
+	// Get local score first
+	localScore, err := rs.getLocalScore(appID, providerID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal peer score: %v", err)
+		reputationLog.Warnf("Failed to get local reputation score: %v", err)
+		// Continue anyway, we'll query peers
 	}
 
-	return peerScore, nil
+	// Query peers for their scores
+	peerScores, err := rs.queryReputationScores(appID, providerID, verifierID)
+	if err != nil {
+		return localScore, fmt.Errorf("failed to query peers: %v", err)
+	}
+
+	// Aggregate scores
+	aggregateScore := rs.aggregateScores(localScore, peerScores)
+
+	// Cache the result
+	rs.scoreCache.Add(cacheKey, aggregateScore)
+
+	return aggregateScore, nil
 }
 
-// RegisterPeerScoreHandlers registers handlers for peer score P2P protocols
-func (v *Verifier) RegisterPeerScoreHandlers() {
-	// Handler for peer score queries - open to any peer
-	v.ps.SetStreamHandler(ProtocolPeerScoreQuery, func(s network.Stream) {
-		defer s.Close()
+// getLocalScore retrieves the local reputation score for a provider
+func (rs *ReputationService) getLocalScore(appID int64, providerID string) (int, error) {
+	key := datastore.NewKey(fmt.Sprintf("/provider_scores/%d/%s", appID, providerID))
 
-		// Read query
-		data, err := io.ReadAll(s)
-		if err != nil {
-			log.Errorf("Failed to read peer score query: %v", err)
-			s.Reset()
-			return
+	scoreBytes, err := rs.ds.Get(context.Background(), key)
+	if err != nil {
+		if err == datastore.ErrNotFound {
+			return 0, nil // No score yet, return 0
 		}
-
-		// Parse query
-		var query struct {
-			AppID  int64  `json:"app_id"`
-			PeerID string `json:"peer_id"`
-		}
-
-		if err := json.Unmarshal(data, &query); err != nil {
-			log.Errorf("Failed to unmarshal peer score query: %v", err)
-			return
-		}
-
-		log.Infof("Received peer score query for peer %s (app %d) from %s",
-			query.PeerID, query.AppID, s.Conn().RemotePeer())
-
-		// Get peer score
-		peerScore, err := v.GetPeerScore(query.AppID, query.PeerID)
-		if err != nil {
-			log.Warnf("Failed to get peer score: %v", err)
-			peerScore = &PeerScore{
-				PeerID:    query.PeerID,
-				AppID:     query.AppID,
-				Score:     0,
-				Timestamp: time.Now(),
-			}
-		}
-
-		// Send response
-		responseData, err := json.Marshal(peerScore)
-		if err != nil {
-			log.Errorf("Failed to marshal peer score response: %v", err)
-			return
-		}
-
-		// Create response stream
-		responseStream, err := v.ps.NewStream(context.Background(), s.Conn().RemotePeer(), ProtocolPeerScoreResponse)
-		if err != nil {
-			log.Errorf("Failed to create response stream: %v", err)
-			return
-		}
-		defer responseStream.Close()
-
-		_, err = responseStream.Write(responseData)
-		if err != nil {
-			log.Errorf("Failed to send peer score response: %v", err)
-			responseStream.Reset()
-			return
-		}
-
-		log.Infof("Sent peer score %d for peer %s (app %d) to %s",
-			peerScore.Score, peerScore.PeerID, peerScore.AppID, s.Conn().RemotePeer())
-	})
-
-	// Handler for peer score responses
-	v.ps.SetStreamHandler(ProtocolPeerScoreResponse, func(s network.Stream) {
-		defer s.Close()
-
-		// Read response
-		data, err := io.ReadAll(s)
-		if err != nil {
-			log.Errorf("Failed to read peer score response: %v", err)
-			s.Reset()
-			return
-		}
-
-		// Parse response
-		peerScore := &PeerScore{}
-		if err := json.Unmarshal(data, peerScore); err != nil {
-			log.Errorf("Failed to unmarshal peer score response: %v", err)
-			return
-		}
-
-		log.Infof("Received peer score %d for peer %s (app %d) from %s",
-			peerScore.Score, peerScore.PeerID, peerScore.AppID, s.Conn().RemotePeer())
-	})
-}
-
-// QueryPeerScoreFromVerifier queries a peer's score from another verifier
-func (v *Verifier) QueryPeerScoreFromVerifier(verifierID peer.ID, appID int64, peerID string) (*PeerScore, error) {
-	// Create query
-	query := struct {
-		AppID  int64  `json:"app_id"`
-		PeerID string `json:"peer_id"`
-	}{
-		AppID:  appID,
-		PeerID: peerID,
+		return 0, fmt.Errorf("failed to get score from datastore: %v", err)
 	}
 
-	queryData, err := json.Marshal(query)
+	var score int
+	err = json.Unmarshal(scoreBytes, &score)
+	if err != nil {
+		return 0, fmt.Errorf("failed to unmarshal score: %v", err)
+	}
+
+	return score, nil
+}
+
+// StoreProviderScore stores a provider's reputation score
+func (rs *ReputationService) StoreProviderScore(appID int64, providerID string, score int) error {
+	key := datastore.NewKey(fmt.Sprintf("/provider_scores/%d/%s", appID, providerID))
+
+	scoreBytes, err := json.Marshal(score)
+	if err != nil {
+		return fmt.Errorf("failed to marshal score: %v", err)
+	}
+
+	err = rs.ds.Put(context.Background(), key, scoreBytes)
+	if err != nil {
+		return fmt.Errorf("failed to store score in datastore: %v", err)
+	}
+
+	// Update cache
+	cacheKey := fmt.Sprintf("%d-%s", appID, providerID)
+	rs.scoreCache.Add(cacheKey, score)
+
+	return nil
+}
+
+// queryReputationScores queries other verifier nodes for reputation scores
+func (rs *ReputationService) queryReputationScores(appID int64, providerID string, verifierID string) ([]ReputationResponse, error) {
+	// Generate a unique request ID
+	requestID := fmt.Sprintf("%d-%s-%d", appID, providerID, time.Now().UnixNano())
+
+	// Create a query
+	query := ReputationQuery{
+		AppID:      appID,
+		ProviderID: providerID,
+		Timestamp:  time.Now().Unix(),
+		RequestID:  requestID,
+		VerifierID: verifierID,
+	}
+
+	// Create a result to track responses
+	result := &ReputationQueryResponse{
+		Responses: make([]ReputationResponse, 0),
+		Done:      make(chan struct{}),
+	}
+
+	// Store the pending query
+	rs.pendingQueries.Store(requestID, result)
+
+	// Set a timeout for the query
+	ctx, cancel := context.WithTimeout(context.Background(), ResponseTimeout)
+	defer cancel()
+
+	// Determine target peers
+	var targetPeers []peer.ID
+	if verifierID != "" {
+		peerID, err := peer.Decode(verifierID)
+		if err != nil {
+			return nil, fmt.Errorf("invalid verifier ID: %v", err)
+		}
+		// Check if the peer is connected
+		if rs.host.Network().Connectedness(peerID) != network.Connected {
+			return nil, fmt.Errorf("not connected to verifier %s", verifierID)
+		}
+		targetPeers = []peer.ID{peerID}
+	} else {
+		targetPeers = rs.host.Network().Peers()
+	}
+
+	if len(targetPeers) == 0 {
+		return nil, fmt.Errorf("no connected peers to query")
+	}
+
+	// Convert query to bytes
+	queryBytes, err := json.Marshal(query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal query: %v", err)
 	}
 
-	// Create stream to verifier
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	s, err := v.ps.NewStream(ctx, verifierID, ProtocolPeerScoreQuery)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create stream to verifier %s: %v", verifierID, err)
-	}
-
-	// Send query
-	_, err = s.Write(queryData)
-	if err != nil {
-		s.Reset()
-		return nil, fmt.Errorf("failed to send query: %v", err)
-	}
-	s.Close()
-
-	// Wait for response
-	responseStream, err := v.ps.NewStream(ctx, verifierID, ProtocolPeerScoreResponse)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create response stream: %v", err)
-	}
-	defer responseStream.Close()
-
-	// Read response
-	responseData, err := io.ReadAll(responseStream)
-	if err != nil {
-		responseStream.Reset()
-		return nil, fmt.Errorf("failed to read response: %v", err)
-	}
-
-	// Parse response
-	peerScore := &PeerScore{}
-	if err := json.Unmarshal(responseData, peerScore); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal response: %v", err)
-	}
-
-	log.Infof("Received peer score %d for peer %s (app %d) from verifier %s",
-		peerScore.Score, peerScore.PeerID, peerScore.AppID, verifierID)
-
-	return peerScore, nil
-}
-
-// QueryPeerScoreFromDHT queries a peer's score from the DHT
-func (v *Verifier) QueryPeerScoreFromDHT(appID int64, peerID string) ([]*PeerScore, error) {
-	// Skip if DHT is not available
-	if v.dht == nil {
-		return nil, fmt.Errorf("DHT not available")
-	}
-
-	// Create DHT key prefix for this peer score
-	dhtKeyPrefix := fmt.Sprintf("/subnet/peer-score/%d/%s", appID, peerID)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	// Find providers for this key
-	peerScores := []*PeerScore{}
-
-	// This is a simplified approach - in a real implementation, you would use a proper DHT query
-	// For now, we'll just try to get values with known verifier IDs
-	connectedPeers := v.ps.Network().Peers()
-	for _, verifierID := range connectedPeers {
-		dhtKey := fmt.Sprintf("%s/%s", dhtKeyPrefix, verifierID.String())
-
-		// Get value from DHT using the ValueStore interface
-		data, err := v.dht.GetValue(ctx, dhtKey)
-		if err != nil {
-			log.Debugf("Failed to get peer score from DHT for key %s: %v", dhtKey, err)
-			continue
-		}
-
-		// Parse peer score
-		peerScore := &PeerScore{}
-		if err := json.Unmarshal(data, peerScore); err != nil {
-			log.Warnf("Failed to unmarshal peer score from DHT: %v", err)
-			continue
-		}
-
-		peerScores = append(peerScores, peerScore)
-		log.Debugf("Found peer score in DHT: %+v", peerScore)
-	}
-
-	if len(peerScores) == 0 {
-		return nil, fmt.Errorf("no peer scores found in DHT")
-	}
-
-	return peerScores, nil
-}
-
-// QueryPeerScoreFromAllVerifiers queries a peer's score from all known verifiers
-// This now uses the DHT as the primary source and falls back to direct queries
-func (v *Verifier) QueryPeerScoreFromAllVerifiers(appID int64, peerID string) (int, error) {
-	// First try to get scores from DHT
-	peerScores, err := v.QueryPeerScoreFromDHT(appID, peerID)
-
-	// If DHT query successful, calculate average score
-	if err == nil && len(peerScores) > 0 {
-		totalScore := 0
-		for _, score := range peerScores {
-			totalScore += score.Score
-		}
-		return totalScore / len(peerScores), nil
-	}
-
-	// Fall back to local score if DHT query fails
-	log.Debugf("DHT query failed, falling back to local score: %v", err)
-	localScore, err := v.GetPeerScore(appID, peerID)
-	if err != nil {
-		return 0, fmt.Errorf("no scores available: %v", err)
-	}
-
-	return localScore.Score, nil
-}
-
-// publishPeerScoreToDHT publishes a peer score to the DHT for other verifiers to discover
-func (v *Verifier) publishPeerScoreToDHT(appID int64, peerID string, peerScore *PeerScore) error {
-	// Skip if DHT is not available
-	if v.dht == nil {
-		return fmt.Errorf("DHT not available")
-	}
-
-	// Create DHT key for this peer score
-	dhtKey := fmt.Sprintf("/subnet/peer-score/%d/%s/%s", appID, peerID, v.ps.ID().String())
-
-	// Marshal the data
-	data, err := json.Marshal(peerScore)
-	if err != nil {
-		return fmt.Errorf("failed to marshal peer score for DHT: %v", err)
-	}
-
-	// Put value in DHT with context timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	// Use the dual DHT's PutValue method
-	err = v.dht.PutValue(ctx, dhtKey, data)
-	if err != nil {
-		return fmt.Errorf("failed to put peer score in DHT: %v", err)
-	}
-
-	log.Debugf("Published peer score for %s (app %d) to DHT", peerID, appID)
-	return nil
-}
-
-// StartPeriodicScorePublishing starts a goroutine that periodically publishes all peer scores to the DHT
-func (v *Verifier) StartPeriodicScorePublishing(interval time.Duration) {
-	go func() {
-		ticker := time.NewTicker(interval)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-ticker.C:
-				v.publishAllScoresToDHT()
+	// Send query to target peers
+	var wg sync.WaitGroup
+	for _, peerID := range targetPeers {
+		wg.Add(1)
+		go func(peer peer.ID) {
+			defer wg.Done()
+			stream, err := rs.host.NewStream(ctx, peer, atypes.ProtocolAppVerifierProviderScoreRequest)
+			if err != nil {
+				reputationLog.Warnf("Failed to open stream to peer %s: %v", peer, err)
+				return
 			}
-		}
-	}()
+			defer stream.Close()
 
-	log.Infof("Started periodic score publishing with interval %s", interval)
-}
+			// Write query to stream
+			_, err = stream.Write(queryBytes)
+			if err != nil {
+				reputationLog.Warnf("Failed to write query to peer %s: %v", peer, err)
+				stream.Reset()
+				return
+			}
 
-// publishAllScoresToDHT publishes all stored peer scores to the DHT
-func (v *Verifier) publishAllScoresToDHT() {
-	// Query all peer scores from local datastore
-	query := query.Query{
-		Prefix: PeerScorePrefix,
+			reputationLog.Debugf("Sent reputation query to peer %s", peer)
+		}(peerID)
 	}
 
-	results, err := v.ds.Query(context.Background(), query)
+	// Wait for all query sends to complete
+	wg.Wait()
+
+	// Wait for responses or timeout
+	select {
+	case <-ctx.Done():
+		reputationLog.Debugf("Query timed out after waiting %s", ResponseTimeout)
+	case <-result.Done:
+		reputationLog.Debugf("Query completed with %d responses", len(result.Responses))
+	}
+
+	// Cleanup
+	rs.pendingQueries.Delete(requestID)
+
+	return result.Responses, result.Error
+}
+
+// handleReputationQuery handles incoming reputation queries
+func (rs *ReputationService) handleReputationQuery(stream network.Stream) {
+	defer stream.Close()
+
+	// Read the query
+	buf, err := readFullStream(stream)
 	if err != nil {
-		log.Errorf("Failed to query peer scores from datastore: %v", err)
+		reputationLog.Errorf("Failed to read reputation query: %v", err)
+		stream.Reset()
 		return
 	}
 
-	defer results.Close()
-
-	count := 0
-	for result := range results.Next() {
-		if result.Error != nil {
-			log.Warnf("Error in datastore query result: %v", result.Error)
-			continue
-		}
-
-		// Parse key to get appID and peerID
-		key := result.Key
-		parts := strings.Split(strings.TrimPrefix(key, PeerScorePrefix), "/")
-		if len(parts) != 2 {
-			log.Warnf("Invalid peer score key format: %s", key)
-			continue
-		}
-
-		appID, err := strconv.ParseInt(parts[0], 10, 64)
-		if err != nil {
-			log.Warnf("Invalid appID in key %s: %v", key, err)
-			continue
-		}
-
-		peerID := parts[1]
-
-		// Parse peer score
-		peerScore := &PeerScore{}
-		if err := json.Unmarshal(result.Value, peerScore); err != nil {
-			log.Warnf("Failed to unmarshal peer score: %v", err)
-			continue
-		}
-
-		// Publish to DHT
-		err = v.publishPeerScoreToDHT(appID, peerID, peerScore)
-		if err != nil {
-			log.Warnf("Failed to publish peer score to DHT: %v", err)
-			continue
-		}
-
-		count++
+	var query ReputationQuery
+	err = json.Unmarshal(buf, &query)
+	if err != nil {
+		reputationLog.Errorf("Failed to unmarshal reputation query: %v", err)
+		return
 	}
 
-	log.Infof("Published %d peer scores to DHT", count)
+	// Check timestamp to prevent replay attacks
+	if abs(time.Now().Unix()-query.Timestamp) > 60 {
+		reputationLog.Warnf("Rejecting stale query from %s, timestamp difference: %d seconds",
+			stream.Conn().RemotePeer(), abs(time.Now().Unix()-query.Timestamp))
+		return
+	}
+
+	// Check if the query is directed to this verifier
+	if query.VerifierID != "" && query.VerifierID != rs.host.ID().String() {
+		reputationLog.Debugf("Ignoring query not directed to this verifier: %s", query.VerifierID)
+		return
+	}
+
+	reputationLog.Debugf("Received reputation query from %s for app %d provider %s",
+		stream.Conn().RemotePeer(), query.AppID, query.ProviderID)
+
+	// Get the local score
+	score, err := rs.getLocalScore(query.AppID, query.ProviderID)
+	if err != nil {
+		reputationLog.Errorf("Failed to get local score: %v", err)
+		return
+	}
+
+	// Create response
+	response := ReputationResponse{
+		AppID:      query.AppID,
+		ProviderID: query.ProviderID,
+		Score:      score,
+		Timestamp:  time.Now().Unix(),
+		VerifierID: rs.host.ID().String(),
+		RequestID:  query.RequestID,
+	}
+
+	// Send response
+	rs.sendReputationResponse(stream.Conn().RemotePeer(), response)
 }
 
-// getKnownVerifiers returns a list of known verifier peer IDs
-// This is a placeholder - in a real implementation, you would get this from a registry or discovery mechanism
-func (v *Verifier) getKnownVerifiers() ([]peer.ID, error) {
-	// In this simplified approach, we consider all connected peers as potential verifiers
-	return v.ps.Network().Peers(), nil
+// handleReputationResponse handles incoming reputation responses
+func (rs *ReputationService) handleReputationResponse(stream network.Stream) {
+	defer stream.Close()
+
+	// Read the response
+	buf, err := readFullStream(stream)
+	if err != nil {
+		reputationLog.Errorf("Failed to read reputation response: %v", err)
+		stream.Reset()
+		return
+	}
+
+	var response ReputationResponse
+	err = json.Unmarshal(buf, &response)
+	if err != nil {
+		reputationLog.Errorf("Failed to unmarshal reputation response: %v", err)
+		return
+	}
+
+	// Check timestamp to prevent replay attacks
+	if abs(time.Now().Unix()-response.Timestamp) > 60 {
+		reputationLog.Warnf("Rejecting stale response from %s, timestamp difference: %d seconds",
+			stream.Conn().RemotePeer(), abs(time.Now().Unix()-response.Timestamp))
+		return
+	}
+
+	// Verify the response is from the sender
+	if response.VerifierID != stream.Conn().RemotePeer().String() {
+		reputationLog.Warnf("Reputation response verifier ID doesn't match sender: %s vs %s",
+			response.VerifierID, stream.Conn().RemotePeer())
+		return
+	}
+
+	reputationLog.Debugf("Received reputation response from %s for request %s with score %d",
+		stream.Conn().RemotePeer(), response.RequestID, response.Score)
+
+	// Look up the pending query
+	if result, found := rs.pendingQueries.Load(response.RequestID); found {
+		queryResult := result.(*ReputationQueryResponse)
+
+		// Add the response
+		queryResult.Responses = append(queryResult.Responses, response)
+
+		// If we have enough responses, mark the query as done
+		if len(queryResult.Responses) >= MaxResponses {
+			close(queryResult.Done)
+		}
+	} else {
+		reputationLog.Warnf("Received response for unknown request ID: %s", response.RequestID)
+	}
+}
+
+// sendReputationResponse sends a reputation response to a peer
+func (rs *ReputationService) sendReputationResponse(peerID peer.ID, response ReputationResponse) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	stream, err := rs.host.NewStream(ctx, peerID, atypes.ProtocolAppVerifierProviderScoreResponse)
+	if err != nil {
+		reputationLog.Errorf("Failed to open stream to peer %s: %v", peerID, err)
+		return
+	}
+	defer stream.Close()
+
+	// Convert response to bytes
+	responseBytes, err := json.Marshal(response)
+	if err != nil {
+		reputationLog.Errorf("Failed to marshal response: %v", err)
+		return
+	}
+
+	// Write response to stream
+	_, err = stream.Write(responseBytes)
+	if err != nil {
+		reputationLog.Errorf("Failed to write response to peer %s: %v", peerID, err)
+		stream.Reset()
+		return
+	}
+
+	reputationLog.Debugf("Sent reputation response to peer %s", peerID)
+}
+
+// aggregateScores aggregates local and peer scores
+func (rs *ReputationService) aggregateScores(localScore int, peerResponses []ReputationResponse) int {
+	if len(peerResponses) == 0 {
+		return localScore // Return local score if no peer responses
+	}
+
+	// Sum up all scores
+	totalScore := localScore
+	validResponses := 1 // Count local score as one valid response
+
+	for _, response := range peerResponses {
+		totalScore += response.Score
+		validResponses++
+	}
+
+	// Calculate average
+	if validResponses > 0 {
+		return totalScore / validResponses
+	}
+
+	return 0
+}
+
+// readFullStream reads the entire contents of a stream
+func readFullStream(stream network.Stream) ([]byte, error) {
+	const maxSize = 1 << 20 // 1MB max message size
+
+	var buf []byte
+	for len(buf) < maxSize {
+		// Read in chunks
+		chunk := make([]byte, 1024)
+		n, err := stream.Read(chunk)
+		if err != nil {
+			if err.Error() == "EOF" {
+				// End of stream, append final chunk and return
+				buf = append(buf, chunk[:n]...)
+				return buf, nil
+			}
+			return nil, err
+		}
+
+		// Append the chunk to our buffer
+		buf = append(buf, chunk[:n]...)
+	}
+
+	return buf, fmt.Errorf("message exceeds maximum size of 1MB")
 }

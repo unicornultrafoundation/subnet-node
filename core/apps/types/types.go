@@ -23,6 +23,8 @@ import (
 var log = logrus.WithField("service", "apps")
 
 const ProtocolProxyReverse = protocol.ID("/x/proxy/reverse/0.0.1")
+const ProtocolAppVerifierProviderScoreRequest = protocol.ID("/x/app/verifier/providerscore/request/0.0.1")
+const ProtocolAppVerifierProviderScoreResponse = protocol.ID("/x/app/verifier/providerscore/response/0.0.1")
 const ProtocolAppVerifierUsageReport = protocol.ID("/x/app/verifier/usagereport/0.0.1")
 const ProtocolAppSignatureRequest = protocol.ID("/x/app/verifier/signreq/0.0.1")
 const ProtocollAppSignatureReceive = protocol.ID("/x/app/verifier/signrev/0.0.1")
