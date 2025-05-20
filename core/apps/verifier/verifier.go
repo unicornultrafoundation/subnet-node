@@ -448,3 +448,31 @@ func (v *Verifier) sendProtoMessage(id peer.ID, p protocol.ID, data proto.Messag
 	}
 	return true
 }
+
+func (v *Verifier) GetReputationScore(ctx context.Context, appId int64, providerId string, verifierId string) (int, error) {
+	score, err := v.rs.QueryReputationScore(appId, providerId, verifierId)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get reputation score: %v", err)
+	}
+
+	return score, nil
+}
+
+func (v *Verifier) GetVerifierIds(ctx context.Context) ([]string, error) {
+	// Get all connected peers
+	connectedPeers := v.ps.Network().Peers()
+	verifierIds := make([]string, 0)
+
+	// For each peer, check if it's a verifier
+	for _, peerId := range connectedPeers {
+		// Check if the peer is a verifier using the PoW's verifier tracking
+		if v.pow.IsVerifierPeer(peerId.String()) {
+			verifierIds = append(verifierIds, peerId.String())
+		}
+	}
+
+	// Add our own ID as a verifier
+	verifierIds = append(verifierIds, v.ps.ID().String())
+
+	return verifierIds, nil
+}

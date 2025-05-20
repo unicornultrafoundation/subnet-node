@@ -7,7 +7,6 @@ import (
 	"sync"
 	"time"
 
-	lru "github.com/hashicorp/golang-lru"
 	"github.com/ipfs/go-datastore"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
@@ -46,7 +45,6 @@ type ReputationService struct {
 	ds             datastore.Datastore
 	p2p            *p2p.P2P
 	host           host.Host
-	scoreCache     *lru.Cache
 	pendingQueries sync.Map
 }
 
@@ -58,12 +56,10 @@ type ReputationQueryResponse struct {
 
 // NewReputationService creates a new instance of ReputationService
 func NewReputationService(ds datastore.Datastore, host host.Host, p2p *p2p.P2P) *ReputationService {
-	cache, _ := lru.New(1024)
 	rs := &ReputationService{
-		ds:         ds,
-		p2p:        p2p,
-		host:       host,
-		scoreCache: cache,
+		ds:   ds,
+		p2p:  p2p,
+		host: host,
 	}
 
 	return rs
@@ -80,34 +76,29 @@ func (rs *ReputationService) Register() error {
 
 // QueryReputationScore queries reputation scores for a provider from other verifiers
 func (rs *ReputationService) QueryReputationScore(appID int64, providerID string, verifierID string) (int, error) {
-	// Check cache first
-	cacheKey := fmt.Sprintf("%d-%s", appID, providerID)
-	if cachedScore, found := rs.scoreCache.Get(cacheKey); found {
-		reputationLog.Debugf("Found cached reputation score for app %d provider %s: %d",
-			appID, providerID, cachedScore.(int))
-		return cachedScore.(int), nil
+	// If no specific verifier is requested, return local score
+	if verifierID == "" || verifierID == rs.host.ID().String() {
+		localScore, err := rs.getLocalScore(appID, providerID)
+		if err != nil {
+			reputationLog.Warnf("Failed to get local reputation score: %v", err)
+			// Continue anyway, we'll query peers if needed
+		}
+		return localScore, nil
 	}
 
-	// Get local score first
-	localScore, err := rs.getLocalScore(appID, providerID)
-	if err != nil {
-		reputationLog.Warnf("Failed to get local reputation score: %v", err)
-		// Continue anyway, we'll query peers
-	}
-
-	// Query peers for their scores
+	// Query specific verifier for their score
 	peerScores, err := rs.queryReputationScores(appID, providerID, verifierID)
 	if err != nil {
-		return localScore, fmt.Errorf("failed to query peers: %v", err)
+		return 0, fmt.Errorf("failed to query verifier %s: %v", verifierID, err)
 	}
 
-	// Aggregate scores
-	aggregateScore := rs.aggregateScores(localScore, peerScores)
+	// If we got a response from the specific verifier, return that score
+	if len(peerScores) > 0 {
+		return peerScores[0].Score, nil
+	}
 
-	// Cache the result
-	rs.scoreCache.Add(cacheKey, aggregateScore)
-
-	return aggregateScore, nil
+	// If no response from the specific verifier, return an error
+	return 0, fmt.Errorf("no response received from verifier %s", verifierID)
 }
 
 // getLocalScore retrieves the local reputation score for a provider
@@ -144,10 +135,6 @@ func (rs *ReputationService) StoreProviderScore(appID int64, providerID string, 
 	if err != nil {
 		return fmt.Errorf("failed to store score in datastore: %v", err)
 	}
-
-	// Update cache
-	cacheKey := fmt.Sprintf("%d-%s", appID, providerID)
-	rs.scoreCache.Add(cacheKey, score)
 
 	return nil
 }
@@ -383,29 +370,6 @@ func (rs *ReputationService) sendReputationResponse(peerID peer.ID, response Rep
 	}
 
 	reputationLog.Debugf("Sent reputation response to peer %s", peerID)
-}
-
-// aggregateScores aggregates local and peer scores
-func (rs *ReputationService) aggregateScores(localScore int, peerResponses []ReputationResponse) int {
-	if len(peerResponses) == 0 {
-		return localScore // Return local score if no peer responses
-	}
-
-	// Sum up all scores
-	totalScore := localScore
-	validResponses := 1 // Count local score as one valid response
-
-	for _, response := range peerResponses {
-		totalScore += response.Score
-		validResponses++
-	}
-
-	// Calculate average
-	if validResponses > 0 {
-		return totalScore / validResponses
-	}
-
-	return 0
 }
 
 // readFullStream reads the entire contents of a stream
