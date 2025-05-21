@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"runtime"
+	"sort"
 	"sync"
 	"time"
 
@@ -39,11 +40,21 @@ type Verifier struct {
 	ps            p2phost.Host // the network host (server+client)
 	previousTimes *lru.Cache
 	pow           *Pow
+	rs            *ReputationService
 }
 
 // NewVerifier creates a new instance of Verifier
 func NewVerifier(ds datastore.Datastore, ps p2phost.Host, P2P *p2p.P2P, acc *account.AccountService) *Verifier {
 	cache, _ := lru.New(128)
+
+	rs := NewReputationService(ds, ps, P2P)
+	err := rs.Register()
+
+	if err != nil {
+		log.Errorf("Failed to register reputation service: %v", err)
+		return nil
+	}
+
 	v := &Verifier{
 		ds:            ds,
 		p2p:           P2P,
@@ -51,14 +62,17 @@ func NewVerifier(ds datastore.Datastore, ps p2phost.Host, P2P *p2p.P2P, acc *acc
 		ps:            ps,
 		previousTimes: cache,
 		pow:           NewPow(NodeVerifier, ps, P2P),
+		rs:            rs,
 	}
-	go v.periodicCheck(DefaultCheckInterval) // Pass the default check interval
+	go v.periodicCheck(DefaultCheckInterval)
+
 	return v
 }
 
 func (v *Verifier) Register() error {
 	v.ps.SetStreamHandler(atypes.ProtocolAppVerifierUsageReport, v.onUsageReport)
 	v.ps.SetStreamHandler(atypes.ProtocolAppSignatureRequest, v.onSignatureRequest)
+
 	log.Infof("Verifier service started and registered stream handlers")
 	return nil
 }
@@ -252,6 +266,30 @@ func (v *Verifier) processUsageReports(usagesByAppId map[int64][]*pvtypes.UsageR
 		detector := AnomalyDetector{Logs: filteredLogs, Threshold: 2}
 		peerScores := detector.detect()
 
+		// Map to track providers by their peer IDs
+		providerMap := make(map[string]int64)
+
+		// Store provider scores directly from peer scores
+		for _, log := range filteredLogs {
+			// Map peer ID to provider ID
+			providerMap[log.PeerId] = log.ProviderId
+		}
+
+		// Store scores for each peer's provider
+		for peerId, score := range peerScores {
+			providerId, exists := providerMap[peerId]
+			if exists {
+				// Store the raw score directly
+				err := v.rs.StoreProviderScore(fmt.Sprintf("%d", providerId), score)
+				if err != nil {
+					log.Errorf("Failed to store provider score: %v", err)
+				} else {
+					log.Infof("Stored score %d for provider %d based on peer %s",
+						score, providerId, peerId)
+				}
+			}
+		}
+
 		usagesByPeer := make(map[string][]*pvtypes.UsageReport)
 		for _, log := range filteredLogs {
 			if peerScores[log.PeerId] > 0 {
@@ -261,6 +299,7 @@ func (v *Verifier) processUsageReports(usagesByAppId map[int64][]*pvtypes.UsageR
 				usagesByPeer[log.PeerId] = append(usagesByPeer[log.PeerId], log)
 			}
 		}
+
 		for peerId, peerLogs := range usagesByPeer {
 			if len(peerLogs) == 0 {
 				continue
@@ -409,4 +448,111 @@ func (v *Verifier) sendProtoMessage(id peer.ID, p protocol.ID, data proto.Messag
 		return false
 	}
 	return true
+}
+
+func (v *Verifier) GetReputationScore(ctx context.Context, providerId string) (int, error) {
+	score, err := v.rs.QueryReputationScore(providerId)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get reputation score: %v", err)
+	}
+
+	return score, nil
+}
+
+func (v *Verifier) GetVerifierIds(ctx context.Context) ([]string, error) {
+	// Get all connected peers
+	connectedPeers := v.ps.Network().Peers()
+	verifierIds := make([]string, 0)
+
+	// For each peer, check if it's a verifier
+	for _, peerId := range connectedPeers {
+		// Check if the peer is a verifier using the PoW's verifier tracking
+		if v.pow.IsVerifierPeer(peerId.String()) {
+			verifierIds = append(verifierIds, peerId.String())
+		}
+	}
+
+	// Add our own ID as a verifier
+	verifierIds = append(verifierIds, v.ps.ID().String())
+
+	return verifierIds, nil
+}
+
+// GetAllProviderIds returns all provider IDs that have reputation scores
+func (v *Verifier) GetAllProviderIds(ctx context.Context) ([]string, error) {
+	// Create a query to get all provider scores
+	query := query.Query{
+		Prefix: "/provider_scores/",
+	}
+
+	results, err := v.ds.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query provider scores: %v", err)
+	}
+	defer results.Close()
+
+	var providerIds []string
+	for entry := range results.Next() {
+		if entry.Error != nil {
+			continue
+		}
+
+		// Extract provider ID from the key
+		key := entry.Key
+		if len(key) <= len("/provider_scores/") {
+			continue
+		}
+
+		providerId := key[len("/provider_scores/"):]
+		providerIds = append(providerIds, providerId)
+	}
+
+	return providerIds, nil
+}
+
+// GetReputationScoreRanges retrieves reputation scores grouped by ranges
+func (v *Verifier) GetReputationScoreRanges(ctx context.Context) ([]atypes.ReputationScoreRange, error) {
+	// Get all provider IDs
+	providerIds, err := v.GetAllProviderIds(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Define score ranges
+	ranges := []atypes.ReputationScoreRange{
+		{MinScore: 0, MaxScore: 20, Count: 0, Providers: []string{}},
+		{MinScore: 21, MaxScore: 40, Count: 0, Providers: []string{}},
+		{MinScore: 41, MaxScore: 60, Count: 0, Providers: []string{}},
+		{MinScore: 61, MaxScore: 80, Count: 0, Providers: []string{}},
+		{MinScore: 81, MaxScore: 100, Count: 0, Providers: []string{}},
+	}
+
+	// Collect scores for each provider
+	for _, providerId := range providerIds {
+		score, err := v.GetReputationScore(ctx, providerId)
+		if err != nil {
+			// Skip providers with no score
+			continue
+		}
+
+		// Find the appropriate range for this score
+		for i := range ranges {
+			if score >= ranges[i].MinScore && score <= ranges[i].MaxScore {
+				ranges[i].Count++
+				ranges[i].Providers = append(ranges[i].Providers, providerId)
+				break
+			}
+		}
+	}
+
+	// Sort providers within each range by score (highest first)
+	for i := range ranges {
+		sort.Slice(ranges[i].Providers, func(a, b int) bool {
+			scoreA, _ := v.GetReputationScore(ctx, ranges[i].Providers[a])
+			scoreB, _ := v.GetReputationScore(ctx, ranges[i].Providers[b])
+			return scoreA > scoreB
+		})
+	}
+
+	return ranges, nil
 }

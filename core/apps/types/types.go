@@ -23,6 +23,8 @@ import (
 var log = logrus.WithField("service", "apps")
 
 const ProtocolProxyReverse = protocol.ID("/x/proxy/reverse/0.0.1")
+const ProtocolAppVerifierProviderScoreRequest = protocol.ID("/x/app/verifier/providerscore/request/0.0.1")
+const ProtocolAppVerifierProviderScoreResponse = protocol.ID("/x/app/verifier/providerscore/response/0.0.1")
 const ProtocolAppVerifierUsageReport = protocol.ID("/x/app/verifier/usagereport/0.0.1")
 const ProtocolAppSignatureRequest = protocol.ID("/x/app/verifier/signreq/0.0.1")
 const ProtocollAppSignatureReceive = protocol.ID("/x/app/verifier/signrev/0.0.1")
@@ -181,6 +183,13 @@ type DeviceCapability struct {
 	AvailableCPU     *big.Int `json:"availableCpu"`     // Available CPU cores
 	AvailableMemory  *big.Int `json:"availableMemory"`  // Available memory in bytes
 	AvailableStorage *big.Int `json:"availableStorage"` // Available storage in bytes
+}
+
+type ReputationScoreRange struct {
+	MinScore  int      `json:"min_score"`
+	MaxScore  int      `json:"max_score"`
+	Count     int      `json:"count"`
+	Providers []string `json:"providers"`
 }
 
 func decodeAndParseMetadata(encodedMetadata string) (*AppMetadata, error) {
