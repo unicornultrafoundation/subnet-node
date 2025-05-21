@@ -253,7 +253,7 @@ func (v *Verifier) queryUsageReports() (map[int64][]*pvtypes.UsageReport, []stri
 func (v *Verifier) processUsageReports(usagesByAppId map[int64][]*pvtypes.UsageReport) ([]*pvtypes.SignedUsage, error) {
 	signedUsages := make([]*pvtypes.SignedUsage, 0)
 
-	for appId, logs := range usagesByAppId {
+	for _, logs := range usagesByAppId {
 		// Filter logs by qualified peers
 		filteredLogs := make([]*pvtypes.UsageReport, 0)
 		for _, log := range logs {
@@ -284,8 +284,8 @@ func (v *Verifier) processUsageReports(usagesByAppId map[int64][]*pvtypes.UsageR
 				if err != nil {
 					log.Errorf("Failed to store provider score: %v", err)
 				} else {
-					log.Infof("Stored score %d for provider %d (app %d) based on peer %s",
-						score, providerId, appId, peerId)
+					log.Infof("Stored score %d for provider %d based on peer %s",
+						score, providerId, peerId)
 				}
 			}
 		}

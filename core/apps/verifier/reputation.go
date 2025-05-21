@@ -18,11 +18,7 @@ import (
 
 var reputationLog = logrus.WithField("service", "reputation-service")
 
-const (
-	ReputationCacheExpiry = 30 * time.Minute
-	MaxResponses          = 10
-	ResponseTimeout       = 10 * time.Second
-)
+const ResponseTimeout = 10 * time.Second
 
 type ReputationService struct {
 	ds             datastore.Datastore
@@ -35,14 +31,13 @@ type ReputationQuery struct {
 	ProviderID string `json:"provider_id"`
 	Timestamp  int64  `json:"timestamp"`
 	RequestID  string `json:"request_id"`
-	VerifierID string `json:"verifier_id"`
 }
 
 type ReputationResponse struct {
 	ProviderID string `json:"provider_id"`
+	VerifierID string `json:"verifier_id"`
 	Score      int    `json:"score"`
 	Timestamp  int64  `json:"timestamp"`
-	VerifierID string `json:"verifier_id"`
 	RequestID  string `json:"request_id"`
 }
 
@@ -86,7 +81,8 @@ func (rs *ReputationService) QueryReputationScore(providerID string) (int, error
 	}
 
 	// Query all peers to get their scores
-	peerScores, err := rs.queryReputationScores(providerID, "")
+	peerScores, err := rs.queryReputationScores(providerID)
+
 	if err != nil {
 		reputationLog.Warnf("Failed to query peers for scores: %v", err)
 		// If we have a local score > 0, return it
@@ -110,8 +106,8 @@ func (rs *ReputationService) QueryReputationScore(providerID string) (int, error
 	for _, response := range peerScores {
 		totalScore += response.Score
 		scoreCount++
-		reputationLog.Debugf("Got peer score %d for provider %s from verifier %s",
-			response.Score, providerID, response.VerifierID)
+		reputationLog.Debugf("Got peer score %d for provider %s ",
+			response.Score, providerID)
 	}
 
 	// Calculate average
@@ -166,7 +162,7 @@ func (rs *ReputationService) StoreProviderScore(providerID string, score int) er
 }
 
 // queryReputationScores queries other verifier nodes for reputation scores
-func (rs *ReputationService) queryReputationScores(providerID string, verifierID string) ([]ReputationResponse, error) {
+func (rs *ReputationService) queryReputationScores(providerID string) ([]ReputationResponse, error) {
 	// Generate a unique request ID
 	requestID := fmt.Sprintf("%s-%d", providerID, time.Now().UnixNano())
 
@@ -175,7 +171,6 @@ func (rs *ReputationService) queryReputationScores(providerID string, verifierID
 		ProviderID: providerID,
 		Timestamp:  time.Now().Unix(),
 		RequestID:  requestID,
-		VerifierID: verifierID,
 	}
 
 	// Create a result to track responses
@@ -192,20 +187,7 @@ func (rs *ReputationService) queryReputationScores(providerID string, verifierID
 	defer cancel()
 
 	// Determine target peers
-	var targetPeers []peer.ID
-	if verifierID != "" {
-		peerID, err := peer.Decode(verifierID)
-		if err != nil {
-			return nil, fmt.Errorf("invalid verifier ID: %v", err)
-		}
-		// Check if the peer is connected
-		if rs.host.Network().Connectedness(peerID) != network.Connected {
-			return nil, fmt.Errorf("not connected to verifier %s", verifierID)
-		}
-		targetPeers = []peer.ID{peerID}
-	} else {
-		targetPeers = rs.host.Network().Peers()
-	}
+	var targetPeers = rs.host.Network().Peers()
 
 	if len(targetPeers) == 0 {
 		return nil, fmt.Errorf("no connected peers to query")
@@ -285,12 +267,6 @@ func (rs *ReputationService) handleReputationQuery(stream network.Stream) {
 		return
 	}
 
-	// Check if the query is directed to this verifier
-	if query.VerifierID != "" && query.VerifierID != rs.host.ID().String() {
-		reputationLog.Debugf("Ignoring query not directed to this verifier: %s", query.VerifierID)
-		return
-	}
-
 	reputationLog.Debugf("Received reputation query from %s for provider %s",
 		stream.Conn().RemotePeer(), query.ProviderID)
 
@@ -304,9 +280,9 @@ func (rs *ReputationService) handleReputationQuery(stream network.Stream) {
 	// Create response
 	response := ReputationResponse{
 		ProviderID: query.ProviderID,
+		VerifierID: rs.host.ID().String(),
 		Score:      score,
 		Timestamp:  time.Now().Unix(),
-		VerifierID: rs.host.ID().String(),
 		RequestID:  query.RequestID,
 	}
 
@@ -340,13 +316,6 @@ func (rs *ReputationService) handleReputationResponse(stream network.Stream) {
 		return
 	}
 
-	// Verify the response is from the sender
-	if response.VerifierID != stream.Conn().RemotePeer().String() {
-		reputationLog.Warnf("Reputation response verifier ID doesn't match sender: %s vs %s",
-			response.VerifierID, stream.Conn().RemotePeer())
-		return
-	}
-
 	reputationLog.Debugf("Received reputation response from %s for request %s with score %d",
 		stream.Conn().RemotePeer(), response.RequestID, response.Score)
 
@@ -357,10 +326,6 @@ func (rs *ReputationService) handleReputationResponse(stream network.Stream) {
 		// Add the response
 		queryResult.Responses = append(queryResult.Responses, response)
 
-		// If we have enough responses, mark the query as done
-		if len(queryResult.Responses) >= MaxResponses {
-			close(queryResult.Done)
-		}
 	} else {
 		reputationLog.Warnf("Received response for unknown request ID: %s", response.RequestID)
 	}
