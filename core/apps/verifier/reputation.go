@@ -24,8 +24,14 @@ const (
 	ResponseTimeout       = 10 * time.Second
 )
 
+type ReputationService struct {
+	ds             datastore.Datastore
+	p2p            *p2p.P2P
+	host           host.Host
+	pendingQueries sync.Map
+}
+
 type ReputationQuery struct {
-	AppID      int64  `json:"app_id"`
 	ProviderID string `json:"provider_id"`
 	Timestamp  int64  `json:"timestamp"`
 	RequestID  string `json:"request_id"`
@@ -33,19 +39,11 @@ type ReputationQuery struct {
 }
 
 type ReputationResponse struct {
-	AppID      int64  `json:"app_id"`
 	ProviderID string `json:"provider_id"`
 	Score      int    `json:"score"`
 	Timestamp  int64  `json:"timestamp"`
 	VerifierID string `json:"verifier_id"`
 	RequestID  string `json:"request_id"`
-}
-
-type ReputationService struct {
-	ds             datastore.Datastore
-	p2p            *p2p.P2P
-	host           host.Host
-	pendingQueries sync.Map
 }
 
 type ReputationQueryResponse struct {
@@ -75,40 +73,68 @@ func (rs *ReputationService) Register() error {
 }
 
 // QueryReputationScore queries reputation scores for a provider from other verifiers
-func (rs *ReputationService) QueryReputationScore(appID int64, providerID string, verifierID string) (int, error) {
-	// If no specific verifier is requested, return local score
-	if verifierID == "" || verifierID == rs.host.ID().String() {
-		localScore, err := rs.getLocalScore(appID, providerID)
-		if err != nil {
-			reputationLog.Warnf("Failed to get local reputation score: %v", err)
-			// Continue anyway, we'll query peers if needed
+func (rs *ReputationService) QueryReputationScore(providerID string) (int, error) {
+	// Get local score
+	localScore, err := rs.getLocalScore(providerID)
+	hasLocalScore := err == nil && localScore > 0
+
+	if err != nil {
+		reputationLog.Warnf("Failed to get local reputation score: %v", err)
+		// Continue anyway, we'll query peers
+	} else if localScore > 0 {
+		reputationLog.Debugf("Got local score %d for provider %s", localScore, providerID)
+	}
+
+	// Query all peers to get their scores
+	peerScores, err := rs.queryReputationScores(providerID, "")
+	if err != nil {
+		reputationLog.Warnf("Failed to query peers for scores: %v", err)
+		// If we have a local score > 0, return it
+		if hasLocalScore {
+			return localScore, nil
 		}
+		return 0, fmt.Errorf("no reputation scores available")
+	}
+
+	// Calculate average including local score if it's > 0
+	totalScore := 0
+	scoreCount := 0
+
+	// Add local score if available and > 0
+	if hasLocalScore {
+		totalScore += localScore
+		scoreCount++
+	}
+
+	// Add peer scores
+	for _, response := range peerScores {
+		totalScore += response.Score
+		scoreCount++
+		reputationLog.Debugf("Got peer score %d for provider %s from verifier %s",
+			response.Score, providerID, response.VerifierID)
+	}
+
+	// Calculate average
+	if scoreCount > 0 {
+		return totalScore / scoreCount, nil
+	}
+
+	// If we have a local score > 0, return it as fallback
+	if hasLocalScore {
 		return localScore, nil
 	}
 
-	// Query specific verifier for their score
-	peerScores, err := rs.queryReputationScores(appID, providerID, verifierID)
-	if err != nil {
-		return 0, fmt.Errorf("failed to query verifier %s: %v", verifierID, err)
-	}
-
-	// If we got a response from the specific verifier, return that score
-	if len(peerScores) > 0 {
-		return peerScores[0].Score, nil
-	}
-
-	// If no response from the specific verifier, return an error
-	return 0, fmt.Errorf("no response received from verifier %s", verifierID)
+	return 0, fmt.Errorf("no reputation scores available for provider %s", providerID)
 }
 
 // getLocalScore retrieves the local reputation score for a provider
-func (rs *ReputationService) getLocalScore(appID int64, providerID string) (int, error) {
-	key := datastore.NewKey(fmt.Sprintf("/provider_scores/%d/%s", appID, providerID))
+func (rs *ReputationService) getLocalScore(providerID string) (int, error) {
+	key := datastore.NewKey(fmt.Sprintf("/provider_scores/%s", providerID))
 
 	scoreBytes, err := rs.ds.Get(context.Background(), key)
 	if err != nil {
 		if err == datastore.ErrNotFound {
-			return 0, nil // No score yet, return 0
+			return 0, fmt.Errorf("no reputation score found for provider %s", providerID) // Return explicit not found message
 		}
 		return 0, fmt.Errorf("failed to get score from datastore: %v", err)
 	}
@@ -123,8 +149,8 @@ func (rs *ReputationService) getLocalScore(appID int64, providerID string) (int,
 }
 
 // StoreProviderScore stores a provider's reputation score
-func (rs *ReputationService) StoreProviderScore(appID int64, providerID string, score int) error {
-	key := datastore.NewKey(fmt.Sprintf("/provider_scores/%d/%s", appID, providerID))
+func (rs *ReputationService) StoreProviderScore(providerID string, score int) error {
+	key := datastore.NewKey(fmt.Sprintf("/provider_scores/%s", providerID))
 
 	scoreBytes, err := json.Marshal(score)
 	if err != nil {
@@ -140,13 +166,12 @@ func (rs *ReputationService) StoreProviderScore(appID int64, providerID string, 
 }
 
 // queryReputationScores queries other verifier nodes for reputation scores
-func (rs *ReputationService) queryReputationScores(appID int64, providerID string, verifierID string) ([]ReputationResponse, error) {
+func (rs *ReputationService) queryReputationScores(providerID string, verifierID string) ([]ReputationResponse, error) {
 	// Generate a unique request ID
-	requestID := fmt.Sprintf("%d-%s-%d", appID, providerID, time.Now().UnixNano())
+	requestID := fmt.Sprintf("%s-%d", providerID, time.Now().UnixNano())
 
 	// Create a query
 	query := ReputationQuery{
-		AppID:      appID,
 		ProviderID: providerID,
 		Timestamp:  time.Now().Unix(),
 		RequestID:  requestID,
@@ -266,11 +291,11 @@ func (rs *ReputationService) handleReputationQuery(stream network.Stream) {
 		return
 	}
 
-	reputationLog.Debugf("Received reputation query from %s for app %d provider %s",
-		stream.Conn().RemotePeer(), query.AppID, query.ProviderID)
+	reputationLog.Debugf("Received reputation query from %s for provider %s",
+		stream.Conn().RemotePeer(), query.ProviderID)
 
 	// Get the local score
-	score, err := rs.getLocalScore(query.AppID, query.ProviderID)
+	score, err := rs.getLocalScore(query.ProviderID)
 	if err != nil {
 		reputationLog.Errorf("Failed to get local score: %v", err)
 		return
@@ -278,7 +303,6 @@ func (rs *ReputationService) handleReputationQuery(stream network.Stream) {
 
 	// Create response
 	response := ReputationResponse{
-		AppID:      query.AppID,
 		ProviderID: query.ProviderID,
 		Score:      score,
 		Timestamp:  time.Now().Unix(),

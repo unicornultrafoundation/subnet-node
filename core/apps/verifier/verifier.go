@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"runtime"
+	"sort"
 	"sync"
 	"time"
 
@@ -279,7 +280,7 @@ func (v *Verifier) processUsageReports(usagesByAppId map[int64][]*pvtypes.UsageR
 			providerId, exists := providerMap[peerId]
 			if exists {
 				// Store the raw score directly
-				err := v.rs.StoreProviderScore(appId, fmt.Sprintf("%d", providerId), score)
+				err := v.rs.StoreProviderScore(fmt.Sprintf("%d", providerId), score)
 				if err != nil {
 					log.Errorf("Failed to store provider score: %v", err)
 				} else {
@@ -449,8 +450,8 @@ func (v *Verifier) sendProtoMessage(id peer.ID, p protocol.ID, data proto.Messag
 	return true
 }
 
-func (v *Verifier) GetReputationScore(ctx context.Context, appId int64, providerId string, verifierId string) (int, error) {
-	score, err := v.rs.QueryReputationScore(appId, providerId, verifierId)
+func (v *Verifier) GetReputationScore(ctx context.Context, providerId string) (int, error) {
+	score, err := v.rs.QueryReputationScore(providerId)
 	if err != nil {
 		return 0, fmt.Errorf("failed to get reputation score: %v", err)
 	}
@@ -475,4 +476,83 @@ func (v *Verifier) GetVerifierIds(ctx context.Context) ([]string, error) {
 	verifierIds = append(verifierIds, v.ps.ID().String())
 
 	return verifierIds, nil
+}
+
+// GetAllProviderIds returns all provider IDs that have reputation scores
+func (v *Verifier) GetAllProviderIds(ctx context.Context) ([]string, error) {
+	// Create a query to get all provider scores
+	query := query.Query{
+		Prefix: "/provider_scores/",
+	}
+
+	results, err := v.ds.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query provider scores: %v", err)
+	}
+	defer results.Close()
+
+	var providerIds []string
+	for entry := range results.Next() {
+		if entry.Error != nil {
+			continue
+		}
+
+		// Extract provider ID from the key
+		key := entry.Key
+		if len(key) <= len("/provider_scores/") {
+			continue
+		}
+
+		providerId := key[len("/provider_scores/"):]
+		providerIds = append(providerIds, providerId)
+	}
+
+	return providerIds, nil
+}
+
+// GetReputationScoreRanges retrieves reputation scores grouped by ranges
+func (v *Verifier) GetReputationScoreRanges(ctx context.Context) ([]atypes.ReputationScoreRange, error) {
+	// Get all provider IDs
+	providerIds, err := v.GetAllProviderIds(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Define score ranges
+	ranges := []atypes.ReputationScoreRange{
+		{MinScore: 0, MaxScore: 20, Count: 0, Providers: []string{}},
+		{MinScore: 21, MaxScore: 40, Count: 0, Providers: []string{}},
+		{MinScore: 41, MaxScore: 60, Count: 0, Providers: []string{}},
+		{MinScore: 61, MaxScore: 80, Count: 0, Providers: []string{}},
+		{MinScore: 81, MaxScore: 100, Count: 0, Providers: []string{}},
+	}
+
+	// Collect scores for each provider
+	for _, providerId := range providerIds {
+		score, err := v.GetReputationScore(ctx, providerId)
+		if err != nil {
+			// Skip providers with no score
+			continue
+		}
+
+		// Find the appropriate range for this score
+		for i := range ranges {
+			if score >= ranges[i].MinScore && score <= ranges[i].MaxScore {
+				ranges[i].Count++
+				ranges[i].Providers = append(ranges[i].Providers, providerId)
+				break
+			}
+		}
+	}
+
+	// Sort providers within each range by score (highest first)
+	for i := range ranges {
+		sort.Slice(ranges[i].Providers, func(a, b int) bool {
+			scoreA, _ := v.GetReputationScore(ctx, ranges[i].Providers[a])
+			scoreB, _ := v.GetReputationScore(ctx, ranges[i].Providers[b])
+			return scoreA > scoreB
+		})
+	}
+
+	return ranges, nil
 }

@@ -185,6 +185,13 @@ type DeviceCapability struct {
 	AvailableStorage *big.Int `json:"availableStorage"` // Available storage in bytes
 }
 
+type ReputationScoreRange struct {
+	MinScore  int      `json:"min_score"`
+	MaxScore  int      `json:"max_score"`
+	Count     int      `json:"count"`
+	Providers []string `json:"providers"`
+}
+
 func decodeAndParseMetadata(encodedMetadata string) (*AppMetadata, error) {
 
 	// Decode Base64
