@@ -186,18 +186,18 @@ func TestVerifierBasic(t *testing.T) {
 	verifier.pow.qualifiedPeers[provider.host.ID().String()] = true
 	verifier.pow.AddVerifierPeer(provider.host.ID().String())
 
-	// Send a usage report
-	err = provider.SendUsageReport(
-		50.0, // CPU: 50%
-		1024, // Memory: 1024 MB
-		2048, // Storage: 2GB
-		1000, // Upload: 1000 bytes
-		2000, // Download: 2000 bytes
-	)
-	require.NoError(t, err)
-
-	// Wait for report to be processed
-	time.Sleep(2 * time.Second)
+	// Send multiple usage reports to build reputation
+	for i := 0; i < 3; i++ {
+		err = provider.SendUsageReport(
+			50.0, // CPU: 50%
+			1024, // Memory: 1024 MB
+			2048, // Storage: 2GB
+			1000, // Upload: 1000 bytes
+			2000, // Download: 2000 bytes
+		)
+		require.NoError(t, err)
+		time.Sleep(30 * time.Second) // Wait between reports to meet time threshold
+	}
 
 	// Trigger periodic check manually
 	signedUsages, err := verifier.TriggerPeriodicCheck()
@@ -211,6 +211,7 @@ func TestVerifierBasic(t *testing.T) {
 	require.Equal(t, provider.host.ID().String(), signedUsage.PeerId)
 	require.NotEmpty(t, signedUsage.Signature, "Should have a signature")
 	require.NotEmpty(t, signedUsage.Hash, "Should have a hash")
+	require.Equal(t, int32(12), signedUsage.Score, "Provider should have a reputation score of 12")
 
 	// Query and verify the signed usage was stored
 	storedSignedUsages, err := verifier.getSignedUsages(provider.appId, provider.host.ID().String(), 1)
@@ -218,6 +219,7 @@ func TestVerifierBasic(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, storedSignedUsages, "Should find at least one signed usage")
 	require.Equal(t, signedUsage.Hash, storedSignedUsages[0].Hash, "Stored signed usage should match")
+	require.Equal(t, int32(12), storedSignedUsages[0].Score, "Stored signed usage should have a score of 12")
 }
 
 func TestTriggerPeriodicCheck(t *testing.T) {

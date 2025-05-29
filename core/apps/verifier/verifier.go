@@ -44,7 +44,6 @@ type Verifier struct {
 // NewVerifier creates a new instance of Verifier
 func NewVerifier(ds datastore.Datastore, ps p2phost.Host, P2P *p2p.P2P, acc *account.AccountService) *Verifier {
 	cache, _ := lru.New(128)
-
 	v := &Verifier{
 		ds:            ds,
 		p2p:           P2P,
@@ -53,7 +52,7 @@ func NewVerifier(ds datastore.Datastore, ps p2phost.Host, P2P *p2p.P2P, acc *acc
 		previousTimes: cache,
 		pow:           NewPow(NodeVerifier, ps, P2P),
 	}
-	go v.periodicCheck(DefaultCheckInterval)
+	go v.periodicCheck(DefaultCheckInterval) // Pass the default check interval
 
 	return v
 }
@@ -290,7 +289,7 @@ func (v *Verifier) processUsageReports(usagesByAppId map[int64][]*pvtypes.UsageR
 				signedUsage.AppId = peerlog.AppId
 				signedUsage.ProviderId = peerlog.ProviderId
 				signedUsage.Duration += int64(ReportTimeThreshold.Seconds())
-				signedUsage.Score = int32(peerScores[peerId])
+				signedUsage.Score = int32(peerScores[peerlog.PeerId])
 			}
 			peerlognum := int64(len(peerLogs))
 
@@ -435,36 +434,4 @@ func (v *Verifier) GetVerifierIds(ctx context.Context) ([]string, error) {
 	verifierIds = append(verifierIds, v.ps.ID().String())
 
 	return verifierIds, nil
-}
-
-// GetAllProviderIds returns all provider IDs that have reputation scores
-func (v *Verifier) GetAllProviderIds(ctx context.Context) ([]string, error) {
-	// Create a query to get all provider scores
-	query := query.Query{
-		Prefix: "/provider_scores/",
-	}
-
-	results, err := v.ds.Query(ctx, query)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query provider scores: %v", err)
-	}
-	defer results.Close()
-
-	var providerIds []string
-	for entry := range results.Next() {
-		if entry.Error != nil {
-			continue
-		}
-
-		// Extract provider ID from the key
-		key := entry.Key
-		if len(key) <= len("/provider_scores/") {
-			continue
-		}
-
-		providerId := key[len("/provider_scores/"):]
-		providerIds = append(providerIds, providerId)
-	}
-
-	return providerIds, nil
 }
