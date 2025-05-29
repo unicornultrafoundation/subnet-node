@@ -37,6 +37,7 @@ message SignedUsage {
 	int64 timestamp = 11;
 	bytes signature = 12;
 	bytes hash = 13;
+	int32 score = 14;
 }
 
 message Msg {

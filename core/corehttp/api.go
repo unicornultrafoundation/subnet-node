@@ -40,10 +40,9 @@ func APIOption() ServeOption {
 			server.RegisterName("peers", api.NewPeersAPI(n.Peers))
 		}
 
-		if cfg.GetBool("verifier.enable", false) {
-			server.RegisterName("verifier", api.NewVerifierAPI(n.Verifier))
-
-		}
+		// if cfg.GetBool("verifier.enable", false) {
+		// 	server.RegisterName("verifier", api.NewVerifierAPI(n.Verifier))
+		// }
 
 		// Handle public APIs without authentication
 		publicServer := rpc.NewServer()

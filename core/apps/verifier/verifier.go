@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"runtime"
-	"sort"
 	"sync"
 	"time"
 
@@ -40,20 +39,11 @@ type Verifier struct {
 	ps            p2phost.Host // the network host (server+client)
 	previousTimes *lru.Cache
 	pow           *Pow
-	rs            *ReputationService
 }
 
 // NewVerifier creates a new instance of Verifier
 func NewVerifier(ds datastore.Datastore, ps p2phost.Host, P2P *p2p.P2P, acc *account.AccountService) *Verifier {
 	cache, _ := lru.New(128)
-
-	rs := NewReputationService(ds, ps, P2P)
-	err := rs.Register()
-
-	if err != nil {
-		log.Errorf("Failed to register reputation service: %v", err)
-		return nil
-	}
 
 	v := &Verifier{
 		ds:            ds,
@@ -62,7 +52,6 @@ func NewVerifier(ds datastore.Datastore, ps p2phost.Host, P2P *p2p.P2P, acc *acc
 		ps:            ps,
 		previousTimes: cache,
 		pow:           NewPow(NodeVerifier, ps, P2P),
-		rs:            rs,
 	}
 	go v.periodicCheck(DefaultCheckInterval)
 
@@ -198,7 +187,6 @@ func (v *Verifier) periodicCheck(interval time.Duration) {
 		}
 
 		v.pow.Clear()
-
 		err = v.saveAndSendSignedUsages(signedUsages, usageReportIds)
 		if err != nil {
 			log.Errorf("Failed to save and send signed usages: %v", err)
@@ -261,34 +249,9 @@ func (v *Verifier) processUsageReports(usagesByAppId map[int64][]*pvtypes.UsageR
 				filteredLogs = append(filteredLogs, log)
 			}
 		}
-
 		// Initialize detector with threshold 2
 		detector := AnomalyDetector{Logs: filteredLogs, Threshold: 2}
 		peerScores := detector.detect()
-
-		// Map to track providers by their peer IDs
-		providerMap := make(map[string]int64)
-
-		// Store provider scores directly from peer scores
-		for _, log := range filteredLogs {
-			// Map peer ID to provider ID
-			providerMap[log.PeerId] = log.ProviderId
-		}
-
-		// Store scores for each peer's provider
-		for peerId, score := range peerScores {
-			providerId, exists := providerMap[peerId]
-			if exists {
-				// Store the raw score directly
-				err := v.rs.StoreProviderScore(fmt.Sprintf("%d", providerId), score)
-				if err != nil {
-					log.Errorf("Failed to store provider score: %v", err)
-				} else {
-					log.Infof("Stored score %d for provider %d based on peer %s",
-						score, providerId, peerId)
-				}
-			}
-		}
 
 		usagesByPeer := make(map[string][]*pvtypes.UsageReport)
 		for _, log := range filteredLogs {
@@ -327,6 +290,7 @@ func (v *Verifier) processUsageReports(usagesByAppId map[int64][]*pvtypes.UsageR
 				signedUsage.AppId = peerlog.AppId
 				signedUsage.ProviderId = peerlog.ProviderId
 				signedUsage.Duration += int64(ReportTimeThreshold.Seconds())
+				signedUsage.Score = int32(peerScores[peerId])
 			}
 			peerlognum := int64(len(peerLogs))
 
@@ -343,10 +307,10 @@ func (v *Verifier) processUsageReports(usagesByAppId map[int64][]*pvtypes.UsageR
 			if err := v.signResourceUsage(signedUsage); err != nil {
 				return nil, fmt.Errorf("failed to sign resource usage: %v", err)
 			}
-
 			signedUsages = append(signedUsages, signedUsage)
 		}
 	}
+
 	return signedUsages, nil
 }
 
@@ -417,11 +381,15 @@ func abs(x int64) int64 {
 
 func (s *Verifier) signResourceUsage(usage *pvtypes.SignedUsage) error {
 	log.Debugf("Signing usage: %+v\n", usage)
+
 	typedData, err := atypes.ConvertUsageToTypedData(usage, s.acc.GetChainID(), s.acc.AppStoreAddr())
+
 	if err != nil {
 		return fmt.Errorf("failed to get usage typed data: %v", err)
 	}
+
 	hash, signature, err := s.acc.SignTypedData(typedData)
+
 	if err != nil {
 		return fmt.Errorf("failed to sign usage: %v", err)
 	}
@@ -448,15 +416,6 @@ func (v *Verifier) sendProtoMessage(id peer.ID, p protocol.ID, data proto.Messag
 		return false
 	}
 	return true
-}
-
-func (v *Verifier) GetReputationScore(ctx context.Context, providerId string) (int, error) {
-	score, err := v.rs.QueryReputationScore(providerId)
-	if err != nil {
-		return 0, fmt.Errorf("failed to get reputation score: %v", err)
-	}
-
-	return score, nil
 }
 
 func (v *Verifier) GetVerifierIds(ctx context.Context) ([]string, error) {
@@ -508,51 +467,4 @@ func (v *Verifier) GetAllProviderIds(ctx context.Context) ([]string, error) {
 	}
 
 	return providerIds, nil
-}
-
-// GetReputationScoreRanges retrieves reputation scores grouped by ranges
-func (v *Verifier) GetReputationScoreRanges(ctx context.Context) ([]atypes.ReputationScoreRange, error) {
-	// Get all provider IDs
-	providerIds, err := v.GetAllProviderIds(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	// Define score ranges
-	ranges := []atypes.ReputationScoreRange{
-		{MinScore: 0, MaxScore: 20, Count: 0, Providers: []string{}},
-		{MinScore: 21, MaxScore: 40, Count: 0, Providers: []string{}},
-		{MinScore: 41, MaxScore: 60, Count: 0, Providers: []string{}},
-		{MinScore: 61, MaxScore: 80, Count: 0, Providers: []string{}},
-		{MinScore: 81, MaxScore: 100, Count: 0, Providers: []string{}},
-	}
-
-	// Collect scores for each provider
-	for _, providerId := range providerIds {
-		score, err := v.GetReputationScore(ctx, providerId)
-		if err != nil {
-			// Skip providers with no score
-			continue
-		}
-
-		// Find the appropriate range for this score
-		for i := range ranges {
-			if score >= ranges[i].MinScore && score <= ranges[i].MaxScore {
-				ranges[i].Count++
-				ranges[i].Providers = append(ranges[i].Providers, providerId)
-				break
-			}
-		}
-	}
-
-	// Sort providers within each range by score (highest first)
-	for i := range ranges {
-		sort.Slice(ranges[i].Providers, func(a, b int) bool {
-			scoreA, _ := v.GetReputationScore(ctx, ranges[i].Providers[a])
-			scoreB, _ := v.GetReputationScore(ctx, ranges[i].Providers[b])
-			return scoreA > scoreB
-		})
-	}
-
-	return ranges, nil
 }
