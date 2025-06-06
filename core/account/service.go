@@ -33,6 +33,8 @@ type AccountService struct {
 	subnetIPRegistry     IPRegistry
 	subnetIPRegistryAddr string
 	providerID           int64
+	subnetDeploymentAddr string
+	subnetDeployment     *contracts.SubnetDeployment
 }
 
 // NewAccountService initializes a new AccountService
@@ -82,6 +84,16 @@ func NewAccountService(cfg *config.C) (*AccountService, error) {
 
 	var ipRegistry IPRegistry = subnetIPRegistry
 
+	subnetDeploymentAddr := cfg.GetString("apps.subnet_deployment", config.DefaultSubnetDeployment)
+	subnetDeployment, err := contracts.NewSubnetDeployment(
+		common.HexToAddress(subnetDeploymentAddr),
+		client,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
 	s := &AccountService{
 		privateKey:           privateKey,
 		client:               client,
@@ -92,6 +104,8 @@ func NewAccountService(cfg *config.C) (*AccountService, error) {
 		subnetAppStoreAddr:   subnetAppStoreAddr,
 		subnetIPRegistry:     ipRegistry,
 		subnetIPRegistryAddr: subnetIPRegistryAddr,
+		subnetDeployment:     subnetDeployment,
+		subnetDeploymentAddr: subnetDeploymentAddr,
 	}
 	s.updateProviderID(cfg)
 	s.registerReloadCallback(cfg)

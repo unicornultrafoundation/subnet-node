@@ -88,7 +88,7 @@ func (s *Service) GetAppPeers(ctx context.Context, appId string) ([]PeerMultiAdd
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	providers := s.dht.FindProvidersAsync(ctx, cid, 100)
+	providers := s.dht.FindProvidersAsync(ctx, cid, 1000)
 
 	// Collect providers
 	var result []PeerMultiAddress
