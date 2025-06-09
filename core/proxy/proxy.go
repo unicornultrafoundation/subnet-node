@@ -41,10 +41,12 @@ func (s *Service) forwardTraffic(remotePeerId peer.ID, appId string, m PortMappi
 					continue
 				}
 
-				// Allow IP filtering
+				// Extract source IP
 				remoteAddr, _, _ := net.SplitHostPort(conn.RemoteAddr().String())
-				if !isIPAllowed(remoteAddr, m.AllowIPs) {
-					log.Warnf("Connection from %s is not allowed (AppId: %s, AppPort: %d)", remoteAddr, appId, m.AppPort)
+
+				// Use comprehensive ACL checking
+				if !s.allowConnection(remoteAddr, appId, m.AllowIPs) {
+					log.Warnf("Connection from %s denied by ACL (AppId: %s, AppPort: %d)", remoteAddr, appId, m.AppPort)
 					conn.Close()
 					continue
 				}
@@ -55,7 +57,6 @@ func (s *Service) forwardTraffic(remotePeerId peer.ID, appId string, m PortMappi
 	default:
 		log.Debugln("Unsupported protocol:", m.Protocol)
 	}
-
 }
 
 // handleConnection forwards TCP connections via P2P
@@ -65,10 +66,10 @@ func (s *Service) handleTCPConnection(conn net.Conn, remotePeerId peer.ID, appId
 	// Get the remote address
 	remoteAddr, _, _ := net.SplitHostPort(conn.RemoteAddr().String())
 
-	// Check if the source IP is allowed
-	if !isIPAllowed(remoteAddr, m.AllowIPs) {
-		log.Warnf("Connection from %s is not allowed (AppId: %s, AppPort: %d). Proceeding to next step.", remoteAddr, appId, m.AppPort)
-		return // Proceed to the next connection
+	// Use comprehensive ACL checking (double-check for security)
+	if !s.allowConnection(remoteAddr, appId, m.AllowIPs) {
+		log.Warnf("Connection from %s denied by ACL in handler (AppId: %s, AppPort: %d)", remoteAddr, appId, m.AppPort)
+		return
 	}
 
 	// Encode metadata in the protocol name

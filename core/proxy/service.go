@@ -3,6 +3,7 @@ package proxy
 import (
 	"context"
 	"fmt"
+	"net"
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/sirupsen/logrus"
@@ -21,24 +22,86 @@ type Service struct {
 	ProxyCfg ProxyConfig
 
 	stopChan chan struct{} // Channel to stop background tasks
+
+	// ACL configuration
+	allowAll    bool
+	allowedNets []*net.IPNet
 }
 
 // Initializes the Peer Service.
 func New(peerHost p2phost.Host, peerId peer.ID, cfg *config.C) (*Service, error) {
 	parsedConfig, err := ParseProxyConfig(cfg.GetMap("proxy", map[string]any{}))
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse proxy config: %v", err)
 	}
 
-	return &Service{
+	service := &Service{
 		PeerId:   peerId,
 		PeerHost: peerHost,
 		Cfg:      cfg,
 		IsEnable: cfg.GetBool("proxy.enable", false),
 		ProxyCfg: parsedConfig,
 		stopChan: make(chan struct{}),
-	}, nil
+	}
+
+	// Initialize ACL settings
+	if err := service.initializeACL(); err != nil {
+		return nil, fmt.Errorf("failed to initialize ACL: %v", err)
+	}
+
+	return service, nil
+}
+
+// initializeACL sets up ACL configuration from config
+func (s *Service) initializeACL() error {
+	// Check if allow_all is enabled
+	s.allowAll = s.Cfg.GetBool("proxy.acl.allow_all", false)
+
+	// Parse allowed networks from config
+	allowedNetworks := s.Cfg.GetStringSlice("proxy.acl.allowed_networks", []string{})
+	for _, network := range allowedNetworks {
+		if _, ipnet, err := net.ParseCIDR(network); err == nil {
+			s.allowedNets = append(s.allowedNets, ipnet)
+		}
+	}
+
+	log.Infof("ACL initialized - allowAll: %v, allowedNets: %d",
+		s.allowAll, len(s.allowedNets))
+
+	return nil
+}
+
+// allowConnection implements ACL checking with allowAll and allowedNets only
+func (s *Service) allowConnection(sourceIP, appID string, appAllowIPs []string) bool {
+	// If allow_all is enabled, permit everything
+	if s.allowAll {
+		log.Debugf("Connection from %s allowed by allow_all policy (AppId: %s)", sourceIP, appID)
+		return true
+	}
+
+	ip := net.ParseIP(sourceIP)
+	if ip == nil {
+		log.Warnf("Invalid IP format: %s", sourceIP)
+		return false
+	}
+
+	// Check traditional app-level AllowIPs first (for backward compatibility)
+	if len(appAllowIPs) > 0 && !isIPAllowed(sourceIP, appAllowIPs) {
+		log.Debugf("Connection from %s denied by app AllowIPs (AppId: %s)", sourceIP, appID)
+		return false
+	}
+
+	// Check if IP is in configured allowed networks
+	for _, allowedNet := range s.allowedNets {
+		if allowedNet.Contains(ip) {
+			log.Debugf("Connection from %s allowed by configured network %s (AppId: %s)", sourceIP, allowedNet.String(), appID)
+			return true
+		}
+	}
+
+	// Default: deny if not in allowed networks and allow_all is false
+	log.Debugf("Connection from %s denied by ACL policy (AppId: %s)", sourceIP, appID)
+	return false
 }
 
 func (s *Service) Start(ctx context.Context) error {
