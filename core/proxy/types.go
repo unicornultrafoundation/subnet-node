@@ -5,7 +5,6 @@ import (
 	"strconv"
 
 	"github.com/libp2p/go-libp2p/core/peer"
-	p2peer "github.com/libp2p/go-libp2p/core/peer"
 )
 
 // PortMapping represents a parsed port mapping
@@ -14,11 +13,13 @@ type PortMapping struct {
 	LocalPort int
 	AppPort   int
 	Protocol  string
+	AllowIPs  []string // List of allowed source IPs (CIDR or single IP)
 }
 
 type ProxyApp struct {
 	ID          string   `yaml:"id"`
 	Ports       []string `yaml:"ports"`
+	AllowIPs    []string `yaml:"allow_ips"` // List of allowed source IPs for the app
 	ParsedPorts []PortMapping
 }
 
@@ -49,14 +50,14 @@ func ParseProxyConfig(data map[string]any) (ProxyConfig, error) {
 				continue
 			}
 
-			peer := ProxyPeer{}
+			proxyPeer := ProxyPeer{}
 			if id, ok := peerMap["id"].(string); ok {
-				peer.ID = id
-				peerId, err := p2peer.Decode(id)
+				proxyPeer.ID = id
+				parsedId, err := peer.Decode(id)
 				if err != nil {
 					return proxyConfig, fmt.Errorf("failed to decode peerID %s: %v", id, err)
 				}
-				peer.ParsedId = peerId
+				proxyPeer.ParsedId = parsedId
 			}
 
 			// Parse "apps" field
@@ -73,7 +74,16 @@ func ParseProxyConfig(data map[string]any) (ProxyConfig, error) {
 					} else if id, ok := appMap["id"].(int64); ok {
 						app.ID = strconv.FormatInt(id, 10) // Convert int to string
 					} else {
-						return proxyConfig, fmt.Errorf("failed to parse appId for the peerId %s", peer.ID)
+						return proxyConfig, fmt.Errorf("failed to parse appId for the peerId %s", proxyPeer.ID)
+					}
+
+					// Parse "allow_ips" field
+					if allowIPs, ok := appMap["allow_ips"].([]any); ok {
+						for _, ip := range allowIPs {
+							if ipStr, ok := ip.(string); ok {
+								app.AllowIPs = append(app.AllowIPs, ipStr)
+							}
+						}
 					}
 
 					// Parse "ports" field
@@ -94,14 +104,18 @@ func ParseProxyConfig(data map[string]any) (ProxyConfig, error) {
 						if err != nil {
 							return proxyConfig, fmt.Errorf("failed to parse port mapping for this appId %s: %v", app.ID, err)
 						}
+						// Apply app-level AllowIPs to each port mapping if no port-specific AllowIPs are defined
+						for i := range parsedPorts {
+							parsedPorts[i].AllowIPs = app.AllowIPs
+						}
 						app.ParsedPorts = parsedPorts
 					}
 
-					peer.Apps = append(peer.Apps, app)
+					proxyPeer.Apps = append(proxyPeer.Apps, app)
 				}
 			}
 
-			proxyConfig.Peers = append(proxyConfig.Peers, peer)
+			proxyConfig.Peers = append(proxyConfig.Peers, proxyPeer)
 		}
 	}
 

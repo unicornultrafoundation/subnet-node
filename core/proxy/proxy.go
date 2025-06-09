@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strings"
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
@@ -39,6 +40,15 @@ func (s *Service) forwardTraffic(remotePeerId peer.ID, appId string, m PortMappi
 					log.Debugln("TCP Accept error:", err)
 					continue
 				}
+
+				// Allow IP filtering
+				remoteAddr, _, _ := net.SplitHostPort(conn.RemoteAddr().String())
+				if !isIPAllowed(remoteAddr, m.AllowIPs) {
+					log.Warnf("Connection from %s is not allowed (AppId: %s, AppPort: %d)", remoteAddr, appId, m.AppPort)
+					conn.Close()
+					continue
+				}
+
 				go s.handleTCPConnection(conn, remotePeerId, appId, m)
 			}
 		}
@@ -52,6 +62,15 @@ func (s *Service) forwardTraffic(remotePeerId peer.ID, appId string, m PortMappi
 func (s *Service) handleTCPConnection(conn net.Conn, remotePeerId peer.ID, appId string, m PortMapping) {
 	defer conn.Close()
 
+	// Get the remote address
+	remoteAddr, _, _ := net.SplitHostPort(conn.RemoteAddr().String())
+
+	// Check if the source IP is allowed
+	if !isIPAllowed(remoteAddr, m.AllowIPs) {
+		log.Warnf("Connection from %s is not allowed (AppId: %s, AppPort: %d). Proceeding to next step.", remoteAddr, appId, m.AppPort)
+		return // Proceed to the next connection
+	}
+
 	// Encode metadata in the protocol name
 	protocolWithMeta := protocol.ID(fmt.Sprintf("%s/tcp/%s/%d", atypes.ProtocolProxyReverse, appId, m.AppPort))
 	stream, err := s.PeerHost.NewStream(context.Background(), remotePeerId, protocolWithMeta)
@@ -64,4 +83,28 @@ func (s *Service) handleTCPConnection(conn net.Conn, remotePeerId peer.ID, appId
 	// Forward bidirectional TCP traffic
 	go io.Copy(stream, conn) // Client → P2P
 	io.Copy(conn, stream)    // P2P → Client
+}
+
+// isIPAllowed checks if the given IP is in the allowed list (supports CIDR and single IP)
+func isIPAllowed(ip string, allowList []string) bool {
+	if len(allowList) == 0 {
+		return true // If no allow list, allow all
+	}
+	parsedIP := net.ParseIP(ip)
+	if parsedIP == nil {
+		return false
+	}
+	for _, cidr := range allowList {
+		if strings.Contains(cidr, "/") {
+			_, ipnet, err := net.ParseCIDR(cidr)
+			if err == nil && ipnet.Contains(parsedIP) {
+				return true
+			}
+		} else {
+			if cidr == ip {
+				return true
+			}
+		}
+	}
+	return false
 }
