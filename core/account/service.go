@@ -82,7 +82,7 @@ func NewAccountService(cfg *config.C) (*AccountService, error) {
 		return nil, err
 	}
 
-	subnetClusterMarketAddr := cfg.GetString("apps.subnet_cluster_market", config.DefaultSubnetClusterMarketAddr)
+	subnetClusterMarketAddr := cfg.GetString("apps.subnet_cluster_market_addr", config.DefaultSubnetClusterMarketAddr)
 	subnetClusterMarket, err := contracts.NewSubnetClusterMarket(
 		common.HexToAddress(subnetClusterMarketAddr),
 		client,
@@ -152,6 +152,10 @@ func (s *AccountService) AppStore() *contracts.SubnetAppStore {
 
 func (s *AccountService) IPRegistry() IPRegistry {
 	return s.subnetIPRegistry
+}
+
+func (s *AccountService) SubnetClusterMarket() *contracts.SubnetClusterMarket {
+	return s.subnetClusterMarket
 }
 
 func (s *AccountService) GetChainID() *big.Int {

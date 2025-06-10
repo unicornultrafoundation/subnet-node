@@ -63,29 +63,31 @@ type Service struct {
 	dht *ddht.DHT `optional:"true"`
 
 	// Caching fields
-	gitHubAppCache  *cache.Cache
-	subnetAppCache  *cache.Cache
-	gitHubAppsCache *cache.Cache
+	gitHubAppCache         *cache.Cache
+	subnetAppCache         *cache.Cache
+	gitHubAppsCache        *cache.Cache
+	clusterMembershipCache *cache.Cache
 }
 
 // Initializes the Service with Ethereum and docker clients.
 func New(peerHost p2phost.Host, peerId peer.ID, cfg *config.C, P2P *p2p.P2P, ds datastore.Datastore, acc *account.AccountService, docker *docker.Service, DHT *ddht.DHT) *Service {
 
 	return &Service{
-		peerId:                peerId,
-		PeerHost:              peerHost,
-		P2P:                   P2P,
-		cfg:                   cfg,
-		Datastore:             ds,
-		stopChan:              make(chan struct{}),
-		accountService:        acc,
-		ethClient:             acc.GetClient(),
-		dockerClient:          *docker.GetClient(),
-		signatureResponseChan: make(chan *pvtypes.SignatureResponse, 100),
-		gitHubAppCache:        cache.New(1*time.Minute, 2*time.Minute),
-		subnetAppCache:        cache.New(1*time.Minute, 2*time.Minute),
-		gitHubAppsCache:       cache.New(1*time.Minute, 2*time.Minute),
-		dht:                   DHT,
+		peerId:                 peerId,
+		PeerHost:               peerHost,
+		P2P:                    P2P,
+		cfg:                    cfg,
+		Datastore:              ds,
+		stopChan:               make(chan struct{}),
+		accountService:         acc,
+		ethClient:              acc.GetClient(),
+		dockerClient:           *docker.GetClient(),
+		signatureResponseChan:  make(chan *pvtypes.SignatureResponse, 100),
+		gitHubAppCache:         cache.New(1*time.Minute, 2*time.Minute),
+		subnetAppCache:         cache.New(1*time.Minute, 2*time.Minute),
+		gitHubAppsCache:        cache.New(1*time.Minute, 2*time.Minute),
+		clusterMembershipCache: cache.New(5*time.Minute, 10*time.Minute),
+		dht:                    DHT,
 	}
 }
 

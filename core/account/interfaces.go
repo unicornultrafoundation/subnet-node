@@ -19,6 +19,8 @@ type Service interface {
 	AppStore() *contracts.SubnetAppStore
 	// IPRegistry returns the subnet IP registry contract
 	IPRegistry() IPRegistry
+	// SubnetClusterMarket returns the subnet cluster market contract
+	SubnetClusterMarket() *contracts.SubnetClusterMarket
 	// GetChainID returns the chain ID
 	GetChainID() *big.Int
 	// AppStoreAddr returns the subnet app store address
@@ -27,6 +29,8 @@ type Service interface {
 	ProviderAddr() string
 	// IPRegistryAddr returns the subnet IP registry address
 	IPRegistryAddr() string
+	// SubnetClusterMarketAddr returns the subnet cluster market address
+	SubnetClusterMarketAddr() string
 	// GetAddress retrieves the Ethereum address from the private key
 	GetAddress() common.Address
 	// GetBalance retrieves the Ether balance of the account

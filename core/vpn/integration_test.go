@@ -190,15 +190,17 @@ func createTestConfig(virtualIP string, subnet int) *config.C {
 
 // MockAccountService is a mock implementation of account.Service
 type MockAccountService struct {
-	client               *ethclient.Client
-	chainID              *big.Int
-	subnetProvider       *contracts.SubnetProvider
-	subnetProviderAddr   string
-	subnetAppStore       *contracts.SubnetAppStore
-	subnetAppStoreAddr   string
-	subnetIPRegistry     account.IPRegistry
-	subnetIPRegistryAddr string
-	providerID           int64
+	client                  *ethclient.Client
+	chainID                 *big.Int
+	subnetProvider          *contracts.SubnetProvider
+	subnetProviderAddr      string
+	subnetAppStore          *contracts.SubnetAppStore
+	subnetAppStoreAddr      string
+	subnetIPRegistry        account.IPRegistry
+	subnetIPRegistryAddr    string
+	providerID              int64
+	subnetClusterMarket     *contracts.SubnetClusterMarket
+	subnetClusterMarketAddr string
 }
 
 func (m *MockAccountService) GetClient() *ethclient.Client {
@@ -231,6 +233,14 @@ func (m *MockAccountService) ProviderAddr() string {
 
 func (m *MockAccountService) IPRegistryAddr() string {
 	return m.subnetIPRegistryAddr
+}
+
+func (m *MockAccountService) SubnetClusterMarket() *contracts.SubnetClusterMarket {
+	return m.subnetClusterMarket
+}
+
+func (m *MockAccountService) SubnetClusterMarketAddr() string {
+	return m.subnetClusterMarketAddr
 }
 
 func (m *MockAccountService) GetAddress() common.Address {
@@ -283,15 +293,17 @@ func createMockAccountServiceForPeer(virtualIP, peerID string) account.Service {
 
 	// Create a mock that implements the account.Service interface
 	mock := &MockAccountService{
-		client:               &ethclient.Client{},
-		chainID:              big.NewInt(1),
-		subnetProvider:       &contracts.SubnetProvider{},
-		subnetProviderAddr:   "0x0000000000000000000000000000000000000002",
-		subnetAppStore:       &contracts.SubnetAppStore{},
-		subnetAppStoreAddr:   "0x0000000000000000000000000000000000000001",
-		subnetIPRegistry:     mockIPRegistry,
-		subnetIPRegistryAddr: "0x0000000000000000000000000000000000000003",
-		providerID:           1,
+		client:                  &ethclient.Client{},
+		chainID:                 big.NewInt(1),
+		subnetProvider:          &contracts.SubnetProvider{},
+		subnetProviderAddr:      "0x0000000000000000000000000000000000000002",
+		subnetAppStore:          &contracts.SubnetAppStore{},
+		subnetAppStoreAddr:      "0x0000000000000000000000000000000000000001",
+		subnetIPRegistry:        mockIPRegistry,
+		subnetIPRegistryAddr:    "0x0000000000000000000000000000000000000003",
+		providerID:              1,
+		subnetClusterMarket:     &contracts.SubnetClusterMarket{},
+		subnetClusterMarketAddr: "0x0000000000000000000000000000000000000004",
 	}
 
 	return mock
