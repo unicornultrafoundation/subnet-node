@@ -62,6 +62,9 @@ type Service struct {
 
 	dht *ddht.DHT `optional:"true"`
 
+	// Container ACL Manager for managing container allow IPs
+	containerACLManager *ContainerACLManager
+
 	// Caching fields
 	gitHubAppCache         *cache.Cache
 	subnetAppCache         *cache.Cache
@@ -71,8 +74,7 @@ type Service struct {
 
 // Initializes the Service with Ethereum and docker clients.
 func New(peerHost p2phost.Host, peerId peer.ID, cfg *config.C, P2P *p2p.P2P, ds datastore.Datastore, acc *account.AccountService, docker *docker.Service, DHT *ddht.DHT) *Service {
-
-	return &Service{
+	srv := &Service{
 		peerId:                 peerId,
 		PeerHost:               peerHost,
 		P2P:                    P2P,
@@ -83,11 +85,41 @@ func New(peerHost p2phost.Host, peerId peer.ID, cfg *config.C, P2P *p2p.P2P, ds 
 		ethClient:              acc.GetClient(),
 		dockerClient:           *docker.GetClient(),
 		signatureResponseChan:  make(chan *pvtypes.SignatureResponse, 100),
+		containerACLManager:    nil, // Will be initialized below
 		gitHubAppCache:         cache.New(1*time.Minute, 2*time.Minute),
 		subnetAppCache:         cache.New(1*time.Minute, 2*time.Minute),
 		gitHubAppsCache:        cache.New(1*time.Minute, 2*time.Minute),
 		clusterMembershipCache: cache.New(5*time.Minute, 10*time.Minute),
 		dht:                    DHT,
+	}
+
+	// Initialize Container ACL Manager
+	srv.initializeContainerACL()
+
+	return srv
+}
+
+// initializeContainerACL initializes the Container ACL Manager based on configuration
+func (s *Service) initializeContainerACL() {
+	// Check if Container ACL is configured
+	if s.cfg.IsSet("apps.container_acl_config") {
+		configPath := s.cfg.GetString("apps.container_acl_config", "")
+		if configPath != "" {
+			aclManager, err := NewContainerACLManager(configPath)
+			if err != nil {
+				log.Warnf("Failed to initialize Container ACL Manager from JSON config '%s': %v. Container allow IP checking will be disabled.", configPath, err)
+				s.containerACLManager = nil
+			} else {
+				log.Infof("Container ACL Manager initialized with JSON config: %s", configPath)
+				s.containerACLManager = aclManager
+			}
+		} else {
+			log.Info("Container ACL config path is empty in main config. Container allow IP checking will be disabled.")
+			s.containerACLManager = nil
+		}
+	} else {
+		log.Info("Container ACL config path not found in main config. Container allow IP checking will be disabled.")
+		s.containerACLManager = nil
 	}
 }
 
@@ -125,6 +157,11 @@ func (s *Service) Stop(ctx context.Context) error {
 
 	// Close stopChan to stop all background tasks
 	close(s.stopChan)
+
+	// Stop container ACL auto-reload watcher
+	if s.containerACLManager != nil {
+		s.containerACLManager.StopAutoReload()
+	}
 
 	// Close the docker client
 	if s.dockerClient != nil {

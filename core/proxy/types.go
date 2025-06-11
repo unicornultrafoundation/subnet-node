@@ -13,13 +13,11 @@ type PortMapping struct {
 	LocalPort int
 	AppPort   int
 	Protocol  string
-	AllowIPs  []string // List of allowed source IPs (CIDR or single IP)
 }
 
 type ProxyApp struct {
 	ID          string   `yaml:"id"`
 	Ports       []string `yaml:"ports"`
-	AllowIPs    []string `yaml:"allow_ips"` // List of allowed source IPs for the app
 	ParsedPorts []PortMapping
 }
 
@@ -77,15 +75,6 @@ func ParseProxyConfig(data map[string]any) (ProxyConfig, error) {
 						return proxyConfig, fmt.Errorf("failed to parse appId for the peerId %s", proxyPeer.ID)
 					}
 
-					// Parse "allow_ips" field
-					if allowIPs, ok := appMap["allow_ips"].([]any); ok {
-						for _, ip := range allowIPs {
-							if ipStr, ok := ip.(string); ok {
-								app.AllowIPs = append(app.AllowIPs, ipStr)
-							}
-						}
-					}
-
 					// Parse "ports" field
 					if ports, ok := appMap["ports"].([]any); ok {
 						for _, port := range ports {
@@ -104,10 +93,7 @@ func ParseProxyConfig(data map[string]any) (ProxyConfig, error) {
 						if err != nil {
 							return proxyConfig, fmt.Errorf("failed to parse port mapping for this appId %s: %v", app.ID, err)
 						}
-						// Apply app-level AllowIPs to each port mapping if no port-specific AllowIPs are defined
-						for i := range parsedPorts {
-							parsedPorts[i].AllowIPs = app.AllowIPs
-						}
+
 						app.ParsedPorts = parsedPorts
 					}
 

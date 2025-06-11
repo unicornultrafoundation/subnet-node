@@ -22,6 +22,7 @@ func AppService(lc fx.Lifecycle, cfg *config.C, P2P *p2p.P2P, dataStore datastor
 	}
 
 	srv := apps.New(peerHost, peerId, cfg, P2P, dataStore, acc, docker, dht)
+
 	lc.Append(fx.Hook{
 		OnStop: func(ctx context.Context) error {
 			return srv.Stop(ctx)
