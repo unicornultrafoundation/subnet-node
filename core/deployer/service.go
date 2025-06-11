@@ -1,4 +1,4 @@
-package k8scluster
+package deployer
 
 import (
 	"context"
@@ -13,6 +13,7 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 
+	"github.com/unicornultrafoundation/subnet-node/config"
 	"github.com/unicornultrafoundation/subnet-node/core/account"
 	"github.com/unicornultrafoundation/subnet-node/core/deployer/bid"
 	"github.com/unicornultrafoundation/subnet-node/core/deployer/crd"
@@ -45,8 +46,17 @@ type Service struct {
 	contract       types.ContractInterface
 }
 
+func NewServiceFromConfig(cfg *config.C, acc *account.AccountService) (*Service, error) {
+	serviceConfig, err := NewServiceConfigFromConfig(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create service config: %w", err)
+	}
+
+	return NewService(serviceConfig, acc)
+}
+
 // NewService creates a new marketplace service
-func NewService(config *ServiceConfig) (*Service, error) {
+func NewService(config *ServiceConfig, acc *account.AccountService) (*Service, error) {
 	// Validate configuration
 	if err := config.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
@@ -93,14 +103,16 @@ func NewService(config *ServiceConfig) (*Service, error) {
 
 	// Create service
 	service := &Service{
-		config:     config,
-		logger:     logger,
-		client:     client,
-		eventBus:   eventBus.(*events.DefaultEventBus[types.MarketplaceEvent]),
-		bidTracker: bidTracker,
-		session:    session,
-		ipfsClient: ipfsClient,
-		stopCh:     make(chan struct{}),
+		config:         config,
+		logger:         logger,
+		client:         client,
+		accountService: acc,
+		ethClient:      acc.GetClient(),
+		eventBus:       eventBus.(*events.DefaultEventBus[types.MarketplaceEvent]),
+		bidTracker:     bidTracker,
+		session:        session,
+		ipfsClient:     ipfsClient,
+		stopCh:         make(chan struct{}),
 	}
 
 	// Create deployment manager
@@ -222,7 +234,7 @@ func (s *Service) Start(ctx context.Context) error {
 }
 
 // Stop stops the service
-func (s *Service) Stop() {
+func (s *Service) Stop() error {
 	s.logger.Info("Stopping service...")
 
 	// Signal stop
@@ -236,7 +248,7 @@ func (s *Service) Stop() {
 	// Stop event bus
 	if s.eventBus != nil {
 		if err := s.eventBus.Stop(context.Background()); err != nil {
-			s.logger.Error("Failed to stop event bus", zap.Error(err))
+			return fmt.Errorf("failed to stop event bus: %w", err)
 		}
 	}
 
@@ -246,6 +258,7 @@ func (s *Service) Stop() {
 	}
 
 	s.logger.Info("Service stopped")
+	return nil
 }
 
 // run runs the service

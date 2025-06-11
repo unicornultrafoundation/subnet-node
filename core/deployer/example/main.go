@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
-	k8scluster "github.com/unicornultrafoundation/subnet-node/core/deployer"
+	deployer "github.com/unicornultrafoundation/subnet-node/core/deployer"
 	"github.com/unicornultrafoundation/subnet-node/core/deployer/manifest"
 	"github.com/unicornultrafoundation/subnet-node/core/deployer/types"
 	"go.uber.org/zap"
@@ -53,12 +53,6 @@ func main() {
 		logger.Fatal("Failed to build kubeconfig", zap.Error(err))
 	}
 
-	// Create deployment directory
-	deploymentDir := "./deployments"
-	if err := os.MkdirAll(deploymentDir, 0755); err != nil {
-		logger.Fatal("Failed to create deployment directory", zap.Error(err))
-	}
-
 	// Create store directory for payment manager
 	storeDir := "./store"
 	if err := os.MkdirAll(storeDir, 0755); err != nil {
@@ -78,9 +72,8 @@ func main() {
 	}
 
 	// Create service configuration
-	config := &k8scluster.ServiceConfig{
+	config := &deployer.ServiceConfig{
 		KubeConfig:      kubeconfig,
-		DeploymentDir:   deploymentDir,
 		MaxRetries:      3,
 		ProviderAddress: common.HexToAddress("0x0000000000000000000000000000000000000000"),
 		IPFSURL:         "mock://", // Use mock IPFS client
@@ -101,12 +94,11 @@ func main() {
 	}
 
 	logger.Debug("Created service configuration",
-		zap.String("deploymentDir", deploymentDir),
 		zap.String("storeDir", storeDir),
 		zap.String("providerAddress", config.ProviderAddress.Hex()))
 
 	// Create service instance
-	service, err := k8scluster.NewService(config)
+	service, err := deployer.NewService(config, nil)
 	if err != nil {
 		logger.Fatal("Failed to create service", zap.Error(err))
 	}

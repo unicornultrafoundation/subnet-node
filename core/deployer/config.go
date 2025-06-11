@@ -1,23 +1,25 @@
-package k8scluster
+package deployer
 
 import (
 	"fmt"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/unicornultrafoundation/subnet-node/config"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
 // ServiceConfig represents service configuration
 type ServiceConfig struct {
 	// Provider configuration
 	ProviderAddress common.Address
-	DeploymentDir   string
 	MaxRetries      int
 	StoreDir        string // Directory for storing payment data
 
 	// Kubernetes configuration
-	KubeConfig *rest.Config
+	KubeConfigPath string
+	KubeConfig     *rest.Config
 
 	// Blockchain configuration
 	EthEndpoint     string
@@ -31,6 +33,38 @@ type ServiceConfig struct {
 		Storage string // Storage in GB (e.g., "100Gi")
 		GPU     int64  // Number of GPU units
 	}
+}
+
+func NewServiceConfigFromConfig(cfg *config.C) (*ServiceConfig, error) {
+	serviceConfig := DefaultServiceConfig()
+
+	// Provider configuration
+	serviceConfig.MaxRetries = cfg.GetInt("deployer.max_retries", serviceConfig.MaxRetries)
+	serviceConfig.ProviderAddress = common.HexToAddress(cfg.GetString("provider.address", ""))
+
+	// Kubernetes configuration
+	serviceConfig.KubeConfigPath = cfg.GetString("deployer.kubeconfig_path", "")
+	serviceConfig.KubeConfig = nil
+	if serviceConfig.KubeConfigPath != "" {
+		var err error
+		serviceConfig.KubeConfig, err = clientcmd.BuildConfigFromFlags("", serviceConfig.KubeConfigPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to build kubeconfig: %w", err)
+		}
+	}
+
+	// Blockchain configuration
+	serviceConfig.EthEndpoint = cfg.GetString("account.rpc", "")
+	serviceConfig.IPFSURL = cfg.GetString("deployer.ipfs_url", "")
+	serviceConfig.ContractAddress = cfg.GetString("deployer.contract_address", "")
+
+	// Cluster resources
+	serviceConfig.ClusterResources.CPU = int64(cfg.GetInt("deployer.cluster_resources.cpu", int(serviceConfig.ClusterResources.CPU)))
+	serviceConfig.ClusterResources.Memory = cfg.GetString("deployer.cluster_resources.memory", serviceConfig.ClusterResources.Memory)
+	serviceConfig.ClusterResources.Storage = cfg.GetString("deployer.cluster_resources.storage", serviceConfig.ClusterResources.Storage)
+	serviceConfig.ClusterResources.GPU = int64(cfg.GetInt("deployer.cluster_resources.gpu", int(serviceConfig.ClusterResources.GPU)))
+
+	return serviceConfig, nil
 }
 
 // DefaultServiceConfig returns a default service configuration
@@ -55,10 +89,6 @@ func DefaultServiceConfig() *ServiceConfig {
 func (c *ServiceConfig) Validate() error {
 	if c.KubeConfig == nil {
 		return fmt.Errorf("kubeconfig is required")
-	}
-
-	if c.DeploymentDir == "" {
-		return fmt.Errorf("deployment directory is required")
 	}
 
 	if c.StoreDir == "" {
