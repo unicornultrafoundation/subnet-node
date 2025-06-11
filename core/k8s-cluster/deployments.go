@@ -144,7 +144,7 @@ func (s *Service) StopDeployment(ctx context.Context, id string) error {
 	// Stop deployment
 	if err := s.deploymentMgr.StopDeployment(ctx, id); err != nil {
 		// Update marketplace status on failure
-		s.updateMarketplaceStatus(ctx, id, "termination_failed", err.Error())
+		s.logger.Error("failed to stop deployment", zap.Error(err))
 		return fmt.Errorf("failed to stop deployment: %w", err)
 	}
 
@@ -154,7 +154,7 @@ func (s *Service) StopDeployment(ctx context.Context, id string) error {
 	}
 
 	// Update marketplace status
-	s.updateMarketplaceStatus(ctx, id, "terminated", "")
+	s.logger.Info("deployment terminated", zap.String("deploymentID", id))
 
 	return nil
 }

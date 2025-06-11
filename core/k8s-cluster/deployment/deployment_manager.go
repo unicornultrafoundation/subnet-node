@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -104,7 +106,62 @@ func NewDeploymentManager(
 	eventBus *events.DefaultEventBus[clusterTypes.MarketplaceEvent],
 	crdClient *crd.Client,
 	session *session.Session,
-) *DeploymentManager {
+) (*DeploymentManager, error) {
+	// Get actual resource values from the cluster
+	resourceUsage := map[string]float64{
+		"cpu":     0.0,
+		"memory":  0.0,
+		"storage": 0.0,
+	}
+
+	// Get node resources
+	nodes, err := client.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{})
+	if err != nil {
+		logger.Error("Failed to get node resources from cluster", zap.Error(err))
+		return nil, fmt.Errorf("failed to get node resources: %w", err)
+	}
+
+	if len(nodes.Items) == 0 {
+		logger.Error("No nodes found in cluster")
+		return nil, fmt.Errorf("no nodes found in cluster")
+	}
+
+	// Calculate total resources from all nodes
+	for _, node := range nodes.Items {
+		// Add CPU cores
+		if cpu, ok := node.Status.Capacity.Cpu().AsInt64(); ok {
+			resourceUsage["cpu"] += float64(cpu)
+		} else {
+			logger.Error("Failed to get CPU capacity from node",
+				zap.String("node", node.Name))
+			return nil, fmt.Errorf("invalid CPU value for node %s", node.Name)
+		}
+
+		// Add memory in GB
+		if mem, ok := node.Status.Capacity.Memory().AsInt64(); ok {
+			resourceUsage["memory"] += float64(mem) / (1024 * 1024 * 1024) // Convert to GB
+		} else {
+			logger.Error("Failed to get memory capacity from node",
+				zap.String("node", node.Name))
+			return nil, fmt.Errorf("invalid memory value for node %s", node.Name)
+		}
+
+		// Add storage in GB
+		if storage, ok := node.Status.Capacity.Storage().AsInt64(); ok {
+			resourceUsage["storage"] += float64(storage) / (1024 * 1024 * 1024) // Convert to GB
+		} else {
+			logger.Error("Failed to get storage capacity from node",
+				zap.String("node", node.Name))
+			return nil, fmt.Errorf("invalid storage value for node %s", node.Name)
+		}
+	}
+
+	// Log the actual resource values
+	logger.Info("Successfully retrieved cluster resources",
+		zap.Float64("total_cpu_cores", resourceUsage["cpu"]),
+		zap.Float64("total_memory_gb", resourceUsage["memory"]),
+		zap.Float64("total_storage_gb", resourceUsage["storage"]))
+
 	return &DeploymentManager{
 		logger:         logger,
 		client:         client,
@@ -112,13 +169,13 @@ func NewDeploymentManager(
 		eventBus:       eventBus,
 		managerChannel: make(chan interfaces.DeploymentManagerInterface),
 		deployments:    make(map[string]*clusterTypes.ManagedDeployment),
-		resourceUsage:  make(map[string]float64),
+		resourceUsage:  resourceUsage,
 		stopCh:         make(chan struct{}),
 		ac:             crdClient,
 		ns:             "deployment-default",
 		crdClient:      crdClient,
 		session:        session,
-	}
+	}, nil
 }
 
 // Start starts the deployment manager
@@ -183,7 +240,7 @@ func (m *DeploymentManager) CreateDeployment(ctx context.Context, id string, req
 		BaseEvent:    clusterTypes.BaseEvent{Timestamp: time.Now()},
 		DeploymentID: id,
 		Provider:     m.session.GetProviderAddress(),
-		Status:       string(dep.Status),
+		Status:       dep.Status,
 	}
 	if err := m.eventBus.Publish(ctx, string(clusterTypes.MarketplaceEventTypeDeploymentCompleted), event); err != nil {
 		m.logger.Error("Failed to publish deployment event", zap.String("id", id), zap.Error(err))
@@ -294,9 +351,125 @@ func (m *DeploymentManager) GetResponseTime() time.Duration {
 	return m.responseTime
 }
 
-// GetResourceUsage gets the resource usage
+// GetResourceUsage gets the actual available resources
 func (m *DeploymentManager) GetResourceUsage() map[string]float64 {
-	return m.resourceUsage
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	// Get node resources
+	nodes, err := m.client.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{})
+	if err != nil {
+		m.logger.Error("Failed to get node resources from cluster", zap.Error(err))
+		return nil
+	}
+
+	// Calculate total resources from all nodes
+	available := map[string]float64{
+		"cpu":     0.0,
+		"memory":  0.0,
+		"storage": 0.0,
+	}
+
+	for _, node := range nodes.Items {
+		// Add CPU cores
+		if cpu, ok := node.Status.Capacity.Cpu().AsInt64(); ok {
+			available["cpu"] += float64(cpu)
+		} else {
+			m.logger.Error("Failed to get CPU capacity from node",
+				zap.String("node", node.Name))
+			continue
+		}
+
+		// Add memory in GB
+		if mem, ok := node.Status.Capacity.Memory().AsInt64(); ok {
+			available["memory"] += float64(mem) / (1024 * 1024 * 1024) // Convert to GB
+		} else {
+			m.logger.Error("Failed to get memory capacity from node",
+				zap.String("node", node.Name))
+			continue
+		}
+
+		// Add storage in GB
+		if storage, ok := node.Status.Capacity.Storage().AsInt64(); ok {
+			available["storage"] += float64(storage) / (1024 * 1024 * 1024) // Convert to GB
+		} else {
+			m.logger.Error("Failed to get storage capacity from node",
+				zap.String("node", node.Name))
+			continue
+		}
+	}
+
+	// Subtract resources used by existing deployments
+	for _, dep := range m.deployments {
+		if dep.Status == clusterTypes.DeploymentStatusRunning {
+			// Get resource requirements from SDL
+			requirements := dep.SDL.Profiles.Compute["default"].Resources
+
+			// Parse CPU requirement
+			if cpuReq, err := parseResourceValue(requirements.CPU.Request); err == nil {
+				available["cpu"] -= cpuReq
+			}
+
+			// Parse memory requirement
+			if memReq, err := parseResourceValue(requirements.Memory.Request); err == nil {
+				available["memory"] -= memReq
+			}
+
+			// Parse storage requirement
+			storageReq := 0.0
+			for _, vol := range requirements.Storage {
+				if size, err := parseResourceValue(vol.Size); err == nil {
+					storageReq += size
+				}
+			}
+			available["storage"] -= storageReq
+		}
+	}
+
+	// Log the actual resource values
+	m.logger.Info("Current resource usage",
+		zap.Float64("available_cpu_cores", available["cpu"]),
+		zap.Float64("available_memory_gb", available["memory"]),
+		zap.Float64("available_storage_gb", available["storage"]))
+
+	return available
+}
+
+// parseResourceValue parses a resource value string into a float64
+func parseResourceValue(value string) (float64, error) {
+	// Remove any whitespace
+	value = strings.TrimSpace(value)
+
+	// Split into number and unit
+	parts := strings.Fields(value)
+	if len(parts) == 0 {
+		return 0, fmt.Errorf("empty resource value")
+	}
+
+	// Parse number
+	num, err := strconv.ParseFloat(parts[0], 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid resource value: %w", err)
+	}
+
+	// Convert to base unit based on suffix
+	if len(parts) > 1 {
+		switch strings.ToLower(parts[1]) {
+		case "m", "mi":
+			if strings.Contains(value, "cpu") {
+				return num / 1000, nil // Convert millicores to cores
+			}
+			return num / 1024, nil // Convert MB to GB
+		case "g", "gi":
+			return num, nil // Already in GB
+		case "k", "ki":
+			return num / (1024 * 1024), nil // Convert KB to GB
+		case "t", "ti":
+			return num * 1024, nil // Convert TB to GB
+		}
+	}
+
+	return num, nil
 }
 
 // GetDeploymentVersion gets the deployment version

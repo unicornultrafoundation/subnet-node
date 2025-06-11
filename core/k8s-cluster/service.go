@@ -8,17 +8,20 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"go.uber.org/zap"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 
+	"github.com/unicornultrafoundation/subnet-node/core/account"
 	"github.com/unicornultrafoundation/subnet-node/core/k8s-cluster/bid"
 	"github.com/unicornultrafoundation/subnet-node/core/k8s-cluster/crd"
 	"github.com/unicornultrafoundation/subnet-node/core/k8s-cluster/deployment"
 	"github.com/unicornultrafoundation/subnet-node/core/k8s-cluster/events"
 	"github.com/unicornultrafoundation/subnet-node/core/k8s-cluster/ipfs"
 	"github.com/unicornultrafoundation/subnet-node/core/k8s-cluster/manifest"
+	"github.com/unicornultrafoundation/subnet-node/core/k8s-cluster/marketplace"
 	"github.com/unicornultrafoundation/subnet-node/core/k8s-cluster/payment"
 	"github.com/unicornultrafoundation/subnet-node/core/k8s-cluster/session"
 	"github.com/unicornultrafoundation/subnet-node/core/k8s-cluster/types"
@@ -32,21 +35,26 @@ type ServiceConfig struct {
 	KubeConfig      *rest.Config
 	EthEndpoint     string
 	IPFSURL         string
+	ContractAddress string
 }
 
 // Service represents the marketplace service
 type Service struct {
-	config        *ServiceConfig
-	deploymentMgr types.DeploymentManagerInterface
-	eventBus      *events.DefaultEventBus[types.MarketplaceEvent]
-	paymentMgr    payment.PaymentManagerInterface
-	logger        *zap.Logger
-	bidTracker    *bid.BidTracker
-	client        *kubernetes.Clientset
-	session       *session.Session
-	sdlParser     *manifest.Parser
-	ipfsClient    types.IPFSClient
-	stopCh        chan struct{}
+	config         *ServiceConfig
+	ethClient      *ethclient.Client
+	accountService *account.AccountService
+	deploymentMgr  types.DeploymentManagerInterface
+	eventBus       *events.DefaultEventBus[types.MarketplaceEvent]
+	paymentMgr     payment.PaymentManagerInterface
+	logger         *zap.Logger
+	bidTracker     *bid.BidTracker
+	bidManager     *marketplace.BidManager
+	client         *kubernetes.Clientset
+	session        *session.Session
+	sdlParser      *manifest.Parser
+	ipfsClient     types.IPFSClient
+	stopCh         chan struct{}
+	contract       types.ContractInterface
 }
 
 // NewService creates a new marketplace service
@@ -70,7 +78,13 @@ func NewService(config *ServiceConfig) (*Service, error) {
 	}
 
 	// Create IPFS client
-	ipfsClient := ipfs.NewClient(config.IPFSURL)
+	var ipfsClient types.IPFSClient
+	if config.IPFSURL == "mock://" {
+		// Use mock IPFS client for local/demo runs
+		ipfsClient = ipfs.NewMockClient()
+	} else {
+		ipfsClient = ipfs.NewClient(config.IPFSURL)
+	}
 
 	// Create dynamic client for CRD
 	dynamicClient, err := dynamic.NewForConfig(config.KubeConfig)
@@ -82,7 +96,7 @@ func NewService(config *ServiceConfig) (*Service, error) {
 	crdClient := crd.NewClient(dynamicClient)
 
 	// Create bid tracker
-	bidTracker := bid.NewBidTracker()
+	bidTracker := bid.NewBidTracker(logger)
 
 	// Create service instance
 	s := &Service{
@@ -93,6 +107,7 @@ func NewService(config *ServiceConfig) (*Service, error) {
 		client:     k8sClient,
 		bidTracker: bidTracker,
 		ipfsClient: ipfsClient,
+		sdlParser:  manifest.NewParser(),
 	}
 
 	// Create session
@@ -101,7 +116,7 @@ func NewService(config *ServiceConfig) (*Service, error) {
 	s.session = session
 
 	// Create deployment manager
-	deploymentMgr := deployment.NewDeploymentManager(
+	deploymentMgr, err := deployment.NewDeploymentManager(
 		logger,
 		k8sClient,
 		&types.DeploymentManagerConfig{
@@ -112,6 +127,9 @@ func NewService(config *ServiceConfig) (*Service, error) {
 		crdClient,
 		session,
 	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create deployment manager: %w", err)
+	}
 	s.deploymentMgr = deploymentMgr
 
 	// Initialize payment manager based on configuration
@@ -122,17 +140,78 @@ func NewService(config *ServiceConfig) (*Service, error) {
 			return nil, fmt.Errorf("failed to start mock event bus: %w", err)
 		}
 		s.paymentMgr = payment.NewMockPaymentManager(mockEventBus.(*events.DefaultEventBus[interface{}]))
+
+		// Create mock contract for local/demo runs
+		contract := marketplace.NewMockMarketplaceContract(logger)
+		s.contract = contract
+
+		// Create bid manager with mock components
+		priceConfig := &payment.PricingConfig{
+			MemPriceMin:      1000000000000000,  // 0.001 ETH
+			MemPriceMax:      10000000000000000, // 0.01 ETH
+			BidPriceStrategy: "dynamic",
+			BidCPUScale:      1.5,
+			BidStorageScale:  1.2,
+			ProcessLimit:     10,
+			ProcessTimeout:   30,
+		}
+		s.bidManager = marketplace.NewBidManager(
+			deploymentMgr,
+			config.ProviderAddress,
+			contract,
+			nil, // No Ethereum client for mock
+			logger,
+			priceConfig,
+			ipfsClient,
+		)
 	} else {
-		// Use real payment manager with Ethereum
-		paymentMgr, err := payment.NewPaymentManager(&payment.Config{
-			ProviderAddr:  config.ProviderAddress,
-			StoreDir:      config.DeploymentDir,
-			CheckInterval: time.Minute,
-		}, eventBus.(*events.DefaultEventBus[types.MarketplaceEvent]))
+		client, err := ethclient.Dial(config.EthEndpoint)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create Ethereum client: %w", err)
+		}
+		s.ethClient = client
+
+		contractAddr := common.HexToAddress(config.ContractAddress)
+
+		// Create contract first
+		contract, err := marketplace.NewMarketplaceContract(
+			client,
+			contractAddr,
+			bidTracker,
+			nil, // Payment manager will be set later
+			logger,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create marketplace contract: %w", err)
+		}
+		s.contract = contract
+
+		// Create payment manager with contract
+		paymentMgr, err := payment.NewPaymentManager(contract, eventBus.(*events.DefaultEventBus[types.MarketplaceEvent]))
 		if err != nil {
 			return nil, fmt.Errorf("failed to create payment manager: %w", err)
 		}
 		s.paymentMgr = paymentMgr
+
+		// Create bid manager
+		priceConfig := &payment.PricingConfig{
+			MemPriceMin:      1000000000000000,  // 0.001 ETH
+			MemPriceMax:      10000000000000000, // 0.01 ETH
+			BidPriceStrategy: "dynamic",
+			BidCPUScale:      1.5,
+			BidStorageScale:  1.2,
+			ProcessLimit:     10,
+			ProcessTimeout:   30,
+		}
+		s.bidManager = marketplace.NewBidManager(
+			deploymentMgr,
+			config.ProviderAddress,
+			contract,
+			client,
+			logger,
+			priceConfig,
+			ipfsClient,
+		)
 	}
 
 	// Register event handlers for all major event types
@@ -216,22 +295,40 @@ func (s *Service) run(ctx context.Context) {
 		case <-ticker.C:
 			// Check health
 			if err := s.checkHealth(); err != nil {
-				s.logger.Error("failed to check health", zap.Error(err))
+				s.logger.Error("health check failed", zap.Error(err))
+				// Consider stopping the service if health check fails repeatedly
+				continue
 			}
 		}
 	}
 }
 
-// checkHealth checks the health of the marketplace service
+// checkHealth checks the health of all components
 func (s *Service) checkHealth() error {
 	// Check deployment manager health
 	if !s.deploymentMgr.IsHealthy() {
-		return fmt.Errorf("deployment manager is not healthy")
+		return fmt.Errorf("deployment manager is unhealthy")
 	}
 
 	// Check payment manager health
 	if !s.paymentMgr.IsHealthy() {
-		return fmt.Errorf("payment manager is not healthy")
+		return fmt.Errorf("payment manager is unhealthy")
+	}
+
+	// Check Ethereum client connection
+	if s.ethClient != nil {
+		if _, err := s.ethClient.BlockNumber(context.Background()); err != nil {
+			return fmt.Errorf("ethereum client is unhealthy: %w", err)
+		}
+	}
+
+	// Check IPFS client connection
+	if s.ipfsClient != nil {
+		// Try to get a test hash to verify connection
+		_, err := s.ipfsClient.Get("QmTest")
+		if err == nil {
+			return fmt.Errorf("IPFS client is unhealthy: %w", err)
+		}
 	}
 
 	return nil
@@ -250,4 +347,24 @@ func (s *Service) GetIPFSClient() types.IPFSClient {
 // SetIPFSClient sets the IPFS client
 func (s *Service) SetIPFSClient(ipfsClient types.IPFSClient) {
 	s.ipfsClient = ipfsClient
+}
+
+// GetBidManager returns the bid manager
+func (s *Service) GetBidManager() *marketplace.BidManager {
+	return s.bidManager
+}
+
+// GetContract returns the marketplace contract
+func (s *Service) GetContract() types.ContractInterface {
+	return s.contract
+}
+
+// GetClient returns the Ethereum client
+func (s *Service) GetClient() *ethclient.Client {
+	return s.ethClient
+}
+
+// GetBidTracker returns the bid tracker
+func (s *Service) GetBidTracker() *bid.BidTracker {
+	return s.bidTracker
 }

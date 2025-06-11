@@ -39,16 +39,6 @@ func (s *Service) Subscribe() error {
 		return fmt.Errorf("failed to subscribe to provider selected events: %w", err)
 	}
 
-	// Subscribe to deployment approved events
-	if err := s.eventBus.Subscribe(string(types.MarketplaceEventTypeDeploymentApproved), func(ctx context.Context, event types.MarketplaceEvent) error {
-		if e, ok := event.(*types.DeploymentApprovedEvent); ok {
-			return s.handleDeploymentApprovedEvent(ctx, e)
-		}
-		return fmt.Errorf("invalid event type for deployment approved event")
-	}); err != nil {
-		return fmt.Errorf("failed to subscribe to deployment approved events: %w", err)
-	}
-
 	// Subscribe to deployment completed events
 	if err := s.eventBus.Subscribe(string(types.MarketplaceEventTypeDeploymentCompleted), func(ctx context.Context, event types.MarketplaceEvent) error {
 		if e, ok := event.(*types.DeploymentCompletedEvent); ok {

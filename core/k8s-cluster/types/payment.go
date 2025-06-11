@@ -91,6 +91,10 @@ type PaymentCreatedEvent struct {
 	Amount       *big.Int
 }
 
+func (e *PaymentCreatedEvent) GetTimestamp() time.Time { return e.Timestamp }
+func (e *PaymentCreatedEvent) GetBlockNum() uint64     { return e.BlockNum }
+func (e *PaymentCreatedEvent) GetTxHash() string       { return e.TxHash }
+
 // PaymentReleasedEvent represents a payment release event
 type PaymentReleasedEvent struct {
 	BaseEvent
@@ -99,6 +103,10 @@ type PaymentReleasedEvent struct {
 	Provider     common.Address
 	Amount       *big.Int
 }
+
+func (e *PaymentReleasedEvent) GetTimestamp() time.Time { return e.Timestamp }
+func (e *PaymentReleasedEvent) GetBlockNum() uint64     { return e.BlockNum }
+func (e *PaymentReleasedEvent) GetTxHash() string       { return e.TxHash }
 
 // PaymentFailedEvent represents a payment failure event
 type PaymentFailedEvent struct {
@@ -121,6 +129,10 @@ type PaymentRefundedEvent struct {
 	Reason       string
 	RefundedAt   time.Time
 }
+
+func (e *PaymentRefundedEvent) GetTimestamp() time.Time { return e.Timestamp }
+func (e *PaymentRefundedEvent) GetBlockNum() uint64     { return e.BlockNum }
+func (e *PaymentRefundedEvent) GetTxHash() string       { return e.TxHash }
 
 // PaymentDisputedEvent represents a payment dispute event
 type PaymentDisputedEvent struct {

@@ -13,49 +13,13 @@ import (
 
 // handleDeploymentRequestedEvent handles deployment requested events
 func (s *Service) handleDeploymentRequestedEvent(ctx context.Context, event *types.DeploymentRequestedEvent) error {
-	// Get the manifest from IPFS
-	manifestData, err := s.ipfsClient.Get(event.SDLHash)
-	if err != nil {
-		return fmt.Errorf("failed to get manifest from IPFS: %w", err)
-	}
-
-	// Parse the manifest
-	sdl, err := s.sdlParser.Parse(bytes.NewReader(manifestData))
-	if err != nil {
-		return fmt.Errorf("failed to parse manifest: %w", err)
-	}
-
 	s.logger.Info("Handling DeploymentRequestedEvent",
 		zap.String("deploymentID", event.DeploymentID),
 		zap.String("requester", event.Requester.Hex()),
 		zap.String("sdlHash", event.SDLHash))
 
-	// Store the deployment request
-	s.bidTracker.StoreRequest(event.DeploymentID, event)
-
-	// Calculate resource requirements
-	requirements, err := s.calculateResourceRequirements(sdl)
-	if err != nil {
-		s.logger.Error("invalid resource requirements", zap.Error(err))
-		return err
-	}
-
-	// Publish DeploymentRequestReceivedEvent
-	receivedEvent := &types.DeploymentRequestReceivedEvent{
-		BaseEvent: types.BaseEvent{
-			Timestamp: time.Now(),
-		},
-		DeploymentID: event.DeploymentID,
-		Requester:    event.Requester,
-		SDLHash:      event.SDLHash,
-		MaxPrice:     event.MaxPrice,
-	}
-	if err := s.eventBus.Publish(ctx, string(types.MarketplaceEventTypeDeploymentRequestReceived), receivedEvent); err != nil {
-		s.logger.Error("Failed to publish deployment request received event", zap.Error(err))
-	}
-
 	// Submit bid to marketplace
-	bid, err := s.submitBid(ctx, &requirements)
+	bid, err := s.bidManager.SubmitBid(ctx, event.DeploymentID, event.SDLHash)
 	if err != nil {
 		s.logger.Error("Failed to submit bid", zap.Error(err))
 		return err
@@ -67,7 +31,9 @@ func (s *Service) handleDeploymentRequestedEvent(ctx context.Context, event *typ
 			Timestamp: time.Now(),
 		},
 		DeploymentID: event.DeploymentID,
-		Provider:     s.config.ProviderAddress,             // Use provider address from config
+		SDLHash:      event.SDLHash,
+		Provider:     s.config.ProviderAddress, // Use provider address from config
+		Requester:    event.Requester,
 		Amount:       big.NewInt(int64(bid.Amount * 1e18)), // Convert float to big.Int with 18 decimals
 		Duration:     time.Hour * 24,                       // Default duration of 24 hours
 	}
@@ -85,9 +51,6 @@ func (s *Service) handleBidSubmittedEvent(ctx context.Context, event *types.BidS
 		zap.String("provider", event.Provider.Hex()),
 		zap.String("amount", event.Amount.String()))
 
-	// Store the bid
-	s.bidTracker.StoreBid(event.DeploymentID, event)
-
 	return nil
 }
 
@@ -98,14 +61,26 @@ func (s *Service) handleProviderSelectedEvent(ctx context.Context, event *types.
 		zap.String("provider", event.Provider.Hex()),
 		zap.String("amount", event.Amount.String()))
 
-	// Get the deployment request
-	request := s.bidTracker.GetRequests(event.DeploymentID)
-	if request == nil {
-		return fmt.Errorf("deployment request %s not found", event.DeploymentID)
+	// Get the bid
+	bid, err := s.bidTracker.GetBid(ctx, event.DeploymentID, event.Provider)
+	if err != nil {
+		return fmt.Errorf("failed to get bid: %w", err)
+	}
+	if bid == nil {
+		s.logger.Error("Bid not found for provider", zap.String("deploymentID", event.DeploymentID), zap.String("provider", event.Provider.Hex()))
+		return fmt.Errorf("bid not found for provider %s", event.Provider.Hex())
+	}
+	if s.ipfsClient == nil {
+		s.logger.Error("ipfsClient is nil in handleProviderSelectedEvent")
+		return fmt.Errorf("ipfsClient is nil")
+	}
+	if s.sdlParser == nil {
+		s.logger.Error("sdlParser is nil in handleProviderSelectedEvent")
+		return fmt.Errorf("sdlParser is nil")
 	}
 
 	// Get the manifest from IPFS
-	manifestData, err := s.ipfsClient.Get(request.SDLHash)
+	manifestData, err := s.ipfsClient.Get(bid.SDLHash)
 	if err != nil {
 		return fmt.Errorf("failed to get manifest from IPFS: %w", err)
 	}
@@ -117,35 +92,8 @@ func (s *Service) handleProviderSelectedEvent(ctx context.Context, event *types.
 	}
 
 	// Create deployment
-	if err := s.deploymentMgr.CreateDeployment(ctx, event.DeploymentID, request.Requester, sdl); err != nil {
+	if err := s.deploymentMgr.CreateDeployment(ctx, event.DeploymentID, bid.Requester, sdl); err != nil {
 		s.logger.Error("Failed to create deployment", zap.Error(err))
-		return err
-	}
-
-	return nil
-}
-
-// handleDeploymentApprovedEvent handles a deployment approved event
-func (s *Service) handleDeploymentApprovedEvent(ctx context.Context, event *types.DeploymentApprovedEvent) error {
-	s.logger.Info("Handling DeploymentApprovedEvent",
-		zap.String("deploymentID", event.DeploymentID),
-		zap.String("provider", event.Provider.Hex()),
-		zap.String("requester", event.Requester.Hex()))
-
-	// Get the deployment
-	deployment, err := s.deploymentMgr.GetDeployment(event.DeploymentID)
-	if err != nil {
-		s.logger.Error("Failed to get deployment", zap.Error(err))
-		return err
-	}
-
-	// Update deployment status
-	deployment.Status = types.DeploymentStatusRunning
-	deployment.UpdatedAt = time.Now()
-
-	// Update deployment
-	if err := s.deploymentMgr.UpdateDeployment(ctx, deployment); err != nil {
-		s.logger.Error("Failed to update deployment", zap.Error(err))
 		return err
 	}
 

@@ -3,7 +3,6 @@ package payment
 import (
 	"context"
 	"crypto/ecdsa"
-	"encoding/json"
 	"fmt"
 	"log"
 	"math/big"
@@ -12,7 +11,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
@@ -23,84 +21,6 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/core/k8s-cluster/types"
 	clusterTypes "github.com/unicornultrafoundation/subnet-node/core/k8s-cluster/types"
 )
-
-// MarketplaceContract represents the smart contract interface
-type MarketplaceContract struct {
-	*bind.BoundContract
-	client *ethclient.Client
-}
-
-// NewMarketplaceContract creates a new contract instance
-func NewMarketplaceContract(address common.Address, client *ethclient.Client) (*MarketplaceContract, error) {
-	// Load contract ABI
-	contractABI, err := loadContractABI()
-	if err != nil {
-		return nil, fmt.Errorf("failed to load contract ABI: %w", err)
-	}
-
-	// Create bound contract
-	contract := bind.NewBoundContract(address, contractABI, client, client, client)
-
-	return &MarketplaceContract{
-		BoundContract: contract,
-		client:        client,
-	}, nil
-}
-
-// loadContractABI loads the contract ABI from file
-func loadContractABI() (abi.ABI, error) {
-	// TODO: Load ABI from file or embed in binary
-	abiJSON := `[{"anonymous":false,"inputs":[{"indexed":true,"name":"deploymentId","type":"string"},{"indexed":true,"name":"requester","type":"address"},{"indexed":true,"name":"provider","type":"address"},{"indexed":false,"name":"amount","type":"uint256"}],"name":"PaymentReceived","type":"event"}]`
-	return abi.JSON(strings.NewReader(abiJSON))
-}
-
-// ParsePaymentReceived parses the PaymentReceived event
-func (c *MarketplaceContract) ParsePaymentReceived(log ethtypes.Log) (*clusterTypes.PaymentReceived, error) {
-	// TODO: Implement event parsing
-	return &clusterTypes.PaymentReceived{
-		DeploymentID: "test",
-		Requester:    common.HexToAddress("0x0"),
-		Provider:     common.HexToAddress("0x0"),
-		Amount:       big.NewInt(0),
-	}, nil
-}
-
-// ReleaseEscrow releases funds from escrow
-func (c *MarketplaceContract) ReleaseEscrow(opts *bind.TransactOpts, deploymentID string) (*ethtypes.Transaction, error) {
-	// TODO: Implement contract call
-	return nil, nil
-}
-
-// RefundEscrow refunds funds from escrow
-func (c *MarketplaceContract) RefundEscrow(opts *bind.TransactOpts, deploymentID string) (*ethtypes.Transaction, error) {
-	// TODO: Implement contract call
-	return nil, nil
-}
-
-// loadPrivateKey loads a private key from file
-func loadPrivateKey(path string) (*ecdsa.PrivateKey, error) {
-	// Read key file
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read key file: %w", err)
-	}
-
-	// Parse key file
-	var keyFile struct {
-		PrivateKey string `json:"privateKey"`
-	}
-	if err := json.Unmarshal(data, &keyFile); err != nil {
-		return nil, fmt.Errorf("failed to parse key file: %w", err)
-	}
-
-	// Decode private key
-	key, err := crypto.HexToECDSA(keyFile.PrivateKey)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode private key: %w", err)
-	}
-
-	return key, nil
-}
 
 // PaymentManagerInterface defines the interface for payment management
 type PaymentManagerInterface interface {
@@ -129,7 +49,7 @@ type PaymentManager struct {
 	config      *Config
 	client      *ethclient.Client
 	store       *PaymentStore
-	contract    *MarketplaceContract
+	contract    types.ContractInterface
 	stopCh      chan struct{}
 	mu          sync.RWMutex
 	deployments map[string]*clusterTypes.ManagedDeployment
@@ -150,28 +70,14 @@ type ManagedDeployment struct {
 var _ clusterTypes.PaymentManagerInterface = (*PaymentManager)(nil)
 
 // NewPaymentManager creates a new payment manager
-func NewPaymentManager(cfg *Config, eventBus *events.DefaultEventBus[types.MarketplaceEvent]) (*PaymentManager, error) {
-	// Connect to Ethereum node
-	client, err := ethclient.Dial(cfg.EthNodeURL)
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to Ethereum node: %w", err)
-	}
-
+func NewPaymentManager(contract types.ContractInterface, eventBus *events.DefaultEventBus[types.MarketplaceEvent]) (*PaymentManager, error) {
 	// Create payment store
-	store, err := NewPaymentStore(cfg.StoreDir)
+	store, err := NewPaymentStore("")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create payment store: %w", err)
 	}
 
-	// Create contract instance
-	contract, err := NewMarketplaceContract(cfg.ContractAddr, client)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create contract instance: %w", err)
-	}
-
 	return &PaymentManager{
-		config:      cfg,
-		client:      client,
 		store:       store,
 		contract:    contract,
 		stopCh:      make(chan struct{}),
@@ -373,7 +279,7 @@ func (m *PaymentManager) releaseEscrow(ctx context.Context, escrow *clusterTypes
 	}
 
 	// Release escrow
-	tx, err := m.contract.ReleaseEscrow(opts, escrow.DeploymentID)
+	tx, err := m.contract.ReleaseEscrow(ctx, opts, escrow.DeploymentID)
 	if err != nil {
 		// Publish PaymentFailedEvent
 		m.eventBus.Publish(ctx, "PaymentFailed", &clusterTypes.PaymentFailedEvent{
@@ -430,7 +336,7 @@ func (m *PaymentManager) refundEscrow(ctx context.Context, escrow *clusterTypes.
 	}
 
 	// Refund escrow
-	tx, err := m.contract.RefundEscrow(opts, escrow.DeploymentID)
+	tx, err := m.contract.RefundEscrow(ctx, opts, escrow.DeploymentID)
 	if err != nil {
 		// Publish PaymentFailedEvent
 		m.eventBus.Publish(ctx, "PaymentFailed", &clusterTypes.PaymentFailedEvent{
@@ -598,4 +504,13 @@ func (m *PaymentManager) HandleDeploymentStatusChange(ctx context.Context, deplo
 	}
 
 	return nil
+}
+
+// loadPrivateKey loads a private key from file
+func loadPrivateKey(path string) (*ecdsa.PrivateKey, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read private key file: %w", err)
+	}
+	return crypto.HexToECDSA(strings.TrimSpace(string(data)))
 }

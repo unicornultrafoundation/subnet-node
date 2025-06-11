@@ -78,6 +78,8 @@ func main() {
 		MaxRetries:      3,
 		ProviderAddress: common.HexToAddress("0x0000000000000000000000000000000000000000"),
 		IPFSURL:         "mock://", // Use mock IPFS client
+		EthEndpoint:     "",        // Empty string will use mock Ethereum client
+		ContractAddress: "",        // Empty string will use mock contract
 	}
 
 	logger.Debug("Created service configuration",
@@ -89,10 +91,6 @@ func main() {
 	if err != nil {
 		logger.Fatal("Failed to create service", zap.Error(err))
 	}
-
-	// Create mock IPFS client & set it to the service
-	mockClient := NewMockClient()
-	service.SetIPFSClient(mockClient)
 
 	// Create context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
@@ -116,7 +114,7 @@ func main() {
 	}()
 
 	requesterAddress := common.HexToAddress("0x0000000000000000000000000000000000000000")
-	providerAddress := common.HexToAddress("0x0000000000000000000000000000000000000000")
+	providerAddress := common.HexToAddress("0x1111111111111111111111111111111111111111")
 
 	// Create channels for events
 	bidSubmittedCh := make(chan *types.BidSubmittedEvent, 1)
@@ -162,7 +160,6 @@ func main() {
 		DeploymentID: "default",
 		Requester:    requesterAddress,
 		SDLHash:      sdlHash,
-		MaxPrice:     big.NewInt(0),
 	})
 
 	if err != nil {
@@ -176,6 +173,13 @@ func main() {
 		logger.Info("Bid submitted successfully")
 	case <-time.After(60 * time.Second):
 		logger.Fatal("Timeout waiting for bid submitted")
+	}
+
+	// Add a mock bid for the provider address to avoid nil dereference
+	_ = service.GetBidTracker().AddBid(ctx, "default", providerAddress, big.NewInt(1), 24*time.Hour)
+	// Set the SDLHash for the mock bid
+	if bid, _ := service.GetBidTracker().GetBid(ctx, "default", providerAddress); bid != nil {
+		bid.SDLHash = sdlHash
 	}
 
 	// Simulate service provider selected with retry logic

@@ -56,7 +56,6 @@ This service provides automated orchestration of Kubernetes deployments based on
    - Parse SDL configuration
    - Calculate resource requirements
    - Submit bid to marketplace
-   - Publish `DeploymentRequestReceivedEvent`
 
 2. **Bidding Phase**
    - Handle `BidSubmittedEvent`
