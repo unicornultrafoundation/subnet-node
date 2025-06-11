@@ -70,14 +70,15 @@ type ManagedDeployment struct {
 var _ clusterTypes.PaymentManagerInterface = (*PaymentManager)(nil)
 
 // NewPaymentManager creates a new payment manager
-func NewPaymentManager(contract types.ContractInterface, eventBus *events.DefaultEventBus[types.MarketplaceEvent]) (*PaymentManager, error) {
+func NewPaymentManager(contract types.ContractInterface, eventBus *events.DefaultEventBus[types.MarketplaceEvent], config *Config) (*PaymentManager, error) {
 	// Create payment store
-	store, err := NewPaymentStore("")
+	store, err := NewPaymentStore(config.StoreDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create payment store: %w", err)
 	}
 
 	return &PaymentManager{
+		config:      config,
 		store:       store,
 		contract:    contract,
 		stopCh:      make(chan struct{}),

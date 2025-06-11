@@ -184,7 +184,7 @@ func (b *Workload) container() corev1.Container {
 	}
 
 	// Handle storage resources
-	if service.Resources.Storage != nil {
+	if service.Resources.Storage != nil && service.Resources.Storage.Size.Value > 0 {
 		// Handle ephemeral storage
 		requestedStorage := service.Resources.Storage.Size.Value
 		// Convert to bytes if the unit is Mi
@@ -257,7 +257,7 @@ func (b *Workload) volumes() []corev1.Volume {
 	}
 
 	// Add volumes for persistent storage
-	if service.Resources.Storage != nil {
+	if service.Resources.Storage != nil && service.Resources.Storage.Size.Value > 0 {
 		volumes = append(volumes, corev1.Volume{
 			Name: fmt.Sprintf("%s-storage", b.Name()),
 			VolumeSource: corev1.VolumeSource{
@@ -274,7 +274,7 @@ func (b *Workload) volumes() []corev1.Volume {
 // PersistentVolumeClaims returns the persistent volume claims for the workload
 func (b *Workload) PersistentVolumeClaims() []corev1.PersistentVolumeClaim {
 	service := b.deployment.Manifest.Groups[b.groupIndex].Services[b.serviceIndex]
-	if service.Resources.Storage == nil {
+	if service.Resources.Storage == nil || service.Resources.Storage.Size.Value == 0 {
 		return nil
 	}
 

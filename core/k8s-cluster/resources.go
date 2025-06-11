@@ -3,98 +3,17 @@ package k8scluster
 import (
 	"context"
 	"fmt"
+	"os/exec"
 
-	"github.com/unicornultrafoundation/subnet-node/core/k8s-cluster/manifest"
 	"github.com/unicornultrafoundation/subnet-node/core/k8s-cluster/types"
+	"go.uber.org/zap"
+	corev1 "k8s.io/api/core/v1"
+	storagev1 "k8s.io/api/storage/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
-
-// calculateResourceRequirements calculates the total resource requirements for a deployment
-func (s *Service) calculateResourceRequirements(sdl *manifest.SDL) (manifest.ResourceRequirements, error) {
-	var totalResources manifest.ResourceRequirements
-
-	// Initialize resource maps
-	totalResources.CPU = manifest.ResourceLimit{}
-	totalResources.Memory = manifest.ResourceLimit{}
-	totalResources.Storage = make([]manifest.StorageVolume, 0)
-
-	// Calculate resources for each deployment group
-	for _, deployment := range sdl.Deployment {
-		computeProfile, ok := sdl.Profiles.Compute[deployment.Profile]
-		if !ok {
-			return manifest.ResourceRequirements{}, fmt.Errorf("compute profile %s not found", deployment.Profile)
-		}
-
-		// Multiply resources by deployment count
-		count := int64(deployment.Count)
-
-		// Add CPU resources
-		if computeProfile.Resources.CPU.Request != "" {
-			cpu, err := resource.ParseQuantity(computeProfile.Resources.CPU.Request)
-			if err != nil {
-				return manifest.ResourceRequirements{}, fmt.Errorf("invalid CPU request: %w", err)
-			}
-			cpuValue := cpu.Value() * count
-			totalResources.CPU.Request = fmt.Sprintf("%dm", cpuValue)
-		}
-		if computeProfile.Resources.CPU.Limit != "" {
-			cpu, err := resource.ParseQuantity(computeProfile.Resources.CPU.Limit)
-			if err != nil {
-				return manifest.ResourceRequirements{}, fmt.Errorf("invalid CPU limit: %w", err)
-			}
-			cpuValue := cpu.Value() * count
-			totalResources.CPU.Limit = fmt.Sprintf("%dm", cpuValue)
-		}
-
-		// Add Memory resources
-		if computeProfile.Resources.Memory.Request != "" {
-			mem, err := resource.ParseQuantity(computeProfile.Resources.Memory.Request)
-			if err != nil {
-				return manifest.ResourceRequirements{}, fmt.Errorf("invalid memory request: %w", err)
-			}
-			memValue := mem.Value() * count
-			totalResources.Memory.Request = fmt.Sprintf("%dMi", memValue)
-		}
-		if computeProfile.Resources.Memory.Limit != "" {
-			mem, err := resource.ParseQuantity(computeProfile.Resources.Memory.Limit)
-			if err != nil {
-				return manifest.ResourceRequirements{}, fmt.Errorf("invalid memory limit: %w", err)
-			}
-			memValue := mem.Value() * count
-			totalResources.Memory.Limit = fmt.Sprintf("%dMi", memValue)
-		}
-
-		// Add Storage resources
-		for _, storage := range computeProfile.Resources.Storage {
-			storageCopy := storage
-			if storage.Size != "" {
-				size, err := resource.ParseQuantity(storage.Size)
-				if err != nil {
-					return manifest.ResourceRequirements{}, fmt.Errorf("invalid storage size: %w", err)
-				}
-				sizeValue := size.Value() * count
-				storageCopy.Size = fmt.Sprintf("%dGi", sizeValue)
-			}
-			totalResources.Storage = append(totalResources.Storage, storageCopy)
-		}
-
-		// Add GPU resources if present
-		if computeProfile.Resources.GPU != nil {
-			if totalResources.GPU == nil {
-				totalResources.GPU = &manifest.GPUResource{
-					Units:      computeProfile.Resources.GPU.Units * int32(count),
-					Attributes: computeProfile.Resources.GPU.Attributes,
-				}
-			} else {
-				totalResources.GPU.Units += computeProfile.Resources.GPU.Units * int32(count)
-			}
-		}
-	}
-
-	return totalResources, nil
-}
 
 // cleanupResources cleans up resources for a deployment
 func (s *Service) cleanupResources(ctx context.Context, dep *types.ManagedDeployment) error {
@@ -141,6 +60,190 @@ func (s *Service) cleanupResources(ctx context.Context, dep *types.ManagedDeploy
 	for _, pvc := range pvcs.Items {
 		if err := clientset.CoreV1().PersistentVolumeClaims(namespace).Delete(ctx, pvc.Name, metav1.DeleteOptions{}); err != nil {
 			return fmt.Errorf("failed to delete persistent volume claim %s: %w", pvc.Name, err)
+		}
+	}
+
+	return nil
+}
+
+// setupClusterResources sets up the cluster resources according to configuration
+func (s *Service) setupClusterResources(ctx context.Context) error {
+	s.logger.Info("Setting up cluster resources",
+		zap.Int64("cpu", s.config.ClusterResources.CPU),
+		zap.String("memory", s.config.ClusterResources.Memory),
+		zap.String("storage", s.config.ClusterResources.Storage),
+		zap.Int64("gpu", s.config.ClusterResources.GPU))
+
+	// Get nodes
+	nodes, err := s.client.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to list nodes: %w", err)
+	}
+
+	if len(nodes.Items) == 0 {
+		return fmt.Errorf("no nodes found in cluster")
+	}
+
+	// Check and setup storage
+	if s.config.ClusterResources.Storage != "" {
+		if err := s.setupStorage(ctx); err != nil {
+			return fmt.Errorf("failed to setup storage: %w", err)
+		}
+	}
+
+	// Check and setup GPU if needed
+	if s.config.ClusterResources.GPU > 0 {
+		if err := s.setupGPU(ctx); err != nil {
+			return fmt.Errorf("failed to setup GPU: %w", err)
+		}
+	}
+
+	// Verify CPU and memory resources
+	for _, node := range nodes.Items {
+		// Check CPU
+		if cpu, ok := node.Status.Capacity.Cpu().AsInt64(); ok {
+			if cpu < s.config.ClusterResources.CPU {
+				s.logger.Warn("Node has insufficient CPU",
+					zap.String("node", node.Name),
+					zap.Int64("available", cpu),
+					zap.Int64("required", s.config.ClusterResources.CPU))
+			}
+		}
+
+		// Check Memory
+		if mem, ok := node.Status.Capacity.Memory().AsInt64(); ok {
+			requiredMem, err := resource.ParseQuantity(s.config.ClusterResources.Memory)
+			if err != nil {
+				return fmt.Errorf("invalid memory configuration: %w", err)
+			}
+			if mem < requiredMem.Value() {
+				s.logger.Warn("Node has insufficient memory",
+					zap.String("node", node.Name),
+					zap.Int64("available", mem),
+					zap.Int64("required", requiredMem.Value()))
+			}
+		}
+	}
+
+	return nil
+}
+
+// setupStorage sets up the storage resources
+func (s *Service) setupStorage(ctx context.Context) error {
+	// Skip storage setup if storage requirement is 0
+	if s.config.ClusterResources.Storage == "0Gi" || s.config.ClusterResources.Storage == "0" {
+		s.logger.Info("Skipping storage setup as storage requirement is 0")
+		return nil
+	}
+
+	// Get nodes for node affinity
+	nodes, err := s.client.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to list nodes: %w", err)
+	}
+	if len(nodes.Items) == 0 {
+		return fmt.Errorf("no nodes found in cluster")
+	}
+
+	// Create storage class if it doesn't exist
+	waitForFirstConsumer := storagev1.VolumeBindingWaitForFirstConsumer
+	retain := corev1.PersistentVolumeReclaimRetain
+	storageClass := &storagev1.StorageClass{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "local-path",
+		},
+		Provisioner:       "rancher.io/local-path",
+		VolumeBindingMode: &waitForFirstConsumer,
+		ReclaimPolicy:     &retain,
+	}
+
+	_, err = s.client.StorageV1().StorageClasses().Create(ctx, storageClass, metav1.CreateOptions{})
+	if err != nil && !errors.IsAlreadyExists(err) {
+		return fmt.Errorf("failed to create storage class: %w", err)
+	}
+
+	// Create persistent volume
+	storageQuantity, err := resource.ParseQuantity(s.config.ClusterResources.Storage)
+	if err != nil {
+		return fmt.Errorf("invalid storage configuration: %w", err)
+	}
+
+	filesystem := corev1.PersistentVolumeFilesystem
+	hostPathType := corev1.HostPathDirectoryOrCreate
+	pv := &corev1.PersistentVolume{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "local-pv",
+		},
+		Spec: corev1.PersistentVolumeSpec{
+			Capacity: corev1.ResourceList{
+				corev1.ResourceStorage: storageQuantity,
+			},
+			VolumeMode:                    &filesystem,
+			AccessModes:                   []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+			PersistentVolumeReclaimPolicy: corev1.PersistentVolumeReclaimRetain,
+			StorageClassName:              "local-path",
+			PersistentVolumeSource: corev1.PersistentVolumeSource{
+				HostPath: &corev1.HostPathVolumeSource{
+					Path: "/mnt/data",
+					Type: &hostPathType,
+				},
+			},
+			NodeAffinity: &corev1.VolumeNodeAffinity{
+				Required: &corev1.NodeSelector{
+					NodeSelectorTerms: []corev1.NodeSelectorTerm{
+						{
+							MatchExpressions: []corev1.NodeSelectorRequirement{
+								{
+									Key:      "kubernetes.io/hostname",
+									Operator: corev1.NodeSelectorOpIn,
+									Values:   []string{nodes.Items[0].Name},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	_, err = s.client.CoreV1().PersistentVolumes().Create(ctx, pv, metav1.CreateOptions{})
+	if err != nil && !errors.IsAlreadyExists(err) {
+		return fmt.Errorf("failed to create persistent volume: %w", err)
+	}
+
+	// Create storage directory
+	cmd := exec.Command("sudo", "mkdir", "-p", "/mnt/data")
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to create storage directory: %w", err)
+	}
+
+	cmd = exec.Command("sudo", "chmod", "777", "/mnt/data")
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to set storage directory permissions: %w", err)
+	}
+
+	return nil
+}
+
+// setupGPU sets up GPU resources
+func (s *Service) setupGPU(ctx context.Context) error {
+	// Check if NVIDIA device plugin is installed
+	_, err := s.client.AppsV1().DaemonSets("kube-system").Get(ctx, "nvidia-device-plugin-daemonset", metav1.GetOptions{})
+	if err != nil {
+		if errors.IsNotFound(err) {
+			s.logger.Warn("NVIDIA device plugin not found. GPU support may not be available")
+		} else {
+			return fmt.Errorf("failed to check NVIDIA device plugin: %w", err)
+		}
+	}
+
+	// Check if AMD device plugin is installed
+	_, err = s.client.AppsV1().DaemonSets("kube-system").Get(ctx, "amd-device-plugin-daemonset", metav1.GetOptions{})
+	if err != nil {
+		if errors.IsNotFound(err) {
+			s.logger.Warn("AMD device plugin not found. GPU support may not be available")
+		} else {
+			return fmt.Errorf("failed to check AMD device plugin: %w", err)
 		}
 	}
 

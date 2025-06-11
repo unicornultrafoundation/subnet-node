@@ -21,7 +21,7 @@ services:
           unit: Mi
       storage:
         size:
-          value: 512
+          value: 0
           unit: Mi
     count: 1
     params:
@@ -41,10 +41,10 @@ profiles:
           request: 1
           limit: 2
         memory:
-          request: 128
-          limit: 256
+          request: 1
+          limit: 2
         storage:
-          - size: 512
+          - size: 0
   placement:
     default:
       attributes:

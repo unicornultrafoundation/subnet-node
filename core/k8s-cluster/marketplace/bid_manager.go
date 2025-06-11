@@ -164,6 +164,20 @@ func (m *BidManager) verifyResources(ctx context.Context, sdl *manifest.SDL) (bo
 		storageReq += size
 	}
 
+	// Debug log for all resources
+	fmt.Printf("[DEBUG] CPU: req=%f, available=%f\n", cpuReq, available["cpu"])
+	fmt.Printf("[DEBUG] Memory: req=%f, available=%f\n", memReq, available["memory"])
+	fmt.Printf("[DEBUG] Storage: req=%f, available=%f\n", storageReq, available["storage"])
+	if m.logger != nil {
+		m.logger.Debug("Resource check",
+			zap.Float64("cpuReq", cpuReq),
+			zap.Float64("availableCPU", available["cpu"]),
+			zap.Float64("memReq", memReq),
+			zap.Float64("availableMemory", available["memory"]),
+			zap.Float64("storageReq", storageReq),
+			zap.Float64("availableStorage", available["storage"]))
+	}
+
 	// Check if we have enough resources
 	if cpuReq > available["cpu"] {
 		return false, nil
@@ -171,8 +185,11 @@ func (m *BidManager) verifyResources(ctx context.Context, sdl *manifest.SDL) (bo
 	if memReq > available["memory"] {
 		return false, nil
 	}
-	if storageReq > available["storage"] {
-		return false, nil
+	// Only check storage if storageReq > 0
+	if storageReq > 0 {
+		if storageReq > available["storage"] {
+			return false, nil
+		}
 	}
 
 	return true, nil

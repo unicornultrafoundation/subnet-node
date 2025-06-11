@@ -12,7 +12,6 @@ import (
 	"go.uber.org/zap"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 
 	"github.com/unicornultrafoundation/subnet-node/core/account"
 	"github.com/unicornultrafoundation/subnet-node/core/k8s-cluster/bid"
@@ -26,17 +25,6 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/core/k8s-cluster/session"
 	"github.com/unicornultrafoundation/subnet-node/core/k8s-cluster/types"
 )
-
-// ServiceConfig represents service configuration
-type ServiceConfig struct {
-	ProviderAddress common.Address
-	DeploymentDir   string
-	MaxRetries      int
-	KubeConfig      *rest.Config
-	EthEndpoint     string
-	IPFSURL         string
-	ContractAddress string
-}
 
 // Service represents the marketplace service
 type Service struct {
@@ -59,16 +47,27 @@ type Service struct {
 
 // NewService creates a new marketplace service
 func NewService(config *ServiceConfig) (*Service, error) {
-	// Initialize logger
+	// Validate configuration
+	if err := config.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid configuration: %w", err)
+	}
+
+	// Create logger
 	logger, err := zap.NewProduction()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create logger: %w", err)
 	}
 
 	// Create Kubernetes client
-	k8sClient, err := kubernetes.NewForConfig(config.KubeConfig)
+	client, err := kubernetes.NewForConfig(config.KubeConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Kubernetes client: %w", err)
+	}
+
+	// Create dynamic client
+	dynamicClient, err := dynamic.NewForConfig(config.KubeConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create dynamic client: %w", err)
 	}
 
 	// Create event bus
@@ -80,102 +79,63 @@ func NewService(config *ServiceConfig) (*Service, error) {
 	// Create IPFS client
 	var ipfsClient types.IPFSClient
 	if config.IPFSURL == "mock://" {
-		// Use mock IPFS client for local/demo runs
 		ipfsClient = ipfs.NewMockClient()
 	} else {
 		ipfsClient = ipfs.NewClient(config.IPFSURL)
 	}
 
-	// Create dynamic client for CRD
-	dynamicClient, err := dynamic.NewForConfig(config.KubeConfig)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create dynamic client: %w", err)
-	}
-
-	// Create CRD client
-	crdClient := crd.NewClient(dynamicClient)
-
 	// Create bid tracker
 	bidTracker := bid.NewBidTracker(logger)
-
-	// Create service instance
-	s := &Service{
-		config:     config,
-		logger:     logger,
-		stopCh:     make(chan struct{}),
-		eventBus:   eventBus.(*events.DefaultEventBus[types.MarketplaceEvent]),
-		client:     k8sClient,
-		bidTracker: bidTracker,
-		ipfsClient: ipfsClient,
-		sdlParser:  manifest.NewParser(),
-	}
 
 	// Create session
 	session := session.New()
 	session.SetProviderAddress(config.ProviderAddress)
-	s.session = session
+
+	// Create service
+	service := &Service{
+		config:     config,
+		logger:     logger,
+		client:     client,
+		eventBus:   eventBus.(*events.DefaultEventBus[types.MarketplaceEvent]),
+		bidTracker: bidTracker,
+		session:    session,
+		ipfsClient: ipfsClient,
+		stopCh:     make(chan struct{}),
+	}
 
 	// Create deployment manager
 	deploymentMgr, err := deployment.NewDeploymentManager(
 		logger,
-		k8sClient,
+		client,
 		&types.DeploymentManagerConfig{
-			DeploymentDir: config.DeploymentDir,
-			MaxRetries:    config.MaxRetries,
+			MaxRetries: config.MaxRetries,
 		},
 		eventBus.(*events.DefaultEventBus[types.MarketplaceEvent]),
-		crdClient,
+		crd.NewClient(dynamicClient),
 		session,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create deployment manager: %w", err)
 	}
-	s.deploymentMgr = deploymentMgr
+	service.deploymentMgr = deploymentMgr
 
-	// Initialize payment manager based on configuration
+	// Create Ethereum client and contract
+	var ethClient *ethclient.Client
+	var contract types.ContractInterface
+
 	if config.EthEndpoint == "" {
-		// Use mock payment manager for local/demo runs
-		mockEventBus := events.NewEventBus[interface{}]()
-		if err := mockEventBus.Start(context.Background()); err != nil {
-			return nil, fmt.Errorf("failed to start mock event bus: %w", err)
-		}
-		s.paymentMgr = payment.NewMockPaymentManager(mockEventBus.(*events.DefaultEventBus[interface{}]))
-
-		// Create mock contract for local/demo runs
-		contract := marketplace.NewMockMarketplaceContract(logger)
-		s.contract = contract
-
-		// Create bid manager with mock components
-		priceConfig := &payment.PricingConfig{
-			MemPriceMin:      1000000000000000,  // 0.001 ETH
-			MemPriceMax:      10000000000000000, // 0.01 ETH
-			BidPriceStrategy: "dynamic",
-			BidCPUScale:      1.5,
-			BidStorageScale:  1.2,
-			ProcessLimit:     10,
-			ProcessTimeout:   30,
-		}
-		s.bidManager = marketplace.NewBidManager(
-			deploymentMgr,
-			config.ProviderAddress,
-			contract,
-			nil, // No Ethereum client for mock
-			logger,
-			priceConfig,
-			ipfsClient,
-		)
+		// Use mock contract for local/demo runs
+		contract = marketplace.NewMockMarketplaceContract(logger)
 	} else {
-		client, err := ethclient.Dial(config.EthEndpoint)
+		ethClient, err = ethclient.Dial(config.EthEndpoint)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create Ethereum client: %w", err)
 		}
-		s.ethClient = client
+		service.ethClient = ethClient
 
 		contractAddr := common.HexToAddress(config.ContractAddress)
-
-		// Create contract first
-		contract, err := marketplace.NewMarketplaceContract(
-			client,
+		contract, err = marketplace.NewMarketplaceContract(
+			ethClient,
 			contractAddr,
 			bidTracker,
 			nil, // Payment manager will be set later
@@ -184,46 +144,62 @@ func NewService(config *ServiceConfig) (*Service, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to create marketplace contract: %w", err)
 		}
-		s.contract = contract
-
-		// Create payment manager with contract
-		paymentMgr, err := payment.NewPaymentManager(contract, eventBus.(*events.DefaultEventBus[types.MarketplaceEvent]))
-		if err != nil {
-			return nil, fmt.Errorf("failed to create payment manager: %w", err)
-		}
-		s.paymentMgr = paymentMgr
-
-		// Create bid manager
-		priceConfig := &payment.PricingConfig{
-			MemPriceMin:      1000000000000000,  // 0.001 ETH
-			MemPriceMax:      10000000000000000, // 0.01 ETH
-			BidPriceStrategy: "dynamic",
-			BidCPUScale:      1.5,
-			BidStorageScale:  1.2,
-			ProcessLimit:     10,
-			ProcessTimeout:   30,
-		}
-		s.bidManager = marketplace.NewBidManager(
-			deploymentMgr,
-			config.ProviderAddress,
-			contract,
-			client,
-			logger,
-			priceConfig,
-			ipfsClient,
-		)
 	}
+	service.contract = contract
 
-	// Register event handlers for all major event types
-	if err := s.Subscribe(); err != nil {
+	// Create payment manager
+	paymentConfig := &payment.Config{
+		StoreDir:      config.StoreDir,
+		CheckInterval: time.Minute,
+	}
+	defaultEventBus, ok := eventBus.(*events.DefaultEventBus[types.MarketplaceEvent])
+	if !ok {
+		return nil, fmt.Errorf("failed to convert event bus to default event bus")
+	}
+	paymentManager, err := payment.NewPaymentManager(contract, defaultEventBus, paymentConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create payment manager: %w", err)
+	}
+	service.paymentMgr = paymentManager
+
+	// Create bid manager
+	priceConfig := &payment.PricingConfig{
+		MemPriceMin:      1000000000000000,  // 0.001 ETH
+		MemPriceMax:      10000000000000000, // 0.01 ETH
+		BidPriceStrategy: "dynamic",
+		BidCPUScale:      1.5,
+		BidStorageScale:  1.2,
+		ProcessLimit:     10,
+		ProcessTimeout:   30,
+	}
+	service.bidManager = marketplace.NewBidManager(
+		deploymentMgr,
+		config.ProviderAddress,
+		contract,
+		ethClient,
+		logger,
+		priceConfig,
+		ipfsClient,
+	)
+
+	// Create SDL parser
+	service.sdlParser = manifest.NewParser()
+
+	// Register event handlers
+	if err := service.Subscribe(); err != nil {
 		return nil, fmt.Errorf("failed to subscribe to events: %w", err)
 	}
 
-	return s, nil
+	return service, nil
 }
 
 // Start starts the marketplace service
 func (s *Service) Start(ctx context.Context) error {
+	// Setup cluster resources if needed
+	if err := s.setupClusterResources(ctx); err != nil {
+		return fmt.Errorf("failed to setup cluster resources: %w", err)
+	}
+
 	// Verify Kubernetes permissions
 	if err := s.verifyKubernetesPermissions(ctx); err != nil {
 		return fmt.Errorf("failed to verify Kubernetes permissions: %w", err)

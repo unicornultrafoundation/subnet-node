@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
@@ -19,7 +21,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/unicornultrafoundation/subnet-node/core/k8s-cluster/crd"
 	"github.com/unicornultrafoundation/subnet-node/core/k8s-cluster/deployment/builder"
@@ -107,7 +112,7 @@ func NewDeploymentManager(
 	crdClient *crd.Client,
 	session *session.Session,
 ) (*DeploymentManager, error) {
-	// Get actual resource values from the cluster
+	// Initialize resource usage map
 	resourceUsage := map[string]float64{
 		"cpu":     0.0,
 		"memory":  0.0,
@@ -440,6 +445,11 @@ func parseResourceValue(value string) (float64, error) {
 	// Remove any whitespace
 	value = strings.TrimSpace(value)
 
+	// Return 0 for empty values
+	if value == "" || value == "0" {
+		return 0, nil
+	}
+
 	// Split into number and unit
 	parts := strings.Fields(value)
 	if len(parts) == 0 {
@@ -450,6 +460,11 @@ func parseResourceValue(value string) (float64, error) {
 	num, err := strconv.ParseFloat(parts[0], 64)
 	if err != nil {
 		return 0, fmt.Errorf("invalid resource value: %w", err)
+	}
+
+	// Return 0 if the number is 0
+	if num == 0 {
+		return 0, nil
 	}
 
 	// Convert to base unit based on suffix
@@ -746,9 +761,32 @@ func (m *DeploymentManager) createKubernetesResources(ctx context.Context, deplo
 	}
 
 	// Create manifest
+	var dynamicClient dynamic.Interface
+	if m.crdClient != nil {
+		dynamicClient = m.crdClient.DynamicClient
+	} else {
+		// Create a default dynamic client if crdClient is nil
+		config, err := rest.InClusterConfig()
+		if err != nil {
+			// If not running in cluster, try to get config from kubeconfig
+			kubeconfig := os.Getenv("KUBECONFIG")
+			if kubeconfig == "" {
+				kubeconfig = filepath.Join(os.Getenv("HOME"), ".kube", "config")
+			}
+			config, err = clientcmd.BuildConfigFromFlags("", kubeconfig)
+			if err != nil {
+				return fmt.Errorf("failed to get kubernetes config: %w", err)
+			}
+		}
+		dynamicClient, err = dynamic.NewForConfig(config)
+		if err != nil {
+			return fmt.Errorf("failed to create dynamic client: %w", err)
+		}
+	}
+
 	manifestBuilder := builder.BuildManifest(m.logger, builder.Settings{
 		Client:        m.client,
-		DynamicClient: m.crdClient.DynamicClient,
+		DynamicClient: dynamicClient,
 		Logger:        m.logger,
 	}, ns.Name, deployment)
 
@@ -761,7 +799,7 @@ func (m *DeploymentManager) createKubernetesResources(ctx context.Context, deplo
 	// Create network policy
 	netPolBuilder := builder.BuildNetPol(builder.Settings{
 		Client:        m.client,
-		DynamicClient: m.crdClient.DynamicClient,
+		DynamicClient: dynamicClient,
 		Logger:        m.logger,
 	}, deployment)
 
@@ -785,26 +823,28 @@ func (m *DeploymentManager) createKubernetesResources(ctx context.Context, deplo
 			// Create workload
 			workloadBuilder, err := builder.NewWorkloadBuilder(m.logger, builder.Settings{
 				Client:        m.client,
-				DynamicClient: m.crdClient.DynamicClient,
+				DynamicClient: dynamicClient,
 				Logger:        m.logger,
 			}, deployment, groupIdx, serviceIdx)
 			if err != nil {
 				return fmt.Errorf("failed to create workload builder: %w", err)
 			}
 
-			// Create PVCs first
-			pvcs := workloadBuilder.PersistentVolumeClaims()
-			for _, pvc := range pvcs {
-				_, err := m.client.CoreV1().PersistentVolumeClaims(ns.Name).Create(ctx, &pvc, metav1.CreateOptions{})
-				if err != nil && !errors.IsAlreadyExists(err) {
-					return fmt.Errorf("failed to create PVC: %w", err)
+			// Create PVCs first if storage is required
+			if len(workloadBuilder.PersistentVolumeClaims()) > 0 {
+				pvcs := workloadBuilder.PersistentVolumeClaims()
+				for _, pvc := range pvcs {
+					_, err := m.client.CoreV1().PersistentVolumeClaims(ns.Name).Create(ctx, &pvc, metav1.CreateOptions{})
+					if err != nil && !errors.IsAlreadyExists(err) {
+						return fmt.Errorf("failed to create PVC: %w", err)
+					}
 				}
 			}
 
 			// Create deployment
 			deploymentBuilder, err := builder.NewDeploymentBuilder(m.logger, builder.Settings{
 				Client:        m.client,
-				DynamicClient: m.crdClient.DynamicClient,
+				DynamicClient: dynamicClient,
 				Logger:        m.logger,
 			}, deployment, groupIdx, serviceIdx)
 			if err != nil {
@@ -826,7 +866,7 @@ func (m *DeploymentManager) createKubernetesResources(ctx context.Context, deplo
 			// Create service
 			serviceBuilder := builder.NewServiceBuilder(builder.Settings{
 				Client:        m.client,
-				DynamicClient: m.crdClient.DynamicClient,
+				DynamicClient: dynamicClient,
 				Logger:        m.logger,
 			}, deployment, serviceIdx, isServiceGlobal(&group.Services[serviceIdx]), groupIdx)
 

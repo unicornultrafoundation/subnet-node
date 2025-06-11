@@ -59,6 +59,12 @@ func main() {
 		logger.Fatal("Failed to create deployment directory", zap.Error(err))
 	}
 
+	// Create store directory for payment manager
+	storeDir := "./store"
+	if err := os.MkdirAll(storeDir, 0755); err != nil {
+		logger.Fatal("Failed to create store directory", zap.Error(err))
+	}
+
 	// Parse SDL file
 	parser := manifest.NewParser()
 	sdl, err := parser.ParseFile(*sdlPath)
@@ -80,10 +86,23 @@ func main() {
 		IPFSURL:         "mock://", // Use mock IPFS client
 		EthEndpoint:     "",        // Empty string will use mock Ethereum client
 		ContractAddress: "",        // Empty string will use mock contract
+		StoreDir:        storeDir,  // Set store directory for payment manager
+		ClusterResources: struct {
+			CPU     int64
+			Memory  string
+			Storage string
+			GPU     int64
+		}{
+			CPU:     2,     // 2 CPU cores
+			Memory:  "2Gi", // 2 GB memory
+			Storage: "0Gi", // No storage requirement
+			GPU:     0,     // No GPU by default
+		},
 	}
 
 	logger.Debug("Created service configuration",
 		zap.String("deploymentDir", deploymentDir),
+		zap.String("storeDir", storeDir),
 		zap.String("providerAddress", config.ProviderAddress.Hex()))
 
 	// Create service instance
