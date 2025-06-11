@@ -44,6 +44,43 @@ func (s *Service) extractSourceIP(stream network.Stream) string {
 	return stream.Conn().RemotePeer().String()
 }
 
+// isIPAllowed checks if the given IP is in the allowed list (supports CIDR and single IP)
+func (s *Service) isIPAllowed(ip string, allowList []string) bool {
+	if len(allowList) == 0 {
+		return false // If no allow list, not allowed
+	}
+	parsedIP := net.ParseIP(ip)
+	if parsedIP == nil {
+		return false
+	}
+	for _, cidr := range allowList {
+		if strings.Contains(cidr, "/") {
+			_, ipnet, err := net.ParseCIDR(cidr)
+			if err == nil && ipnet.Contains(parsedIP) {
+				return true
+			}
+		} else {
+			if cidr == ip {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// getAppAllowIPs retrieves allow IPs for a specific app from configuration
+func (s *Service) getAppAllowIPs(appIdStr string) []string {
+	// Check if there are global allow IPs configured for apps
+	globalAllowIPs := s.cfg.GetStringSlice("apps.allow_ips", []string{})
+	if len(globalAllowIPs) > 0 {
+		return globalAllowIPs
+	}
+
+	// Check if there are app-specific allow IPs configured
+	appAllowIPs := s.cfg.GetStringSlice(fmt.Sprintf("apps.%s.allow_ips", appIdStr), []string{})
+	return appAllowIPs
+}
+
 // checkClusterMembership verifies if source IP and destination IP are in the same cluster via smart contract
 func (s *Service) checkClusterMembership(sourceIP, destIP string) bool {
 	if s.accountService == nil {
@@ -148,14 +185,19 @@ func (s *Service) OnReverseRequestReceive(stream network.Stream) {
 	// Extract source IP from stream
 	sourceIP := s.extractSourceIP(stream)
 
-	// Perform cluster membership check
-	if !s.checkClusterMembership(sourceIP, containerIP) {
-		log.Warnf("Cluster membership check failed: source IP %s not in same cluster as destination IP %s (AppId: %s)", sourceIP, containerIP, appIdStr)
-		writeErrorToStream(stream, "Access denied: not in same cluster")
-		return
+	// Check if IP is in allow list first (OR logic implementation)
+	appAllowIPs := s.getAppAllowIPs(appIdStr)
+	if s.isIPAllowed(sourceIP, appAllowIPs) {
+		log.Debugf("Connection from %s allowed by AllowIPs, skipping cluster membership check (AppId: %s)", sourceIP, appIdStr)
+	} else {
+		// If not in allow list, perform cluster membership check
+		if !s.checkClusterMembership(sourceIP, containerIP) {
+			log.Warnf("Cluster membership check failed: source IP %s not in same cluster as destination IP %s (AppId: %s)", sourceIP, containerIP, appIdStr)
+			writeErrorToStream(stream, "Access denied: not in same cluster")
+			return
+		}
+		log.Debugf("Cluster membership check passed: source IP %s and destination IP %s are in same cluster (AppId: %s)", sourceIP, containerIP, appIdStr)
 	}
-
-	log.Debugf("Cluster membership check passed: source IP %s and destination IP %s are in same cluster (AppId: %s)", sourceIP, containerIP, appIdStr)
 
 	targetAddr := fmt.Sprintf("%s:%s", containerIP, appPort)
 
