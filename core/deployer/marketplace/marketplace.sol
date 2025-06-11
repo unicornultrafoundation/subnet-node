@@ -6,10 +6,10 @@ import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /**
- * @title K8sClusterMarketplace
+ * @title DeployerMarketplace
  * @dev Smart contract for managing Kubernetes cluster deployments, bids, and payments
  */
-contract K8sClusterMarketplace is Ownable, ReentrancyGuard {
+contract DeployerMarketplace is Ownable, ReentrancyGuard {
     // Events
     event DeploymentRequested(
         string indexed deploymentId,
