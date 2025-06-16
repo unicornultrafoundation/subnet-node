@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"sort"
 
 	"k8s.io/apimachinery/pkg/api/resource"
 )
@@ -266,7 +267,17 @@ func (s *SDL) ToManifest() (*Manifest, error) {
 			Services: make([]Service, 0, len(s.Services)),
 		}
 
-		for _, svc := range s.Services {
+		// Create a slice to store service names in order
+		serviceNames := make([]string, 0, len(s.Services))
+		for serviceName := range s.Services {
+			serviceNames = append(serviceNames, serviceName)
+		}
+		// Sort service names to ensure deterministic order
+		sort.Strings(serviceNames)
+
+		// Add services in sorted order
+		for _, serviceName := range serviceNames {
+			svc := s.Services[serviceName]
 			// Create a copy of the service with deployment count
 			manifestSvc := svc
 			manifestSvc.Count = deployment.Count

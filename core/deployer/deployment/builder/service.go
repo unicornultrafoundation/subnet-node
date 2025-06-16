@@ -54,10 +54,11 @@ func NewServiceBuilder(settings Settings, deployment *types.ManagedDeployment, s
 
 // Name returns the name of the Service
 func (b *Service) Name() string {
+	baseName := fmt.Sprintf("%s-group-%d-service-%d", b.deployment.Name, b.groupIndex, b.serviceIndex)
 	if b.isGlobal {
-		return fmt.Sprintf("%s-service-%d-global", b.deployment.Name, b.serviceIndex)
+		return baseName + "-global"
 	}
-	return fmt.Sprintf("%s-service-%d", b.deployment.Name, b.serviceIndex)
+	return baseName
 }
 
 // NS returns the namespace of the Service

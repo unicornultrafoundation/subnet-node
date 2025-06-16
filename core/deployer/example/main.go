@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
-	deployer "github.com/unicornultrafoundation/subnet-node/core/deployer"
+	"github.com/unicornultrafoundation/subnet-node/core/deployer"
 	"github.com/unicornultrafoundation/subnet-node/core/deployer/manifest"
 	"github.com/unicornultrafoundation/subnet-node/core/deployer/types"
 	"go.uber.org/zap"
@@ -90,6 +90,23 @@ func main() {
 			Memory:  "2Gi", // 2 GB memory
 			Storage: "0Gi", // No storage requirement
 			GPU:     0,     // No GPU by default
+		},
+		Pricing: struct {
+			MemPriceMin      int64
+			MemPriceMax      int64
+			BidPriceStrategy string
+			BidCPUScale      float64
+			BidStorageScale  float64
+			ProcessLimit     int
+			ProcessTimeout   int
+		}{
+			MemPriceMin:      1000,  // Minimum memory price
+			MemPriceMax:      10000, // Maximum memory price
+			BidPriceStrategy: "fixed",
+			BidCPUScale:      1.0, // CPU price scale
+			BidStorageScale:  1.0, // Storage price scale
+			ProcessLimit:     100, // Process limit
+			ProcessTimeout:   30,  // Process timeout in seconds
 		},
 	}
 
@@ -227,7 +244,7 @@ func main() {
 	// Wait for deployment to be completed
 	logger.Info("Waiting for deployment to be completed...")
 	retryCount := 0
-	maxRetries = 30 // Increase max retries
+	maxRetries = 6 // Increase max retries to 30 seconds (5s * 6)
 	for {
 		select {
 		case <-deploymentCompletedCh:
@@ -251,7 +268,7 @@ deploymentCompleted:
 	defer ticker.Stop()
 
 	// Wait for service to be accessible
-	maxServiceRetries := 30 // Increase max retries for service access
+	maxServiceRetries := 60 // Increase max retries to 5 minutes
 	serviceRetryCount := 0
 	serviceURL := ""
 
@@ -276,51 +293,112 @@ deploymentCompleted:
 			continue
 		}
 
+		allPodsReady := true
 		for _, pod := range pods {
 			logger.Info("Pod status",
 				zap.String("name", pod.Name),
 				zap.String("status", pod.Status),
 				zap.Bool("ready", pod.Ready))
+			if !pod.Ready {
+				allPodsReady = false
+			}
+		}
+
+		if !allPodsReady {
+			serviceRetryCount++
+			if serviceRetryCount >= maxServiceRetries {
+				logger.Fatal("Timeout waiting for all pods to be ready")
+			}
+			logger.Warn("Not all pods are ready, retrying...", zap.Int("retry", serviceRetryCount))
+			continue
 		}
 
 		// Try to access the service
 		if serviceURL == "" {
-			// Get service URL
-			serviceURL, err = service.GetServiceURL(ctx, "default", "default-service-0")
+			// Get service URL for the echo service
+			serviceName := "default-group-0-service-0"
+			// Always try the global service name first
+			url, err := service.GetServiceURL(ctx, "default", serviceName+"-global")
 			if err != nil {
-				// Try the global service name
-				serviceURL, err = service.GetServiceURL(ctx, "default", "default-service-0-global")
+				// Fallback to the regular service name
+				url, err = service.GetServiceURL(ctx, "default", serviceName)
 				if err != nil {
-					logger.Error("Failed to get service URL", zap.Error(err))
+					logger.Error("Failed to get service URL",
+						zap.String("service", serviceName),
+						zap.Error(err))
+					serviceRetryCount++
+					if serviceRetryCount >= maxServiceRetries {
+						logger.Fatal("Failed to get service URL after retries")
+					}
+					logger.Warn("Service is not accessible, retrying...",
+						zap.Int("retry", serviceRetryCount))
 					continue
 				}
 			}
-			logger.Info("Service is accessible", zap.String("url", serviceURL))
-		}
 
-		if serviceURL != "" {
-			// Try to access the service
-			resp, err := http.Get(serviceURL)
+			logger.Info("Service is accessible",
+				zap.String("service", serviceName),
+				zap.String("url", url))
+
+			// Add a small delay before trying to access the service
+			time.Sleep(2 * time.Second)
+
+			logger.Info("Attempting to access service",
+				zap.String("service", serviceName),
+				zap.String("url", url))
+
+			// Create a custom HTTP client with timeout
+			client := &http.Client{
+				Timeout: 10 * time.Second,
+			}
+
+			resp, err := client.Get(url)
 			if err != nil {
+				logger.Error("Failed to access service",
+					zap.String("service", serviceName),
+					zap.Error(err))
 				serviceRetryCount++
 				if serviceRetryCount >= maxServiceRetries {
-					logger.Fatal("Failed to access service after retries", zap.Error(err))
+					logger.Fatal("Failed to access service after retries")
 				}
-				logger.Warn("Failed to fetch service, retrying...",
-					zap.Error(err),
+				logger.Warn("Service is not responding, retrying...",
 					zap.Int("retry", serviceRetryCount))
 				continue
 			}
 			defer resp.Body.Close()
 
-			body, err := io.ReadAll(resp.Body)
-			if err != nil {
-				logger.Error("Failed to read response body", zap.Error(err))
+			if resp.StatusCode != http.StatusOK {
+				logger.Error("Service returned non-200 status code",
+					zap.String("service", serviceName),
+					zap.Int("status", resp.StatusCode))
+				serviceRetryCount++
+				if serviceRetryCount >= maxServiceRetries {
+					logger.Fatal("Service returned non-200 status code after retries")
+				}
+				logger.Warn("Service returned non-200 status code, retrying...",
+					zap.Int("retry", serviceRetryCount))
 				continue
 			}
 
-			logger.Info("Service response", zap.String("body", string(body)))
-			logger.Info("Deployment is running successfully!")
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				logger.Error("Failed to read response body",
+					zap.String("service", serviceName),
+					zap.Error(err))
+				serviceRetryCount++
+				if serviceRetryCount >= maxServiceRetries {
+					logger.Fatal("Failed to read response body after retries")
+				}
+				logger.Warn("Failed to read response body, retrying...",
+					zap.Int("retry", serviceRetryCount))
+				continue
+			}
+
+			logger.Info("Service response",
+				zap.String("service", serviceName),
+				zap.String("body", string(body)))
+
+			logger.Info("Service is running successfully!")
 			logger.Info("Pausing for 5 seconds to allow inspection of resources...")
 			time.Sleep(5 * time.Second)
 			return

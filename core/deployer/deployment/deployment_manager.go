@@ -863,20 +863,35 @@ func (m *DeploymentManager) createKubernetesResources(ctx context.Context, deplo
 				return fmt.Errorf("failed to apply deployment: %w", err)
 			}
 
-			// Create service
-			serviceBuilder := builder.NewServiceBuilder(builder.Settings{
+			// Create local service (ClusterIP, no -global suffix, no externalTrafficPolicy)
+			localServiceBuilder := builder.NewServiceBuilder(builder.Settings{
 				Client:        m.client,
 				DynamicClient: dynamicClient,
 				Logger:        m.logger,
-			}, deployment, serviceIdx, isServiceGlobal(&group.Services[serviceIdx]), groupIdx)
-
-			// Create service object
-			serviceObj := serviceBuilder.Create()
-
-			// Apply service
-			_, err = m.client.CoreV1().Services(ns.Name).Create(ctx, serviceObj, metav1.CreateOptions{})
+			}, deployment, serviceIdx, false, groupIdx)
+			localServiceObj := localServiceBuilder.Create()
+			localServiceObj.Spec.Type = corev1.ServiceTypeClusterIP
+			// Remove any externalTrafficPolicy if present
+			localServiceObj.Spec.ExternalTrafficPolicy = ""
+			_, err = m.client.CoreV1().Services(ns.Name).Create(ctx, localServiceObj, metav1.CreateOptions{})
 			if err != nil && !errors.IsAlreadyExists(err) {
-				return fmt.Errorf("failed to apply service: %w", err)
+				return fmt.Errorf("failed to apply local service: %w", err)
+			}
+
+			// Create global service if needed (-global suffix, NodePort, with externalTrafficPolicy)
+			if isServiceGlobal(&group.Services[serviceIdx]) {
+				globalServiceBuilder := builder.NewServiceBuilder(builder.Settings{
+					Client:        m.client,
+					DynamicClient: dynamicClient,
+					Logger:        m.logger,
+				}, deployment, serviceIdx, true, groupIdx)
+				globalServiceObj := globalServiceBuilder.Create()
+				globalServiceObj.Spec.Type = corev1.ServiceTypeNodePort
+				globalServiceObj.Spec.ExternalTrafficPolicy = corev1.ServiceExternalTrafficPolicyTypeLocal
+				_, err = m.client.CoreV1().Services(ns.Name).Create(ctx, globalServiceObj, metav1.CreateOptions{})
+				if err != nil && !errors.IsAlreadyExists(err) {
+					return fmt.Errorf("failed to apply global service: %w", err)
+				}
 			}
 		}
 	}

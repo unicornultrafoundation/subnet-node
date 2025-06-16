@@ -33,6 +33,17 @@ type ServiceConfig struct {
 		Storage string // Storage in GB (e.g., "100Gi")
 		GPU     int64  // Number of GPU units
 	}
+
+	// Pricing configuration
+	Pricing struct {
+		MemPriceMin      int64   // Minimum memory price in wei
+		MemPriceMax      int64   // Maximum memory price in wei
+		BidPriceStrategy string  // Pricing strategy (e.g., "dynamic", "fixed")
+		BidCPUScale      float64 // CPU price scaling factor
+		BidStorageScale  float64 // Storage price scaling factor
+		ProcessLimit     int     // Maximum number of concurrent processes
+		ProcessTimeout   int     // Process timeout in seconds
+	}
 }
 
 func NewServiceConfigFromConfig(cfg *config.C) (*ServiceConfig, error) {
@@ -64,6 +75,15 @@ func NewServiceConfigFromConfig(cfg *config.C) (*ServiceConfig, error) {
 	serviceConfig.ClusterResources.Storage = cfg.GetString("deployer.cluster_resources.storage", serviceConfig.ClusterResources.Storage)
 	serviceConfig.ClusterResources.GPU = int64(cfg.GetInt("deployer.cluster_resources.gpu", int(serviceConfig.ClusterResources.GPU)))
 
+	// Pricing configuration
+	serviceConfig.Pricing.MemPriceMin = int64(cfg.GetInt("deployer.pricing.mem_price_min", int(serviceConfig.Pricing.MemPriceMin)))
+	serviceConfig.Pricing.MemPriceMax = int64(cfg.GetInt("deployer.pricing.mem_price_max", int(serviceConfig.Pricing.MemPriceMax)))
+	serviceConfig.Pricing.BidPriceStrategy = cfg.GetString("deployer.pricing.bid_price_strategy", serviceConfig.Pricing.BidPriceStrategy)
+	serviceConfig.Pricing.BidCPUScale = float64(cfg.GetInt("deployer.pricing.bid_cpu_scale", int(serviceConfig.Pricing.BidCPUScale*100))) / 100
+	serviceConfig.Pricing.BidStorageScale = float64(cfg.GetInt("deployer.pricing.bid_storage_scale", int(serviceConfig.Pricing.BidStorageScale*100))) / 100
+	serviceConfig.Pricing.ProcessLimit = cfg.GetInt("deployer.pricing.process_limit", serviceConfig.Pricing.ProcessLimit)
+	serviceConfig.Pricing.ProcessTimeout = cfg.GetInt("deployer.pricing.process_timeout", serviceConfig.Pricing.ProcessTimeout)
+
 	return serviceConfig, nil
 }
 
@@ -81,6 +101,23 @@ func DefaultServiceConfig() *ServiceConfig {
 			Memory:  "4Gi",  // 4 GB memory
 			Storage: "10Gi", // 10 GB storage
 			GPU:     0,      // No GPU by default
+		},
+		Pricing: struct {
+			MemPriceMin      int64
+			MemPriceMax      int64
+			BidPriceStrategy string
+			BidCPUScale      float64
+			BidStorageScale  float64
+			ProcessLimit     int
+			ProcessTimeout   int
+		}{
+			MemPriceMin:      1000000000000000,  // 0.001 U2U
+			MemPriceMax:      10000000000000000, // 0.01 U2U
+			BidPriceStrategy: "dynamic",
+			BidCPUScale:      1.5,
+			BidStorageScale:  1.2,
+			ProcessLimit:     10,
+			ProcessTimeout:   30,
 		},
 	}
 }
@@ -118,6 +155,31 @@ func (c *ServiceConfig) Validate() error {
 
 	if c.ClusterResources.GPU < 0 {
 		return fmt.Errorf("GPU units must be non-negative")
+	}
+
+	// Validate pricing configuration
+	if c.Pricing.MemPriceMin < 0 {
+		return fmt.Errorf("minimum memory price must be non-negative")
+	}
+
+	if c.Pricing.MemPriceMax < c.Pricing.MemPriceMin {
+		return fmt.Errorf("maximum memory price must be greater than minimum memory price")
+	}
+
+	if c.Pricing.BidCPUScale <= 0 {
+		return fmt.Errorf("CPU price scale must be positive")
+	}
+
+	if c.Pricing.BidStorageScale <= 0 {
+		return fmt.Errorf("storage price scale must be positive")
+	}
+
+	if c.Pricing.ProcessLimit <= 0 {
+		return fmt.Errorf("process limit must be positive")
+	}
+
+	if c.Pricing.ProcessTimeout <= 0 {
+		return fmt.Errorf("process timeout must be positive")
 	}
 
 	return nil

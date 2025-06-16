@@ -1,15 +1,33 @@
 version: "2.0"
 services:
-  echo:
+  web:
     image: hashicorp/http-echo
-    command: ["/http-echo"]
-    args: ["-listen", ":5678", "-text", "Hello from http-echo!"]
+    command: ["/http-echo", "-text", "Hello from http-echo!"]
     expose:
       - port: 5678
         as: 80
-        proto: TCP
         to:
           - global: true
+    params:
+      health:
+        readiness:
+          http:
+            path: /
+            port: 5678
+          initial_delay_seconds: 5
+          period_seconds: 10
+          timeout_seconds: 5
+          success_threshold: 1
+          failure_threshold: 3
+        liveness:
+          http:
+            path: /
+            port: 5678
+          initial_delay_seconds: 15
+          period_seconds: 10
+          timeout_seconds: 5
+          success_threshold: 1
+          failure_threshold: 3
     resources:
       cpu:
         units:
@@ -17,21 +35,12 @@ services:
           unit: m
       memory:
         size:
-          value: 256
+          value: 1024
           unit: Mi
       storage:
         size:
-          value: 0
+          value: 1024
           unit: Mi
-    count: 1
-    params:
-      health:
-        http:
-          path: /
-          port: 5678
-          interval: "30s"
-          timeout: "5s"
-          retries: 3
 
 profiles:
   compute:
@@ -51,13 +60,13 @@ profiles:
         region: us-west
       pricing:
         cpu:
-          denom: uakt
+          denom: u2u
           amount: 1000
         memory:
-          denom: uakt
+          denom: u2u
           amount: 500
         storage:
-          denom: uakt
+          denom: u2u
           amount: 200
 
 deployment:

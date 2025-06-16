@@ -431,11 +431,6 @@ func (m *PaymentManager) GetEscrowHistory(deploymentID string) ([]*clusterTypes.
 
 // IsHealthy checks if the payment manager is healthy
 func (m *PaymentManager) IsHealthy() bool {
-	// Check if client is connected
-	if m.client == nil {
-		return false
-	}
-
 	// Check if contract is initialized
 	if m.contract == nil {
 		return false
@@ -451,6 +446,16 @@ func (m *PaymentManager) IsHealthy() bool {
 	case <-m.stopCh:
 		return false
 	default:
+	}
+
+	// In mock mode, we don't need a client
+	if m.config.EthNodeURL == "" {
+		return true
+	}
+
+	// In real mode, check if client is connected
+	if m.client == nil {
+		return false
 	}
 
 	return true

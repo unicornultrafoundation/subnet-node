@@ -107,7 +107,7 @@ func NewService(config *ServiceConfig, acc *account.AccountService) (*Service, e
 		logger:         logger,
 		client:         client,
 		accountService: acc,
-		ethClient:      acc.GetClient(),
+		ethClient:      nil, // TODO: will be set later
 		eventBus:       eventBus.(*events.DefaultEventBus[types.MarketplaceEvent]),
 		bidTracker:     bidTracker,
 		session:        session,
@@ -176,13 +176,13 @@ func NewService(config *ServiceConfig, acc *account.AccountService) (*Service, e
 
 	// Create bid manager
 	priceConfig := &payment.PricingConfig{
-		MemPriceMin:      1000000000000000,  // 0.001 ETH
-		MemPriceMax:      10000000000000000, // 0.01 ETH
-		BidPriceStrategy: "dynamic",
-		BidCPUScale:      1.5,
-		BidStorageScale:  1.2,
-		ProcessLimit:     10,
-		ProcessTimeout:   30,
+		MemPriceMin:      config.Pricing.MemPriceMin,
+		MemPriceMax:      config.Pricing.MemPriceMax,
+		BidPriceStrategy: config.Pricing.BidPriceStrategy,
+		BidCPUScale:      config.Pricing.BidCPUScale,
+		BidStorageScale:  config.Pricing.BidStorageScale,
+		ProcessLimit:     config.Pricing.ProcessLimit,
+		ProcessTimeout:   config.Pricing.ProcessTimeout,
 	}
 	service.bidManager = marketplace.NewBidManager(
 		deploymentMgr,

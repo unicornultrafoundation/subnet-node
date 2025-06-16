@@ -137,31 +137,35 @@ func (b *Workload) container() corev1.Container {
 		}
 	} else {
 		// Default health checks if not specified
-		kcontainer.ReadinessProbe = &corev1.Probe{
-			InitialDelaySeconds: 10,
-			PeriodSeconds:       10,
-			TimeoutSeconds:      5,
-			SuccessThreshold:    1,
-			FailureThreshold:    3,
-			ProbeHandler: corev1.ProbeHandler{
-				HTTPGet: &corev1.HTTPGetAction{
-					Path: "/",
-					Port: intstr.FromInt(80),
+		// Only set up health checks if there are exposed ports
+		if len(service.Expose) > 0 {
+			healthCheckPort := service.Expose[0].Port
+			kcontainer.ReadinessProbe = &corev1.Probe{
+				InitialDelaySeconds: 10,
+				PeriodSeconds:       10,
+				TimeoutSeconds:      5,
+				SuccessThreshold:    1,
+				FailureThreshold:    3,
+				ProbeHandler: corev1.ProbeHandler{
+					HTTPGet: &corev1.HTTPGetAction{
+						Path: "/health", // More standard health check path
+						Port: intstr.FromInt(int(healthCheckPort)),
+					},
 				},
-			},
-		}
-		kcontainer.LivenessProbe = &corev1.Probe{
-			InitialDelaySeconds: 20,
-			PeriodSeconds:       10,
-			TimeoutSeconds:      5,
-			SuccessThreshold:    1,
-			FailureThreshold:    3,
-			ProbeHandler: corev1.ProbeHandler{
-				HTTPGet: &corev1.HTTPGetAction{
-					Path: "/",
-					Port: intstr.FromInt(80),
+			}
+			kcontainer.LivenessProbe = &corev1.Probe{
+				InitialDelaySeconds: 20,
+				PeriodSeconds:       10,
+				TimeoutSeconds:      5,
+				SuccessThreshold:    1,
+				FailureThreshold:    3,
+				ProbeHandler: corev1.ProbeHandler{
+					HTTPGet: &corev1.HTTPGetAction{
+						Path: "/health", // More standard health check path
+						Port: intstr.FromInt(int(healthCheckPort)),
+					},
 				},
-			},
+			}
 		}
 	}
 
