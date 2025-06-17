@@ -43,6 +43,7 @@ type Bid struct {
 	ExpirationAt time.Time        `json:"expirationAt"` // When the bid expires
 	Requirements *BidRequirements `json:"requirements"` // Resource requirements
 	TxHash       string           `json:"txHash"`       // Transaction hash of the bid submission
+	Renter       common.Address   `json:"renter"`       // Optional reference data from renter
 }
 
 // OrderInfo contains information about an order from the BidMarket contract

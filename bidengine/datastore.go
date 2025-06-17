@@ -102,6 +102,13 @@ func (s *Store) ListBidsByStatus(ctx context.Context, status BidStatus) ([]*Bid,
 	})
 }
 
+// ListAllBids retrieves all bids from the datastore
+func (s *Store) ListAllBids(ctx context.Context) ([]*Bid, error) {
+	return s.listBidsWithFilter(ctx, func(bid *Bid) bool {
+		return true // Return all bids
+	})
+}
+
 // listBidsWithFilter is a helper function to list bids with a filter function
 func (s *Store) listBidsWithFilter(ctx context.Context, filter func(*Bid) bool) ([]*Bid, error) {
 	s.mutex.RLock()

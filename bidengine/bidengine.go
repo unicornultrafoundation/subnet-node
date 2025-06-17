@@ -29,8 +29,8 @@ type BidEngine struct {
 	activeBids    map[string]*Bid
 	bidsMutex     sync.RWMutex
 	bidConfig     BidConfig
-	providerId    *big.Int // Our provider ID
-	store         *Store   // Added datastore interface
+	providerId    *big.Int     // Our provider ID
+	store         BidDatastore // Added datastore interface
 
 	shutdown chan struct{}
 	wg       sync.WaitGroup
@@ -97,21 +97,16 @@ func (b *BidEngine) Start(ctx context.Context) error {
 	b.loadBidConfig()
 
 	// Load active bids from datastore
-	if b.store != nil {
-		bids, err := b.store.ListActiveBids(ctx)
-		if err != nil {
-			b.log.WithError(err).Warn("Failed to load active bids from datastore")
-		} else {
-			b.log.WithField("count", len(bids)).Info("Loaded active bids from datastore")
-			b.bidsMutex.Lock()
-			for _, bid := range bids {
-				// Only load non-finalized bids into memory
-				if bid.Status != BidStatusExpired && bid.Status != BidStatusRejected {
-					b.activeBids[bid.ID.String()] = bid
-				}
-			}
-			b.bidsMutex.Unlock()
+	bids, err := b.store.ListActiveBids(ctx)
+	if err != nil {
+		b.log.WithError(err).Warn("Failed to load active bids from datastore")
+	} else {
+		b.log.WithField("count", len(bids)).Info("Loaded active bids from datastore")
+		b.bidsMutex.Lock()
+		for _, bid := range bids {
+			b.activeBids[bid.ID.String()] = bid
 		}
+		b.bidsMutex.Unlock()
 	}
 
 	// Start monitoring for active bids
@@ -194,4 +189,148 @@ func (b *BidEngine) loadBidConfig() {
 	b.bidConfig.MachineTypeMultipliers[1] = big.NewInt(int64(b.cfg.GetInt("bidengine.machine_type_multipliers.shared", 10)))
 	b.bidConfig.MachineTypeMultipliers[2] = big.NewInt(int64(b.cfg.GetInt("bidengine.machine_type_multipliers.vm", 15)))
 	b.bidConfig.MachineTypeMultipliers[3] = big.NewInt(int64(b.cfg.GetInt("bidengine.machine_type_multipliers.bare_metal", 25)))
+}
+
+// MachineResources represents the available resources of a machine
+type MachineResources struct {
+	CpuCores      *big.Int
+	MemoryMB      *big.Int
+	DiskGB        *big.Int
+	GpuCores      *big.Int
+	UploadSpeed   *big.Int
+	DownloadSpeed *big.Int
+	Active        bool
+	Region        *big.Int
+	MachineType   *big.Int
+}
+
+// GetMachineRemainingResources retrieves the remaining resources of a machine after accounting for active bids
+func (b *BidEngine) GetMachineRemainingResources(ctx context.Context, providerId, machineId *big.Int) (*MachineResources, error) {
+	// Get machine details from the blockchain
+	machine, err := b.provider.ProviderMachines(&bind.CallOpts{Context: ctx}, providerId, machineId)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get machine details: %v", err)
+	}
+
+	// Initialize with total resources
+	resources := &MachineResources{
+		CpuCores:      new(big.Int).Set(machine.CpuCores),
+		MemoryMB:      new(big.Int).Set(machine.MemoryMB),
+		DiskGB:        new(big.Int).Set(machine.DiskGB),
+		GpuCores:      new(big.Int).Set(machine.GpuCores),
+		UploadSpeed:   new(big.Int).Set(machine.UploadSpeed),
+		DownloadSpeed: new(big.Int).Set(machine.DownloadSpeed),
+		Active:        machine.Active,
+		Region:        new(big.Int).Set(machine.Region),
+		MachineType:   new(big.Int).Set(machine.MachineType),
+	}
+
+	// Return early if machine is not active
+	if !machine.Active {
+		return resources, nil
+	}
+
+	// Calculate resources used by active bids
+	usedCPU := big.NewInt(0)
+	usedMemory := big.NewInt(0)
+	usedDisk := big.NewInt(0)
+	usedGPU := big.NewInt(0)
+	usedUpload := big.NewInt(0)
+	usedDownload := big.NewInt(0)
+
+	// Lock for reading the active bids map
+	b.bidsMutex.RLock()
+	for _, bid := range b.activeBids {
+		// Only count bids that are pending or accepted for this specific machine
+		if (bid.Status == BidStatusPending || bid.Status == BidStatusAccepted) &&
+			bid.MachineId.Cmp(machineId) == 0 && bid.ProviderId.Cmp(providerId) == 0 {
+
+			usedCPU = new(big.Int).Add(usedCPU, bid.Requirements.MinCPUCores)
+			usedMemory = new(big.Int).Add(usedMemory, bid.Requirements.MinMemoryMB)
+			usedDisk = new(big.Int).Add(usedDisk, bid.Requirements.MinDiskGB)
+			usedGPU = new(big.Int).Add(usedGPU, bid.Requirements.MinGPUCores)
+			usedUpload = new(big.Int).Add(usedUpload, bid.Requirements.MinUploadSpeed)
+			usedDownload = new(big.Int).Add(usedDownload, bid.Requirements.MinDownloadSpeed)
+		}
+	}
+	b.bidsMutex.RUnlock()
+
+	// Calculate remaining resources by subtracting used resources
+	resources.CpuCores = new(big.Int).Sub(resources.CpuCores, usedCPU)
+	resources.MemoryMB = new(big.Int).Sub(resources.MemoryMB, usedMemory)
+	resources.DiskGB = new(big.Int).Sub(resources.DiskGB, usedDisk)
+	resources.GpuCores = new(big.Int).Sub(resources.GpuCores, usedGPU)
+	resources.UploadSpeed = new(big.Int).Sub(resources.UploadSpeed, usedUpload)
+	resources.DownloadSpeed = new(big.Int).Sub(resources.DownloadSpeed, usedDownload)
+
+	// Ensure we don't return negative values (could happen if there's a resource tracking issue)
+	if resources.CpuCores.Sign() < 0 {
+		resources.CpuCores = big.NewInt(0)
+	}
+	if resources.MemoryMB.Sign() < 0 {
+		resources.MemoryMB = big.NewInt(0)
+	}
+	if resources.DiskGB.Sign() < 0 {
+		resources.DiskGB = big.NewInt(0)
+	}
+	if resources.GpuCores.Sign() < 0 {
+		resources.GpuCores = big.NewInt(0)
+	}
+	if resources.UploadSpeed.Sign() < 0 {
+		resources.UploadSpeed = big.NewInt(0)
+	}
+	if resources.DownloadSpeed.Sign() < 0 {
+		resources.DownloadSpeed = big.NewInt(0)
+	}
+
+	return resources, nil
+}
+
+// GetMachineBids retrieves all bids associated with a specific machine
+func (b *BidEngine) GetMachineBids(ctx context.Context, providerId, machineId *big.Int, filterStatus []BidStatus) ([]*Bid, error) {
+	var result []*Bid
+
+	// First check in-memory active bids
+	b.bidsMutex.RLock()
+	for _, bid := range b.activeBids {
+		if bid.ProviderId.Cmp(providerId) == 0 && bid.MachineId.Cmp(machineId) == 0 {
+			// If filterStatus is provided, check if bid status matches any of the requested statuses
+			if len(filterStatus) > 0 {
+				statusMatched := false
+				for _, status := range filterStatus {
+					if bid.Status == status {
+						statusMatched = true
+						break
+					}
+				}
+				if !statusMatched {
+					continue
+				}
+			}
+
+			// Add a copy of the bid to the result to avoid race conditions
+			bidCopy := *bid
+			result = append(result, &bidCopy)
+		}
+	}
+	b.bidsMutex.RUnlock()
+
+	b.log.WithFields(logrus.Fields{
+		"providerId":   providerId,
+		"machineId":    machineId,
+		"statusFilter": filterStatus,
+		"bidCount":     len(result),
+	}).Debug("Retrieved bids for machine")
+
+	return result, nil
+}
+
+// GetActiveAndPendingBids retrieves all active and pending bids for a machine
+func (b *BidEngine) GetActiveAndPendingBids(ctx context.Context, providerId, machineId *big.Int) ([]*Bid, error) {
+	return b.GetMachineBids(ctx, providerId, machineId, []BidStatus{BidStatusAccepted, BidStatusPending})
+}
+
+// GetAcceptedBids retrieves all accepted bids for a machine
+func (b *BidEngine) GetAcceptedBids(ctx context.Context, providerId, machineId *big.Int) ([]*Bid, error) {
+	return b.GetMachineBids(ctx, providerId, machineId, []BidStatus{BidStatusAccepted})
 }
