@@ -1,238 +1,319 @@
-# KVM Module for Subnet Node
+# Real KVM Service for Subnet Node
 
-A simple, focused KVM (Kernel-based Virtual Machine) module that provides basic virtual machine management capabilities. This module is designed to be easy to understand and extend incrementally.
+This module provides **real KVM/QEMU virtualization** capabilities using libvirt, enabling actual virtual machine management on Linux systems with KVM support.
 
-## Overview
+## ✅ What's Real Now
 
-This KVM module provides:
+Unlike the previous simulation, this implementation provides:
 
-- **Basic VM Lifecycle Management**: Create, start, stop, delete VMs
-- **Resource Management**: CPU, memory, and disk allocation with limits
-- **System Monitoring**: VM statistics and resource usage tracking
-- **REST API**: HTTP endpoints for all operations
-- **Persistent Storage**: VM metadata stored in datastore
-- **Configuration**: YAML-based configuration with sensible defaults
+### **🖥️ Actual Virtualization**
 
-## Architecture
+- **Real VMs**: Creates actual QEMU/KVM virtual machines
+- **Libvirt Integration**: Uses libvirt.org Go bindings for VM management
+- **KVM Hypervisor**: Leverages Linux KVM for hardware-accelerated virtualization
+- **QEMU Emulation**: Uses QEMU as the machine emulator
+
+### **💾 Real Storage Management**
+
+- **qcow2 Disk Images**: Creates actual qcow2 disk files
+- **Storage Pools**: Manages libvirt storage pools
+- **Template Support**: Clone VMs from template images
+- **Volume Management**: Real disk volume creation and deletion
+
+### **🌐 Real Networking**
+
+- **Virtual Networks**: Creates libvirt virtual networks
+- **NAT Networks**: Automatic NAT network creation with DHCP
+- **Bridge Networks**: Support for bridged networking
+- **MAC Address Generation**: Proper MAC address allocation
+- **IP Management**: DHCP-based IP assignment
+
+### **📊 Real Resource Management**
+
+- **CPU Allocation**: Actual CPU core assignment to VMs
+- **Memory Management**: Real memory allocation and limits
+- **Resource Monitoring**: Live resource usage tracking
+- **System Integration**: Integrates with host system resources
+
+## 🏗️ Architecture
+
+```
+Subnet Node KVM Service
+├── Service (Auto-detection)
+│   ├── Libvirt Available → Real Mode
+│   └── Libvirt Unavailable → Simulation Mode
+├── Libvirt Components
+│   ├── Client (libvirt connection)
+│   ├── DomainManager (VM lifecycle)
+│   ├── StorageManager (disk management)
+│   └── NetworkManager (network setup)
+└── API Layer
+    ├── HTTP REST API
+    └── JSON-RPC API
+```
+
+## 📁 Module Structure
 
 ```
 core/kvm/
-├── types.go           # VM data structures and types
-├── service.go         # Main KVM service implementation
+├── service.go              # Main service with auto-detection
+├── service_real.go         # Real libvirt implementation
+├── types.go               # Data structures
 ├── config/
-│   ├── config.go      # Configuration management
-│   └── validator.go   # Configuration validation
-└── README.md          # This documentation
+│   ├── config.go          # Configuration management
+│   └── validator.go       # Config validation
+├── libvirt/
+│   ├── client.go          # Libvirt client wrapper
+│   ├── domain.go          # VM (domain) management
+│   ├── storage.go         # Storage pool & volume management
+│   └── network.go         # Virtual network management
+└── README.md              # This documentation
 ```
 
-### Key Components
+## 🚀 Prerequisites
 
-1. **Service**: Main orchestrator that manages VM lifecycle
-2. **Types**: Define VM structures, status, and requests
-3. **Configuration**: Handles YAML config loading with defaults
-4. **API**: HTTP REST endpoints for VM operations
+### **System Requirements**
 
-## Configuration
+1. **Linux System** with KVM support
+2. **libvirt daemon** installed and running
+3. **qemu-kvm** installed
+4. **User permissions** to access libvirt
 
-Add to your `config.yaml`:
-
-```yaml
-kvm:
-  enabled: true # Enable/disable KVM service
-  max_vms: 5 # Maximum number of VMs
-  max_cpu_cores: 4 # Maximum CPU cores per VM
-  max_memory_mb: 4096 # Maximum memory per VM (MB)
-  max_disk_gb: 50 # Maximum disk size per VM (GB)
-```
-
-## Usage
-
-### 1. Service Integration
-
-```go
-import (
-    "github.com/unicornultrafoundation/subnet-node/core/kvm"
-    "github.com/unicornultrafoundation/subnet-node/internal/api"
-)
-
-// Create KVM service
-kvmService := kvm.NewService(config, logger, datastore, resourceService)
-
-// Start the service
-err := kvmService.Start(ctx)
-
-// Register API routes
-kvmAPI := api.NewKVMAPI(kvmService, logger)
-kvmAPI.RegisterRoutes(router)
-```
-
-### 2. HTTP API Usage
-
-#### Create a VM
+### **Installation (Ubuntu/Debian)**
 
 ```bash
+# Install KVM and libvirt
+sudo apt update
+sudo apt install qemu-kvm libvirt-daemon-system libvirt-clients bridge-utils
+
+# Add user to libvirt group
+sudo usermod -aG libvirt $USER
+sudo usermod -aG kvm $USER
+
+# Start libvirt service
+sudo systemctl enable libvirtd
+sudo systemctl start libvirtd
+
+# Verify installation
+virsh version
+```
+
+### **Installation (CentOS/RHEL)**
+
+```bash
+# Install KVM and libvirt
+sudo yum install qemu-kvm libvirt libvirt-python libguestfs-tools virt-install
+
+# Add user to libvirt group
+sudo usermod -aG libvirt $USER
+
+# Start libvirt service
+sudo systemctl enable libvirtd
+sudo systemctl start libvirtd
+
+# Verify installation
+virsh version
+```
+
+## ⚙️ Configuration
+
+### **Real KVM Configuration**
+
+```yaml
+# config-examples/kvm-real.yaml
+kvm:
+  enabled: true
+  max_vms: 5
+  max_cpu_cores: 4
+  max_memory_mb: 8192
+  max_disk_gb: 100
+
+  # Libvirt settings
+  libvirt_uri: "qemu:///system" # System libvirt connection
+  storage_pool: "subnet-vms" # Storage pool name
+  storage_path: "/var/lib/libvirt/images/subnet" # Storage directory
+  network_name: "subnet-net" # Virtual network name
+```
+
+### **Auto-Detection Behavior**
+
+- **Libvirt Available**: Uses real virtualization automatically
+- **Libvirt Unavailable**: Falls back to simulation mode
+- **Graceful Degradation**: No configuration changes needed
+
+## 🛠️ Usage Examples
+
+### **1. Start Subnet Node with Real KVM**
+
+```bash
+# Using real KVM configuration
+./subnet --config config-examples/kvm-real.yaml
+```
+
+### **2. Create a Real VM**
+
+```bash
+# Create VM via HTTP API
 curl -X POST http://localhost:8080/kvm/vms \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "my-vm",
+    "name": "test-vm",
     "cpu_cores": 2,
-    "memory_mb": 2048,
-    "disk_gb": 20,
-    "metadata": {
-      "purpose": "development"
-    }
+    "memory_mb": 1024,
+    "disk_gb": 10
   }'
 ```
 
-#### List VMs
+### **3. Start the VM**
 
 ```bash
-curl http://localhost:8080/kvm/vms
+# Start VM
+curl -X POST http://localhost:8080/kvm/vms/{vm-id}/start
 ```
 
-#### Get VM Details
+### **4. Check VM Status**
 
 ```bash
+# Get VM details
 curl http://localhost:8080/kvm/vms/{vm-id}
-```
 
-#### Start/Stop VM
-
-```bash
-curl -X POST http://localhost:8080/kvm/vms/{vm-id}/start
-curl -X POST http://localhost:8080/kvm/vms/{vm-id}/stop
-```
-
-#### Get VM Statistics
-
-```bash
-curl http://localhost:8080/kvm/vms/{vm-id}/stats
-```
-
-#### Get System Resources
-
-```bash
-curl http://localhost:8080/kvm/resources
-```
-
-#### Check Service Status
-
-```bash
-curl http://localhost:8080/kvm/status
-```
-
-### 3. Programmatic Usage
-
-```go
-// Create a VM
-req := &kvm.CreateVMRequest{
-    Name:     "test-vm",
-    CPUCores: 2,
-    MemoryMB: 1024,
-    DiskGB:   20,
-    Metadata: map[string]string{
-        "env": "testing",
-    },
-}
-
-vm, err := kvmService.CreateVM(ctx, req)
-if err != nil {
-    log.Fatal(err)
-}
-
-// Start the VM
-err = kvmService.StartVM(ctx, vm.ID)
-
-// Get VM stats
-stats, err := kvmService.GetVMStats(ctx, vm.ID)
-```
-
-## VM Lifecycle
-
-1. **Create**: VM is created in `stopped` state with allocated resources
-2. **Start**: VM transitions to `starting` then `running` state
-3. **Stop**: VM transitions to `stopping` then `stopped` state
-4. **Delete**: VM must be stopped before deletion
-
-## Features
-
-### Current Implementation
-
-- ✅ In-memory VM management (simulated)
-- ✅ Resource validation and limits
-- ✅ VM state management with status tracking
-- ✅ Persistent metadata storage in datastore
-- ✅ Background statistics collection
-- ✅ Complete REST API
-- ✅ Configuration management
-- ✅ Proper error handling and logging
-
-### Future Enhancements
-
-- 🔄 Real libvirt integration for actual VM management
-- 🔄 Network configuration and IP management
-- 🔄 VM template system for OS images
-- 🔄 Disk image management and storage pools
-- 🔄 VM snapshots and backups
-- 🔄 Resource monitoring and alerts
-- 🔄 VM migration capabilities
-
-## Error Handling
-
-The module includes comprehensive error handling:
-
-- Resource validation (CPU, memory, disk limits)
-- VM state validation (can't delete running VM)
-- Service availability checks
-- Proper HTTP status codes in API responses
-
-## Monitoring
-
-The service includes built-in monitoring:
-
-- VM statistics collection every 30 seconds
-- Resource usage tracking
-- System resource availability
-- Service health checks
-
-## Development
-
-### Testing the Module
-
-1. **Enable in config**:
-
-```yaml
-kvm:
-  enabled: true
-  max_vms: 3
-```
-
-2. **Start the service and test**:
-
-```bash
-# Check status
-curl http://localhost:8080/kvm/status
-
-# Create a test VM
-curl -X POST http://localhost:8080/kvm/vms \
-  -H "Content-Type: application/json" \
-  -d '{"name":"test","cpu_cores":1,"memory_mb":512,"disk_gb":10}'
-
-# List VMs
+# List all VMs
 curl http://localhost:8080/kvm/vms
 
-# Start the VM
-curl -X POST http://localhost:8080/kvm/vms/{vm-id}/start
+# Check with virsh
+virsh list --all
+virsh dominfo test-vm
 ```
 
-### Extending the Module
+## 🔧 VM Management Operations
 
-This simple foundation can be extended by:
+### **VM Lifecycle**
 
-1. Adding real libvirt integration
-2. Implementing network management
-3. Adding template/image management
-4. Enhancing monitoring and metrics
-5. Adding security features
+- **Create**: `CreateVM()` - Creates qcow2 disk, generates XML, defines domain
+- **Start**: `StartVM()` - Powers on the VM using libvirt
+- **Stop**: `StopVM()` - Graceful shutdown (with force fallback)
+- **Delete**: `DeleteVM()` - Removes VM and deletes disk image
 
-The modular design makes it easy to enhance specific components without affecting others.
+### **Storage Operations**
+
+- **Disk Creation**: Uses `qemu-img` or libvirt volume creation
+- **Template Support**: Clone from base images
+- **Storage Pools**: Automatic pool creation and management
+- **Cleanup**: Proper disk deletion on VM removal
+
+### **Network Operations**
+
+- **Network Creation**: Automatic NAT network setup
+- **DHCP Configuration**: Built-in DHCP for VM IP assignment
+- **Bridge Support**: Integration with host bridges
+- **MAC Generation**: Proper locally-administered MAC addresses
+
+## 📊 Monitoring & Status
+
+### **Real VM Monitoring**
+
+```bash
+# System resources
+curl http://localhost:8080/kvm/resources
+
+# VM statistics
+curl http://localhost:8080/kvm/vms/{vm-id}/stats
+
+# Service status
+curl http://localhost:8080/kvm/status
+```
+
+### **System Integration**
+
+- **Resource Limits**: Enforced CPU, memory, and disk limits
+- **Resource Monitoring**: Integration with host resource service
+- **State Synchronization**: VM state sync between libvirt and datastore
+
+## 🔍 Debugging & Troubleshooting
+
+### **Check Libvirt Connection**
+
+```bash
+# Test libvirt connection
+virsh uri
+virsh version
+
+# Check permissions
+groups $USER  # Should include 'libvirt'
+```
+
+### **Logs and Debugging**
+
+```bash
+# Check libvirt logs
+sudo journalctl -u libvirtd -f
+
+# Check KVM support
+lsmod | grep kvm
+```
+
+### **Common Issues**
+
+1. **Permission Denied**
+
+   - Add user to `libvirt` group
+   - Restart session after group change
+
+2. **Network Issues**
+
+   - Check bridge configuration
+   - Verify firewall settings
+
+3. **Storage Issues**
+   - Check storage path permissions
+   - Verify disk space availability
+
+## 🔒 Security Considerations
+
+### **Access Control**
+
+- Service runs with user privileges
+- libvirt group membership required
+- Storage paths should be properly secured
+
+### **Network Security**
+
+- NAT networks provide isolation
+- Bridge networks need careful configuration
+- Consider firewall rules for VM access
+
+## 🚀 Performance Considerations
+
+### **Resource Management**
+
+- CPU: Uses host-model CPU for best performance
+- Memory: Direct memory allocation (no swap)
+- Storage: qcow2 format for space efficiency
+- Network: virtio drivers for performance
+
+### **Optimization Tips**
+
+- Use SSD storage for VM disks
+- Allocate appropriate CPU cores
+- Enable KVM hardware acceleration
+- Use virtio drivers in VMs
+
+## 🔮 Future Enhancements
+
+### **Planned Features**
+
+- **Cloud-init Support**: Automated VM configuration
+- **Snapshot Management**: VM state snapshots
+- **Live Migration**: Move VMs between hosts
+- **Template Management**: Pre-built VM templates
+- **Monitoring Integration**: Prometheus metrics
+- **Backup System**: Automated VM backups
+
+### **Advanced Networking**
+
+- **Multiple Networks**: Multiple network interfaces per VM
+- **VLAN Support**: Network segmentation
+- **SDN Integration**: Software-defined networking
+- **Load Balancing**: VM traffic distribution
+
+This implementation transforms the Subnet Node KVM service from a simulation into a **real virtualization platform** capable of managing actual virtual machines using industry-standard technologies.

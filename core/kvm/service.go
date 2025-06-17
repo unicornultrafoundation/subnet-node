@@ -11,17 +11,25 @@ import (
 	"github.com/ipfs/go-datastore/query"
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/config"
+	"github.com/unicornultrafoundation/subnet-node/core/kvm/libvirt"
 	"github.com/unicornultrafoundation/subnet-node/core/node/resource"
 )
 
-// Service implements a simple KVM management service
+// Service implements KVM management with auto-detection of libvirt availability
 type Service struct {
 	config      *config.C
 	logger      *logrus.Entry
 	datastore   datastore.Datastore
 	resourceSvc resource.Service
 
-	// In-memory VM storage (in production, this would be libvirt)
+	// Libvirt components (only used if libvirt is available)
+	libvirtAvailable bool
+	client           *libvirt.Client
+	domainManager    *libvirt.DomainManager
+	storageManager   *libvirt.StorageManager
+	networkManager   *libvirt.NetworkManager
+
+	// In-memory VM storage (used in both modes)
 	vms     map[string]*VM
 	vmStats map[string]*VMStats
 	mu      sync.RWMutex
@@ -32,6 +40,10 @@ type Service struct {
 	maxCPUCores int
 	maxMemoryMB int
 	maxDiskGB   int
+	libvirtURI  string
+	storagePool string
+	storagePath string
+	networkName string
 }
 
 // NewService creates a new KVM service
@@ -41,7 +53,7 @@ func NewService(
 	ds datastore.Datastore,
 	resourceSvc resource.Service,
 ) *Service {
-	return &Service{
+	service := &Service{
 		config:      cfg,
 		logger:      logger.WithField("service", "kvm"),
 		datastore:   ds,
@@ -55,7 +67,42 @@ func NewService(
 		maxCPUCores: cfg.GetInt("kvm.max_cpu_cores", 4),
 		maxMemoryMB: cfg.GetInt("kvm.max_memory_mb", 4096),
 		maxDiskGB:   cfg.GetInt("kvm.max_disk_gb", 50),
+		libvirtURI:  cfg.GetString("kvm.libvirt_uri", "qemu:///system"),
+		storagePool: cfg.GetString("kvm.storage_pool", "subnet-vms"),
+		storagePath: cfg.GetString("kvm.storage_path", "/var/lib/libvirt/images/subnet"),
+		networkName: cfg.GetString("kvm.network_name", "subnet-net"),
 	}
+
+	// Try to initialize libvirt if enabled
+	if service.enabled {
+		if err := service.tryInitLibvirt(); err != nil {
+			service.logger.WithError(err).Warn("Libvirt not available, using simulation mode")
+			service.libvirtAvailable = false
+		} else {
+			service.logger.Info("Libvirt detected, using real virtualization mode")
+			service.libvirtAvailable = true
+		}
+	}
+
+	return service
+}
+
+// tryInitLibvirt attempts to initialize libvirt components
+func (s *Service) tryInitLibvirt() error {
+	var err error
+
+	// Try to connect to libvirt
+	s.client, err = libvirt.NewClient(s.libvirtURI, s.logger)
+	if err != nil {
+		return fmt.Errorf("failed to create libvirt client: %w", err)
+	}
+
+	// Initialize managers
+	s.domainManager = libvirt.NewDomainManager(s.client, s.logger)
+	s.storageManager = libvirt.NewStorageManager(s.client, s.logger)
+	s.networkManager = libvirt.NewNetworkManager(s.client, s.logger)
+
+	return nil
 }
 
 // IsEnabled returns whether the KVM service is enabled

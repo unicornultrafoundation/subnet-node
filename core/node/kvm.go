@@ -21,7 +21,7 @@ func KVMService(lc fx.Lifecycle, cfg *config.C, ds datastore.Datastore, resource
 	// Create logger for KVM service
 	logger := logrus.WithField("service", "kvm")
 
-	// Create KVM service - dereference the pointer since NewService expects value
+	// Create KVM service (either real libvirt or simulation based on config)
 	var srv *kvm.Service
 	if resourceSvc != nil {
 		srv = kvm.NewService(cfg, logger, ds, *resourceSvc)
