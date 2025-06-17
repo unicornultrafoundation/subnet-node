@@ -21,6 +21,7 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/core/account"
 	"github.com/unicornultrafoundation/subnet-node/core/apps"
 	"github.com/unicornultrafoundation/subnet-node/core/apps/verifier"
+	"github.com/unicornultrafoundation/subnet-node/core/kvm"
 	"github.com/unicornultrafoundation/subnet-node/core/node/resource"
 	"github.com/unicornultrafoundation/subnet-node/core/peers"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn"
@@ -51,6 +52,7 @@ type SubnetNode struct {
 	Apps            *apps.Service              `optional:"true"`
 	Verifier        *verifier.Verifier         `optional:"true"`
 	VPN             *vpn.Service               `optional:"true"`
+	KVM             *kvm.Service               `optional:"true"`
 	Firewall        firewall.FirewallInterface `optional:"true"`
 
 	Account *account.AccountService `optional:"true"`

@@ -3,503 +3,543 @@ package kvm
 import (
 	"context"
 	"fmt"
-	"math/big"
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/ipfs/go-datastore"
+	"github.com/ipfs/go-datastore/query"
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/config"
 	"github.com/unicornultrafoundation/subnet-node/core/node/resource"
 )
 
-var log = logrus.WithField("service", "kvm")
-
-// Service implements the main KVM service
+// Service implements a simple KVM management service
 type Service struct {
-	cfg             *config.C
-	kvmConfig       *KVMConfig
-	resourceService *resource.Service
-	datastore       datastore.Datastore
+	config      *config.C
+	logger      *logrus.Entry
+	datastore   datastore.Datastore
+	resourceSvc resource.Service
 
-	// Components
-	vmManager       VMManager
-	storageManager  StorageManager
-	networkManager  NetworkManager
-	resourceChecker ResourceChecker
-	registry        VMRegistry
-	libvirtClient   LibvirtClient
+	// In-memory VM storage (in production, this would be libvirt)
+	vms     map[string]*VM
+	vmStats map[string]*VMStats
+	mu      sync.RWMutex
 
-	// State
-	running  bool
-	stopChan chan struct{}
-	mu       sync.RWMutex
-	logger   *logrus.Logger
+	// Configuration
+	enabled     bool
+	maxVMs      int
+	maxCPUCores int
+	maxMemoryMB int
+	maxDiskGB   int
 }
 
-// NewService creates a new KVM service instance
-func NewService(cfg *config.C, resourceService *resource.Service, ds datastore.Datastore) (*Service, error) {
-	logger := log.WithField("component", "kvm-service").Logger
+// NewService creates a new KVM service
+func NewService(
+	cfg *config.C,
+	logger *logrus.Entry,
+	ds datastore.Datastore,
+	resourceSvc resource.Service,
+) *Service {
+	return &Service{
+		config:      cfg,
+		logger:      logger.WithField("service", "kvm"),
+		datastore:   ds,
+		resourceSvc: resourceSvc,
+		vms:         make(map[string]*VM),
+		vmStats:     make(map[string]*VMStats),
 
-	// Parse KVM configuration
-	kvmConfig, err := parseKVMConfig(cfg)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse KVM config: %w", err)
+		// Load configuration
+		enabled:     cfg.GetBool("kvm.enabled", false),
+		maxVMs:      cfg.GetInt("kvm.max_vms", 5),
+		maxCPUCores: cfg.GetInt("kvm.max_cpu_cores", 4),
+		maxMemoryMB: cfg.GetInt("kvm.max_memory_mb", 4096),
+		maxDiskGB:   cfg.GetInt("kvm.max_disk_gb", 50),
 	}
-
-	if !kvmConfig.Enabled {
-		logger.Info("KVM service is disabled in configuration")
-		return &Service{
-			cfg:       cfg,
-			kvmConfig: kvmConfig,
-			running:   false,
-			logger:    logger,
-		}, nil
-	}
-
-	service := &Service{
-		cfg:             cfg,
-		kvmConfig:       kvmConfig,
-		resourceService: resourceService,
-		datastore:       ds,
-		stopChan:        make(chan struct{}),
-		logger:          logger,
-	}
-
-	// Initialize components
-	if err := service.initializeComponents(); err != nil {
-		return nil, fmt.Errorf("failed to initialize KVM components: %w", err)
-	}
-
-	return service, nil
 }
 
-// initializeComponents initializes all KVM service components
-func (s *Service) initializeComponents() error {
-	var err error
-
-	// Initialize libvirt client
-	s.libvirtClient, err = NewLibvirtClientImpl(s.kvmConfig.LibvirtURI, s.logger)
-	if err != nil {
-		return fmt.Errorf("failed to create libvirt client: %w", err)
-	}
-
-	// Initialize registry
-	s.registry, err = NewVMRegistryImpl(s.datastore, s.logger)
-	if err != nil {
-		return fmt.Errorf("failed to create VM registry: %w", err)
-	}
-
-	// Initialize resource checker
-	s.resourceChecker, err = NewResourceCheckerImpl(s.resourceService, s.kvmConfig, s.registry, s.logger)
-	if err != nil {
-		return fmt.Errorf("failed to create resource checker: %w", err)
-	}
-
-	// Initialize storage manager
-	s.storageManager, err = NewStorageManagerImpl(s.kvmConfig, s.libvirtClient, s.logger)
-	if err != nil {
-		return fmt.Errorf("failed to create storage manager: %w", err)
-	}
-
-	// Initialize network manager
-	s.networkManager, err = NewNetworkManagerImpl(s.kvmConfig, s.libvirtClient, s.logger)
-	if err != nil {
-		return fmt.Errorf("failed to create network manager: %w", err)
-	}
-
-	// Initialize VM manager
-	s.vmManager, err = NewVMManagerImpl(s.libvirtClient, s.storageManager, s.networkManager, s.registry, s.logger)
-	if err != nil {
-		return fmt.Errorf("failed to create VM manager: %w", err)
-	}
-
-	return nil
+// IsEnabled returns whether the KVM service is enabled
+func (s *Service) IsEnabled() bool {
+	return s.enabled
 }
 
 // Start starts the KVM service
 func (s *Service) Start(ctx context.Context) error {
-	if !s.kvmConfig.Enabled {
-		s.logger.Info("KVM service is disabled, skipping start")
+	if !s.enabled {
+		s.logger.Info("KVM service is disabled")
 		return nil
-	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if s.running {
-		return fmt.Errorf("KVM service is already running")
 	}
 
 	s.logger.Info("Starting KVM service")
 
-	// Connect to libvirt
-	if err := s.libvirtClient.Connect(); err != nil {
-		return fmt.Errorf("failed to connect to libvirt: %w", err)
+	// Load existing VMs from datastore
+	if err := s.loadVMsFromDatastore(ctx); err != nil {
+		s.logger.WithError(err).Error("Failed to load VMs from datastore")
+		return fmt.Errorf("failed to load VMs: %w", err)
 	}
 
-	// Validate system capabilities
-	if err := s.validateSystemCapabilities(); err != nil {
-		return fmt.Errorf("system validation failed: %w", err)
-	}
+	// Start background monitoring
+	go s.monitorVMs(ctx)
 
-	// Initialize storage pools and networks
-	if err := s.initializeInfrastructure(); err != nil {
-		return fmt.Errorf("failed to initialize infrastructure: %w", err)
-	}
-
-	// Start background tasks
-	go s.runBackgroundTasks(ctx)
-
-	s.running = true
-	s.logger.Info("KVM service started successfully")
-
+	s.logger.WithField("max_vms", s.maxVMs).Info("KVM service started")
 	return nil
 }
 
 // Stop stops the KVM service
 func (s *Service) Stop(ctx context.Context) error {
-	if !s.kvmConfig.Enabled {
-		return nil
-	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if !s.running {
+	if !s.enabled {
 		return nil
 	}
 
 	s.logger.Info("Stopping KVM service")
 
-	// Signal stop to background tasks
-	close(s.stopChan)
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	// Disconnect from libvirt
-	if s.libvirtClient != nil {
-		if err := s.libvirtClient.Disconnect(); err != nil {
-			s.logger.WithError(err).Error("Failed to disconnect from libvirt")
+	// In a real implementation, we would gracefully stop all VMs
+	for id, vm := range s.vms {
+		if vm.Status == VMStatusRunning {
+			s.logger.WithField("vm_id", id).Info("Stopping VM during service shutdown")
+			vm.Status = VMStatusStopped
+			vm.UpdatedAt = time.Now()
+			// Save VM state
+			s.saveVMToDatastore(ctx, vm)
 		}
 	}
 
-	s.running = false
 	s.logger.Info("KVM service stopped")
-
 	return nil
 }
 
-// IsHealthy checks if the KVM service is healthy
-func (s *Service) IsHealthy(ctx context.Context) error {
-	if !s.kvmConfig.Enabled {
-		return nil
+// CreateVM creates a new virtual machine
+func (s *Service) CreateVM(ctx context.Context, req *CreateVMRequest) (*VM, error) {
+	if !s.enabled {
+		return nil, fmt.Errorf("KVM service is not enabled")
+	}
+
+	s.logger.WithFields(logrus.Fields{
+		"name":      req.Name,
+		"cpu_cores": req.CPUCores,
+		"memory_mb": req.MemoryMB,
+		"disk_gb":   req.DiskGB,
+	}).Info("Creating VM")
+
+	// Validate request
+	if err := s.validateCreateRequest(req); err != nil {
+		return nil, fmt.Errorf("validation failed: %w", err)
+	}
+
+	// Check resource availability
+	if err := s.checkResourceAvailability(ctx, req); err != nil {
+		return nil, fmt.Errorf("insufficient resources: %w", err)
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Check VM limit
+	if len(s.vms) >= s.maxVMs {
+		return nil, fmt.Errorf("maximum VM limit (%d) reached", s.maxVMs)
+	}
+
+	// Create VM
+	now := time.Now()
+	vm := &VM{
+		ID:        uuid.New().String(),
+		Name:      req.Name,
+		Status:    VMStatusStopped,
+		CPUCores:  req.CPUCores,
+		MemoryMB:  req.MemoryMB,
+		DiskGB:    req.DiskGB,
+		CreatedAt: now,
+		UpdatedAt: now,
+		Metadata:  req.Metadata,
+	}
+
+	// In a real implementation, this would create actual VM resources
+	// For now, we just simulate the creation
+	vm.IPAddress = s.generateMockIP()
+
+	// Store VM
+	s.vms[vm.ID] = vm
+
+	// Save to datastore
+	if err := s.saveVMToDatastore(ctx, vm); err != nil {
+		delete(s.vms, vm.ID)
+		return nil, fmt.Errorf("failed to save VM: %w", err)
+	}
+
+	s.logger.WithFields(logrus.Fields{
+		"vm_id": vm.ID,
+		"name":  vm.Name,
+	}).Info("VM created successfully")
+
+	return vm, nil
+}
+
+// GetVM retrieves a VM by ID
+func (s *Service) GetVM(ctx context.Context, vmID string) (*VM, error) {
+	if !s.enabled {
+		return nil, fmt.Errorf("KVM service is not enabled")
 	}
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	if !s.running {
-		return fmt.Errorf("KVM service is not running")
+	vm, exists := s.vms[vmID]
+	if !exists {
+		return nil, fmt.Errorf("VM not found: %s", vmID)
 	}
 
-	// Check libvirt connection
-	if !s.libvirtClient.IsConnected() {
-		return fmt.Errorf("libvirt connection is not healthy")
-	}
-
-	return nil
+	return vm, nil
 }
 
-// CreateVM creates a new virtual machine
-func (s *Service) CreateVM(ctx context.Context, req *CreateVMRequest) (*VMDetails, error) {
-	if !s.kvmConfig.Enabled {
-		return nil, &KVMError{
-			Code:    ErrCodeServiceUnavailable,
-			Message: "KVM service is disabled",
-		}
+// ListVMs returns all VMs
+func (s *Service) ListVMs(ctx context.Context) ([]*VM, error) {
+	if !s.enabled {
+		return nil, fmt.Errorf("KVM service is not enabled")
 	}
 
-	s.logger.WithFields(logrus.Fields{
-		"name":     req.Name,
-		"template": req.Template,
-		"cpu":      req.CPU,
-		"memory":   req.Memory,
-		"disk":     req.Disk,
-	}).Info("Creating new VM")
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
-	// Validate request
-	if err := s.validateCreateVMRequest(req); err != nil {
-		return nil, &KVMError{
-			Code:    ErrCodeValidationError,
-			Message: "Invalid VM creation request",
-			Details: err.Error(),
-		}
+	vms := make([]*VM, 0, len(s.vms))
+	for _, vm := range s.vms {
+		vms = append(vms, vm)
 	}
 
-	// Check resource availability
-	resourceReq := s.createResourceRequirement(req)
-	if err := s.resourceChecker.CheckAvailableResources(resourceReq); err != nil {
-		return nil, &KVMError{
-			Code:    ErrCodeResourceInsufficient,
-			Message: "Insufficient resources",
-			Details: err.Error(),
-		}
-	}
-
-	// Create VM specification
-	vmSpec := &VMSpec{
-		Name:        req.Name,
-		Template:    req.Template,
-		CPU:         req.CPU,
-		Memory:      req.Memory,
-		Disk:        req.Disk,
-		NetworkType: NetworkTypeNAT, // Default to NAT
-		CloudInit:   req.CloudInit,
-		Metadata:    req.Metadata,
-	}
-
-	// Set network type if specified
-	if req.Network != "" {
-		networkType, err := s.parseNetworkType(req.Network)
-		if err != nil {
-			return nil, &KVMError{
-				Code:    ErrCodeValidationError,
-				Message: "Invalid network type",
-				Details: err.Error(),
-			}
-		}
-		vmSpec.NetworkType = networkType
-	}
-
-	// Provision the VM
-	vm, err := s.vmManager.Provision(ctx, vmSpec)
-	if err != nil {
-		return nil, &KVMError{
-			Code:    ErrCodeLibvirtError,
-			Message: "Failed to provision VM",
-			Details: err.Error(),
-		}
-	}
-
-	// Convert to VMDetails
-	vmDetails := s.convertVMToDetails(vm)
-
-	s.logger.WithField("vm_id", vm.ID).Info("VM created successfully")
-
-	return vmDetails, nil
-}
-
-// DeleteVM deletes a virtual machine
-func (s *Service) DeleteVM(ctx context.Context, vmID string) error {
-	if !s.kvmConfig.Enabled {
-		return &KVMError{
-			Code:    ErrCodeServiceUnavailable,
-			Message: "KVM service is disabled",
-		}
-	}
-
-	s.logger.WithField("vm_id", vmID).Info("Deleting VM")
-
-	// Check if VM exists
-	if !s.registry.VMExists(vmID) {
-		return &KVMError{
-			Code:    ErrCodeVMNotFound,
-			Message: "VM not found",
-			Details: vmID,
-		}
-	}
-
-	// Stop VM if running
-	status, err := s.vmManager.GetStatus(ctx, vmID)
-	if err != nil {
-		s.logger.WithError(err).WithField("vm_id", vmID).Warn("Failed to get VM status before deletion")
-	} else if status == VMStatusRunning {
-		if err := s.vmManager.Stop(ctx, vmID); err != nil {
-			s.logger.WithError(err).WithField("vm_id", vmID).Warn("Failed to stop VM before deletion")
-		}
-	}
-
-	// Destroy the VM
-	if err := s.vmManager.Destroy(ctx, vmID); err != nil {
-		return &KVMError{
-			Code:    ErrCodeLibvirtError,
-			Message: "Failed to destroy VM",
-			Details: err.Error(),
-		}
-	}
-
-	s.logger.WithField("vm_id", vmID).Info("VM deleted successfully")
-
-	return nil
-}
-
-// ListVMs lists all virtual machines
-func (s *Service) ListVMs(ctx context.Context, filters map[string]string) ([]*VMDetails, error) {
-	if !s.kvmConfig.Enabled {
-		return nil, &KVMError{
-			Code:    ErrCodeServiceUnavailable,
-			Message: "KVM service is disabled",
-		}
-	}
-
-	vmMetadataList, err := s.registry.ListVMs(filters)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list VMs from registry: %w", err)
-	}
-
-	var vmDetailsList []*VMDetails
-	for _, metadata := range vmMetadataList {
-		vmDetails := s.convertMetadataToDetails(metadata)
-		vmDetailsList = append(vmDetailsList, vmDetails)
-	}
-
-	return vmDetailsList, nil
-}
-
-// GetVM gets details of a specific virtual machine
-func (s *Service) GetVM(ctx context.Context, vmID string) (*VMDetails, error) {
-	if !s.kvmConfig.Enabled {
-		return nil, &KVMError{
-			Code:    ErrCodeServiceUnavailable,
-			Message: "KVM service is disabled",
-		}
-	}
-
-	metadata, err := s.registry.GetVM(vmID)
-	if err != nil {
-		return nil, &KVMError{
-			Code:    ErrCodeVMNotFound,
-			Message: "VM not found",
-			Details: vmID,
-		}
-	}
-
-	vmDetails := s.convertMetadataToDetails(metadata)
-
-	return vmDetails, nil
+	return vms, nil
 }
 
 // StartVM starts a virtual machine
 func (s *Service) StartVM(ctx context.Context, vmID string) error {
-	if !s.kvmConfig.Enabled {
-		return &KVMError{
-			Code:    ErrCodeServiceUnavailable,
-			Message: "KVM service is disabled",
-		}
+	if !s.enabled {
+		return fmt.Errorf("KVM service is not enabled")
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	vm, exists := s.vms[vmID]
+	if !exists {
+		return fmt.Errorf("VM not found: %s", vmID)
+	}
+
+	if vm.Status == VMStatusRunning {
+		return fmt.Errorf("VM is already running")
 	}
 
 	s.logger.WithField("vm_id", vmID).Info("Starting VM")
 
-	if !s.registry.VMExists(vmID) {
-		return &KVMError{
-			Code:    ErrCodeVMNotFound,
-			Message: "VM not found",
-			Details: vmID,
-		}
-	}
+	// Simulate VM startup
+	vm.Status = VMStatusStarting
+	vm.UpdatedAt = time.Now()
 
-	if err := s.vmManager.Start(ctx, vmID); err != nil {
-		return &KVMError{
-			Code:    ErrCodeLibvirtError,
-			Message: "Failed to start VM",
-			Details: err.Error(),
-		}
-	}
+	// In a real implementation, this would start the actual VM
+	go func() {
+		time.Sleep(2 * time.Second) // Simulate startup time
 
-	s.logger.WithField("vm_id", vmID).Info("VM started successfully")
+		s.mu.Lock()
+		vm.Status = VMStatusRunning
+		vm.UpdatedAt = time.Now()
+		s.mu.Unlock()
 
-	return nil
+		s.saveVMToDatastore(context.Background(), vm)
+		s.logger.WithField("vm_id", vmID).Info("VM started successfully")
+	}()
+
+	return s.saveVMToDatastore(ctx, vm)
 }
 
 // StopVM stops a virtual machine
 func (s *Service) StopVM(ctx context.Context, vmID string) error {
-	if !s.kvmConfig.Enabled {
-		return &KVMError{
-			Code:    ErrCodeServiceUnavailable,
-			Message: "KVM service is disabled",
-		}
+	if !s.enabled {
+		return fmt.Errorf("KVM service is not enabled")
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	vm, exists := s.vms[vmID]
+	if !exists {
+		return fmt.Errorf("VM not found: %s", vmID)
+	}
+
+	if vm.Status == VMStatusStopped {
+		return fmt.Errorf("VM is already stopped")
 	}
 
 	s.logger.WithField("vm_id", vmID).Info("Stopping VM")
 
-	if !s.registry.VMExists(vmID) {
-		return &KVMError{
-			Code:    ErrCodeVMNotFound,
-			Message: "VM not found",
-			Details: vmID,
-		}
+	// Simulate VM shutdown
+	vm.Status = VMStatusStopping
+	vm.UpdatedAt = time.Now()
+
+	// In a real implementation, this would stop the actual VM
+	go func() {
+		time.Sleep(1 * time.Second) // Simulate shutdown time
+
+		s.mu.Lock()
+		vm.Status = VMStatusStopped
+		vm.UpdatedAt = time.Now()
+		s.mu.Unlock()
+
+		s.saveVMToDatastore(context.Background(), vm)
+		s.logger.WithField("vm_id", vmID).Info("VM stopped successfully")
+	}()
+
+	return s.saveVMToDatastore(ctx, vm)
+}
+
+// DeleteVM deletes a virtual machine
+func (s *Service) DeleteVM(ctx context.Context, vmID string) error {
+	if !s.enabled {
+		return fmt.Errorf("KVM service is not enabled")
 	}
 
-	if err := s.vmManager.Stop(ctx, vmID); err != nil {
-		return &KVMError{
-			Code:    ErrCodeLibvirtError,
-			Message: "Failed to stop VM",
-			Details: err.Error(),
-		}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	vm, exists := s.vms[vmID]
+	if !exists {
+		return fmt.Errorf("VM not found: %s", vmID)
 	}
 
-	s.logger.WithField("vm_id", vmID).Info("VM stopped successfully")
+	if vm.Status == VMStatusRunning {
+		return fmt.Errorf("cannot delete running VM, stop it first")
+	}
 
+	s.logger.WithField("vm_id", vmID).Info("Deleting VM")
+
+	// Remove from memory
+	delete(s.vms, vmID)
+	delete(s.vmStats, vmID)
+
+	// Remove from datastore
+	key := datastore.NewKey("/kvm/vms/" + vmID)
+	if err := s.datastore.Delete(ctx, key); err != nil {
+		s.logger.WithError(err).Error("Failed to delete VM from datastore")
+		return fmt.Errorf("failed to delete VM from datastore: %w", err)
+	}
+
+	s.logger.WithField("vm_id", vmID).Info("VM deleted successfully")
 	return nil
 }
 
-// RestartVM restarts a virtual machine
-func (s *Service) RestartVM(ctx context.Context, vmID string) error {
-	if !s.kvmConfig.Enabled {
-		return &KVMError{
-			Code:    ErrCodeServiceUnavailable,
-			Message: "KVM service is disabled",
+// GetSystemResources returns current system resource usage
+func (s *Service) GetSystemResources(ctx context.Context) (*SystemResources, error) {
+	if !s.enabled {
+		return nil, fmt.Errorf("KVM service is not enabled")
+	}
+
+	// Get system resources from resource service
+	sysRes, err := s.resourceSvc.GetResource()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get system resources: %w", err)
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	// Calculate used resources from VMs
+	usedCPU := 0
+	usedMemoryMB := 0
+	usedDiskGB := 0
+	runningVMs := 0
+
+	for _, vm := range s.vms {
+		usedCPU += vm.CPUCores
+		usedMemoryMB += vm.MemoryMB
+		usedDiskGB += vm.DiskGB
+		if vm.Status == VMStatusRunning {
+			runningVMs++
 		}
 	}
 
-	s.logger.WithField("vm_id", vmID).Info("Restarting VM")
+	totalCPU := sysRes.CPU.Count
+	totalMemoryMB := int(sysRes.Memory.Total / (1024 * 1024))
+	totalDiskGB := int(sysRes.Storage.Total / (1024 * 1024 * 1024))
 
-	if !s.registry.VMExists(vmID) {
-		return &KVMError{
-			Code:    ErrCodeVMNotFound,
-			Message: "VM not found",
-			Details: vmID,
-		}
+	return &SystemResources{
+		TotalCPUCores:     totalCPU,
+		AvailableCPUCores: totalCPU - usedCPU,
+		TotalMemoryMB:     totalMemoryMB,
+		AvailableMemoryMB: totalMemoryMB - usedMemoryMB,
+		TotalDiskGB:       totalDiskGB,
+		AvailableDiskGB:   totalDiskGB - usedDiskGB,
+		RunningVMs:        runningVMs,
+		MaxVMs:            s.maxVMs,
+	}, nil
+}
+
+// GetVMStats returns statistics for a specific VM
+func (s *Service) GetVMStats(ctx context.Context, vmID string) (*VMStats, error) {
+	if !s.enabled {
+		return nil, fmt.Errorf("KVM service is not enabled")
 	}
 
-	if err := s.vmManager.Restart(ctx, vmID); err != nil {
-		return &KVMError{
-			Code:    ErrCodeLibvirtError,
-			Message: "Failed to restart VM",
-			Details: err.Error(),
-		}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if _, exists := s.vms[vmID]; !exists {
+		return nil, fmt.Errorf("VM not found: %s", vmID)
 	}
 
-	s.logger.WithField("vm_id", vmID).Info("VM restarted successfully")
+	stats, exists := s.vmStats[vmID]
+	if !exists {
+		// Return default stats if not collected yet
+		return &VMStats{
+			VMID:        vmID,
+			CPUUsage:    0,
+			MemoryUsage: 0,
+			DiskUsage:   0,
+			NetworkRxMB: 0,
+			NetworkTxMB: 0,
+			CollectedAt: time.Now(),
+		}, nil
+	}
 
-	return nil
+	return stats, nil
 }
 
 // Helper methods
 
-func (s *Service) validateSystemCapabilities() error {
-	capabilities, err := s.resourceChecker.GetSystemCapabilities()
-	if err != nil {
-		return fmt.Errorf("failed to get system capabilities: %w", err)
+// validateCreateRequest validates the VM creation request
+func (s *Service) validateCreateRequest(req *CreateVMRequest) error {
+	if req.Name == "" {
+		return fmt.Errorf("VM name is required")
 	}
 
-	s.logger.WithFields(logrus.Fields{
-		"total_cpu":     capabilities.TotalCPU,
-		"total_memory":  capabilities.TotalMemory,
-		"total_storage": capabilities.TotalStorage,
-		"max_vms":       capabilities.MaxVMs,
-	}).Info("System capabilities validated")
+	if req.CPUCores < 1 || req.CPUCores > s.maxCPUCores {
+		return fmt.Errorf("CPU cores must be between 1 and %d", s.maxCPUCores)
+	}
+
+	if req.MemoryMB < 512 || req.MemoryMB > s.maxMemoryMB {
+		return fmt.Errorf("memory must be between 512 MB and %d MB", s.maxMemoryMB)
+	}
+
+	if req.DiskGB < 10 || req.DiskGB > s.maxDiskGB {
+		return fmt.Errorf("disk size must be between 10 GB and %d GB", s.maxDiskGB)
+	}
+
+	// Check for duplicate names
+	s.mu.RLock()
+	for _, vm := range s.vms {
+		if vm.Name == req.Name {
+			s.mu.RUnlock()
+			return fmt.Errorf("VM with name '%s' already exists", req.Name)
+		}
+	}
+	s.mu.RUnlock()
 
 	return nil
 }
 
-func (s *Service) initializeInfrastructure() error {
-	// This would initialize storage pools, networks, etc.
-	// Implementation depends on the specific infrastructure setup
-	s.logger.Info("Infrastructure initialized")
+// checkResourceAvailability checks if system has enough resources
+func (s *Service) checkResourceAvailability(ctx context.Context, req *CreateVMRequest) error {
+	sysRes, err := s.resourceSvc.GetResource()
+	if err != nil {
+		return fmt.Errorf("failed to get system resources: %w", err)
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	// Calculate currently used resources
+	usedCPU := 0
+	usedMemoryMB := 0
+	usedDiskGB := 0
+
+	for _, vm := range s.vms {
+		usedCPU += vm.CPUCores
+		usedMemoryMB += vm.MemoryMB
+		usedDiskGB += vm.DiskGB
+	}
+
+	// Check CPU availability
+	totalCPU := sysRes.CPU.Count
+	if usedCPU+req.CPUCores > totalCPU {
+		return fmt.Errorf("insufficient CPU cores: need %d, have %d available",
+			req.CPUCores, totalCPU-usedCPU)
+	}
+
+	// Check memory availability
+	totalMemoryMB := int(sysRes.Memory.Total / (1024 * 1024))
+	if usedMemoryMB+req.MemoryMB > totalMemoryMB {
+		return fmt.Errorf("insufficient memory: need %d MB, have %d MB available",
+			req.MemoryMB, totalMemoryMB-usedMemoryMB)
+	}
+
+	// Check disk availability
+	totalDiskGB := int(sysRes.Storage.Total / (1024 * 1024 * 1024))
+	if usedDiskGB+req.DiskGB > totalDiskGB {
+		return fmt.Errorf("insufficient disk space: need %d GB, have %d GB available",
+			req.DiskGB, totalDiskGB-usedDiskGB)
+	}
+
 	return nil
 }
 
-func (s *Service) runBackgroundTasks(ctx context.Context) {
+// generateMockIP generates a mock IP address for simulation
+func (s *Service) generateMockIP() string {
+	// Simple mock IP generation - in real implementation this would be proper DHCP/network management
+	return fmt.Sprintf("192.168.122.%d", 10+len(s.vms))
+}
+
+// saveVMToDatastore saves VM metadata to datastore
+func (s *Service) saveVMToDatastore(ctx context.Context, vm *VM) error {
+	key := datastore.NewKey("/kvm/vms/" + vm.ID)
+
+	// Convert VM to JSON-like data
+	data := map[string]interface{}{
+		"id":         vm.ID,
+		"name":       vm.Name,
+		"status":     string(vm.Status),
+		"cpu_cores":  vm.CPUCores,
+		"memory_mb":  vm.MemoryMB,
+		"disk_gb":    vm.DiskGB,
+		"ip_address": vm.IPAddress,
+		"created_at": vm.CreatedAt.Unix(),
+		"updated_at": vm.UpdatedAt.Unix(),
+		"metadata":   vm.Metadata,
+	}
+
+	// In a real implementation, this would serialize to JSON/protobuf
+	// For simplicity, we'll just store the string representation
+	value := fmt.Sprintf("%+v", data)
+
+	return s.datastore.Put(ctx, key, []byte(value))
+}
+
+// loadVMsFromDatastore loads existing VMs from datastore
+func (s *Service) loadVMsFromDatastore(ctx context.Context) error {
+	q := query.Query{Prefix: "/kvm/vms/"}
+	results, err := s.datastore.Query(ctx, q)
+	if err != nil {
+		return fmt.Errorf("failed to query VMs: %w", err)
+	}
+	defer results.Close()
+
+	count := 0
+	for result := range results.Next() {
+		if result.Error != nil {
+			s.logger.WithError(result.Error).Error("Error loading VM from datastore")
+			continue
+		}
+
+		// For simplicity, we'll just log that we found VMs
+		// In a real implementation, this would deserialize and restore VM state
+		vmID := result.Key[len("/kvm/vms/"):]
+		s.logger.WithField("vm_id", vmID).Debug("Found VM in datastore")
+		count++
+	}
+
+	s.logger.WithField("vm_count", count).Info("Loaded VMs from datastore")
+	return nil
+}
+
+// monitorVMs runs background monitoring for VM statistics
+func (s *Service) monitorVMs(ctx context.Context) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
@@ -507,123 +547,35 @@ func (s *Service) runBackgroundTasks(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case <-s.stopChan:
-			return
 		case <-ticker.C:
-			s.performMaintenanceTasks()
+			s.collectVMStats()
 		}
 	}
 }
 
-func (s *Service) performMaintenanceTasks() {
-	// Update VM statuses, cleanup orphaned resources, etc.
-	s.logger.Debug("Performing maintenance tasks")
-}
+// collectVMStats collects statistics for all running VMs
+func (s *Service) collectVMStats() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-func (s *Service) validateCreateVMRequest(req *CreateVMRequest) error {
-	if req.Name == "" {
-		return fmt.Errorf("VM name is required")
+	now := time.Now()
+	for vmID, vm := range s.vms {
+		if vm.Status == VMStatusRunning {
+			// Simulate statistics collection
+			stats := &VMStats{
+				VMID:        vmID,
+				CPUUsage:    float64(20 + (len(vmID) % 60)), // Mock CPU usage 20-80%
+				MemoryUsage: float64(30 + (len(vmID) % 50)), // Mock memory usage 30-80%
+				DiskUsage:   float64(10 + (len(vmID) % 30)), // Mock disk usage 10-40%
+				NetworkRxMB: float64(len(vmID) % 100),       // Mock network usage
+				NetworkTxMB: float64(len(vmID) % 80),
+				CollectedAt: now,
+			}
+			s.vmStats[vmID] = stats
+		}
 	}
 
-	if req.Template == "" {
-		return fmt.Errorf("template is required")
+	if len(s.vms) > 0 {
+		s.logger.WithField("running_vms", len(s.vmStats)).Debug("Collected VM statistics")
 	}
-
-	if req.CPU < 1 || req.CPU > 16 {
-		return fmt.Errorf("CPU must be between 1 and 16")
-	}
-
-	if req.Memory < 512 {
-		return fmt.Errorf("memory must be at least 512 MB")
-	}
-
-	if req.Disk < 1 {
-		return fmt.Errorf("disk size must be at least 1 GB")
-	}
-
-	return nil
-}
-
-func (s *Service) createResourceRequirement(req *CreateVMRequest) *ResourceRequirement {
-	// Convert MB to bytes for memory, GB to bytes for disk
-	memoryBytes := int64(req.Memory) * 1024 * 1024
-	diskBytes := int64(req.Disk) * 1024 * 1024 * 1024
-
-	return &ResourceRequirement{
-		CPU:    big.NewInt(int64(req.CPU)),
-		Memory: big.NewInt(memoryBytes),
-		Disk:   big.NewInt(diskBytes),
-	}
-}
-
-func (s *Service) parseNetworkType(network string) (NetworkType, error) {
-	switch network {
-	case "bridge":
-		return NetworkTypeBridge, nil
-	case "nat":
-		return NetworkTypeNAT, nil
-	case "isolated":
-		return NetworkTypeIsolated, nil
-	default:
-		return NetworkTypeNAT, fmt.Errorf("unknown network type: %s", network)
-	}
-}
-
-func (s *Service) convertVMToDetails(vm *VM) *VMDetails {
-	return &VMDetails{
-		ID:          vm.ID,
-		Name:        vm.Name,
-		Status:      vm.Status,
-		IPAddress:   vm.Network.IPAddress.String(),
-		MACAddress:  vm.Network.MACAddress,
-		Resources:   vm.Resources,
-		CreatedAt:   vm.CreatedAt,
-		UpdatedAt:   time.Now(),
-		Template:    vm.Metadata["template"],
-		NetworkType: vm.Network.Type,
-		Metadata:    vm.Metadata,
-	}
-}
-
-func (s *Service) convertMetadataToDetails(metadata *VMMetadata) *VMDetails {
-	return &VMDetails{
-		ID:         metadata.ID,
-		Name:       metadata.Name,
-		Status:     metadata.Status,
-		IPAddress:  metadata.IPAddress,
-		MACAddress: metadata.MACAddress,
-		Resources: &ResourceInfo{
-			CPU:    int(metadata.Resources.CPU.Int64()),
-			Memory: int(metadata.Resources.Memory.Int64() / (1024 * 1024)),      // Convert to MB
-			Disk:   int(metadata.Resources.Disk.Int64() / (1024 * 1024 * 1024)), // Convert to GB
-		},
-		CreatedAt:   metadata.CreatedAt,
-		UpdatedAt:   metadata.UpdatedAt,
-		Template:    metadata.Template,
-		NetworkType: metadata.NetworkType,
-		Metadata:    metadata.Metadata,
-	}
-}
-
-// parseKVMConfig parses KVM configuration from the main config
-func parseKVMConfig(cfg *config.C) (*KVMConfig, error) {
-	kvmConfig := &KVMConfig{
-		Enabled:        cfg.GetBool("kvm.enabled", false),
-		LibvirtURI:     cfg.GetString("kvm.libvirt_uri", "qemu:///system"),
-		StoragePath:    cfg.GetString("kvm.storage_path", "/var/lib/subnet-node/kvm/storage"),
-		TemplatePath:   cfg.GetString("kvm.template_path", "/var/lib/subnet-node/kvm/templates"),
-		MaxVMs:         cfg.GetInt("kvm.max_vms", 10),
-		ReservedCPU:    0.2, // TODO: Parse from config
-		ReservedMemory: 0.2, // TODO: Parse from config
-		DefaultNetwork: cfg.GetString("kvm.default_network", "default"),
-		StoragePool:    cfg.GetString("kvm.storage_pool", "default"),
-		Networks:       make(map[string]*NetworkConfig),
-		DefaultResources: &DefaultResources{
-			CPU:    cfg.GetInt("kvm.default_resources.cpu", 1),
-			Memory: cfg.GetInt("kvm.default_resources.memory", 1024),
-			Disk:   cfg.GetInt("kvm.default_resources.disk", 10),
-		},
-	}
-
-	return kvmConfig, nil
 }

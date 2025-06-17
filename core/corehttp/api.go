@@ -33,6 +33,10 @@ func APIOption() ServeOption {
 			server.RegisterName("app", api.NewAppAPI(n.Apps))
 		}
 
+		if cfg.GetBool("kvm.enabled", false) && n.KVM != nil {
+			server.RegisterName("kvm", api.NewKVMRPCAPI(n.KVM))
+		}
+
 		server.RegisterName("account", api.NewAccountAPI(n.Account))
 		server.RegisterName("config", api.NewConfigAPI(n.Repo))
 		server.RegisterName("version", api.NewVersionAPI()) // Register the VersionAPI
