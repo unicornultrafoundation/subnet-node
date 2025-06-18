@@ -24,7 +24,7 @@ func KVMService(lc fx.Lifecycle, cfg *config.C, ds datastore.Datastore, resource
 	// Create KVM service (either real libvirt or simulation based on config)
 	var srv *kvm.Service
 	if resourceSvc != nil {
-		srv = kvm.NewService(cfg, logger, ds, *resourceSvc)
+		srv = kvm.NewService(cfg, logger, ds, resourceSvc)
 	} else {
 		// If resource service is nil, we can't create KVM service
 		log.Warn("Resource service is not available, KVM service will be disabled")

@@ -20,7 +20,7 @@ type Service struct {
 	config      *config.C
 	logger      *logrus.Entry
 	datastore   datastore.Datastore
-	resourceSvc resource.Service
+	resourceSvc *resource.Service
 
 	// Libvirt components (only used if libvirt is available)
 	libvirtAvailable bool
@@ -51,7 +51,7 @@ func NewService(
 	cfg *config.C,
 	logger *logrus.Entry,
 	ds datastore.Datastore,
-	resourceSvc resource.Service,
+	resourceSvc *resource.Service,
 ) *Service {
 	service := &Service{
 		config:      cfg,
@@ -94,6 +94,10 @@ func (s *Service) tryInitLibvirt() error {
 	// Try to connect to libvirt
 	s.client, err = libvirt.NewClient(s.libvirtURI, s.logger)
 	if err != nil {
+		// Check if this is due to libvirt not being available at build time
+		if err.Error() == "libvirt is not available - build with -tags libvirt to enable" {
+			return fmt.Errorf("libvirt not compiled in: %w", err)
+		}
 		return fmt.Errorf("failed to create libvirt client: %w", err)
 	}
 
