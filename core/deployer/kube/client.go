@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/core/deployer/types"
-	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -16,10 +16,10 @@ import (
 
 type KubeClient struct {
 	Client kubernetes.Interface
-	Logger *zap.Logger
+	Logger *logrus.Logger
 }
 
-func NewKubeClient(ctx context.Context, kubeconfig string, logger *zap.Logger) (*KubeClient, error) {
+func NewKubeClient(ctx context.Context, kubeconfig string, logger *logrus.Logger) (*KubeClient, error) {
 	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build kubeconfig: %w", err)

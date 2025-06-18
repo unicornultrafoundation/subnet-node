@@ -1,6 +1,8 @@
 package deployer
 
 import (
+	"time"
+
 	"github.com/unicornultrafoundation/subnet-node/config"
 )
 
@@ -8,6 +10,9 @@ import (
 type ServiceConfig struct {
 	// Kubernetes configuration
 	KubeConfigPath string
+
+	// Monitor interval
+	MonitorInterval time.Duration
 }
 
 func NewServiceConfigFromConfig(cfg *config.C) (*ServiceConfig, error) {
@@ -15,6 +20,9 @@ func NewServiceConfigFromConfig(cfg *config.C) (*ServiceConfig, error) {
 
 	// Kubernetes configuration
 	serviceConfig.KubeConfigPath = cfg.GetString("deployer.kubeconfig_path", "")
+
+	// Monitor interval
+	serviceConfig.MonitorInterval = cfg.GetDuration("deployer.monitor_interval", 30*time.Second)
 
 	if err := serviceConfig.Validate(); err != nil {
 		return nil, err
@@ -26,7 +34,7 @@ func NewServiceConfigFromConfig(cfg *config.C) (*ServiceConfig, error) {
 // DefaultServiceConfig returns a default service configuration
 func DefaultServiceConfig() *ServiceConfig {
 	return &ServiceConfig{
-		KubeConfigPath: "~/.kube/config",
+		MonitorInterval: 30 * time.Second,
 	}
 }
 

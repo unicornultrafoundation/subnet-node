@@ -5,18 +5,17 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/unicornultrafoundation/subnet-node/core/deployer/types"
-	"go.uber.org/zap"
 )
 
-func (s *DeploymentService) RequestDeployment(ctx context.Context, deploymentRequest *types.DeploymentRequest) (*types.Deployment, error) {
+func (s *Service) RequestDeployment(ctx context.Context, deploymentRequest *types.DeploymentRequest) (*types.Deployment, error) {
 	if err := deploymentRequest.Manifest.Validate(); err != nil {
-		s.Logger.Error("Invalid deployment request", zap.Error(err))
+		s.logger.Error("Invalid deployment request", err)
 		return nil, err
 	}
 
 	manifest, err := deploymentRequest.Manifest.ToManifest()
 	if err != nil {
-		s.Logger.Error("Failed to convert manifest to kubernetes manifest", zap.Error(err))
+		s.logger.Error("Failed to convert manifest to kubernetes manifest", err)
 		return nil, err
 	}
 
@@ -29,20 +28,44 @@ func (s *DeploymentService) RequestDeployment(ctx context.Context, deploymentReq
 	}
 
 	// Deploy the deployment request
-	if err := s.KubeClient.Deploy(ctx, deployment); err != nil {
-		s.Logger.Error("Failed to deploy deployment request", zap.Error(err))
+	if err := s.kubeClient.Deploy(ctx, deployment); err != nil {
+		s.logger.Error("Failed to deploy deployment request", err)
 		return nil, err
 	}
 
-	s.Logger.Info("Deployment request deployed", zap.Any("order_id", deploymentRequest.OrderID))
+	// Store the deployment request
+	if err := s.store.StoreDeploymentRequest(ctx, deploymentRequest); err != nil {
+		s.logger.Error("Failed to store deployment request", err)
+		return nil, err
+	}
 
-	return s.KubeClient.GetDeployment(ctx, deploymentRequest.OrderID)
+	// Store the deployment in the cache
+	s.AddDeploymentListCache(deploymentRequest.OrderID)
+
+	s.logger.WithField("order_id", deploymentRequest.OrderID).Info("Deployment request deployed")
+
+	return s.kubeClient.GetDeployment(ctx, deploymentRequest.OrderID)
 }
 
-func (s *DeploymentService) GetDeployment(ctx context.Context, orderID string) (*types.Deployment, error) {
-	return s.KubeClient.GetDeployment(ctx, orderID)
+func (s *Service) GetDeployment(ctx context.Context, orderID string) (*types.Deployment, error) {
+	return s.kubeClient.GetDeployment(ctx, orderID)
 }
 
-func (s *DeploymentService) CleanupDeployment(ctx context.Context, orderID string) error {
-	return s.KubeClient.CleanupResources(ctx, orderID)
+func (s *Service) CleanupDeployment(ctx context.Context, orderID string) error {
+	err := s.kubeClient.CleanupResources(ctx, orderID)
+	if err != nil {
+		s.logger.WithField("orderID", orderID).Error("Failed to cleanup deployment", err)
+		return err
+	}
+
+	// Delete the deployment request
+	if err := s.store.DeleteDeploymentRequest(ctx, orderID); err != nil {
+		s.logger.WithField("orderID", orderID).Error("Failed to delete deployment request from datastore", err)
+		return err
+	}
+	s.DeleteDeploymentListCache(orderID)
+
+	s.logger.WithField("orderID", orderID).Info("Deployment request deleted")
+
+	return nil
 }
