@@ -7,11 +7,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unicornultrafoundation/subnet-node/core/deployer/manifest"
 	"github.com/unicornultrafoundation/subnet-node/core/deployer/types"
-	"go.uber.org/zap"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -29,7 +29,7 @@ func setupIntegrationTest(t *testing.T) (*KubeClient, func()) {
 	}
 
 	// Create logger
-	logger, _ := zap.NewDevelopment()
+	logger := logrus.New().WithField("service", "kube").Logger
 
 	// Create client
 	client, err := NewKubeClient(context.Background(), kubeconfig, logger)

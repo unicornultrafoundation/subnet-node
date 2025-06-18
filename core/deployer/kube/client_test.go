@@ -8,10 +8,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/unicornultrafoundation/subnet-node/core/deployer/manifest"
 	"github.com/unicornultrafoundation/subnet-node/core/deployer/types"
-	"go.uber.org/zap"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
@@ -46,7 +46,7 @@ func TestNewKubeClient(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			logger := zap.NewNop()
+			logger := logrus.New().WithField("service", "kube").Logger
 			client, err := NewKubeClient(context.Background(), tt.kubeconfig, logger)
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -62,7 +62,7 @@ func TestNewKubeClient(t *testing.T) {
 func TestDeploy(t *testing.T) {
 	// Create a fake Kubernetes client
 	fakeClient := fake.NewSimpleClientset()
-	logger := zap.NewNop()
+	logger := logrus.New().WithField("service", "kube").Logger
 	client := &KubeClient{
 		Client: fakeClient,
 		Logger: logger,
@@ -358,7 +358,7 @@ func TestDeploy(t *testing.T) {
 
 func TestCreateRegistrySecret(t *testing.T) {
 	fakeClient := fake.NewSimpleClientset()
-	logger := zap.NewNop()
+	logger := logrus.New().WithField("service", "kube").Logger
 	client := &KubeClient{
 		Client: fakeClient,
 		Logger: logger,
@@ -417,7 +417,7 @@ func TestCreateRegistrySecret(t *testing.T) {
 
 func TestValidateManifest(t *testing.T) {
 	fakeClient := fake.NewSimpleClientset()
-	logger := zap.NewNop()
+	logger := logrus.New().WithField("service", "kube").Logger
 	client := &KubeClient{
 		Client: fakeClient,
 		Logger: logger,
@@ -483,7 +483,7 @@ func TestValidateManifest(t *testing.T) {
 
 func TestCreateNamespace(t *testing.T) {
 	fakeClient := fake.NewSimpleClientset()
-	logger := zap.NewNop()
+	logger := logrus.New().WithField("service", "kube").Logger
 	client := &KubeClient{
 		Client: fakeClient,
 		Logger: logger,
@@ -531,7 +531,7 @@ func TestCreateNamespace(t *testing.T) {
 
 func TestCreateStorageVolume(t *testing.T) {
 	fakeClient := fake.NewSimpleClientset()
-	logger := zap.NewNop()
+	logger := logrus.New().WithField("service", "kube").Logger
 	client := &KubeClient{
 		Client: fakeClient,
 		Logger: logger,
@@ -867,7 +867,7 @@ func TestCreateEnvironmentVariables(t *testing.T) {
 
 func TestCreateService(t *testing.T) {
 	fakeClient := fake.NewSimpleClientset()
-	logger := zap.NewNop()
+	logger := logrus.New().WithField("service", "kube").Logger
 	client := &KubeClient{
 		Client: fakeClient,
 		Logger: logger,
@@ -955,7 +955,7 @@ func TestCreateService(t *testing.T) {
 
 func TestCreateIngress(t *testing.T) {
 	fakeClient := fake.NewSimpleClientset()
-	logger := zap.NewNop()
+	logger := logrus.New().WithField("service", "kube").Logger
 	client := &KubeClient{
 		Client: fakeClient,
 		Logger: logger,
@@ -1022,7 +1022,7 @@ func TestCreateIngress(t *testing.T) {
 
 func TestValidateComputeProfiles(t *testing.T) {
 	fakeClient := fake.NewSimpleClientset()
-	logger := zap.NewNop()
+	logger := logrus.New().WithField("service", "kube").Logger
 	client := &KubeClient{
 		Client: fakeClient,
 		Logger: logger,
@@ -1088,7 +1088,7 @@ func TestValidateComputeProfiles(t *testing.T) {
 
 func TestCleanupResources(t *testing.T) {
 	fakeClient := fake.NewSimpleClientset()
-	logger := zap.NewNop()
+	logger := logrus.New().WithField("service", "kube").Logger
 	client := &KubeClient{
 		Client: fakeClient,
 		Logger: logger,

@@ -10,7 +10,6 @@ import (
 
 	"github.com/unicornultrafoundation/subnet-node/core/deployer/manifest"
 	"github.com/unicornultrafoundation/subnet-node/core/deployer/types"
-	"go.uber.org/zap"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
@@ -50,10 +49,7 @@ func (c *KubeClient) Deploy(ctx context.Context, deployment types.Deployment) er
 	}
 	defer func() {
 		if err != nil {
-			c.Logger.Error("deployment failed, cleaning up resources",
-				zap.String("namespace", deployment.ID),
-				zap.String("version", versionStr),
-				zap.Error(err))
+			c.Logger.WithField("namespace", deployment.ID).WithField("version", versionStr).Error("deployment failed, cleaning up resources", err)
 			c.cleanupResources(ctx, createdResources)
 		}
 	}()
@@ -803,34 +799,22 @@ func (c *KubeClient) cleanupResources(ctx context.Context, resources []struct {
 		case "Deployment":
 			err := c.Client.AppsV1().Deployments(resource.namespace).Delete(ctx, resource.name, metav1.DeleteOptions{})
 			if err != nil {
-				c.Logger.Error("failed to cleanup deployment",
-					zap.String("name", resource.name),
-					zap.String("namespace", resource.namespace),
-					zap.Error(err))
+				c.Logger.WithField("name", resource.name).WithField("namespace", resource.namespace).Error("failed to cleanup deployment", err)
 			}
 		case "Service":
 			err := c.Client.CoreV1().Services(resource.namespace).Delete(ctx, resource.name, metav1.DeleteOptions{})
 			if err != nil {
-				c.Logger.Error("failed to cleanup service",
-					zap.String("name", resource.name),
-					zap.String("namespace", resource.namespace),
-					zap.Error(err))
+				c.Logger.WithField("name", resource.name).WithField("namespace", resource.namespace).Error("failed to cleanup service", err)
 			}
 		case "Ingress":
 			err := c.Client.NetworkingV1().Ingresses(resource.namespace).Delete(ctx, resource.name, metav1.DeleteOptions{})
 			if err != nil {
-				c.Logger.Error("failed to cleanup ingress",
-					zap.String("name", resource.name),
-					zap.String("namespace", resource.namespace),
-					zap.Error(err))
+				c.Logger.WithField("name", resource.name).WithField("namespace", resource.namespace).Error("failed to cleanup ingress", err)
 			}
 		case "Secret":
 			err := c.Client.CoreV1().Secrets(resource.namespace).Delete(ctx, resource.name, metav1.DeleteOptions{})
 			if err != nil {
-				c.Logger.Error("failed to cleanup secret",
-					zap.String("name", resource.name),
-					zap.String("namespace", resource.namespace),
-					zap.Error(err))
+				c.Logger.WithField("name", resource.name).WithField("namespace", resource.namespace).Error("failed to cleanup secret", err)
 			}
 		}
 	}
