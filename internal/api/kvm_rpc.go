@@ -19,11 +19,17 @@ func NewKVMRPCAPI(kvmService *kvm.Service) *KVMRPCAPI {
 }
 
 // CreateVM creates a new virtual machine
-func (api *KVMRPCAPI) CreateVM(ctx context.Context, req *kvm.CreateVMRequest) (*kvm.VM, error) {
+// func (api *KVMRPCAPI) CreateVM(ctx context.Context, req *kvm.CreateVMRequest) (*kvm.VM, error) {
+func (api *KVMRPCAPI) CreateVM(ctx context.Context, name string, cpuCores int, memoryMB int, diskGB int) (*kvm.VM, error) {
 	if !api.kvmService.IsEnabled() {
 		return nil, &APIError{Code: ServiceUnavailable, Message: "KVM service is disabled"}
 	}
-	return api.kvmService.CreateVM(ctx, req)
+	return api.kvmService.CreateVM(ctx, &kvm.CreateVMRequest{
+		Name:     name,
+		CPUCores: cpuCores,
+		MemoryMB: memoryMB,
+		DiskGB:   diskGB,
+	})
 }
 
 // GetVM retrieves a VM by ID
@@ -36,6 +42,7 @@ func (api *KVMRPCAPI) GetVM(ctx context.Context, vmID string) (*kvm.VM, error) {
 
 // ListVMs returns all VMs
 func (api *KVMRPCAPI) ListVMs(ctx context.Context) ([]*kvm.VM, error) {
+
 	if !api.kvmService.IsEnabled() {
 		return nil, &APIError{Code: ServiceUnavailable, Message: "KVM service is disabled"}
 	}
