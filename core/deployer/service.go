@@ -43,7 +43,7 @@ func (s *Service) Start(ctx context.Context) error {
 		return err
 	}
 
-	kubeClient, err := kube.NewKubeClient(ctx, s.config.KubeConfigPath, s.logger)
+	kubeClient, err := kube.NewKubeClient(ctx, s.config.KubeConfigPath, s.logger, s.config.DefaultServiceType, s.config.LocalhostEnabled)
 	if err != nil {
 		return err
 	}

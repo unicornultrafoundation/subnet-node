@@ -658,10 +658,23 @@ func (c *KubeClient) createService(ctx context.Context, service manifest.Service
 		}
 	}
 
-	// Set service type based on exposure
+	// Set service type based on exposure and config
 	for _, to := range expose.To {
 		if to.Global {
-			svc.Spec.Type = corev1.ServiceTypeLoadBalancer
+			// Use the configured service type
+			switch c.DefaultServiceType {
+			case "NodePort":
+				svc.Spec.Type = corev1.ServiceTypeNodePort
+				// Add localhost binding annotation if enabled
+				if c.LocalhostEnabled {
+					svc.ObjectMeta.Annotations["service.beta.kubernetes.io/aws-load-balancer-internal"] = "true"
+					svc.ObjectMeta.Annotations["service.beta.kubernetes.io/aws-load-balancer-scheme"] = "internal"
+				}
+			case "ClusterIP":
+				svc.Spec.Type = corev1.ServiceTypeClusterIP
+			default:
+				svc.Spec.Type = corev1.ServiceTypeLoadBalancer
+			}
 			break
 		} else if to.Service != "" {
 			svc.ObjectMeta.Labels["target-service"] = to.Service

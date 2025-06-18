@@ -47,7 +47,7 @@ func TestNewKubeClient(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			logger := logrus.New().WithField("service", "kube").Logger
-			client, err := NewKubeClient(context.Background(), tt.kubeconfig, logger)
+			client, err := NewKubeClient(context.Background(), tt.kubeconfig, logger, "NodePort", true)
 			if tt.wantErr {
 				assert.Error(t, err)
 				assert.Nil(t, client)
@@ -869,8 +869,10 @@ func TestCreateService(t *testing.T) {
 	fakeClient := fake.NewSimpleClientset()
 	logger := logrus.New().WithField("service", "kube").Logger
 	client := &KubeClient{
-		Client: fakeClient,
-		Logger: logger,
+		Client:             fakeClient,
+		Logger:             logger,
+		DefaultServiceType: "NodePort",
+		LocalhostEnabled:   true,
 	}
 
 	tests := []struct {

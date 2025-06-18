@@ -13,6 +13,10 @@ type ServiceConfig struct {
 
 	// Monitor interval
 	MonitorInterval time.Duration
+
+	// Service configuration
+	DefaultServiceType string
+	LocalhostEnabled   bool
 }
 
 func NewServiceConfigFromConfig(cfg *config.C) (*ServiceConfig, error) {
@@ -24,6 +28,10 @@ func NewServiceConfigFromConfig(cfg *config.C) (*ServiceConfig, error) {
 	// Monitor interval
 	serviceConfig.MonitorInterval = cfg.GetDuration("deployer.monitor_interval", 30*time.Second)
 
+	// Service configuration
+	serviceConfig.DefaultServiceType = cfg.GetString("deployer.default_service_type", "NodePort")
+	serviceConfig.LocalhostEnabled = cfg.GetBool("deployer.localhost_enabled", true)
+
 	if err := serviceConfig.Validate(); err != nil {
 		return nil, err
 	}
@@ -34,7 +42,9 @@ func NewServiceConfigFromConfig(cfg *config.C) (*ServiceConfig, error) {
 // DefaultServiceConfig returns a default service configuration
 func DefaultServiceConfig() *ServiceConfig {
 	return &ServiceConfig{
-		MonitorInterval: 30 * time.Second,
+		MonitorInterval:    30 * time.Second,
+		DefaultServiceType: "NodePort",
+		LocalhostEnabled:   true,
 	}
 }
 

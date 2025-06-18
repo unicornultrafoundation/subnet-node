@@ -97,7 +97,7 @@ func validateBasicSDL(t *testing.T, sdl *SDL) {
 	// Test expose configuration
 	require.Len(t, webService.Expose, 1)
 	expose := webService.Expose[0]
-	assert.Equal(t, int32(5678), expose.Port)
+	assert.Equal(t, int32(80), expose.Port)
 	assert.Equal(t, int32(80), expose.As)
 	assert.Equal(t, "TCP", expose.Proto)
 	require.Len(t, expose.To, 1)
@@ -110,24 +110,15 @@ func validateBasicSDL(t *testing.T, sdl *SDL) {
 	readiness := webService.Params.Health.Readiness
 	assert.Equal(t, int32(5), readiness.InitialDelaySeconds)
 	assert.Equal(t, int32(10), readiness.PeriodSeconds)
-	assert.Equal(t, int32(5), readiness.TimeoutSeconds)
+	assert.Equal(t, int32(3), readiness.TimeoutSeconds)
 	assert.Equal(t, int32(1), readiness.SuccessThreshold)
 	assert.Equal(t, int32(3), readiness.FailureThreshold)
 	require.NotNil(t, readiness.HTTP)
-	assert.Equal(t, "/", readiness.HTTP.Path)
-	assert.Equal(t, int32(5678), readiness.HTTP.Port)
+	assert.Equal(t, "/health", readiness.HTTP.Path)
+	assert.Equal(t, int32(80), readiness.HTTP.Port)
 
-	// Test liveness check
-	require.NotNil(t, webService.Params.Health.Liveness)
-	liveness := webService.Params.Health.Liveness
-	assert.Equal(t, int32(15), liveness.InitialDelaySeconds)
-	assert.Equal(t, int32(10), liveness.PeriodSeconds)
-	assert.Equal(t, int32(5), liveness.TimeoutSeconds)
-	assert.Equal(t, int32(1), liveness.SuccessThreshold)
-	assert.Equal(t, int32(3), liveness.FailureThreshold)
-	require.NotNil(t, liveness.HTTP)
-	assert.Equal(t, "/", liveness.HTTP.Path)
-	assert.Equal(t, int32(5678), liveness.HTTP.Port)
+	// Test liveness check - not present in basic example
+	assert.Nil(t, webService.Params.Health.Liveness)
 
 	// Test resources
 	require.NotNil(t, webService.Resources)

@@ -15,11 +15,13 @@ import (
 )
 
 type KubeClient struct {
-	Client kubernetes.Interface
-	Logger *logrus.Logger
+	Client             kubernetes.Interface
+	Logger             *logrus.Logger
+	DefaultServiceType string
+	LocalhostEnabled   bool
 }
 
-func NewKubeClient(ctx context.Context, kubeconfig string, logger *logrus.Logger) (*KubeClient, error) {
+func NewKubeClient(ctx context.Context, kubeconfig string, logger *logrus.Logger, defaultServiceType string, localhostEnabled bool) (*KubeClient, error) {
 	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build kubeconfig: %w", err)
@@ -30,7 +32,12 @@ func NewKubeClient(ctx context.Context, kubeconfig string, logger *logrus.Logger
 		return nil, fmt.Errorf("failed to create clientset: %w", err)
 	}
 
-	return &KubeClient{Client: clientset, Logger: logger}, nil
+	return &KubeClient{
+		Client:             clientset,
+		Logger:             logger,
+		DefaultServiceType: defaultServiceType,
+		LocalhostEnabled:   localhostEnabled,
+	}, nil
 }
 
 func (c *KubeClient) GetDeployment(ctx context.Context, deploymentID string) (*types.Deployment, error) {
@@ -140,6 +147,18 @@ func (c *KubeClient) GetDeployment(ctx context.Context, deploymentID string) (*t
 							servicePort.URI = uri
 							serviceURIs = append(serviceURIs, uri)
 						}
+					} else if svc.Spec.Type == corev1.ServiceTypeNodePort {
+						// For NodePort, use localhost with the NodePort
+						if port.NodePort > 0 {
+							uri := fmt.Sprintf("http://localhost:%d", port.NodePort)
+							servicePort.URI = uri
+							serviceURIs = append(serviceURIs, uri)
+						} else {
+							// NodePort not assigned yet
+							uri := fmt.Sprintf("NodePort pending for service %s", svc.Name)
+							servicePort.URI = uri
+							serviceURIs = append(serviceURIs, uri)
+						}
 					} else if svc.Spec.Type == corev1.ServiceTypeClusterIP {
 						// For cluster IP, use internal service name
 						uri := fmt.Sprintf("http://%s.%s.svc.cluster.local:%d", svc.Name, namespace, port.Port)
@@ -201,6 +220,10 @@ func (c *KubeClient) GetDeployment(ctx context.Context, deploymentID string) (*t
 							externalURI = fmt.Sprintf("http://%s:%d%s", lb.Hostname, svc.Spec.Ports[0].Port, path.Path)
 							break
 						}
+					} else if svc.Spec.Type == corev1.ServiceTypeNodePort && svc.Spec.Ports[0].NodePort > 0 {
+						// For NodePort services, use localhost
+						externalURI = fmt.Sprintf("http://localhost:%d%s", svc.Spec.Ports[0].NodePort, path.Path)
+						break
 					}
 				}
 

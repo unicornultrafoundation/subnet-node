@@ -32,7 +32,7 @@ func setupIntegrationTest(t *testing.T) (*KubeClient, func()) {
 	logger := logrus.New().WithField("service", "kube").Logger
 
 	// Create client
-	client, err := NewKubeClient(context.Background(), kubeconfig, logger)
+	client, err := NewKubeClient(context.Background(), kubeconfig, logger, "NodePort", true)
 	require.NoError(t, err)
 
 	// Return cleanup function
