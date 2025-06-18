@@ -3,18 +3,18 @@ package bidengine
 import (
 	"context"
 	"fmt"
-	"math/big"
 	"time"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	"github.com/holiman/uint256"
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/bidengine/contracts"
 )
 
 // PlaceBid places a bid on a specific order in the BidMarket contract
-func (b *BidEngine) PlaceBid(ctx context.Context, order OrderInfo, providerId, machineId, amount *big.Int, requirements *BidRequirements) (*Bid, error) {
+func (b *Service) PlaceBid(ctx context.Context, order *OrderInfo, providerId, machineId, pricePerSecond *uint256.Int, requirements *BidRequirements) (*Bid, error) {
 	// Check if machine is active
-	isActive, err := b.provider.IsMachineActive(&bind.CallOpts{Context: ctx}, providerId, machineId)
+	isActive, err := b.provider.IsMachineActive(&bind.CallOpts{Context: ctx}, providerId.ToBig(), machineId.ToBig())
 	if err != nil {
 		return nil, fmt.Errorf("failed to check if machine is active: %v", err)
 	}
@@ -26,15 +26,15 @@ func (b *BidEngine) PlaceBid(ctx context.Context, order OrderInfo, providerId, m
 	// Validate machine specs against requirements
 	valid, err := b.provider.ValidateMachineRequirements(
 		&bind.CallOpts{Context: ctx},
-		big.NewInt(0), // machineType
-		providerId,
-		machineId,
-		requirements.MinCPUCores,
-		requirements.MinMemoryMB,
-		requirements.MinDiskGB,
-		requirements.MinGPUCores,
-		requirements.MinUploadSpeed,
-		requirements.MinDownloadSpeed,
+		order.Requirements.MachineType.ToBig(), // machineType
+		providerId.ToBig(),
+		machineId.ToBig(),
+		requirements.MinCPUCores.ToBig(),
+		requirements.MinMemoryMB.ToBig(),
+		requirements.MinDiskGB.ToBig(),
+		requirements.MinGPUCores.ToBig(),
+		requirements.MinUploadSpeed.ToBig(),
+		requirements.MinDownloadSpeed.ToBig(),
 	)
 
 	if err != nil {
@@ -46,7 +46,7 @@ func (b *BidEngine) PlaceBid(ctx context.Context, order OrderInfo, providerId, m
 	}
 
 	// Place bid on the blockchain
-	tx, err := b.bidMarket.SubmitBid(b.auth, order.OrderID, providerId, machineId, amount)
+	tx, err := b.bidMarket.SubmitBid(b.auth, order.OrderID, providerId, machineId, pricePerSecond)
 	if err != nil {
 		return nil, fmt.Errorf("failed to place bid on blockchain: %v", err)
 	}
@@ -56,7 +56,7 @@ func (b *BidEngine) PlaceBid(ctx context.Context, order OrderInfo, providerId, m
 		OrderId:      order.OrderID,
 		ProviderId:   providerId,
 		MachineId:    machineId,
-		Amount:       amount,
+		PricePerSec:  pricePerSecond,
 		Status:       BidStatusPending,
 		CreatedAt:    time.Now(),
 		UpdatedAt:    time.Now(),
@@ -86,18 +86,18 @@ func (b *BidEngine) PlaceBid(ctx context.Context, order OrderInfo, providerId, m
 	}
 
 	b.log.WithFields(logrus.Fields{
-		"orderId":    order.OrderID,
-		"providerId": providerId,
-		"machineId":  machineId,
-		"amount":     amount.String(),
-		"txHash":     bid.TxHash,
+		"orderId":        order.OrderID,
+		"providerId":     providerId,
+		"machineId":      machineId,
+		"pricePerSecond": pricePerSecond.String(),
+		"txHash":         bid.TxHash,
 	}).Info("Bid placed successfully on order")
 
 	return bid, nil
 }
 
 // monitorActiveBids periodically checks the status of active bids
-func (b *BidEngine) monitorActiveBids(ctx context.Context) {
+func (b *Service) monitorActiveBids(ctx context.Context) {
 	// Start watching for bid acceptances
 	go b.watchBidAcceptances(ctx)
 
@@ -122,7 +122,7 @@ func (b *BidEngine) monitorActiveBids(ctx context.Context) {
 }
 
 // cleanupNonAcceptedBids removes bids that are not in accepted status from memory
-func (b *BidEngine) cleanupNonAcceptedBids() {
+func (b *Service) cleanupNonAcceptedBids() {
 	b.bidsMutex.Lock()
 	defer b.bidsMutex.Unlock()
 
@@ -147,11 +147,11 @@ func (b *BidEngine) cleanupNonAcceptedBids() {
 }
 
 // watchBidAcceptances watches for bid acceptance events on the blockchain
-func (b *BidEngine) watchBidAcceptances(ctx context.Context) {
+func (b *Service) watchBidAcceptances(ctx context.Context) {
 	bidAcceptedCh := make(chan *contracts.BidMarketBidAccepted)
 	acceptSub, err := b.bidMarket.WatchBidAccepted(&bind.WatchOpts{
 		Context: ctx,
-	}, bidAcceptedCh, nil, nil) // You might want to add filters for our provider ID
+	}, bidAcceptedCh, b.providerId) // You might want to add filters for our provider ID
 
 	if err != nil {
 		b.log.WithError(err).Error("Failed to watch for bid acceptance events")
@@ -170,7 +170,7 @@ func (b *BidEngine) watchBidAcceptances(ctx context.Context) {
 			time.Sleep(time.Second * 10)
 			newSub, err := b.bidMarket.WatchBidAccepted(&bind.WatchOpts{
 				Context: ctx,
-			}, bidAcceptedCh, nil, nil)
+			}, bidAcceptedCh, b.providerId)
 
 			if err != nil {
 				b.log.WithError(err).Error("Failed to resubscribe to bid acceptance events")
@@ -194,10 +194,13 @@ func (b *BidEngine) watchBidAcceptances(ctx context.Context) {
 }
 
 // processBidAcceptance handles a bid acceptance event from the blockchain
-func (b *BidEngine) processBidAcceptance(ctx context.Context, event *contracts.BidMarketBidAccepted) {
+func (b *Service) processBidAcceptance(ctx context.Context, event *contracts.BidMarketBidAccepted) {
 	b.log.WithFields(logrus.Fields{
 		"orderId":    event.OrderId,
-		"providerId": event.Provider,
+		"providerId": event.ProviderId,
+		"machineId":  event.MachineId,
+		"amount":     event.PricePerSecond.String(),
+		"timestamp":  time.Now().Format(time.RFC3339),
 	}).Info("Bid accepted by requester")
 
 	// Find the bid in our active bids or from the store
@@ -230,7 +233,7 @@ func (b *BidEngine) processBidAcceptance(ctx context.Context, event *contracts.B
 		b.log.WithField("orderId", event.OrderId).Info("Restored bid from datastore for processing acceptance")
 	}
 
-	order, err := b.bidMarket.Orders(&bind.CallOpts{Context: ctx}, event.OrderId)
+	order, err := b.getOrder(ctx, uint256.MustFromBig(event.OrderId))
 	if err != nil {
 		b.log.WithError(err).Error("Failed to retrieve order information")
 		return
@@ -263,7 +266,7 @@ func (b *BidEngine) processBidAcceptance(ctx context.Context, event *contracts.B
 }
 
 // handleAcceptedBid performs necessary actions after a bid is accepted
-func (b *BidEngine) handleAcceptedBid(_ context.Context, bid *Bid) {
+func (b *Service) handleAcceptedBid(_ context.Context, bid *Bid) {
 	// Implement resource provisioning, notification to resource manager, etc.
 	b.log.WithFields(logrus.Fields{
 		"orderId":    bid.OrderId,

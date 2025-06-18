@@ -31,26 +31,27 @@ var (
 
 // SubnetProviderMachine is an auto generated low-level Go binding around an user-defined struct.
 type SubnetProviderMachine struct {
-	Active              bool
-	MachineType         *big.Int
-	Region              *big.Int
-	CpuCores            *big.Int
-	CpuSpeed            *big.Int
-	GpuCores            *big.Int
-	GpuMemory           *big.Int
-	MemoryMB            *big.Int
-	DiskGB              *big.Int
-	UploadSpeed         *big.Int
-	DownloadSpeed       *big.Int
-	PublicIp            *big.Int
-	OverlayIp           *big.Int
-	CreatedAt           *big.Int
-	UpdatedAt           *big.Int
-	StakeAmount         *big.Int
-	RemovedAt           *big.Int
-	UnlockTime          *big.Int
-	WithdrawalProcessed bool
-	Metadata            string
+	Active               bool
+	MachineType          *big.Int
+	Region               *big.Int
+	CpuCores             *big.Int
+	GpuCores             *big.Int
+	GpuMemory            *big.Int
+	MemoryMB             *big.Int
+	DiskGB               *big.Int
+	UploadSpeed          *big.Int
+	DownloadSpeed        *big.Int
+	CreatedAt            *big.Int
+	UpdatedAt            *big.Int
+	StakeAmount          *big.Int
+	RemovedAt            *big.Int
+	UnlockTime           *big.Int
+	WithdrawalProcessed  bool
+	Metadata             string
+	CpuPricePerSecond    *big.Int
+	GpuPricePerSecond    *big.Int
+	MemoryPricePerSecond *big.Int
+	DiskPricePerSecond   *big.Int
 }
 
 // SubnetProviderProvider is an auto generated low-level Go binding around an user-defined struct.
@@ -68,11 +69,12 @@ type SubnetProviderProvider struct {
 	Metadata           string
 	IsSlashed          bool
 	IsActive           bool
+	Verified           bool
 }
 
 // ProviderMetaData contains all meta data concerning the Provider contract.
 var ProviderMetaData = &bind.MetaData{
-	ABI: "[{\"inputs\":[{\"internalType\":\"address\",\"name\":\"target\",\"type\":\"address\"}],\"name\":\"AddressEmptyCode\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"account\",\"type\":\"address\"}],\"name\":\"AddressInsufficientBalance\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"sender\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"}],\"name\":\"ERC721IncorrectOwner\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"ERC721InsufficientApproval\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"approver\",\"type\":\"address\"}],\"name\":\"ERC721InvalidApprover\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"}],\"name\":\"ERC721InvalidOperator\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"}],\"name\":\"ERC721InvalidOwner\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"receiver\",\"type\":\"address\"}],\"name\":\"ERC721InvalidReceiver\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"sender\",\"type\":\"address\"}],\"name\":\"ERC721InvalidSender\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"ERC721NonexistentToken\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"FailedInnerCall\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"InvalidInitialization\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"NotInitializing\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"}],\"name\":\"OwnableInvalidOwner\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"account\",\"type\":\"address\"}],\"name\":\"OwnableUnauthorizedAccount\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"token\",\"type\":\"address\"}],\"name\":\"SafeERC20FailedOperation\",\"type\":\"error\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"approved\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"Approval\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"bool\",\"name\":\"approved\",\"type\":\"bool\"}],\"name\":\"ApprovalForAll\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"_fromTokenId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"_toTokenId\",\"type\":\"uint256\"}],\"name\":\"BatchMetadataUpdate\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint64\",\"name\":\"version\",\"type\":\"uint64\"}],\"name\":\"Initialized\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"oldPeriod\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"newPeriod\",\"type\":\"uint256\"}],\"name\":\"LockPeriodUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"machineId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"stakedAmount\",\"type\":\"uint256\"}],\"name\":\"MachineAdded\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"machineId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"unlocktime\",\"type\":\"uint256\"}],\"name\":\"MachineRemoved\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"machineId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"additionalStake\",\"type\":\"uint256\"}],\"name\":\"MachineUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"_tokenId\",\"type\":\"uint256\"}],\"name\":\"MetadataUpdate\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"previousOwner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"OwnershipTransferred\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"}],\"name\":\"ProviderUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"baseAmount\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"cpuRate\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"gpuRate\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"memoryRate\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"diskRate\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"uploadSpeedRate\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"downloadSpeedRate\",\"type\":\"uint256\"}],\"name\":\"StakeParametersUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"machineId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"reason\",\"type\":\"string\"}],\"name\":\"StakeSlashed\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"machineId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"StakeWithdrawn\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"from\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"to\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"Transfer\",\"type\":\"event\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"machineType\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"region\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"cpuCores\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"cpuSpeed\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"gpuCores\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"gpuMemory\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"memoryMB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"diskGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"publicIp\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"overlayIp\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"uploadSpeed\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"downloadSpeed\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"metadata\",\"type\":\"string\"}],\"name\":\"addMachine\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"to\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"approve\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"}],\"name\":\"balanceOf\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"baseStakeAmount\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"cpuCores\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"gpuCores\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"memoryMB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"diskGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"uploadSpeed\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"downloadSpeed\",\"type\":\"uint256\"}],\"name\":\"calculateRequiredStake\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"machineId\",\"type\":\"uint256\"}],\"name\":\"claimWithdrawal\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"cpuStakeRate\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"diskStakeRate\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"downloadSpeedStakeRate\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"start\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"limit\",\"type\":\"uint256\"}],\"name\":\"getActiveMachinesPaginated\",\"outputs\":[{\"components\":[{\"internalType\":\"bool\",\"name\":\"active\",\"type\":\"bool\"},{\"internalType\":\"uint256\",\"name\":\"machineType\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"region\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"cpuCores\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"cpuSpeed\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"gpuCores\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"gpuMemory\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"memoryMB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"diskGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"uploadSpeed\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"downloadSpeed\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"publicIp\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"overlayIp\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"createdAt\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"updatedAt\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"stakeAmount\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"removedAt\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"unlockTime\",\"type\":\"uint256\"},{\"internalType\":\"bool\",\"name\":\"withdrawalProcessed\",\"type\":\"bool\"},{\"internalType\":\"string\",\"name\":\"metadata\",\"type\":\"string\"}],\"internalType\":\"structSubnetProvider.Machine[]\",\"name\":\"\",\"type\":\"tuple[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"getApproved\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"}],\"name\":\"getMachines\",\"outputs\":[{\"components\":[{\"internalType\":\"bool\",\"name\":\"active\",\"type\":\"bool\"},{\"internalType\":\"uint256\",\"name\":\"machineType\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"region\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"cpuCores\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"cpuSpeed\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"gpuCores\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"gpuMemory\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"memoryMB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"diskGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"uploadSpeed\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"downloadSpeed\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"publicIp\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"overlayIp\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"createdAt\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"updatedAt\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"stakeAmount\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"removedAt\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"unlockTime\",\"type\":\"uint256\"},{\"internalType\":\"bool\",\"name\":\"withdrawalProcessed\",\"type\":\"bool\"},{\"internalType\":\"string\",\"name\":\"metadata\",\"type\":\"string\"}],\"internalType\":\"structSubnetProvider.Machine[]\",\"name\":\"\",\"type\":\"tuple[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"start\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"end\",\"type\":\"uint256\"}],\"name\":\"getMachinesPaginated\",\"outputs\":[{\"components\":[{\"internalType\":\"bool\",\"name\":\"active\",\"type\":\"bool\"},{\"internalType\":\"uint256\",\"name\":\"machineType\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"region\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"cpuCores\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"cpuSpeed\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"gpuCores\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"gpuMemory\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"memoryMB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"diskGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"uploadSpeed\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"downloadSpeed\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"publicIp\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"overlayIp\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"createdAt\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"updatedAt\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"stakeAmount\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"removedAt\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"unlockTime\",\"type\":\"uint256\"},{\"internalType\":\"bool\",\"name\":\"withdrawalProcessed\",\"type\":\"bool\"},{\"internalType\":\"string\",\"name\":\"metadata\",\"type\":\"string\"}],\"internalType\":\"structSubnetProvider.Machine[]\",\"name\":\"\",\"type\":\"tuple[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"}],\"name\":\"getProvider\",\"outputs\":[{\"components\":[{\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"},{\"internalType\":\"bool\",\"name\":\"registered\",\"type\":\"bool\"},{\"internalType\":\"uint256\",\"name\":\"reputation\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"machineCount\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"createdAt\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"updatedAt\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"totalStaked\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pendingWithdrawals\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"slashedAmount\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"metadata\",\"type\":\"string\"},{\"internalType\":\"bool\",\"name\":\"isSlashed\",\"type\":\"bool\"},{\"internalType\":\"bool\",\"name\":\"isActive\",\"type\":\"bool\"}],\"internalType\":\"structSubnetProvider.Provider\",\"name\":\"provider\",\"type\":\"tuple\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"}],\"name\":\"getProviderOwner\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"}],\"name\":\"getProviderSlashedAmount\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"gpuStakeRate\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"_stakingToken\",\"type\":\"address\"},{\"internalType\":\"string\",\"name\":\"nftName\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"nftSymbol\",\"type\":\"string\"}],\"name\":\"initialize\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"}],\"name\":\"isApprovedForAll\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"machineId\",\"type\":\"uint256\"}],\"name\":\"isMachineActive\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"account\",\"type\":\"address\"}],\"name\":\"isProviderOperatorOrOwner\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"lockPeriod\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"memoryStakeRate\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"name\",\"outputs\":[{\"internalType\":\"string\",\"name\":\"\",\"type\":\"string\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"owner\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"ownerOf\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"name\":\"providerMachines\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"active\",\"type\":\"bool\"},{\"internalType\":\"uint256\",\"name\":\"machineType\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"region\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"cpuCores\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"cpuSpeed\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"gpuCores\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"gpuMemory\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"memoryMB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"diskGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"uploadSpeed\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"downloadSpeed\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"publicIp\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"overlayIp\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"createdAt\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"updatedAt\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"stakeAmount\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"removedAt\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"unlockTime\",\"type\":\"uint256\"},{\"internalType\":\"bool\",\"name\":\"withdrawalProcessed\",\"type\":\"bool\"},{\"internalType\":\"string\",\"name\":\"metadata\",\"type\":\"string\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"name\":\"providers\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"},{\"internalType\":\"bool\",\"name\":\"registered\",\"type\":\"bool\"},{\"internalType\":\"uint256\",\"name\":\"reputation\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"machineCount\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"createdAt\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"updatedAt\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"totalStaked\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pendingWithdrawals\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"slashedAmount\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"metadata\",\"type\":\"string\"},{\"internalType\":\"bool\",\"name\":\"isSlashed\",\"type\":\"bool\"},{\"internalType\":\"bool\",\"name\":\"isActive\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"},{\"internalType\":\"string\",\"name\":\"metadata\",\"type\":\"string\"}],\"name\":\"registerProvider\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"machineId\",\"type\":\"uint256\"}],\"name\":\"removeMachine\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"renounceOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"from\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"to\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"safeTransferFrom\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"from\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"to\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"},{\"internalType\":\"bytes\",\"name\":\"data\",\"type\":\"bytes\"}],\"name\":\"safeTransferFrom\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"},{\"internalType\":\"bool\",\"name\":\"approved\",\"type\":\"bool\"}],\"name\":\"setApprovalForAll\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"newLockPeriod\",\"type\":\"uint256\"}],\"name\":\"setLockPeriod\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"newOperator\",\"type\":\"address\"}],\"name\":\"setProviderOperator\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"newBaseStakeAmount\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"newCpuStakeRate\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"newGpuStakeRate\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"newMemoryStakeRate\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"newDiskStakeRate\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"newUploadSpeedStakeRate\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"newDownloadSpeedStakeRate\",\"type\":\"uint256\"}],\"name\":\"setStakeParameters\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"machineId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"reason\",\"type\":\"string\"}],\"name\":\"slashStake\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"stakingToken\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes4\",\"name\":\"interfaceId\",\"type\":\"bytes4\"}],\"name\":\"supportsInterface\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"symbol\",\"outputs\":[{\"internalType\":\"string\",\"name\":\"\",\"type\":\"string\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"tokenURI\",\"outputs\":[{\"internalType\":\"string\",\"name\":\"\",\"type\":\"string\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"totalSlashed\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"from\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"to\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"transferFrom\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"transferOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"machineId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"cpuCores\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"cpuSpeed\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"gpuCores\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"gpuMemory\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"memoryMB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"diskGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"publicIp\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"overlayIp\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"uploadSpeed\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"downloadSpeed\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"metadata\",\"type\":\"string\"}],\"name\":\"updateMachine\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"metadata\",\"type\":\"string\"}],\"name\":\"updateProviderInfo\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"uploadSpeedStakeRate\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"machineType\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"machineId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"minCpuCores\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"minMemoryMB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"minDiskGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"minGpuCores\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"minUploadSpeed\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"minDownloadSpeed\",\"type\":\"uint256\"}],\"name\":\"validateMachineRequirements\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"recipient\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"withdrawSlashedFunds\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]",
+	ABI: "[{\"inputs\":[{\"internalType\":\"address\",\"name\":\"target\",\"type\":\"address\"}],\"name\":\"AddressEmptyCode\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"account\",\"type\":\"address\"}],\"name\":\"AddressInsufficientBalance\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"sender\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"}],\"name\":\"ERC721IncorrectOwner\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"ERC721InsufficientApproval\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"approver\",\"type\":\"address\"}],\"name\":\"ERC721InvalidApprover\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"}],\"name\":\"ERC721InvalidOperator\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"}],\"name\":\"ERC721InvalidOwner\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"receiver\",\"type\":\"address\"}],\"name\":\"ERC721InvalidReceiver\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"sender\",\"type\":\"address\"}],\"name\":\"ERC721InvalidSender\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"ERC721NonexistentToken\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"FailedInnerCall\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"InvalidInitialization\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"NotInitializing\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"}],\"name\":\"OwnableInvalidOwner\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"account\",\"type\":\"address\"}],\"name\":\"OwnableUnauthorizedAccount\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"token\",\"type\":\"address\"}],\"name\":\"SafeERC20FailedOperation\",\"type\":\"error\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"approved\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"Approval\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"bool\",\"name\":\"approved\",\"type\":\"bool\"}],\"name\":\"ApprovalForAll\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"_fromTokenId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"_toTokenId\",\"type\":\"uint256\"}],\"name\":\"BatchMetadataUpdate\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint64\",\"name\":\"version\",\"type\":\"uint64\"}],\"name\":\"Initialized\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"oldPeriod\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"newPeriod\",\"type\":\"uint256\"}],\"name\":\"LockPeriodUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"machineId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"stakedAmount\",\"type\":\"uint256\"}],\"name\":\"MachineAdded\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"machineId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"unlocktime\",\"type\":\"uint256\"}],\"name\":\"MachineRemoved\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"machineId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"cpuPricePerSecond\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"gpuPricePerSecond\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"memoryPricePerSecond\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"diskPricePerSecond\",\"type\":\"uint256\"}],\"name\":\"MachineResourcePriceUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"machineId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"additionalStake\",\"type\":\"uint256\"}],\"name\":\"MachineUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"_tokenId\",\"type\":\"uint256\"}],\"name\":\"MetadataUpdate\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"previousOwner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"OwnershipTransferred\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"newReputation\",\"type\":\"uint256\"}],\"name\":\"ProviderReputationUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"}],\"name\":\"ProviderUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"bool\",\"name\":\"verified\",\"type\":\"bool\"}],\"name\":\"ProviderVerified\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"baseAmount\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"cpuRate\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"gpuRate\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"memoryRate\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"diskRate\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"uploadSpeedRate\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"downloadSpeedRate\",\"type\":\"uint256\"}],\"name\":\"StakeParametersUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"machineId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"reason\",\"type\":\"string\"}],\"name\":\"StakeSlashed\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"machineId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"StakeWithdrawn\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"from\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"to\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"Transfer\",\"type\":\"event\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"machineType\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"region\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"cpuCores\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"gpuCores\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"gpuMemory\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"memoryMB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"diskGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"uploadSpeed\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"downloadSpeed\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"metadata\",\"type\":\"string\"},{\"internalType\":\"uint256\",\"name\":\"cpuPricePerSecond\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"gpuPricePerSecond\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"memoryPricePerSecond\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"diskPricePerSecond\",\"type\":\"uint256\"}],\"name\":\"addMachine\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"to\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"approve\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"}],\"name\":\"balanceOf\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"baseStakeAmount\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"cpuCores\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"gpuCores\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"memoryMB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"diskGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"uploadSpeed\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"downloadSpeed\",\"type\":\"uint256\"}],\"name\":\"calculateRequiredStake\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"machineId\",\"type\":\"uint256\"}],\"name\":\"claimWithdrawal\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"cpuStakeRate\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"diskStakeRate\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"downloadSpeedStakeRate\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"start\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"limit\",\"type\":\"uint256\"}],\"name\":\"getActiveMachinesPaginated\",\"outputs\":[{\"components\":[{\"internalType\":\"bool\",\"name\":\"active\",\"type\":\"bool\"},{\"internalType\":\"uint256\",\"name\":\"machineType\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"region\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"cpuCores\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"gpuCores\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"gpuMemory\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"memoryMB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"diskGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"uploadSpeed\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"downloadSpeed\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"createdAt\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"updatedAt\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"stakeAmount\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"removedAt\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"unlockTime\",\"type\":\"uint256\"},{\"internalType\":\"bool\",\"name\":\"withdrawalProcessed\",\"type\":\"bool\"},{\"internalType\":\"string\",\"name\":\"metadata\",\"type\":\"string\"},{\"internalType\":\"uint256\",\"name\":\"cpuPricePerSecond\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"gpuPricePerSecond\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"memoryPricePerSecond\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"diskPricePerSecond\",\"type\":\"uint256\"}],\"internalType\":\"structSubnetProvider.Machine[]\",\"name\":\"\",\"type\":\"tuple[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"getApproved\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"machineId\",\"type\":\"uint256\"}],\"name\":\"getMachineResourcePrice\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"cpuPricePerSecond\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"gpuPricePerSecond\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"memoryPricePerSecond\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"diskPricePerSecond\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"}],\"name\":\"getMachines\",\"outputs\":[{\"components\":[{\"internalType\":\"bool\",\"name\":\"active\",\"type\":\"bool\"},{\"internalType\":\"uint256\",\"name\":\"machineType\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"region\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"cpuCores\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"gpuCores\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"gpuMemory\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"memoryMB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"diskGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"uploadSpeed\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"downloadSpeed\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"createdAt\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"updatedAt\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"stakeAmount\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"removedAt\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"unlockTime\",\"type\":\"uint256\"},{\"internalType\":\"bool\",\"name\":\"withdrawalProcessed\",\"type\":\"bool\"},{\"internalType\":\"string\",\"name\":\"metadata\",\"type\":\"string\"},{\"internalType\":\"uint256\",\"name\":\"cpuPricePerSecond\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"gpuPricePerSecond\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"memoryPricePerSecond\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"diskPricePerSecond\",\"type\":\"uint256\"}],\"internalType\":\"structSubnetProvider.Machine[]\",\"name\":\"\",\"type\":\"tuple[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"start\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"end\",\"type\":\"uint256\"}],\"name\":\"getMachinesPaginated\",\"outputs\":[{\"components\":[{\"internalType\":\"bool\",\"name\":\"active\",\"type\":\"bool\"},{\"internalType\":\"uint256\",\"name\":\"machineType\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"region\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"cpuCores\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"gpuCores\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"gpuMemory\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"memoryMB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"diskGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"uploadSpeed\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"downloadSpeed\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"createdAt\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"updatedAt\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"stakeAmount\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"removedAt\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"unlockTime\",\"type\":\"uint256\"},{\"internalType\":\"bool\",\"name\":\"withdrawalProcessed\",\"type\":\"bool\"},{\"internalType\":\"string\",\"name\":\"metadata\",\"type\":\"string\"},{\"internalType\":\"uint256\",\"name\":\"cpuPricePerSecond\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"gpuPricePerSecond\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"memoryPricePerSecond\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"diskPricePerSecond\",\"type\":\"uint256\"}],\"internalType\":\"structSubnetProvider.Machine[]\",\"name\":\"\",\"type\":\"tuple[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"}],\"name\":\"getProvider\",\"outputs\":[{\"components\":[{\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"},{\"internalType\":\"bool\",\"name\":\"registered\",\"type\":\"bool\"},{\"internalType\":\"uint256\",\"name\":\"reputation\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"machineCount\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"createdAt\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"updatedAt\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"totalStaked\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pendingWithdrawals\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"slashedAmount\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"metadata\",\"type\":\"string\"},{\"internalType\":\"bool\",\"name\":\"isSlashed\",\"type\":\"bool\"},{\"internalType\":\"bool\",\"name\":\"isActive\",\"type\":\"bool\"},{\"internalType\":\"bool\",\"name\":\"verified\",\"type\":\"bool\"}],\"internalType\":\"structSubnetProvider.Provider\",\"name\":\"provider\",\"type\":\"tuple\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"}],\"name\":\"getProviderOwner\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"}],\"name\":\"getProviderReputation\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"}],\"name\":\"getProviderSlashedAmount\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"gpuStakeRate\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"_stakingToken\",\"type\":\"address\"},{\"internalType\":\"string\",\"name\":\"nftName\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"nftSymbol\",\"type\":\"string\"}],\"name\":\"initialize\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"}],\"name\":\"isApprovedForAll\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"machineId\",\"type\":\"uint256\"}],\"name\":\"isMachineActive\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"account\",\"type\":\"address\"}],\"name\":\"isProviderOperatorOrOwner\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"}],\"name\":\"isVerified\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"lockPeriod\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"memoryStakeRate\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"name\",\"outputs\":[{\"internalType\":\"string\",\"name\":\"\",\"type\":\"string\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"owner\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"ownerOf\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"name\":\"providerMachines\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"active\",\"type\":\"bool\"},{\"internalType\":\"uint256\",\"name\":\"machineType\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"region\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"cpuCores\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"gpuCores\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"gpuMemory\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"memoryMB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"diskGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"uploadSpeed\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"downloadSpeed\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"createdAt\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"updatedAt\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"stakeAmount\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"removedAt\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"unlockTime\",\"type\":\"uint256\"},{\"internalType\":\"bool\",\"name\":\"withdrawalProcessed\",\"type\":\"bool\"},{\"internalType\":\"string\",\"name\":\"metadata\",\"type\":\"string\"},{\"internalType\":\"uint256\",\"name\":\"cpuPricePerSecond\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"gpuPricePerSecond\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"memoryPricePerSecond\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"diskPricePerSecond\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"name\":\"providers\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"},{\"internalType\":\"bool\",\"name\":\"registered\",\"type\":\"bool\"},{\"internalType\":\"uint256\",\"name\":\"reputation\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"machineCount\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"createdAt\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"updatedAt\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"totalStaked\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pendingWithdrawals\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"slashedAmount\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"metadata\",\"type\":\"string\"},{\"internalType\":\"bool\",\"name\":\"isSlashed\",\"type\":\"bool\"},{\"internalType\":\"bool\",\"name\":\"isActive\",\"type\":\"bool\"},{\"internalType\":\"bool\",\"name\":\"verified\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"},{\"internalType\":\"string\",\"name\":\"metadata\",\"type\":\"string\"}],\"name\":\"registerProvider\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"},{\"internalType\":\"string\",\"name\":\"providerMetadata\",\"type\":\"string\"},{\"internalType\":\"uint256\",\"name\":\"machineType\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"region\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"cpuCores\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"gpuCores\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"gpuMemory\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"memoryMB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"diskGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"uploadSpeed\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"downloadSpeed\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"machineMetadata\",\"type\":\"string\"},{\"internalType\":\"uint256\",\"name\":\"cpuPricePerSecond\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"gpuPricePerSecond\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"memoryPricePerSecond\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"diskPricePerSecond\",\"type\":\"uint256\"}],\"name\":\"registerProviderWithMachine\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"machineId\",\"type\":\"uint256\"}],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"machineId\",\"type\":\"uint256\"}],\"name\":\"removeMachine\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"renounceOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"from\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"to\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"safeTransferFrom\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"from\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"to\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"},{\"internalType\":\"bytes\",\"name\":\"data\",\"type\":\"bytes\"}],\"name\":\"safeTransferFrom\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"},{\"internalType\":\"bool\",\"name\":\"approved\",\"type\":\"bool\"}],\"name\":\"setApprovalForAll\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"newLockPeriod\",\"type\":\"uint256\"}],\"name\":\"setLockPeriod\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"machineId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"cpuPricePerSecond\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"gpuPricePerSecond\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"memoryPricePerSecond\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"diskPricePerSecond\",\"type\":\"uint256\"}],\"name\":\"setMachineResourcePrice\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"newOperator\",\"type\":\"address\"}],\"name\":\"setProviderOperator\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"newReputation\",\"type\":\"uint256\"}],\"name\":\"setProviderReputation\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"internalType\":\"bool\",\"name\":\"verified_\",\"type\":\"bool\"}],\"name\":\"setProviderVerified\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"newBaseStakeAmount\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"newCpuStakeRate\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"newGpuStakeRate\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"newMemoryStakeRate\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"newDiskStakeRate\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"newUploadSpeedStakeRate\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"newDownloadSpeedStakeRate\",\"type\":\"uint256\"}],\"name\":\"setStakeParameters\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"machineId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"reason\",\"type\":\"string\"}],\"name\":\"slashStake\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"stakingToken\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes4\",\"name\":\"interfaceId\",\"type\":\"bytes4\"}],\"name\":\"supportsInterface\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"symbol\",\"outputs\":[{\"internalType\":\"string\",\"name\":\"\",\"type\":\"string\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"tokenURI\",\"outputs\":[{\"internalType\":\"string\",\"name\":\"\",\"type\":\"string\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"totalSlashed\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"from\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"to\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"transferFrom\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"transferOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"machineId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"cpuCores\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"gpuCores\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"gpuMemory\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"memoryMB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"diskGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"uploadSpeed\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"downloadSpeed\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"metadata\",\"type\":\"string\"},{\"internalType\":\"uint256\",\"name\":\"cpuPricePerSecond\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"gpuPricePerSecond\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"memoryPricePerSecond\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"diskPricePerSecond\",\"type\":\"uint256\"}],\"name\":\"updateMachine\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"metadata\",\"type\":\"string\"}],\"name\":\"updateProviderInfo\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"uploadSpeedStakeRate\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"machineType\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"machineId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"minCpuCores\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"minMemoryMB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"minDiskGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"minGpuCores\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"minUploadSpeed\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"minDownloadSpeed\",\"type\":\"uint256\"}],\"name\":\"validateMachineRequirements\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"recipient\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"withdrawSlashedFunds\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]",
 }
 
 // ProviderABI is the input ABI used to generate the binding from.
@@ -409,7 +411,7 @@ func (_Provider *ProviderCallerSession) DownloadSpeedStakeRate() (*big.Int, erro
 
 // GetActiveMachinesPaginated is a free data retrieval call binding the contract method 0x32f892d5.
 //
-// Solidity: function getActiveMachinesPaginated(uint256 providerId, uint256 start, uint256 limit) view returns((bool,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,bool,string)[])
+// Solidity: function getActiveMachinesPaginated(uint256 providerId, uint256 start, uint256 limit) view returns((bool,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,bool,string,uint256,uint256,uint256,uint256)[])
 func (_Provider *ProviderCaller) GetActiveMachinesPaginated(opts *bind.CallOpts, providerId *big.Int, start *big.Int, limit *big.Int) ([]SubnetProviderMachine, error) {
 	var out []interface{}
 	err := _Provider.contract.Call(opts, &out, "getActiveMachinesPaginated", providerId, start, limit)
@@ -426,14 +428,14 @@ func (_Provider *ProviderCaller) GetActiveMachinesPaginated(opts *bind.CallOpts,
 
 // GetActiveMachinesPaginated is a free data retrieval call binding the contract method 0x32f892d5.
 //
-// Solidity: function getActiveMachinesPaginated(uint256 providerId, uint256 start, uint256 limit) view returns((bool,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,bool,string)[])
+// Solidity: function getActiveMachinesPaginated(uint256 providerId, uint256 start, uint256 limit) view returns((bool,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,bool,string,uint256,uint256,uint256,uint256)[])
 func (_Provider *ProviderSession) GetActiveMachinesPaginated(providerId *big.Int, start *big.Int, limit *big.Int) ([]SubnetProviderMachine, error) {
 	return _Provider.Contract.GetActiveMachinesPaginated(&_Provider.CallOpts, providerId, start, limit)
 }
 
 // GetActiveMachinesPaginated is a free data retrieval call binding the contract method 0x32f892d5.
 //
-// Solidity: function getActiveMachinesPaginated(uint256 providerId, uint256 start, uint256 limit) view returns((bool,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,bool,string)[])
+// Solidity: function getActiveMachinesPaginated(uint256 providerId, uint256 start, uint256 limit) view returns((bool,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,bool,string,uint256,uint256,uint256,uint256)[])
 func (_Provider *ProviderCallerSession) GetActiveMachinesPaginated(providerId *big.Int, start *big.Int, limit *big.Int) ([]SubnetProviderMachine, error) {
 	return _Provider.Contract.GetActiveMachinesPaginated(&_Provider.CallOpts, providerId, start, limit)
 }
@@ -469,9 +471,64 @@ func (_Provider *ProviderCallerSession) GetApproved(tokenId *big.Int) (common.Ad
 	return _Provider.Contract.GetApproved(&_Provider.CallOpts, tokenId)
 }
 
+// GetMachineResourcePrice is a free data retrieval call binding the contract method 0x1077399e.
+//
+// Solidity: function getMachineResourcePrice(uint256 providerId, uint256 machineId) view returns(uint256 cpuPricePerSecond, uint256 gpuPricePerSecond, uint256 memoryPricePerSecond, uint256 diskPricePerSecond)
+func (_Provider *ProviderCaller) GetMachineResourcePrice(opts *bind.CallOpts, providerId *big.Int, machineId *big.Int) (struct {
+	CpuPricePerSecond    *big.Int
+	GpuPricePerSecond    *big.Int
+	MemoryPricePerSecond *big.Int
+	DiskPricePerSecond   *big.Int
+}, error) {
+	var out []interface{}
+	err := _Provider.contract.Call(opts, &out, "getMachineResourcePrice", providerId, machineId)
+
+	outstruct := new(struct {
+		CpuPricePerSecond    *big.Int
+		GpuPricePerSecond    *big.Int
+		MemoryPricePerSecond *big.Int
+		DiskPricePerSecond   *big.Int
+	})
+	if err != nil {
+		return *outstruct, err
+	}
+
+	outstruct.CpuPricePerSecond = *abi.ConvertType(out[0], new(*big.Int)).(**big.Int)
+	outstruct.GpuPricePerSecond = *abi.ConvertType(out[1], new(*big.Int)).(**big.Int)
+	outstruct.MemoryPricePerSecond = *abi.ConvertType(out[2], new(*big.Int)).(**big.Int)
+	outstruct.DiskPricePerSecond = *abi.ConvertType(out[3], new(*big.Int)).(**big.Int)
+
+	return *outstruct, err
+
+}
+
+// GetMachineResourcePrice is a free data retrieval call binding the contract method 0x1077399e.
+//
+// Solidity: function getMachineResourcePrice(uint256 providerId, uint256 machineId) view returns(uint256 cpuPricePerSecond, uint256 gpuPricePerSecond, uint256 memoryPricePerSecond, uint256 diskPricePerSecond)
+func (_Provider *ProviderSession) GetMachineResourcePrice(providerId *big.Int, machineId *big.Int) (struct {
+	CpuPricePerSecond    *big.Int
+	GpuPricePerSecond    *big.Int
+	MemoryPricePerSecond *big.Int
+	DiskPricePerSecond   *big.Int
+}, error) {
+	return _Provider.Contract.GetMachineResourcePrice(&_Provider.CallOpts, providerId, machineId)
+}
+
+// GetMachineResourcePrice is a free data retrieval call binding the contract method 0x1077399e.
+//
+// Solidity: function getMachineResourcePrice(uint256 providerId, uint256 machineId) view returns(uint256 cpuPricePerSecond, uint256 gpuPricePerSecond, uint256 memoryPricePerSecond, uint256 diskPricePerSecond)
+func (_Provider *ProviderCallerSession) GetMachineResourcePrice(providerId *big.Int, machineId *big.Int) (struct {
+	CpuPricePerSecond    *big.Int
+	GpuPricePerSecond    *big.Int
+	MemoryPricePerSecond *big.Int
+	DiskPricePerSecond   *big.Int
+}, error) {
+	return _Provider.Contract.GetMachineResourcePrice(&_Provider.CallOpts, providerId, machineId)
+}
+
 // GetMachines is a free data retrieval call binding the contract method 0x8d49e78d.
 //
-// Solidity: function getMachines(uint256 providerId) view returns((bool,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,bool,string)[])
+// Solidity: function getMachines(uint256 providerId) view returns((bool,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,bool,string,uint256,uint256,uint256,uint256)[])
 func (_Provider *ProviderCaller) GetMachines(opts *bind.CallOpts, providerId *big.Int) ([]SubnetProviderMachine, error) {
 	var out []interface{}
 	err := _Provider.contract.Call(opts, &out, "getMachines", providerId)
@@ -488,21 +545,21 @@ func (_Provider *ProviderCaller) GetMachines(opts *bind.CallOpts, providerId *bi
 
 // GetMachines is a free data retrieval call binding the contract method 0x8d49e78d.
 //
-// Solidity: function getMachines(uint256 providerId) view returns((bool,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,bool,string)[])
+// Solidity: function getMachines(uint256 providerId) view returns((bool,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,bool,string,uint256,uint256,uint256,uint256)[])
 func (_Provider *ProviderSession) GetMachines(providerId *big.Int) ([]SubnetProviderMachine, error) {
 	return _Provider.Contract.GetMachines(&_Provider.CallOpts, providerId)
 }
 
 // GetMachines is a free data retrieval call binding the contract method 0x8d49e78d.
 //
-// Solidity: function getMachines(uint256 providerId) view returns((bool,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,bool,string)[])
+// Solidity: function getMachines(uint256 providerId) view returns((bool,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,bool,string,uint256,uint256,uint256,uint256)[])
 func (_Provider *ProviderCallerSession) GetMachines(providerId *big.Int) ([]SubnetProviderMachine, error) {
 	return _Provider.Contract.GetMachines(&_Provider.CallOpts, providerId)
 }
 
 // GetMachinesPaginated is a free data retrieval call binding the contract method 0xa1d95967.
 //
-// Solidity: function getMachinesPaginated(uint256 providerId, uint256 start, uint256 end) view returns((bool,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,bool,string)[])
+// Solidity: function getMachinesPaginated(uint256 providerId, uint256 start, uint256 end) view returns((bool,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,bool,string,uint256,uint256,uint256,uint256)[])
 func (_Provider *ProviderCaller) GetMachinesPaginated(opts *bind.CallOpts, providerId *big.Int, start *big.Int, end *big.Int) ([]SubnetProviderMachine, error) {
 	var out []interface{}
 	err := _Provider.contract.Call(opts, &out, "getMachinesPaginated", providerId, start, end)
@@ -519,21 +576,21 @@ func (_Provider *ProviderCaller) GetMachinesPaginated(opts *bind.CallOpts, provi
 
 // GetMachinesPaginated is a free data retrieval call binding the contract method 0xa1d95967.
 //
-// Solidity: function getMachinesPaginated(uint256 providerId, uint256 start, uint256 end) view returns((bool,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,bool,string)[])
+// Solidity: function getMachinesPaginated(uint256 providerId, uint256 start, uint256 end) view returns((bool,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,bool,string,uint256,uint256,uint256,uint256)[])
 func (_Provider *ProviderSession) GetMachinesPaginated(providerId *big.Int, start *big.Int, end *big.Int) ([]SubnetProviderMachine, error) {
 	return _Provider.Contract.GetMachinesPaginated(&_Provider.CallOpts, providerId, start, end)
 }
 
 // GetMachinesPaginated is a free data retrieval call binding the contract method 0xa1d95967.
 //
-// Solidity: function getMachinesPaginated(uint256 providerId, uint256 start, uint256 end) view returns((bool,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,bool,string)[])
+// Solidity: function getMachinesPaginated(uint256 providerId, uint256 start, uint256 end) view returns((bool,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,bool,string,uint256,uint256,uint256,uint256)[])
 func (_Provider *ProviderCallerSession) GetMachinesPaginated(providerId *big.Int, start *big.Int, end *big.Int) ([]SubnetProviderMachine, error) {
 	return _Provider.Contract.GetMachinesPaginated(&_Provider.CallOpts, providerId, start, end)
 }
 
 // GetProvider is a free data retrieval call binding the contract method 0x5c42d079.
 //
-// Solidity: function getProvider(uint256 providerId) view returns((address,bool,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,string,bool,bool) provider)
+// Solidity: function getProvider(uint256 providerId) view returns((address,bool,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,string,bool,bool,bool) provider)
 func (_Provider *ProviderCaller) GetProvider(opts *bind.CallOpts, providerId *big.Int) (SubnetProviderProvider, error) {
 	var out []interface{}
 	err := _Provider.contract.Call(opts, &out, "getProvider", providerId)
@@ -550,14 +607,14 @@ func (_Provider *ProviderCaller) GetProvider(opts *bind.CallOpts, providerId *bi
 
 // GetProvider is a free data retrieval call binding the contract method 0x5c42d079.
 //
-// Solidity: function getProvider(uint256 providerId) view returns((address,bool,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,string,bool,bool) provider)
+// Solidity: function getProvider(uint256 providerId) view returns((address,bool,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,string,bool,bool,bool) provider)
 func (_Provider *ProviderSession) GetProvider(providerId *big.Int) (SubnetProviderProvider, error) {
 	return _Provider.Contract.GetProvider(&_Provider.CallOpts, providerId)
 }
 
 // GetProvider is a free data retrieval call binding the contract method 0x5c42d079.
 //
-// Solidity: function getProvider(uint256 providerId) view returns((address,bool,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,string,bool,bool) provider)
+// Solidity: function getProvider(uint256 providerId) view returns((address,bool,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,string,bool,bool,bool) provider)
 func (_Provider *ProviderCallerSession) GetProvider(providerId *big.Int) (SubnetProviderProvider, error) {
 	return _Provider.Contract.GetProvider(&_Provider.CallOpts, providerId)
 }
@@ -591,6 +648,37 @@ func (_Provider *ProviderSession) GetProviderOwner(providerId *big.Int) (common.
 // Solidity: function getProviderOwner(uint256 providerId) view returns(address)
 func (_Provider *ProviderCallerSession) GetProviderOwner(providerId *big.Int) (common.Address, error) {
 	return _Provider.Contract.GetProviderOwner(&_Provider.CallOpts, providerId)
+}
+
+// GetProviderReputation is a free data retrieval call binding the contract method 0x0d2bbacb.
+//
+// Solidity: function getProviderReputation(uint256 providerId) view returns(uint256)
+func (_Provider *ProviderCaller) GetProviderReputation(opts *bind.CallOpts, providerId *big.Int) (*big.Int, error) {
+	var out []interface{}
+	err := _Provider.contract.Call(opts, &out, "getProviderReputation", providerId)
+
+	if err != nil {
+		return *new(*big.Int), err
+	}
+
+	out0 := *abi.ConvertType(out[0], new(*big.Int)).(**big.Int)
+
+	return out0, err
+
+}
+
+// GetProviderReputation is a free data retrieval call binding the contract method 0x0d2bbacb.
+//
+// Solidity: function getProviderReputation(uint256 providerId) view returns(uint256)
+func (_Provider *ProviderSession) GetProviderReputation(providerId *big.Int) (*big.Int, error) {
+	return _Provider.Contract.GetProviderReputation(&_Provider.CallOpts, providerId)
+}
+
+// GetProviderReputation is a free data retrieval call binding the contract method 0x0d2bbacb.
+//
+// Solidity: function getProviderReputation(uint256 providerId) view returns(uint256)
+func (_Provider *ProviderCallerSession) GetProviderReputation(providerId *big.Int) (*big.Int, error) {
+	return _Provider.Contract.GetProviderReputation(&_Provider.CallOpts, providerId)
 }
 
 // GetProviderSlashedAmount is a free data retrieval call binding the contract method 0x972282fb.
@@ -746,6 +834,37 @@ func (_Provider *ProviderSession) IsProviderOperatorOrOwner(providerId *big.Int,
 // Solidity: function isProviderOperatorOrOwner(uint256 providerId, address account) view returns(bool)
 func (_Provider *ProviderCallerSession) IsProviderOperatorOrOwner(providerId *big.Int, account common.Address) (bool, error) {
 	return _Provider.Contract.IsProviderOperatorOrOwner(&_Provider.CallOpts, providerId, account)
+}
+
+// IsVerified is a free data retrieval call binding the contract method 0x37b6d96b.
+//
+// Solidity: function isVerified(uint256 providerId) view returns(bool)
+func (_Provider *ProviderCaller) IsVerified(opts *bind.CallOpts, providerId *big.Int) (bool, error) {
+	var out []interface{}
+	err := _Provider.contract.Call(opts, &out, "isVerified", providerId)
+
+	if err != nil {
+		return *new(bool), err
+	}
+
+	out0 := *abi.ConvertType(out[0], new(bool)).(*bool)
+
+	return out0, err
+
+}
+
+// IsVerified is a free data retrieval call binding the contract method 0x37b6d96b.
+//
+// Solidity: function isVerified(uint256 providerId) view returns(bool)
+func (_Provider *ProviderSession) IsVerified(providerId *big.Int) (bool, error) {
+	return _Provider.Contract.IsVerified(&_Provider.CallOpts, providerId)
+}
+
+// IsVerified is a free data retrieval call binding the contract method 0x37b6d96b.
+//
+// Solidity: function isVerified(uint256 providerId) view returns(bool)
+func (_Provider *ProviderCallerSession) IsVerified(providerId *big.Int) (bool, error) {
+	return _Provider.Contract.IsVerified(&_Provider.CallOpts, providerId)
 }
 
 // LockPeriod is a free data retrieval call binding the contract method 0x3fd8b02f.
@@ -905,53 +1024,55 @@ func (_Provider *ProviderCallerSession) OwnerOf(tokenId *big.Int) (common.Addres
 
 // ProviderMachines is a free data retrieval call binding the contract method 0x0e55e90c.
 //
-// Solidity: function providerMachines(uint256 , uint256 ) view returns(bool active, uint256 machineType, uint256 region, uint256 cpuCores, uint256 cpuSpeed, uint256 gpuCores, uint256 gpuMemory, uint256 memoryMB, uint256 diskGB, uint256 uploadSpeed, uint256 downloadSpeed, uint256 publicIp, uint256 overlayIp, uint256 createdAt, uint256 updatedAt, uint256 stakeAmount, uint256 removedAt, uint256 unlockTime, bool withdrawalProcessed, string metadata)
+// Solidity: function providerMachines(uint256 , uint256 ) view returns(bool active, uint256 machineType, uint256 region, uint256 cpuCores, uint256 gpuCores, uint256 gpuMemory, uint256 memoryMB, uint256 diskGB, uint256 uploadSpeed, uint256 downloadSpeed, uint256 createdAt, uint256 updatedAt, uint256 stakeAmount, uint256 removedAt, uint256 unlockTime, bool withdrawalProcessed, string metadata, uint256 cpuPricePerSecond, uint256 gpuPricePerSecond, uint256 memoryPricePerSecond, uint256 diskPricePerSecond)
 func (_Provider *ProviderCaller) ProviderMachines(opts *bind.CallOpts, arg0 *big.Int, arg1 *big.Int) (struct {
-	Active              bool
-	MachineType         *big.Int
-	Region              *big.Int
-	CpuCores            *big.Int
-	CpuSpeed            *big.Int
-	GpuCores            *big.Int
-	GpuMemory           *big.Int
-	MemoryMB            *big.Int
-	DiskGB              *big.Int
-	UploadSpeed         *big.Int
-	DownloadSpeed       *big.Int
-	PublicIp            *big.Int
-	OverlayIp           *big.Int
-	CreatedAt           *big.Int
-	UpdatedAt           *big.Int
-	StakeAmount         *big.Int
-	RemovedAt           *big.Int
-	UnlockTime          *big.Int
-	WithdrawalProcessed bool
-	Metadata            string
+	Active               bool
+	MachineType          *big.Int
+	Region               *big.Int
+	CpuCores             *big.Int
+	GpuCores             *big.Int
+	GpuMemory            *big.Int
+	MemoryMB             *big.Int
+	DiskGB               *big.Int
+	UploadSpeed          *big.Int
+	DownloadSpeed        *big.Int
+	CreatedAt            *big.Int
+	UpdatedAt            *big.Int
+	StakeAmount          *big.Int
+	RemovedAt            *big.Int
+	UnlockTime           *big.Int
+	WithdrawalProcessed  bool
+	Metadata             string
+	CpuPricePerSecond    *big.Int
+	GpuPricePerSecond    *big.Int
+	MemoryPricePerSecond *big.Int
+	DiskPricePerSecond   *big.Int
 }, error) {
 	var out []interface{}
 	err := _Provider.contract.Call(opts, &out, "providerMachines", arg0, arg1)
 
 	outstruct := new(struct {
-		Active              bool
-		MachineType         *big.Int
-		Region              *big.Int
-		CpuCores            *big.Int
-		CpuSpeed            *big.Int
-		GpuCores            *big.Int
-		GpuMemory           *big.Int
-		MemoryMB            *big.Int
-		DiskGB              *big.Int
-		UploadSpeed         *big.Int
-		DownloadSpeed       *big.Int
-		PublicIp            *big.Int
-		OverlayIp           *big.Int
-		CreatedAt           *big.Int
-		UpdatedAt           *big.Int
-		StakeAmount         *big.Int
-		RemovedAt           *big.Int
-		UnlockTime          *big.Int
-		WithdrawalProcessed bool
-		Metadata            string
+		Active               bool
+		MachineType          *big.Int
+		Region               *big.Int
+		CpuCores             *big.Int
+		GpuCores             *big.Int
+		GpuMemory            *big.Int
+		MemoryMB             *big.Int
+		DiskGB               *big.Int
+		UploadSpeed          *big.Int
+		DownloadSpeed        *big.Int
+		CreatedAt            *big.Int
+		UpdatedAt            *big.Int
+		StakeAmount          *big.Int
+		RemovedAt            *big.Int
+		UnlockTime           *big.Int
+		WithdrawalProcessed  bool
+		Metadata             string
+		CpuPricePerSecond    *big.Int
+		GpuPricePerSecond    *big.Int
+		MemoryPricePerSecond *big.Int
+		DiskPricePerSecond   *big.Int
 	})
 	if err != nil {
 		return *outstruct, err
@@ -961,22 +1082,23 @@ func (_Provider *ProviderCaller) ProviderMachines(opts *bind.CallOpts, arg0 *big
 	outstruct.MachineType = *abi.ConvertType(out[1], new(*big.Int)).(**big.Int)
 	outstruct.Region = *abi.ConvertType(out[2], new(*big.Int)).(**big.Int)
 	outstruct.CpuCores = *abi.ConvertType(out[3], new(*big.Int)).(**big.Int)
-	outstruct.CpuSpeed = *abi.ConvertType(out[4], new(*big.Int)).(**big.Int)
-	outstruct.GpuCores = *abi.ConvertType(out[5], new(*big.Int)).(**big.Int)
-	outstruct.GpuMemory = *abi.ConvertType(out[6], new(*big.Int)).(**big.Int)
-	outstruct.MemoryMB = *abi.ConvertType(out[7], new(*big.Int)).(**big.Int)
-	outstruct.DiskGB = *abi.ConvertType(out[8], new(*big.Int)).(**big.Int)
-	outstruct.UploadSpeed = *abi.ConvertType(out[9], new(*big.Int)).(**big.Int)
-	outstruct.DownloadSpeed = *abi.ConvertType(out[10], new(*big.Int)).(**big.Int)
-	outstruct.PublicIp = *abi.ConvertType(out[11], new(*big.Int)).(**big.Int)
-	outstruct.OverlayIp = *abi.ConvertType(out[12], new(*big.Int)).(**big.Int)
-	outstruct.CreatedAt = *abi.ConvertType(out[13], new(*big.Int)).(**big.Int)
-	outstruct.UpdatedAt = *abi.ConvertType(out[14], new(*big.Int)).(**big.Int)
-	outstruct.StakeAmount = *abi.ConvertType(out[15], new(*big.Int)).(**big.Int)
-	outstruct.RemovedAt = *abi.ConvertType(out[16], new(*big.Int)).(**big.Int)
-	outstruct.UnlockTime = *abi.ConvertType(out[17], new(*big.Int)).(**big.Int)
-	outstruct.WithdrawalProcessed = *abi.ConvertType(out[18], new(bool)).(*bool)
-	outstruct.Metadata = *abi.ConvertType(out[19], new(string)).(*string)
+	outstruct.GpuCores = *abi.ConvertType(out[4], new(*big.Int)).(**big.Int)
+	outstruct.GpuMemory = *abi.ConvertType(out[5], new(*big.Int)).(**big.Int)
+	outstruct.MemoryMB = *abi.ConvertType(out[6], new(*big.Int)).(**big.Int)
+	outstruct.DiskGB = *abi.ConvertType(out[7], new(*big.Int)).(**big.Int)
+	outstruct.UploadSpeed = *abi.ConvertType(out[8], new(*big.Int)).(**big.Int)
+	outstruct.DownloadSpeed = *abi.ConvertType(out[9], new(*big.Int)).(**big.Int)
+	outstruct.CreatedAt = *abi.ConvertType(out[10], new(*big.Int)).(**big.Int)
+	outstruct.UpdatedAt = *abi.ConvertType(out[11], new(*big.Int)).(**big.Int)
+	outstruct.StakeAmount = *abi.ConvertType(out[12], new(*big.Int)).(**big.Int)
+	outstruct.RemovedAt = *abi.ConvertType(out[13], new(*big.Int)).(**big.Int)
+	outstruct.UnlockTime = *abi.ConvertType(out[14], new(*big.Int)).(**big.Int)
+	outstruct.WithdrawalProcessed = *abi.ConvertType(out[15], new(bool)).(*bool)
+	outstruct.Metadata = *abi.ConvertType(out[16], new(string)).(*string)
+	outstruct.CpuPricePerSecond = *abi.ConvertType(out[17], new(*big.Int)).(**big.Int)
+	outstruct.GpuPricePerSecond = *abi.ConvertType(out[18], new(*big.Int)).(**big.Int)
+	outstruct.MemoryPricePerSecond = *abi.ConvertType(out[19], new(*big.Int)).(**big.Int)
+	outstruct.DiskPricePerSecond = *abi.ConvertType(out[20], new(*big.Int)).(**big.Int)
 
 	return *outstruct, err
 
@@ -984,63 +1106,65 @@ func (_Provider *ProviderCaller) ProviderMachines(opts *bind.CallOpts, arg0 *big
 
 // ProviderMachines is a free data retrieval call binding the contract method 0x0e55e90c.
 //
-// Solidity: function providerMachines(uint256 , uint256 ) view returns(bool active, uint256 machineType, uint256 region, uint256 cpuCores, uint256 cpuSpeed, uint256 gpuCores, uint256 gpuMemory, uint256 memoryMB, uint256 diskGB, uint256 uploadSpeed, uint256 downloadSpeed, uint256 publicIp, uint256 overlayIp, uint256 createdAt, uint256 updatedAt, uint256 stakeAmount, uint256 removedAt, uint256 unlockTime, bool withdrawalProcessed, string metadata)
+// Solidity: function providerMachines(uint256 , uint256 ) view returns(bool active, uint256 machineType, uint256 region, uint256 cpuCores, uint256 gpuCores, uint256 gpuMemory, uint256 memoryMB, uint256 diskGB, uint256 uploadSpeed, uint256 downloadSpeed, uint256 createdAt, uint256 updatedAt, uint256 stakeAmount, uint256 removedAt, uint256 unlockTime, bool withdrawalProcessed, string metadata, uint256 cpuPricePerSecond, uint256 gpuPricePerSecond, uint256 memoryPricePerSecond, uint256 diskPricePerSecond)
 func (_Provider *ProviderSession) ProviderMachines(arg0 *big.Int, arg1 *big.Int) (struct {
-	Active              bool
-	MachineType         *big.Int
-	Region              *big.Int
-	CpuCores            *big.Int
-	CpuSpeed            *big.Int
-	GpuCores            *big.Int
-	GpuMemory           *big.Int
-	MemoryMB            *big.Int
-	DiskGB              *big.Int
-	UploadSpeed         *big.Int
-	DownloadSpeed       *big.Int
-	PublicIp            *big.Int
-	OverlayIp           *big.Int
-	CreatedAt           *big.Int
-	UpdatedAt           *big.Int
-	StakeAmount         *big.Int
-	RemovedAt           *big.Int
-	UnlockTime          *big.Int
-	WithdrawalProcessed bool
-	Metadata            string
+	Active               bool
+	MachineType          *big.Int
+	Region               *big.Int
+	CpuCores             *big.Int
+	GpuCores             *big.Int
+	GpuMemory            *big.Int
+	MemoryMB             *big.Int
+	DiskGB               *big.Int
+	UploadSpeed          *big.Int
+	DownloadSpeed        *big.Int
+	CreatedAt            *big.Int
+	UpdatedAt            *big.Int
+	StakeAmount          *big.Int
+	RemovedAt            *big.Int
+	UnlockTime           *big.Int
+	WithdrawalProcessed  bool
+	Metadata             string
+	CpuPricePerSecond    *big.Int
+	GpuPricePerSecond    *big.Int
+	MemoryPricePerSecond *big.Int
+	DiskPricePerSecond   *big.Int
 }, error) {
 	return _Provider.Contract.ProviderMachines(&_Provider.CallOpts, arg0, arg1)
 }
 
 // ProviderMachines is a free data retrieval call binding the contract method 0x0e55e90c.
 //
-// Solidity: function providerMachines(uint256 , uint256 ) view returns(bool active, uint256 machineType, uint256 region, uint256 cpuCores, uint256 cpuSpeed, uint256 gpuCores, uint256 gpuMemory, uint256 memoryMB, uint256 diskGB, uint256 uploadSpeed, uint256 downloadSpeed, uint256 publicIp, uint256 overlayIp, uint256 createdAt, uint256 updatedAt, uint256 stakeAmount, uint256 removedAt, uint256 unlockTime, bool withdrawalProcessed, string metadata)
+// Solidity: function providerMachines(uint256 , uint256 ) view returns(bool active, uint256 machineType, uint256 region, uint256 cpuCores, uint256 gpuCores, uint256 gpuMemory, uint256 memoryMB, uint256 diskGB, uint256 uploadSpeed, uint256 downloadSpeed, uint256 createdAt, uint256 updatedAt, uint256 stakeAmount, uint256 removedAt, uint256 unlockTime, bool withdrawalProcessed, string metadata, uint256 cpuPricePerSecond, uint256 gpuPricePerSecond, uint256 memoryPricePerSecond, uint256 diskPricePerSecond)
 func (_Provider *ProviderCallerSession) ProviderMachines(arg0 *big.Int, arg1 *big.Int) (struct {
-	Active              bool
-	MachineType         *big.Int
-	Region              *big.Int
-	CpuCores            *big.Int
-	CpuSpeed            *big.Int
-	GpuCores            *big.Int
-	GpuMemory           *big.Int
-	MemoryMB            *big.Int
-	DiskGB              *big.Int
-	UploadSpeed         *big.Int
-	DownloadSpeed       *big.Int
-	PublicIp            *big.Int
-	OverlayIp           *big.Int
-	CreatedAt           *big.Int
-	UpdatedAt           *big.Int
-	StakeAmount         *big.Int
-	RemovedAt           *big.Int
-	UnlockTime          *big.Int
-	WithdrawalProcessed bool
-	Metadata            string
+	Active               bool
+	MachineType          *big.Int
+	Region               *big.Int
+	CpuCores             *big.Int
+	GpuCores             *big.Int
+	GpuMemory            *big.Int
+	MemoryMB             *big.Int
+	DiskGB               *big.Int
+	UploadSpeed          *big.Int
+	DownloadSpeed        *big.Int
+	CreatedAt            *big.Int
+	UpdatedAt            *big.Int
+	StakeAmount          *big.Int
+	RemovedAt            *big.Int
+	UnlockTime           *big.Int
+	WithdrawalProcessed  bool
+	Metadata             string
+	CpuPricePerSecond    *big.Int
+	GpuPricePerSecond    *big.Int
+	MemoryPricePerSecond *big.Int
+	DiskPricePerSecond   *big.Int
 }, error) {
 	return _Provider.Contract.ProviderMachines(&_Provider.CallOpts, arg0, arg1)
 }
 
 // Providers is a free data retrieval call binding the contract method 0x50f3fc81.
 //
-// Solidity: function providers(uint256 ) view returns(address operator, bool registered, uint256 reputation, uint256 machineCount, uint256 createdAt, uint256 updatedAt, uint256 totalStaked, uint256 pendingWithdrawals, uint256 slashedAmount, uint256 tokenId, string metadata, bool isSlashed, bool isActive)
+// Solidity: function providers(uint256 ) view returns(address operator, bool registered, uint256 reputation, uint256 machineCount, uint256 createdAt, uint256 updatedAt, uint256 totalStaked, uint256 pendingWithdrawals, uint256 slashedAmount, uint256 tokenId, string metadata, bool isSlashed, bool isActive, bool verified)
 func (_Provider *ProviderCaller) Providers(opts *bind.CallOpts, arg0 *big.Int) (struct {
 	Operator           common.Address
 	Registered         bool
@@ -1055,6 +1179,7 @@ func (_Provider *ProviderCaller) Providers(opts *bind.CallOpts, arg0 *big.Int) (
 	Metadata           string
 	IsSlashed          bool
 	IsActive           bool
+	Verified           bool
 }, error) {
 	var out []interface{}
 	err := _Provider.contract.Call(opts, &out, "providers", arg0)
@@ -1073,6 +1198,7 @@ func (_Provider *ProviderCaller) Providers(opts *bind.CallOpts, arg0 *big.Int) (
 		Metadata           string
 		IsSlashed          bool
 		IsActive           bool
+		Verified           bool
 	})
 	if err != nil {
 		return *outstruct, err
@@ -1091,6 +1217,7 @@ func (_Provider *ProviderCaller) Providers(opts *bind.CallOpts, arg0 *big.Int) (
 	outstruct.Metadata = *abi.ConvertType(out[10], new(string)).(*string)
 	outstruct.IsSlashed = *abi.ConvertType(out[11], new(bool)).(*bool)
 	outstruct.IsActive = *abi.ConvertType(out[12], new(bool)).(*bool)
+	outstruct.Verified = *abi.ConvertType(out[13], new(bool)).(*bool)
 
 	return *outstruct, err
 
@@ -1098,7 +1225,7 @@ func (_Provider *ProviderCaller) Providers(opts *bind.CallOpts, arg0 *big.Int) (
 
 // Providers is a free data retrieval call binding the contract method 0x50f3fc81.
 //
-// Solidity: function providers(uint256 ) view returns(address operator, bool registered, uint256 reputation, uint256 machineCount, uint256 createdAt, uint256 updatedAt, uint256 totalStaked, uint256 pendingWithdrawals, uint256 slashedAmount, uint256 tokenId, string metadata, bool isSlashed, bool isActive)
+// Solidity: function providers(uint256 ) view returns(address operator, bool registered, uint256 reputation, uint256 machineCount, uint256 createdAt, uint256 updatedAt, uint256 totalStaked, uint256 pendingWithdrawals, uint256 slashedAmount, uint256 tokenId, string metadata, bool isSlashed, bool isActive, bool verified)
 func (_Provider *ProviderSession) Providers(arg0 *big.Int) (struct {
 	Operator           common.Address
 	Registered         bool
@@ -1113,13 +1240,14 @@ func (_Provider *ProviderSession) Providers(arg0 *big.Int) (struct {
 	Metadata           string
 	IsSlashed          bool
 	IsActive           bool
+	Verified           bool
 }, error) {
 	return _Provider.Contract.Providers(&_Provider.CallOpts, arg0)
 }
 
 // Providers is a free data retrieval call binding the contract method 0x50f3fc81.
 //
-// Solidity: function providers(uint256 ) view returns(address operator, bool registered, uint256 reputation, uint256 machineCount, uint256 createdAt, uint256 updatedAt, uint256 totalStaked, uint256 pendingWithdrawals, uint256 slashedAmount, uint256 tokenId, string metadata, bool isSlashed, bool isActive)
+// Solidity: function providers(uint256 ) view returns(address operator, bool registered, uint256 reputation, uint256 machineCount, uint256 createdAt, uint256 updatedAt, uint256 totalStaked, uint256 pendingWithdrawals, uint256 slashedAmount, uint256 tokenId, string metadata, bool isSlashed, bool isActive, bool verified)
 func (_Provider *ProviderCallerSession) Providers(arg0 *big.Int) (struct {
 	Operator           common.Address
 	Registered         bool
@@ -1134,6 +1262,7 @@ func (_Provider *ProviderCallerSession) Providers(arg0 *big.Int) (struct {
 	Metadata           string
 	IsSlashed          bool
 	IsActive           bool
+	Verified           bool
 }, error) {
 	return _Provider.Contract.Providers(&_Provider.CallOpts, arg0)
 }
@@ -1355,25 +1484,25 @@ func (_Provider *ProviderCallerSession) ValidateMachineRequirements(machineType 
 	return _Provider.Contract.ValidateMachineRequirements(&_Provider.CallOpts, machineType, providerId, machineId, minCpuCores, minMemoryMB, minDiskGB, minGpuCores, minUploadSpeed, minDownloadSpeed)
 }
 
-// AddMachine is a paid mutator transaction binding the contract method 0xf52d98fc.
+// AddMachine is a paid mutator transaction binding the contract method 0xcf8a1ae7.
 //
-// Solidity: function addMachine(uint256 providerId, uint256 machineType, uint256 region, uint256 cpuCores, uint256 cpuSpeed, uint256 gpuCores, uint256 gpuMemory, uint256 memoryMB, uint256 diskGB, uint256 publicIp, uint256 overlayIp, uint256 uploadSpeed, uint256 downloadSpeed, string metadata) returns(uint256)
-func (_Provider *ProviderTransactor) AddMachine(opts *bind.TransactOpts, providerId *big.Int, machineType *big.Int, region *big.Int, cpuCores *big.Int, cpuSpeed *big.Int, gpuCores *big.Int, gpuMemory *big.Int, memoryMB *big.Int, diskGB *big.Int, publicIp *big.Int, overlayIp *big.Int, uploadSpeed *big.Int, downloadSpeed *big.Int, metadata string) (*types.Transaction, error) {
-	return _Provider.contract.Transact(opts, "addMachine", providerId, machineType, region, cpuCores, cpuSpeed, gpuCores, gpuMemory, memoryMB, diskGB, publicIp, overlayIp, uploadSpeed, downloadSpeed, metadata)
+// Solidity: function addMachine(uint256 providerId, uint256 machineType, uint256 region, uint256 cpuCores, uint256 gpuCores, uint256 gpuMemory, uint256 memoryMB, uint256 diskGB, uint256 uploadSpeed, uint256 downloadSpeed, string metadata, uint256 cpuPricePerSecond, uint256 gpuPricePerSecond, uint256 memoryPricePerSecond, uint256 diskPricePerSecond) returns(uint256)
+func (_Provider *ProviderTransactor) AddMachine(opts *bind.TransactOpts, providerId *big.Int, machineType *big.Int, region *big.Int, cpuCores *big.Int, gpuCores *big.Int, gpuMemory *big.Int, memoryMB *big.Int, diskGB *big.Int, uploadSpeed *big.Int, downloadSpeed *big.Int, metadata string, cpuPricePerSecond *big.Int, gpuPricePerSecond *big.Int, memoryPricePerSecond *big.Int, diskPricePerSecond *big.Int) (*types.Transaction, error) {
+	return _Provider.contract.Transact(opts, "addMachine", providerId, machineType, region, cpuCores, gpuCores, gpuMemory, memoryMB, diskGB, uploadSpeed, downloadSpeed, metadata, cpuPricePerSecond, gpuPricePerSecond, memoryPricePerSecond, diskPricePerSecond)
 }
 
-// AddMachine is a paid mutator transaction binding the contract method 0xf52d98fc.
+// AddMachine is a paid mutator transaction binding the contract method 0xcf8a1ae7.
 //
-// Solidity: function addMachine(uint256 providerId, uint256 machineType, uint256 region, uint256 cpuCores, uint256 cpuSpeed, uint256 gpuCores, uint256 gpuMemory, uint256 memoryMB, uint256 diskGB, uint256 publicIp, uint256 overlayIp, uint256 uploadSpeed, uint256 downloadSpeed, string metadata) returns(uint256)
-func (_Provider *ProviderSession) AddMachine(providerId *big.Int, machineType *big.Int, region *big.Int, cpuCores *big.Int, cpuSpeed *big.Int, gpuCores *big.Int, gpuMemory *big.Int, memoryMB *big.Int, diskGB *big.Int, publicIp *big.Int, overlayIp *big.Int, uploadSpeed *big.Int, downloadSpeed *big.Int, metadata string) (*types.Transaction, error) {
-	return _Provider.Contract.AddMachine(&_Provider.TransactOpts, providerId, machineType, region, cpuCores, cpuSpeed, gpuCores, gpuMemory, memoryMB, diskGB, publicIp, overlayIp, uploadSpeed, downloadSpeed, metadata)
+// Solidity: function addMachine(uint256 providerId, uint256 machineType, uint256 region, uint256 cpuCores, uint256 gpuCores, uint256 gpuMemory, uint256 memoryMB, uint256 diskGB, uint256 uploadSpeed, uint256 downloadSpeed, string metadata, uint256 cpuPricePerSecond, uint256 gpuPricePerSecond, uint256 memoryPricePerSecond, uint256 diskPricePerSecond) returns(uint256)
+func (_Provider *ProviderSession) AddMachine(providerId *big.Int, machineType *big.Int, region *big.Int, cpuCores *big.Int, gpuCores *big.Int, gpuMemory *big.Int, memoryMB *big.Int, diskGB *big.Int, uploadSpeed *big.Int, downloadSpeed *big.Int, metadata string, cpuPricePerSecond *big.Int, gpuPricePerSecond *big.Int, memoryPricePerSecond *big.Int, diskPricePerSecond *big.Int) (*types.Transaction, error) {
+	return _Provider.Contract.AddMachine(&_Provider.TransactOpts, providerId, machineType, region, cpuCores, gpuCores, gpuMemory, memoryMB, diskGB, uploadSpeed, downloadSpeed, metadata, cpuPricePerSecond, gpuPricePerSecond, memoryPricePerSecond, diskPricePerSecond)
 }
 
-// AddMachine is a paid mutator transaction binding the contract method 0xf52d98fc.
+// AddMachine is a paid mutator transaction binding the contract method 0xcf8a1ae7.
 //
-// Solidity: function addMachine(uint256 providerId, uint256 machineType, uint256 region, uint256 cpuCores, uint256 cpuSpeed, uint256 gpuCores, uint256 gpuMemory, uint256 memoryMB, uint256 diskGB, uint256 publicIp, uint256 overlayIp, uint256 uploadSpeed, uint256 downloadSpeed, string metadata) returns(uint256)
-func (_Provider *ProviderTransactorSession) AddMachine(providerId *big.Int, machineType *big.Int, region *big.Int, cpuCores *big.Int, cpuSpeed *big.Int, gpuCores *big.Int, gpuMemory *big.Int, memoryMB *big.Int, diskGB *big.Int, publicIp *big.Int, overlayIp *big.Int, uploadSpeed *big.Int, downloadSpeed *big.Int, metadata string) (*types.Transaction, error) {
-	return _Provider.Contract.AddMachine(&_Provider.TransactOpts, providerId, machineType, region, cpuCores, cpuSpeed, gpuCores, gpuMemory, memoryMB, diskGB, publicIp, overlayIp, uploadSpeed, downloadSpeed, metadata)
+// Solidity: function addMachine(uint256 providerId, uint256 machineType, uint256 region, uint256 cpuCores, uint256 gpuCores, uint256 gpuMemory, uint256 memoryMB, uint256 diskGB, uint256 uploadSpeed, uint256 downloadSpeed, string metadata, uint256 cpuPricePerSecond, uint256 gpuPricePerSecond, uint256 memoryPricePerSecond, uint256 diskPricePerSecond) returns(uint256)
+func (_Provider *ProviderTransactorSession) AddMachine(providerId *big.Int, machineType *big.Int, region *big.Int, cpuCores *big.Int, gpuCores *big.Int, gpuMemory *big.Int, memoryMB *big.Int, diskGB *big.Int, uploadSpeed *big.Int, downloadSpeed *big.Int, metadata string, cpuPricePerSecond *big.Int, gpuPricePerSecond *big.Int, memoryPricePerSecond *big.Int, diskPricePerSecond *big.Int) (*types.Transaction, error) {
+	return _Provider.Contract.AddMachine(&_Provider.TransactOpts, providerId, machineType, region, cpuCores, gpuCores, gpuMemory, memoryMB, diskGB, uploadSpeed, downloadSpeed, metadata, cpuPricePerSecond, gpuPricePerSecond, memoryPricePerSecond, diskPricePerSecond)
 }
 
 // Approve is a paid mutator transaction binding the contract method 0x095ea7b3.
@@ -1458,6 +1587,27 @@ func (_Provider *ProviderSession) RegisterProvider(operator common.Address, meta
 // Solidity: function registerProvider(address operator, string metadata) returns(uint256)
 func (_Provider *ProviderTransactorSession) RegisterProvider(operator common.Address, metadata string) (*types.Transaction, error) {
 	return _Provider.Contract.RegisterProvider(&_Provider.TransactOpts, operator, metadata)
+}
+
+// RegisterProviderWithMachine is a paid mutator transaction binding the contract method 0x9cee4f69.
+//
+// Solidity: function registerProviderWithMachine(address operator, string providerMetadata, uint256 machineType, uint256 region, uint256 cpuCores, uint256 gpuCores, uint256 gpuMemory, uint256 memoryMB, uint256 diskGB, uint256 uploadSpeed, uint256 downloadSpeed, string machineMetadata, uint256 cpuPricePerSecond, uint256 gpuPricePerSecond, uint256 memoryPricePerSecond, uint256 diskPricePerSecond) returns(uint256 providerId, uint256 machineId)
+func (_Provider *ProviderTransactor) RegisterProviderWithMachine(opts *bind.TransactOpts, operator common.Address, providerMetadata string, machineType *big.Int, region *big.Int, cpuCores *big.Int, gpuCores *big.Int, gpuMemory *big.Int, memoryMB *big.Int, diskGB *big.Int, uploadSpeed *big.Int, downloadSpeed *big.Int, machineMetadata string, cpuPricePerSecond *big.Int, gpuPricePerSecond *big.Int, memoryPricePerSecond *big.Int, diskPricePerSecond *big.Int) (*types.Transaction, error) {
+	return _Provider.contract.Transact(opts, "registerProviderWithMachine", operator, providerMetadata, machineType, region, cpuCores, gpuCores, gpuMemory, memoryMB, diskGB, uploadSpeed, downloadSpeed, machineMetadata, cpuPricePerSecond, gpuPricePerSecond, memoryPricePerSecond, diskPricePerSecond)
+}
+
+// RegisterProviderWithMachine is a paid mutator transaction binding the contract method 0x9cee4f69.
+//
+// Solidity: function registerProviderWithMachine(address operator, string providerMetadata, uint256 machineType, uint256 region, uint256 cpuCores, uint256 gpuCores, uint256 gpuMemory, uint256 memoryMB, uint256 diskGB, uint256 uploadSpeed, uint256 downloadSpeed, string machineMetadata, uint256 cpuPricePerSecond, uint256 gpuPricePerSecond, uint256 memoryPricePerSecond, uint256 diskPricePerSecond) returns(uint256 providerId, uint256 machineId)
+func (_Provider *ProviderSession) RegisterProviderWithMachine(operator common.Address, providerMetadata string, machineType *big.Int, region *big.Int, cpuCores *big.Int, gpuCores *big.Int, gpuMemory *big.Int, memoryMB *big.Int, diskGB *big.Int, uploadSpeed *big.Int, downloadSpeed *big.Int, machineMetadata string, cpuPricePerSecond *big.Int, gpuPricePerSecond *big.Int, memoryPricePerSecond *big.Int, diskPricePerSecond *big.Int) (*types.Transaction, error) {
+	return _Provider.Contract.RegisterProviderWithMachine(&_Provider.TransactOpts, operator, providerMetadata, machineType, region, cpuCores, gpuCores, gpuMemory, memoryMB, diskGB, uploadSpeed, downloadSpeed, machineMetadata, cpuPricePerSecond, gpuPricePerSecond, memoryPricePerSecond, diskPricePerSecond)
+}
+
+// RegisterProviderWithMachine is a paid mutator transaction binding the contract method 0x9cee4f69.
+//
+// Solidity: function registerProviderWithMachine(address operator, string providerMetadata, uint256 machineType, uint256 region, uint256 cpuCores, uint256 gpuCores, uint256 gpuMemory, uint256 memoryMB, uint256 diskGB, uint256 uploadSpeed, uint256 downloadSpeed, string machineMetadata, uint256 cpuPricePerSecond, uint256 gpuPricePerSecond, uint256 memoryPricePerSecond, uint256 diskPricePerSecond) returns(uint256 providerId, uint256 machineId)
+func (_Provider *ProviderTransactorSession) RegisterProviderWithMachine(operator common.Address, providerMetadata string, machineType *big.Int, region *big.Int, cpuCores *big.Int, gpuCores *big.Int, gpuMemory *big.Int, memoryMB *big.Int, diskGB *big.Int, uploadSpeed *big.Int, downloadSpeed *big.Int, machineMetadata string, cpuPricePerSecond *big.Int, gpuPricePerSecond *big.Int, memoryPricePerSecond *big.Int, diskPricePerSecond *big.Int) (*types.Transaction, error) {
+	return _Provider.Contract.RegisterProviderWithMachine(&_Provider.TransactOpts, operator, providerMetadata, machineType, region, cpuCores, gpuCores, gpuMemory, memoryMB, diskGB, uploadSpeed, downloadSpeed, machineMetadata, cpuPricePerSecond, gpuPricePerSecond, memoryPricePerSecond, diskPricePerSecond)
 }
 
 // RemoveMachine is a paid mutator transaction binding the contract method 0x88eb26ee.
@@ -1586,6 +1736,27 @@ func (_Provider *ProviderTransactorSession) SetLockPeriod(newLockPeriod *big.Int
 	return _Provider.Contract.SetLockPeriod(&_Provider.TransactOpts, newLockPeriod)
 }
 
+// SetMachineResourcePrice is a paid mutator transaction binding the contract method 0xe845a981.
+//
+// Solidity: function setMachineResourcePrice(uint256 providerId, uint256 machineId, uint256 cpuPricePerSecond, uint256 gpuPricePerSecond, uint256 memoryPricePerSecond, uint256 diskPricePerSecond) returns()
+func (_Provider *ProviderTransactor) SetMachineResourcePrice(opts *bind.TransactOpts, providerId *big.Int, machineId *big.Int, cpuPricePerSecond *big.Int, gpuPricePerSecond *big.Int, memoryPricePerSecond *big.Int, diskPricePerSecond *big.Int) (*types.Transaction, error) {
+	return _Provider.contract.Transact(opts, "setMachineResourcePrice", providerId, machineId, cpuPricePerSecond, gpuPricePerSecond, memoryPricePerSecond, diskPricePerSecond)
+}
+
+// SetMachineResourcePrice is a paid mutator transaction binding the contract method 0xe845a981.
+//
+// Solidity: function setMachineResourcePrice(uint256 providerId, uint256 machineId, uint256 cpuPricePerSecond, uint256 gpuPricePerSecond, uint256 memoryPricePerSecond, uint256 diskPricePerSecond) returns()
+func (_Provider *ProviderSession) SetMachineResourcePrice(providerId *big.Int, machineId *big.Int, cpuPricePerSecond *big.Int, gpuPricePerSecond *big.Int, memoryPricePerSecond *big.Int, diskPricePerSecond *big.Int) (*types.Transaction, error) {
+	return _Provider.Contract.SetMachineResourcePrice(&_Provider.TransactOpts, providerId, machineId, cpuPricePerSecond, gpuPricePerSecond, memoryPricePerSecond, diskPricePerSecond)
+}
+
+// SetMachineResourcePrice is a paid mutator transaction binding the contract method 0xe845a981.
+//
+// Solidity: function setMachineResourcePrice(uint256 providerId, uint256 machineId, uint256 cpuPricePerSecond, uint256 gpuPricePerSecond, uint256 memoryPricePerSecond, uint256 diskPricePerSecond) returns()
+func (_Provider *ProviderTransactorSession) SetMachineResourcePrice(providerId *big.Int, machineId *big.Int, cpuPricePerSecond *big.Int, gpuPricePerSecond *big.Int, memoryPricePerSecond *big.Int, diskPricePerSecond *big.Int) (*types.Transaction, error) {
+	return _Provider.Contract.SetMachineResourcePrice(&_Provider.TransactOpts, providerId, machineId, cpuPricePerSecond, gpuPricePerSecond, memoryPricePerSecond, diskPricePerSecond)
+}
+
 // SetProviderOperator is a paid mutator transaction binding the contract method 0x7496be68.
 //
 // Solidity: function setProviderOperator(uint256 providerId, address newOperator) returns()
@@ -1605,6 +1776,48 @@ func (_Provider *ProviderSession) SetProviderOperator(providerId *big.Int, newOp
 // Solidity: function setProviderOperator(uint256 providerId, address newOperator) returns()
 func (_Provider *ProviderTransactorSession) SetProviderOperator(providerId *big.Int, newOperator common.Address) (*types.Transaction, error) {
 	return _Provider.Contract.SetProviderOperator(&_Provider.TransactOpts, providerId, newOperator)
+}
+
+// SetProviderReputation is a paid mutator transaction binding the contract method 0x6d77c256.
+//
+// Solidity: function setProviderReputation(uint256 providerId, uint256 newReputation) returns()
+func (_Provider *ProviderTransactor) SetProviderReputation(opts *bind.TransactOpts, providerId *big.Int, newReputation *big.Int) (*types.Transaction, error) {
+	return _Provider.contract.Transact(opts, "setProviderReputation", providerId, newReputation)
+}
+
+// SetProviderReputation is a paid mutator transaction binding the contract method 0x6d77c256.
+//
+// Solidity: function setProviderReputation(uint256 providerId, uint256 newReputation) returns()
+func (_Provider *ProviderSession) SetProviderReputation(providerId *big.Int, newReputation *big.Int) (*types.Transaction, error) {
+	return _Provider.Contract.SetProviderReputation(&_Provider.TransactOpts, providerId, newReputation)
+}
+
+// SetProviderReputation is a paid mutator transaction binding the contract method 0x6d77c256.
+//
+// Solidity: function setProviderReputation(uint256 providerId, uint256 newReputation) returns()
+func (_Provider *ProviderTransactorSession) SetProviderReputation(providerId *big.Int, newReputation *big.Int) (*types.Transaction, error) {
+	return _Provider.Contract.SetProviderReputation(&_Provider.TransactOpts, providerId, newReputation)
+}
+
+// SetProviderVerified is a paid mutator transaction binding the contract method 0x3123d1ff.
+//
+// Solidity: function setProviderVerified(uint256 providerId, bool verified_) returns()
+func (_Provider *ProviderTransactor) SetProviderVerified(opts *bind.TransactOpts, providerId *big.Int, verified_ bool) (*types.Transaction, error) {
+	return _Provider.contract.Transact(opts, "setProviderVerified", providerId, verified_)
+}
+
+// SetProviderVerified is a paid mutator transaction binding the contract method 0x3123d1ff.
+//
+// Solidity: function setProviderVerified(uint256 providerId, bool verified_) returns()
+func (_Provider *ProviderSession) SetProviderVerified(providerId *big.Int, verified_ bool) (*types.Transaction, error) {
+	return _Provider.Contract.SetProviderVerified(&_Provider.TransactOpts, providerId, verified_)
+}
+
+// SetProviderVerified is a paid mutator transaction binding the contract method 0x3123d1ff.
+//
+// Solidity: function setProviderVerified(uint256 providerId, bool verified_) returns()
+func (_Provider *ProviderTransactorSession) SetProviderVerified(providerId *big.Int, verified_ bool) (*types.Transaction, error) {
+	return _Provider.Contract.SetProviderVerified(&_Provider.TransactOpts, providerId, verified_)
 }
 
 // SetStakeParameters is a paid mutator transaction binding the contract method 0x03f612c4.
@@ -1691,25 +1904,25 @@ func (_Provider *ProviderTransactorSession) TransferOwnership(newOwner common.Ad
 	return _Provider.Contract.TransferOwnership(&_Provider.TransactOpts, newOwner)
 }
 
-// UpdateMachine is a paid mutator transaction binding the contract method 0x5ec3c24c.
+// UpdateMachine is a paid mutator transaction binding the contract method 0xbc59863c.
 //
-// Solidity: function updateMachine(uint256 providerId, uint256 machineId, uint256 cpuCores, uint256 cpuSpeed, uint256 gpuCores, uint256 gpuMemory, uint256 memoryMB, uint256 diskGB, uint256 publicIp, uint256 overlayIp, uint256 uploadSpeed, uint256 downloadSpeed, string metadata) returns()
-func (_Provider *ProviderTransactor) UpdateMachine(opts *bind.TransactOpts, providerId *big.Int, machineId *big.Int, cpuCores *big.Int, cpuSpeed *big.Int, gpuCores *big.Int, gpuMemory *big.Int, memoryMB *big.Int, diskGB *big.Int, publicIp *big.Int, overlayIp *big.Int, uploadSpeed *big.Int, downloadSpeed *big.Int, metadata string) (*types.Transaction, error) {
-	return _Provider.contract.Transact(opts, "updateMachine", providerId, machineId, cpuCores, cpuSpeed, gpuCores, gpuMemory, memoryMB, diskGB, publicIp, overlayIp, uploadSpeed, downloadSpeed, metadata)
+// Solidity: function updateMachine(uint256 providerId, uint256 machineId, uint256 cpuCores, uint256 gpuCores, uint256 gpuMemory, uint256 memoryMB, uint256 diskGB, uint256 uploadSpeed, uint256 downloadSpeed, string metadata, uint256 cpuPricePerSecond, uint256 gpuPricePerSecond, uint256 memoryPricePerSecond, uint256 diskPricePerSecond) returns()
+func (_Provider *ProviderTransactor) UpdateMachine(opts *bind.TransactOpts, providerId *big.Int, machineId *big.Int, cpuCores *big.Int, gpuCores *big.Int, gpuMemory *big.Int, memoryMB *big.Int, diskGB *big.Int, uploadSpeed *big.Int, downloadSpeed *big.Int, metadata string, cpuPricePerSecond *big.Int, gpuPricePerSecond *big.Int, memoryPricePerSecond *big.Int, diskPricePerSecond *big.Int) (*types.Transaction, error) {
+	return _Provider.contract.Transact(opts, "updateMachine", providerId, machineId, cpuCores, gpuCores, gpuMemory, memoryMB, diskGB, uploadSpeed, downloadSpeed, metadata, cpuPricePerSecond, gpuPricePerSecond, memoryPricePerSecond, diskPricePerSecond)
 }
 
-// UpdateMachine is a paid mutator transaction binding the contract method 0x5ec3c24c.
+// UpdateMachine is a paid mutator transaction binding the contract method 0xbc59863c.
 //
-// Solidity: function updateMachine(uint256 providerId, uint256 machineId, uint256 cpuCores, uint256 cpuSpeed, uint256 gpuCores, uint256 gpuMemory, uint256 memoryMB, uint256 diskGB, uint256 publicIp, uint256 overlayIp, uint256 uploadSpeed, uint256 downloadSpeed, string metadata) returns()
-func (_Provider *ProviderSession) UpdateMachine(providerId *big.Int, machineId *big.Int, cpuCores *big.Int, cpuSpeed *big.Int, gpuCores *big.Int, gpuMemory *big.Int, memoryMB *big.Int, diskGB *big.Int, publicIp *big.Int, overlayIp *big.Int, uploadSpeed *big.Int, downloadSpeed *big.Int, metadata string) (*types.Transaction, error) {
-	return _Provider.Contract.UpdateMachine(&_Provider.TransactOpts, providerId, machineId, cpuCores, cpuSpeed, gpuCores, gpuMemory, memoryMB, diskGB, publicIp, overlayIp, uploadSpeed, downloadSpeed, metadata)
+// Solidity: function updateMachine(uint256 providerId, uint256 machineId, uint256 cpuCores, uint256 gpuCores, uint256 gpuMemory, uint256 memoryMB, uint256 diskGB, uint256 uploadSpeed, uint256 downloadSpeed, string metadata, uint256 cpuPricePerSecond, uint256 gpuPricePerSecond, uint256 memoryPricePerSecond, uint256 diskPricePerSecond) returns()
+func (_Provider *ProviderSession) UpdateMachine(providerId *big.Int, machineId *big.Int, cpuCores *big.Int, gpuCores *big.Int, gpuMemory *big.Int, memoryMB *big.Int, diskGB *big.Int, uploadSpeed *big.Int, downloadSpeed *big.Int, metadata string, cpuPricePerSecond *big.Int, gpuPricePerSecond *big.Int, memoryPricePerSecond *big.Int, diskPricePerSecond *big.Int) (*types.Transaction, error) {
+	return _Provider.Contract.UpdateMachine(&_Provider.TransactOpts, providerId, machineId, cpuCores, gpuCores, gpuMemory, memoryMB, diskGB, uploadSpeed, downloadSpeed, metadata, cpuPricePerSecond, gpuPricePerSecond, memoryPricePerSecond, diskPricePerSecond)
 }
 
-// UpdateMachine is a paid mutator transaction binding the contract method 0x5ec3c24c.
+// UpdateMachine is a paid mutator transaction binding the contract method 0xbc59863c.
 //
-// Solidity: function updateMachine(uint256 providerId, uint256 machineId, uint256 cpuCores, uint256 cpuSpeed, uint256 gpuCores, uint256 gpuMemory, uint256 memoryMB, uint256 diskGB, uint256 publicIp, uint256 overlayIp, uint256 uploadSpeed, uint256 downloadSpeed, string metadata) returns()
-func (_Provider *ProviderTransactorSession) UpdateMachine(providerId *big.Int, machineId *big.Int, cpuCores *big.Int, cpuSpeed *big.Int, gpuCores *big.Int, gpuMemory *big.Int, memoryMB *big.Int, diskGB *big.Int, publicIp *big.Int, overlayIp *big.Int, uploadSpeed *big.Int, downloadSpeed *big.Int, metadata string) (*types.Transaction, error) {
-	return _Provider.Contract.UpdateMachine(&_Provider.TransactOpts, providerId, machineId, cpuCores, cpuSpeed, gpuCores, gpuMemory, memoryMB, diskGB, publicIp, overlayIp, uploadSpeed, downloadSpeed, metadata)
+// Solidity: function updateMachine(uint256 providerId, uint256 machineId, uint256 cpuCores, uint256 gpuCores, uint256 gpuMemory, uint256 memoryMB, uint256 diskGB, uint256 uploadSpeed, uint256 downloadSpeed, string metadata, uint256 cpuPricePerSecond, uint256 gpuPricePerSecond, uint256 memoryPricePerSecond, uint256 diskPricePerSecond) returns()
+func (_Provider *ProviderTransactorSession) UpdateMachine(providerId *big.Int, machineId *big.Int, cpuCores *big.Int, gpuCores *big.Int, gpuMemory *big.Int, memoryMB *big.Int, diskGB *big.Int, uploadSpeed *big.Int, downloadSpeed *big.Int, metadata string, cpuPricePerSecond *big.Int, gpuPricePerSecond *big.Int, memoryPricePerSecond *big.Int, diskPricePerSecond *big.Int) (*types.Transaction, error) {
+	return _Provider.Contract.UpdateMachine(&_Provider.TransactOpts, providerId, machineId, cpuCores, gpuCores, gpuMemory, memoryMB, diskGB, uploadSpeed, downloadSpeed, metadata, cpuPricePerSecond, gpuPricePerSecond, memoryPricePerSecond, diskPricePerSecond)
 }
 
 // UpdateProviderInfo is a paid mutator transaction binding the contract method 0x3f3e8f24.
@@ -2766,6 +2979,163 @@ func (_Provider *ProviderFilterer) ParseMachineRemoved(log types.Log) (*Provider
 	return event, nil
 }
 
+// ProviderMachineResourcePriceUpdatedIterator is returned from FilterMachineResourcePriceUpdated and is used to iterate over the raw logs and unpacked data for MachineResourcePriceUpdated events raised by the Provider contract.
+type ProviderMachineResourcePriceUpdatedIterator struct {
+	Event *ProviderMachineResourcePriceUpdated // Event containing the contract specifics and raw log
+
+	contract *bind.BoundContract // Generic contract to use for unpacking event data
+	event    string              // Event name to use for unpacking event data
+
+	logs chan types.Log        // Log channel receiving the found contract events
+	sub  ethereum.Subscription // Subscription for errors, completion and termination
+	done bool                  // Whether the subscription completed delivering logs
+	fail error                 // Occurred error to stop iteration
+}
+
+// Next advances the iterator to the subsequent event, returning whether there
+// are any more events found. In case of a retrieval or parsing error, false is
+// returned and Error() can be queried for the exact failure.
+func (it *ProviderMachineResourcePriceUpdatedIterator) Next() bool {
+	// If the iterator failed, stop iterating
+	if it.fail != nil {
+		return false
+	}
+	// If the iterator completed, deliver directly whatever's available
+	if it.done {
+		select {
+		case log := <-it.logs:
+			it.Event = new(ProviderMachineResourcePriceUpdated)
+			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+				it.fail = err
+				return false
+			}
+			it.Event.Raw = log
+			return true
+
+		default:
+			return false
+		}
+	}
+	// Iterator still in progress, wait for either a data or an error event
+	select {
+	case log := <-it.logs:
+		it.Event = new(ProviderMachineResourcePriceUpdated)
+		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+			it.fail = err
+			return false
+		}
+		it.Event.Raw = log
+		return true
+
+	case err := <-it.sub.Err():
+		it.done = true
+		it.fail = err
+		return it.Next()
+	}
+}
+
+// Error returns any retrieval or parsing error occurred during filtering.
+func (it *ProviderMachineResourcePriceUpdatedIterator) Error() error {
+	return it.fail
+}
+
+// Close terminates the iteration process, releasing any pending underlying
+// resources.
+func (it *ProviderMachineResourcePriceUpdatedIterator) Close() error {
+	it.sub.Unsubscribe()
+	return nil
+}
+
+// ProviderMachineResourcePriceUpdated represents a MachineResourcePriceUpdated event raised by the Provider contract.
+type ProviderMachineResourcePriceUpdated struct {
+	ProviderId           *big.Int
+	MachineId            *big.Int
+	CpuPricePerSecond    *big.Int
+	GpuPricePerSecond    *big.Int
+	MemoryPricePerSecond *big.Int
+	DiskPricePerSecond   *big.Int
+	Raw                  types.Log // Blockchain specific contextual infos
+}
+
+// FilterMachineResourcePriceUpdated is a free log retrieval operation binding the contract event 0x87c6e61ce2351914ceb4928d7104755f640d3a7ad062a1228110fc0767b03521.
+//
+// Solidity: event MachineResourcePriceUpdated(uint256 indexed providerId, uint256 indexed machineId, uint256 cpuPricePerSecond, uint256 gpuPricePerSecond, uint256 memoryPricePerSecond, uint256 diskPricePerSecond)
+func (_Provider *ProviderFilterer) FilterMachineResourcePriceUpdated(opts *bind.FilterOpts, providerId []*big.Int, machineId []*big.Int) (*ProviderMachineResourcePriceUpdatedIterator, error) {
+
+	var providerIdRule []interface{}
+	for _, providerIdItem := range providerId {
+		providerIdRule = append(providerIdRule, providerIdItem)
+	}
+	var machineIdRule []interface{}
+	for _, machineIdItem := range machineId {
+		machineIdRule = append(machineIdRule, machineIdItem)
+	}
+
+	logs, sub, err := _Provider.contract.FilterLogs(opts, "MachineResourcePriceUpdated", providerIdRule, machineIdRule)
+	if err != nil {
+		return nil, err
+	}
+	return &ProviderMachineResourcePriceUpdatedIterator{contract: _Provider.contract, event: "MachineResourcePriceUpdated", logs: logs, sub: sub}, nil
+}
+
+// WatchMachineResourcePriceUpdated is a free log subscription operation binding the contract event 0x87c6e61ce2351914ceb4928d7104755f640d3a7ad062a1228110fc0767b03521.
+//
+// Solidity: event MachineResourcePriceUpdated(uint256 indexed providerId, uint256 indexed machineId, uint256 cpuPricePerSecond, uint256 gpuPricePerSecond, uint256 memoryPricePerSecond, uint256 diskPricePerSecond)
+func (_Provider *ProviderFilterer) WatchMachineResourcePriceUpdated(opts *bind.WatchOpts, sink chan<- *ProviderMachineResourcePriceUpdated, providerId []*big.Int, machineId []*big.Int) (event.Subscription, error) {
+
+	var providerIdRule []interface{}
+	for _, providerIdItem := range providerId {
+		providerIdRule = append(providerIdRule, providerIdItem)
+	}
+	var machineIdRule []interface{}
+	for _, machineIdItem := range machineId {
+		machineIdRule = append(machineIdRule, machineIdItem)
+	}
+
+	logs, sub, err := _Provider.contract.WatchLogs(opts, "MachineResourcePriceUpdated", providerIdRule, machineIdRule)
+	if err != nil {
+		return nil, err
+	}
+	return event.NewSubscription(func(quit <-chan struct{}) error {
+		defer sub.Unsubscribe()
+		for {
+			select {
+			case log := <-logs:
+				// New log arrived, parse the event and forward to the user
+				event := new(ProviderMachineResourcePriceUpdated)
+				if err := _Provider.contract.UnpackLog(event, "MachineResourcePriceUpdated", log); err != nil {
+					return err
+				}
+				event.Raw = log
+
+				select {
+				case sink <- event:
+				case err := <-sub.Err():
+					return err
+				case <-quit:
+					return nil
+				}
+			case err := <-sub.Err():
+				return err
+			case <-quit:
+				return nil
+			}
+		}
+	}), nil
+}
+
+// ParseMachineResourcePriceUpdated is a log parse operation binding the contract event 0x87c6e61ce2351914ceb4928d7104755f640d3a7ad062a1228110fc0767b03521.
+//
+// Solidity: event MachineResourcePriceUpdated(uint256 indexed providerId, uint256 indexed machineId, uint256 cpuPricePerSecond, uint256 gpuPricePerSecond, uint256 memoryPricePerSecond, uint256 diskPricePerSecond)
+func (_Provider *ProviderFilterer) ParseMachineResourcePriceUpdated(log types.Log) (*ProviderMachineResourcePriceUpdated, error) {
+	event := new(ProviderMachineResourcePriceUpdated)
+	if err := _Provider.contract.UnpackLog(event, "MachineResourcePriceUpdated", log); err != nil {
+		return nil, err
+	}
+	event.Raw = log
+	return event, nil
+}
+
 // ProviderMachineUpdatedIterator is returned from FilterMachineUpdated and is used to iterate over the raw logs and unpacked data for MachineUpdated events raised by the Provider contract.
 type ProviderMachineUpdatedIterator struct {
 	Event *ProviderMachineUpdated // Event containing the contract specifics and raw log
@@ -3199,6 +3569,151 @@ func (_Provider *ProviderFilterer) ParseOwnershipTransferred(log types.Log) (*Pr
 	return event, nil
 }
 
+// ProviderProviderReputationUpdatedIterator is returned from FilterProviderReputationUpdated and is used to iterate over the raw logs and unpacked data for ProviderReputationUpdated events raised by the Provider contract.
+type ProviderProviderReputationUpdatedIterator struct {
+	Event *ProviderProviderReputationUpdated // Event containing the contract specifics and raw log
+
+	contract *bind.BoundContract // Generic contract to use for unpacking event data
+	event    string              // Event name to use for unpacking event data
+
+	logs chan types.Log        // Log channel receiving the found contract events
+	sub  ethereum.Subscription // Subscription for errors, completion and termination
+	done bool                  // Whether the subscription completed delivering logs
+	fail error                 // Occurred error to stop iteration
+}
+
+// Next advances the iterator to the subsequent event, returning whether there
+// are any more events found. In case of a retrieval or parsing error, false is
+// returned and Error() can be queried for the exact failure.
+func (it *ProviderProviderReputationUpdatedIterator) Next() bool {
+	// If the iterator failed, stop iterating
+	if it.fail != nil {
+		return false
+	}
+	// If the iterator completed, deliver directly whatever's available
+	if it.done {
+		select {
+		case log := <-it.logs:
+			it.Event = new(ProviderProviderReputationUpdated)
+			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+				it.fail = err
+				return false
+			}
+			it.Event.Raw = log
+			return true
+
+		default:
+			return false
+		}
+	}
+	// Iterator still in progress, wait for either a data or an error event
+	select {
+	case log := <-it.logs:
+		it.Event = new(ProviderProviderReputationUpdated)
+		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+			it.fail = err
+			return false
+		}
+		it.Event.Raw = log
+		return true
+
+	case err := <-it.sub.Err():
+		it.done = true
+		it.fail = err
+		return it.Next()
+	}
+}
+
+// Error returns any retrieval or parsing error occurred during filtering.
+func (it *ProviderProviderReputationUpdatedIterator) Error() error {
+	return it.fail
+}
+
+// Close terminates the iteration process, releasing any pending underlying
+// resources.
+func (it *ProviderProviderReputationUpdatedIterator) Close() error {
+	it.sub.Unsubscribe()
+	return nil
+}
+
+// ProviderProviderReputationUpdated represents a ProviderReputationUpdated event raised by the Provider contract.
+type ProviderProviderReputationUpdated struct {
+	ProviderId    *big.Int
+	NewReputation *big.Int
+	Raw           types.Log // Blockchain specific contextual infos
+}
+
+// FilterProviderReputationUpdated is a free log retrieval operation binding the contract event 0xda7de51a3c193d4a1046929774737666fb7a005e8e5e1a98e146a99952ad223e.
+//
+// Solidity: event ProviderReputationUpdated(uint256 indexed providerId, uint256 newReputation)
+func (_Provider *ProviderFilterer) FilterProviderReputationUpdated(opts *bind.FilterOpts, providerId []*big.Int) (*ProviderProviderReputationUpdatedIterator, error) {
+
+	var providerIdRule []interface{}
+	for _, providerIdItem := range providerId {
+		providerIdRule = append(providerIdRule, providerIdItem)
+	}
+
+	logs, sub, err := _Provider.contract.FilterLogs(opts, "ProviderReputationUpdated", providerIdRule)
+	if err != nil {
+		return nil, err
+	}
+	return &ProviderProviderReputationUpdatedIterator{contract: _Provider.contract, event: "ProviderReputationUpdated", logs: logs, sub: sub}, nil
+}
+
+// WatchProviderReputationUpdated is a free log subscription operation binding the contract event 0xda7de51a3c193d4a1046929774737666fb7a005e8e5e1a98e146a99952ad223e.
+//
+// Solidity: event ProviderReputationUpdated(uint256 indexed providerId, uint256 newReputation)
+func (_Provider *ProviderFilterer) WatchProviderReputationUpdated(opts *bind.WatchOpts, sink chan<- *ProviderProviderReputationUpdated, providerId []*big.Int) (event.Subscription, error) {
+
+	var providerIdRule []interface{}
+	for _, providerIdItem := range providerId {
+		providerIdRule = append(providerIdRule, providerIdItem)
+	}
+
+	logs, sub, err := _Provider.contract.WatchLogs(opts, "ProviderReputationUpdated", providerIdRule)
+	if err != nil {
+		return nil, err
+	}
+	return event.NewSubscription(func(quit <-chan struct{}) error {
+		defer sub.Unsubscribe()
+		for {
+			select {
+			case log := <-logs:
+				// New log arrived, parse the event and forward to the user
+				event := new(ProviderProviderReputationUpdated)
+				if err := _Provider.contract.UnpackLog(event, "ProviderReputationUpdated", log); err != nil {
+					return err
+				}
+				event.Raw = log
+
+				select {
+				case sink <- event:
+				case err := <-sub.Err():
+					return err
+				case <-quit:
+					return nil
+				}
+			case err := <-sub.Err():
+				return err
+			case <-quit:
+				return nil
+			}
+		}
+	}), nil
+}
+
+// ParseProviderReputationUpdated is a log parse operation binding the contract event 0xda7de51a3c193d4a1046929774737666fb7a005e8e5e1a98e146a99952ad223e.
+//
+// Solidity: event ProviderReputationUpdated(uint256 indexed providerId, uint256 newReputation)
+func (_Provider *ProviderFilterer) ParseProviderReputationUpdated(log types.Log) (*ProviderProviderReputationUpdated, error) {
+	event := new(ProviderProviderReputationUpdated)
+	if err := _Provider.contract.UnpackLog(event, "ProviderReputationUpdated", log); err != nil {
+		return nil, err
+	}
+	event.Raw = log
+	return event, nil
+}
+
 // ProviderProviderUpdatedIterator is returned from FilterProviderUpdated and is used to iterate over the raw logs and unpacked data for ProviderUpdated events raised by the Provider contract.
 type ProviderProviderUpdatedIterator struct {
 	Event *ProviderProviderUpdated // Event containing the contract specifics and raw log
@@ -3337,6 +3852,151 @@ func (_Provider *ProviderFilterer) WatchProviderUpdated(opts *bind.WatchOpts, si
 func (_Provider *ProviderFilterer) ParseProviderUpdated(log types.Log) (*ProviderProviderUpdated, error) {
 	event := new(ProviderProviderUpdated)
 	if err := _Provider.contract.UnpackLog(event, "ProviderUpdated", log); err != nil {
+		return nil, err
+	}
+	event.Raw = log
+	return event, nil
+}
+
+// ProviderProviderVerifiedIterator is returned from FilterProviderVerified and is used to iterate over the raw logs and unpacked data for ProviderVerified events raised by the Provider contract.
+type ProviderProviderVerifiedIterator struct {
+	Event *ProviderProviderVerified // Event containing the contract specifics and raw log
+
+	contract *bind.BoundContract // Generic contract to use for unpacking event data
+	event    string              // Event name to use for unpacking event data
+
+	logs chan types.Log        // Log channel receiving the found contract events
+	sub  ethereum.Subscription // Subscription for errors, completion and termination
+	done bool                  // Whether the subscription completed delivering logs
+	fail error                 // Occurred error to stop iteration
+}
+
+// Next advances the iterator to the subsequent event, returning whether there
+// are any more events found. In case of a retrieval or parsing error, false is
+// returned and Error() can be queried for the exact failure.
+func (it *ProviderProviderVerifiedIterator) Next() bool {
+	// If the iterator failed, stop iterating
+	if it.fail != nil {
+		return false
+	}
+	// If the iterator completed, deliver directly whatever's available
+	if it.done {
+		select {
+		case log := <-it.logs:
+			it.Event = new(ProviderProviderVerified)
+			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+				it.fail = err
+				return false
+			}
+			it.Event.Raw = log
+			return true
+
+		default:
+			return false
+		}
+	}
+	// Iterator still in progress, wait for either a data or an error event
+	select {
+	case log := <-it.logs:
+		it.Event = new(ProviderProviderVerified)
+		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+			it.fail = err
+			return false
+		}
+		it.Event.Raw = log
+		return true
+
+	case err := <-it.sub.Err():
+		it.done = true
+		it.fail = err
+		return it.Next()
+	}
+}
+
+// Error returns any retrieval or parsing error occurred during filtering.
+func (it *ProviderProviderVerifiedIterator) Error() error {
+	return it.fail
+}
+
+// Close terminates the iteration process, releasing any pending underlying
+// resources.
+func (it *ProviderProviderVerifiedIterator) Close() error {
+	it.sub.Unsubscribe()
+	return nil
+}
+
+// ProviderProviderVerified represents a ProviderVerified event raised by the Provider contract.
+type ProviderProviderVerified struct {
+	ProviderId *big.Int
+	Verified   bool
+	Raw        types.Log // Blockchain specific contextual infos
+}
+
+// FilterProviderVerified is a free log retrieval operation binding the contract event 0x73c0906694486d74b07388321c8dee7f4c2d58982c9c4810d24c0b0d0ebf3bbd.
+//
+// Solidity: event ProviderVerified(uint256 indexed providerId, bool verified)
+func (_Provider *ProviderFilterer) FilterProviderVerified(opts *bind.FilterOpts, providerId []*big.Int) (*ProviderProviderVerifiedIterator, error) {
+
+	var providerIdRule []interface{}
+	for _, providerIdItem := range providerId {
+		providerIdRule = append(providerIdRule, providerIdItem)
+	}
+
+	logs, sub, err := _Provider.contract.FilterLogs(opts, "ProviderVerified", providerIdRule)
+	if err != nil {
+		return nil, err
+	}
+	return &ProviderProviderVerifiedIterator{contract: _Provider.contract, event: "ProviderVerified", logs: logs, sub: sub}, nil
+}
+
+// WatchProviderVerified is a free log subscription operation binding the contract event 0x73c0906694486d74b07388321c8dee7f4c2d58982c9c4810d24c0b0d0ebf3bbd.
+//
+// Solidity: event ProviderVerified(uint256 indexed providerId, bool verified)
+func (_Provider *ProviderFilterer) WatchProviderVerified(opts *bind.WatchOpts, sink chan<- *ProviderProviderVerified, providerId []*big.Int) (event.Subscription, error) {
+
+	var providerIdRule []interface{}
+	for _, providerIdItem := range providerId {
+		providerIdRule = append(providerIdRule, providerIdItem)
+	}
+
+	logs, sub, err := _Provider.contract.WatchLogs(opts, "ProviderVerified", providerIdRule)
+	if err != nil {
+		return nil, err
+	}
+	return event.NewSubscription(func(quit <-chan struct{}) error {
+		defer sub.Unsubscribe()
+		for {
+			select {
+			case log := <-logs:
+				// New log arrived, parse the event and forward to the user
+				event := new(ProviderProviderVerified)
+				if err := _Provider.contract.UnpackLog(event, "ProviderVerified", log); err != nil {
+					return err
+				}
+				event.Raw = log
+
+				select {
+				case sink <- event:
+				case err := <-sub.Err():
+					return err
+				case <-quit:
+					return nil
+				}
+			case err := <-sub.Err():
+				return err
+			case <-quit:
+				return nil
+			}
+		}
+	}), nil
+}
+
+// ParseProviderVerified is a log parse operation binding the contract event 0x73c0906694486d74b07388321c8dee7f4c2d58982c9c4810d24c0b0d0ebf3bbd.
+//
+// Solidity: event ProviderVerified(uint256 indexed providerId, bool verified)
+func (_Provider *ProviderFilterer) ParseProviderVerified(log types.Log) (*ProviderProviderVerified, error) {
+	event := new(ProviderProviderVerified)
+	if err := _Provider.contract.UnpackLog(event, "ProviderVerified", log); err != nil {
 		return nil, err
 	}
 	event.Raw = log

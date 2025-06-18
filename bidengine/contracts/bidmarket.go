@@ -41,7 +41,7 @@ type SubnetBidMarketplaceBid struct {
 
 // BidMarketMetaData contains all meta data concerning the BidMarket contract.
 var BidMarketMetaData = &bind.MetaData{
-	ABI: "[{\"inputs\":[{\"internalType\":\"address\",\"name\":\"target\",\"type\":\"address\"}],\"name\":\"AddressEmptyCode\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"account\",\"type\":\"address\"}],\"name\":\"AddressInsufficientBalance\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"FailedInnerCall\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"InvalidInitialization\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"NotInitializing\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"}],\"name\":\"OwnableInvalidOwner\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"account\",\"type\":\"address\"}],\"name\":\"OwnableUnauthorizedAccount\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"token\",\"type\":\"address\"}],\"name\":\"SafeERC20FailedOperation\",\"type\":\"error\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"orderId\",\"type\":\"uint256\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"provider\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"price\",\"type\":\"uint256\"}],\"name\":\"BidAccepted\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"orderId\",\"type\":\"uint256\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"provider\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"bidIndex\",\"type\":\"uint256\"}],\"name\":\"BidCancelled\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"orderId\",\"type\":\"uint256\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"provider\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"price\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"machineId\",\"type\":\"uint256\"}],\"name\":\"BidSubmitted\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"orderId\",\"type\":\"uint256\"}],\"name\":\"BidTimeExpired\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"oldLimit\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"newLimit\",\"type\":\"uint256\"}],\"name\":\"BidTimeLimitUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"address\",\"name\":\"wallet\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"FeesWithdrawn\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint64\",\"name\":\"version\",\"type\":\"uint64\"}],\"name\":\"Initialized\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"orderId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"}],\"name\":\"OrderCancelled\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"orderId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"refundAmount\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"reason\",\"type\":\"string\"}],\"name\":\"OrderClosed\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"orderId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"duration\",\"type\":\"uint256\"}],\"name\":\"OrderCreated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"orderId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"additionalDuration\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"newExpiry\",\"type\":\"uint256\"}],\"name\":\"OrderExtended\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"previousOwner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"OwnershipTransferred\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"oldFee\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"newFee\",\"type\":\"uint256\"}],\"name\":\"PlatformFeeUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"address\",\"name\":\"oldWallet\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"address\",\"name\":\"newWallet\",\"type\":\"address\"}],\"name\":\"PlatformWalletUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"orderId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"newSpecs\",\"type\":\"string\"}],\"name\":\"SpecsUpdated\",\"type\":\"event\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"orderId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"bidIndex\",\"type\":\"uint256\"}],\"name\":\"acceptBid\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"bidTimeLimit\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"orderId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"bidIndex\",\"type\":\"uint256\"}],\"name\":\"cancelBid\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"orderId\",\"type\":\"uint256\"}],\"name\":\"cancelOrder\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"orderId\",\"type\":\"uint256\"}],\"name\":\"claimPayment\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"orderId\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"reason\",\"type\":\"string\"}],\"name\":\"closeOrder\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"machineType\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"duration\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"minBidPrice\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"maxBidPrice\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"region\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"cpuCores\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"gpuCores\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"gpuMemory\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"memoryMB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"diskGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"uploadMbps\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"downloadMbps\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"specs\",\"type\":\"string\"}],\"name\":\"createOrder\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"orderId\",\"type\":\"uint256\"}],\"name\":\"extend\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"orderId\",\"type\":\"uint256\"}],\"name\":\"getBids\",\"outputs\":[{\"components\":[{\"internalType\":\"address\",\"name\":\"provider\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"pricePerSecond\",\"type\":\"uint256\"},{\"internalType\":\"enumSubnetBidMarketplace.BidStatus\",\"name\":\"status\",\"type\":\"uint8\"},{\"internalType\":\"uint256\",\"name\":\"createdAt\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"machineId\",\"type\":\"uint256\"}],\"internalType\":\"structSubnetBidMarketplace.Bid[]\",\"name\":\"\",\"type\":\"tuple[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"orderId\",\"type\":\"uint256\"}],\"name\":\"getRemainingBidTime\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"_paymentToken\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"_subnetProviderContract\",\"type\":\"address\"}],\"name\":\"initialize\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"orderId\",\"type\":\"uint256\"}],\"name\":\"isBiddingOpen\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"name\":\"orderBids\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"provider\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"pricePerSecond\",\"type\":\"uint256\"},{\"internalType\":\"enumSubnetBidMarketplace.BidStatus\",\"name\":\"status\",\"type\":\"uint8\"},{\"internalType\":\"uint256\",\"name\":\"createdAt\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"machineId\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"orderCount\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"name\":\"orders\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"machineType\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"internalType\":\"enumSubnetBidMarketplace.OrderStatus\",\"name\":\"status\",\"type\":\"uint8\"},{\"internalType\":\"uint256\",\"name\":\"createdAt\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"duration\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"minBidPrice\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"maxBidPrice\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"acceptedBidPricePerSecond\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"parentOrderId\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"paymentToken\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"cpuCores\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"gpuCores\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"gpuMemory\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"memoryMB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"diskGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"uploadMbps\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"downloadMbps\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"region\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"specs\",\"type\":\"string\"},{\"internalType\":\"uint256\",\"name\":\"acceptedProviderId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"acceptedMachineId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"startAt\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"expiredAt\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"lastPaidAt\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"owner\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"paymentToken\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"platformFeePercentage\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"platformWallet\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"renounceOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"newBidTimeLimit\",\"type\":\"uint256\"}],\"name\":\"setBidTimeLimit\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_paymentToken\",\"type\":\"address\"}],\"name\":\"setPaymentConfig\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"newFeePercentage\",\"type\":\"uint256\"}],\"name\":\"setPlatformFee\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"newWallet\",\"type\":\"address\"}],\"name\":\"setPlatformWallet\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_subnetProviderContract\",\"type\":\"address\"}],\"name\":\"setSubnetProviderContract\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"orderId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerSecond\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"machineId\",\"type\":\"uint256\"}],\"name\":\"submitBid\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"subnetProviderContract\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"totalAccumulatedFees\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"transferOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"withdrawFees\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]",
+	ABI: "[{\"inputs\":[{\"internalType\":\"address\",\"name\":\"target\",\"type\":\"address\"}],\"name\":\"AddressEmptyCode\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"account\",\"type\":\"address\"}],\"name\":\"AddressInsufficientBalance\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"FailedInnerCall\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"InvalidInitialization\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"NotInitializing\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"}],\"name\":\"OwnableInvalidOwner\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"account\",\"type\":\"address\"}],\"name\":\"OwnableUnauthorizedAccount\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"token\",\"type\":\"address\"}],\"name\":\"SafeERC20FailedOperation\",\"type\":\"error\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"orderId\",\"type\":\"uint256\"},{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"machineId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"bidIndex\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"pricePerSecond\",\"type\":\"uint256\"}],\"name\":\"BidAccepted\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"orderId\",\"type\":\"uint256\"},{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"machineId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"bidIndex\",\"type\":\"uint256\"}],\"name\":\"BidCancelled\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"orderId\",\"type\":\"uint256\"},{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"machineId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"bidIndex\",\"type\":\"uint256\"}],\"name\":\"BidSubmitted\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"orderId\",\"type\":\"uint256\"}],\"name\":\"BidTimeExpired\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"oldLimit\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"newLimit\",\"type\":\"uint256\"}],\"name\":\"BidTimeLimitUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"address\",\"name\":\"wallet\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"FeesWithdrawn\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint64\",\"name\":\"version\",\"type\":\"uint64\"}],\"name\":\"Initialized\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"orderId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"}],\"name\":\"OrderCancelled\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"orderId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"refundAmount\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"reason\",\"type\":\"string\"}],\"name\":\"OrderClosed\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"orderId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"duration\",\"type\":\"uint256\"}],\"name\":\"OrderCreated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"orderId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"additionalDuration\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"newExpiry\",\"type\":\"uint256\"}],\"name\":\"OrderExtended\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"previousOwner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"OwnershipTransferred\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"oldFee\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"newFee\",\"type\":\"uint256\"}],\"name\":\"PlatformFeeUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"address\",\"name\":\"oldWallet\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"address\",\"name\":\"newWallet\",\"type\":\"address\"}],\"name\":\"PlatformWalletUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"orderId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"newSpecs\",\"type\":\"string\"}],\"name\":\"SpecsUpdated\",\"type\":\"event\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"orderId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"bidIndex\",\"type\":\"uint256\"}],\"name\":\"acceptBid\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"bidTimeLimit\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"orderId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"bidIndex\",\"type\":\"uint256\"}],\"name\":\"cancelBid\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"orderId\",\"type\":\"uint256\"}],\"name\":\"cancelOrder\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"orderId\",\"type\":\"uint256\"}],\"name\":\"claimPayment\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"orderId\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"reason\",\"type\":\"string\"}],\"name\":\"closeOrder\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"machineType\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"duration\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"minBidPrice\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"maxBidPrice\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"region\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"cpuCores\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"gpuCores\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"gpuMemory\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"memoryMB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"diskGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"uploadMbps\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"downloadMbps\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"specs\",\"type\":\"string\"}],\"name\":\"createOrder\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"machineType\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"machineId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"region\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"cpuCores\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"gpuCores\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"gpuMemory\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"memoryMB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"diskGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"uploadMbps\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"downloadMbps\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"specs\",\"type\":\"string\"}],\"name\":\"createOrderAndAccept\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"orderId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"extend\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"orderId\",\"type\":\"uint256\"}],\"name\":\"getBids\",\"outputs\":[{\"components\":[{\"internalType\":\"address\",\"name\":\"provider\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"pricePerSecond\",\"type\":\"uint256\"},{\"internalType\":\"enumSubnetBidMarketplace.BidStatus\",\"name\":\"status\",\"type\":\"uint8\"},{\"internalType\":\"uint256\",\"name\":\"createdAt\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"machineId\",\"type\":\"uint256\"}],\"internalType\":\"structSubnetBidMarketplace.Bid[]\",\"name\":\"\",\"type\":\"tuple[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"orderId\",\"type\":\"uint256\"}],\"name\":\"getRemainingBidTime\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"machineId\",\"type\":\"uint256\"}],\"name\":\"getUsedResource\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"cpuCores\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"gpuCores\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"gpuMemory\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"memoryMB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"diskGB\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"_paymentToken\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"_subnetProviderContract\",\"type\":\"address\"}],\"name\":\"initialize\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"orderId\",\"type\":\"uint256\"}],\"name\":\"isBiddingOpen\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"name\":\"machineResourceUsed\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"cpuCores\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"gpuCores\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"gpuMemory\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"memoryMB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"diskGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"uploadMbps\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"downloadMbps\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"name\":\"orderBids\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"provider\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"pricePerSecond\",\"type\":\"uint256\"},{\"internalType\":\"enumSubnetBidMarketplace.BidStatus\",\"name\":\"status\",\"type\":\"uint8\"},{\"internalType\":\"uint256\",\"name\":\"createdAt\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"machineId\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"orderCount\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"name\":\"orders\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"machineType\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"internalType\":\"enumSubnetBidMarketplace.OrderStatus\",\"name\":\"status\",\"type\":\"uint8\"},{\"internalType\":\"uint256\",\"name\":\"createdAt\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"duration\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"minBidPrice\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"maxBidPrice\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"acceptedBidPricePerSecond\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"parentOrderId\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"paymentToken\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"cpuCores\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"gpuCores\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"gpuMemory\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"memoryMB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"diskGB\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"uploadMbps\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"downloadMbps\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"region\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"specs\",\"type\":\"string\"},{\"internalType\":\"uint256\",\"name\":\"acceptedProviderId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"acceptedMachineId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"startAt\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"expiredAt\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"lastPaidAt\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"owner\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"paymentToken\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"platformFeePercentage\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"platformWallet\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"orderId\",\"type\":\"uint256\"}],\"name\":\"releaseOrderResource\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"renounceOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"newBidTimeLimit\",\"type\":\"uint256\"}],\"name\":\"setBidTimeLimit\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_paymentToken\",\"type\":\"address\"}],\"name\":\"setPaymentConfig\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"newFeePercentage\",\"type\":\"uint256\"}],\"name\":\"setPlatformFee\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"newWallet\",\"type\":\"address\"}],\"name\":\"setPlatformWallet\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_subnetProviderContract\",\"type\":\"address\"}],\"name\":\"setSubnetProviderContract\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"orderId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"pricePerSecond\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"providerId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"machineId\",\"type\":\"uint256\"}],\"name\":\"submitBid\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"subnetProviderContract\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"totalAccumulatedFees\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"transferOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"withdrawFees\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]",
 }
 
 // BidMarketABI is the input ABI used to generate the binding from.
@@ -283,6 +283,66 @@ func (_BidMarket *BidMarketCallerSession) GetRemainingBidTime(orderId *big.Int) 
 	return _BidMarket.Contract.GetRemainingBidTime(&_BidMarket.CallOpts, orderId)
 }
 
+// GetUsedResource is a free data retrieval call binding the contract method 0xaea15863.
+//
+// Solidity: function getUsedResource(uint256 providerId, uint256 machineId) view returns(uint256 cpuCores, uint256 gpuCores, uint256 gpuMemory, uint256 memoryMB, uint256 diskGB)
+func (_BidMarket *BidMarketCaller) GetUsedResource(opts *bind.CallOpts, providerId *big.Int, machineId *big.Int) (struct {
+	CpuCores  *big.Int
+	GpuCores  *big.Int
+	GpuMemory *big.Int
+	MemoryMB  *big.Int
+	DiskGB    *big.Int
+}, error) {
+	var out []interface{}
+	err := _BidMarket.contract.Call(opts, &out, "getUsedResource", providerId, machineId)
+
+	outstruct := new(struct {
+		CpuCores  *big.Int
+		GpuCores  *big.Int
+		GpuMemory *big.Int
+		MemoryMB  *big.Int
+		DiskGB    *big.Int
+	})
+	if err != nil {
+		return *outstruct, err
+	}
+
+	outstruct.CpuCores = *abi.ConvertType(out[0], new(*big.Int)).(**big.Int)
+	outstruct.GpuCores = *abi.ConvertType(out[1], new(*big.Int)).(**big.Int)
+	outstruct.GpuMemory = *abi.ConvertType(out[2], new(*big.Int)).(**big.Int)
+	outstruct.MemoryMB = *abi.ConvertType(out[3], new(*big.Int)).(**big.Int)
+	outstruct.DiskGB = *abi.ConvertType(out[4], new(*big.Int)).(**big.Int)
+
+	return *outstruct, err
+
+}
+
+// GetUsedResource is a free data retrieval call binding the contract method 0xaea15863.
+//
+// Solidity: function getUsedResource(uint256 providerId, uint256 machineId) view returns(uint256 cpuCores, uint256 gpuCores, uint256 gpuMemory, uint256 memoryMB, uint256 diskGB)
+func (_BidMarket *BidMarketSession) GetUsedResource(providerId *big.Int, machineId *big.Int) (struct {
+	CpuCores  *big.Int
+	GpuCores  *big.Int
+	GpuMemory *big.Int
+	MemoryMB  *big.Int
+	DiskGB    *big.Int
+}, error) {
+	return _BidMarket.Contract.GetUsedResource(&_BidMarket.CallOpts, providerId, machineId)
+}
+
+// GetUsedResource is a free data retrieval call binding the contract method 0xaea15863.
+//
+// Solidity: function getUsedResource(uint256 providerId, uint256 machineId) view returns(uint256 cpuCores, uint256 gpuCores, uint256 gpuMemory, uint256 memoryMB, uint256 diskGB)
+func (_BidMarket *BidMarketCallerSession) GetUsedResource(providerId *big.Int, machineId *big.Int) (struct {
+	CpuCores  *big.Int
+	GpuCores  *big.Int
+	GpuMemory *big.Int
+	MemoryMB  *big.Int
+	DiskGB    *big.Int
+}, error) {
+	return _BidMarket.Contract.GetUsedResource(&_BidMarket.CallOpts, providerId, machineId)
+}
+
 // IsBiddingOpen is a free data retrieval call binding the contract method 0xe5abcee6.
 //
 // Solidity: function isBiddingOpen(uint256 orderId) view returns(bool)
@@ -312,6 +372,76 @@ func (_BidMarket *BidMarketSession) IsBiddingOpen(orderId *big.Int) (bool, error
 // Solidity: function isBiddingOpen(uint256 orderId) view returns(bool)
 func (_BidMarket *BidMarketCallerSession) IsBiddingOpen(orderId *big.Int) (bool, error) {
 	return _BidMarket.Contract.IsBiddingOpen(&_BidMarket.CallOpts, orderId)
+}
+
+// MachineResourceUsed is a free data retrieval call binding the contract method 0x4a7de239.
+//
+// Solidity: function machineResourceUsed(uint256 , uint256 ) view returns(uint256 cpuCores, uint256 gpuCores, uint256 gpuMemory, uint256 memoryMB, uint256 diskGB, uint256 uploadMbps, uint256 downloadMbps)
+func (_BidMarket *BidMarketCaller) MachineResourceUsed(opts *bind.CallOpts, arg0 *big.Int, arg1 *big.Int) (struct {
+	CpuCores     *big.Int
+	GpuCores     *big.Int
+	GpuMemory    *big.Int
+	MemoryMB     *big.Int
+	DiskGB       *big.Int
+	UploadMbps   *big.Int
+	DownloadMbps *big.Int
+}, error) {
+	var out []interface{}
+	err := _BidMarket.contract.Call(opts, &out, "machineResourceUsed", arg0, arg1)
+
+	outstruct := new(struct {
+		CpuCores     *big.Int
+		GpuCores     *big.Int
+		GpuMemory    *big.Int
+		MemoryMB     *big.Int
+		DiskGB       *big.Int
+		UploadMbps   *big.Int
+		DownloadMbps *big.Int
+	})
+	if err != nil {
+		return *outstruct, err
+	}
+
+	outstruct.CpuCores = *abi.ConvertType(out[0], new(*big.Int)).(**big.Int)
+	outstruct.GpuCores = *abi.ConvertType(out[1], new(*big.Int)).(**big.Int)
+	outstruct.GpuMemory = *abi.ConvertType(out[2], new(*big.Int)).(**big.Int)
+	outstruct.MemoryMB = *abi.ConvertType(out[3], new(*big.Int)).(**big.Int)
+	outstruct.DiskGB = *abi.ConvertType(out[4], new(*big.Int)).(**big.Int)
+	outstruct.UploadMbps = *abi.ConvertType(out[5], new(*big.Int)).(**big.Int)
+	outstruct.DownloadMbps = *abi.ConvertType(out[6], new(*big.Int)).(**big.Int)
+
+	return *outstruct, err
+
+}
+
+// MachineResourceUsed is a free data retrieval call binding the contract method 0x4a7de239.
+//
+// Solidity: function machineResourceUsed(uint256 , uint256 ) view returns(uint256 cpuCores, uint256 gpuCores, uint256 gpuMemory, uint256 memoryMB, uint256 diskGB, uint256 uploadMbps, uint256 downloadMbps)
+func (_BidMarket *BidMarketSession) MachineResourceUsed(arg0 *big.Int, arg1 *big.Int) (struct {
+	CpuCores     *big.Int
+	GpuCores     *big.Int
+	GpuMemory    *big.Int
+	MemoryMB     *big.Int
+	DiskGB       *big.Int
+	UploadMbps   *big.Int
+	DownloadMbps *big.Int
+}, error) {
+	return _BidMarket.Contract.MachineResourceUsed(&_BidMarket.CallOpts, arg0, arg1)
+}
+
+// MachineResourceUsed is a free data retrieval call binding the contract method 0x4a7de239.
+//
+// Solidity: function machineResourceUsed(uint256 , uint256 ) view returns(uint256 cpuCores, uint256 gpuCores, uint256 gpuMemory, uint256 memoryMB, uint256 diskGB, uint256 uploadMbps, uint256 downloadMbps)
+func (_BidMarket *BidMarketCallerSession) MachineResourceUsed(arg0 *big.Int, arg1 *big.Int) (struct {
+	CpuCores     *big.Int
+	GpuCores     *big.Int
+	GpuMemory    *big.Int
+	MemoryMB     *big.Int
+	DiskGB       *big.Int
+	UploadMbps   *big.Int
+	DownloadMbps *big.Int
+}, error) {
+	return _BidMarket.Contract.MachineResourceUsed(&_BidMarket.CallOpts, arg0, arg1)
 }
 
 // OrderBids is a free data retrieval call binding the contract method 0xef5a59c8.
@@ -877,25 +1007,46 @@ func (_BidMarket *BidMarketTransactorSession) CreateOrder(machineType *big.Int, 
 	return _BidMarket.Contract.CreateOrder(&_BidMarket.TransactOpts, machineType, duration, minBidPrice, maxBidPrice, region, cpuCores, gpuCores, gpuMemory, memoryMB, diskGB, uploadMbps, downloadMbps, specs)
 }
 
-// Extend is a paid mutator transaction binding the contract method 0x9714378c.
+// CreateOrderAndAccept is a paid mutator transaction binding the contract method 0x6d4976d2.
 //
-// Solidity: function extend(uint256 orderId) returns()
-func (_BidMarket *BidMarketTransactor) Extend(opts *bind.TransactOpts, orderId *big.Int) (*types.Transaction, error) {
-	return _BidMarket.contract.Transact(opts, "extend", orderId)
+// Solidity: function createOrderAndAccept(uint256 machineType, uint256 amount, uint256 providerId, uint256 machineId, uint256 region, uint256 cpuCores, uint256 gpuCores, uint256 gpuMemory, uint256 memoryMB, uint256 diskGB, uint256 uploadMbps, uint256 downloadMbps, string specs) returns(uint256)
+func (_BidMarket *BidMarketTransactor) CreateOrderAndAccept(opts *bind.TransactOpts, machineType *big.Int, amount *big.Int, providerId *big.Int, machineId *big.Int, region *big.Int, cpuCores *big.Int, gpuCores *big.Int, gpuMemory *big.Int, memoryMB *big.Int, diskGB *big.Int, uploadMbps *big.Int, downloadMbps *big.Int, specs string) (*types.Transaction, error) {
+	return _BidMarket.contract.Transact(opts, "createOrderAndAccept", machineType, amount, providerId, machineId, region, cpuCores, gpuCores, gpuMemory, memoryMB, diskGB, uploadMbps, downloadMbps, specs)
 }
 
-// Extend is a paid mutator transaction binding the contract method 0x9714378c.
+// CreateOrderAndAccept is a paid mutator transaction binding the contract method 0x6d4976d2.
 //
-// Solidity: function extend(uint256 orderId) returns()
-func (_BidMarket *BidMarketSession) Extend(orderId *big.Int) (*types.Transaction, error) {
-	return _BidMarket.Contract.Extend(&_BidMarket.TransactOpts, orderId)
+// Solidity: function createOrderAndAccept(uint256 machineType, uint256 amount, uint256 providerId, uint256 machineId, uint256 region, uint256 cpuCores, uint256 gpuCores, uint256 gpuMemory, uint256 memoryMB, uint256 diskGB, uint256 uploadMbps, uint256 downloadMbps, string specs) returns(uint256)
+func (_BidMarket *BidMarketSession) CreateOrderAndAccept(machineType *big.Int, amount *big.Int, providerId *big.Int, machineId *big.Int, region *big.Int, cpuCores *big.Int, gpuCores *big.Int, gpuMemory *big.Int, memoryMB *big.Int, diskGB *big.Int, uploadMbps *big.Int, downloadMbps *big.Int, specs string) (*types.Transaction, error) {
+	return _BidMarket.Contract.CreateOrderAndAccept(&_BidMarket.TransactOpts, machineType, amount, providerId, machineId, region, cpuCores, gpuCores, gpuMemory, memoryMB, diskGB, uploadMbps, downloadMbps, specs)
 }
 
-// Extend is a paid mutator transaction binding the contract method 0x9714378c.
+// CreateOrderAndAccept is a paid mutator transaction binding the contract method 0x6d4976d2.
 //
-// Solidity: function extend(uint256 orderId) returns()
-func (_BidMarket *BidMarketTransactorSession) Extend(orderId *big.Int) (*types.Transaction, error) {
-	return _BidMarket.Contract.Extend(&_BidMarket.TransactOpts, orderId)
+// Solidity: function createOrderAndAccept(uint256 machineType, uint256 amount, uint256 providerId, uint256 machineId, uint256 region, uint256 cpuCores, uint256 gpuCores, uint256 gpuMemory, uint256 memoryMB, uint256 diskGB, uint256 uploadMbps, uint256 downloadMbps, string specs) returns(uint256)
+func (_BidMarket *BidMarketTransactorSession) CreateOrderAndAccept(machineType *big.Int, amount *big.Int, providerId *big.Int, machineId *big.Int, region *big.Int, cpuCores *big.Int, gpuCores *big.Int, gpuMemory *big.Int, memoryMB *big.Int, diskGB *big.Int, uploadMbps *big.Int, downloadMbps *big.Int, specs string) (*types.Transaction, error) {
+	return _BidMarket.Contract.CreateOrderAndAccept(&_BidMarket.TransactOpts, machineType, amount, providerId, machineId, region, cpuCores, gpuCores, gpuMemory, memoryMB, diskGB, uploadMbps, downloadMbps, specs)
+}
+
+// Extend is a paid mutator transaction binding the contract method 0xc89258db.
+//
+// Solidity: function extend(uint256 orderId, uint256 amount) returns()
+func (_BidMarket *BidMarketTransactor) Extend(opts *bind.TransactOpts, orderId *big.Int, amount *big.Int) (*types.Transaction, error) {
+	return _BidMarket.contract.Transact(opts, "extend", orderId, amount)
+}
+
+// Extend is a paid mutator transaction binding the contract method 0xc89258db.
+//
+// Solidity: function extend(uint256 orderId, uint256 amount) returns()
+func (_BidMarket *BidMarketSession) Extend(orderId *big.Int, amount *big.Int) (*types.Transaction, error) {
+	return _BidMarket.Contract.Extend(&_BidMarket.TransactOpts, orderId, amount)
+}
+
+// Extend is a paid mutator transaction binding the contract method 0xc89258db.
+//
+// Solidity: function extend(uint256 orderId, uint256 amount) returns()
+func (_BidMarket *BidMarketTransactorSession) Extend(orderId *big.Int, amount *big.Int) (*types.Transaction, error) {
+	return _BidMarket.Contract.Extend(&_BidMarket.TransactOpts, orderId, amount)
 }
 
 // Initialize is a paid mutator transaction binding the contract method 0xc0c53b8b.
@@ -917,6 +1068,27 @@ func (_BidMarket *BidMarketSession) Initialize(owner common.Address, _paymentTok
 // Solidity: function initialize(address owner, address _paymentToken, address _subnetProviderContract) returns()
 func (_BidMarket *BidMarketTransactorSession) Initialize(owner common.Address, _paymentToken common.Address, _subnetProviderContract common.Address) (*types.Transaction, error) {
 	return _BidMarket.Contract.Initialize(&_BidMarket.TransactOpts, owner, _paymentToken, _subnetProviderContract)
+}
+
+// ReleaseOrderResource is a paid mutator transaction binding the contract method 0x9f4ee759.
+//
+// Solidity: function releaseOrderResource(uint256 orderId) returns()
+func (_BidMarket *BidMarketTransactor) ReleaseOrderResource(opts *bind.TransactOpts, orderId *big.Int) (*types.Transaction, error) {
+	return _BidMarket.contract.Transact(opts, "releaseOrderResource", orderId)
+}
+
+// ReleaseOrderResource is a paid mutator transaction binding the contract method 0x9f4ee759.
+//
+// Solidity: function releaseOrderResource(uint256 orderId) returns()
+func (_BidMarket *BidMarketSession) ReleaseOrderResource(orderId *big.Int) (*types.Transaction, error) {
+	return _BidMarket.Contract.ReleaseOrderResource(&_BidMarket.TransactOpts, orderId)
+}
+
+// ReleaseOrderResource is a paid mutator transaction binding the contract method 0x9f4ee759.
+//
+// Solidity: function releaseOrderResource(uint256 orderId) returns()
+func (_BidMarket *BidMarketTransactorSession) ReleaseOrderResource(orderId *big.Int) (*types.Transaction, error) {
+	return _BidMarket.Contract.ReleaseOrderResource(&_BidMarket.TransactOpts, orderId)
 }
 
 // RenounceOwnership is a paid mutator transaction binding the contract method 0x715018a6.
@@ -1177,48 +1349,50 @@ func (it *BidMarketBidAcceptedIterator) Close() error {
 
 // BidMarketBidAccepted represents a BidAccepted event raised by the BidMarket contract.
 type BidMarketBidAccepted struct {
-	OrderId  *big.Int
-	Provider common.Address
-	Price    *big.Int
-	Raw      types.Log // Blockchain specific contextual infos
+	OrderId        *big.Int
+	ProviderId     *big.Int
+	MachineId      *big.Int
+	BidIndex       *big.Int
+	PricePerSecond *big.Int
+	Raw            types.Log // Blockchain specific contextual infos
 }
 
-// FilterBidAccepted is a free log retrieval operation binding the contract event 0x91a721693afff25f233ac308edbd2fa15ad7d4dfacdd164dd4e8c57ab72f4ae9.
+// FilterBidAccepted is a free log retrieval operation binding the contract event 0x26ced84e7fcbbaaebd2c7b4da6342643cb90fd15d56673dfabe3954aea0bbe08.
 //
-// Solidity: event BidAccepted(uint256 indexed orderId, address indexed provider, uint256 price)
-func (_BidMarket *BidMarketFilterer) FilterBidAccepted(opts *bind.FilterOpts, orderId []*big.Int, provider []common.Address) (*BidMarketBidAcceptedIterator, error) {
+// Solidity: event BidAccepted(uint256 indexed orderId, uint256 indexed providerId, uint256 machineId, uint256 bidIndex, uint256 pricePerSecond)
+func (_BidMarket *BidMarketFilterer) FilterBidAccepted(opts *bind.FilterOpts, orderId []*big.Int, providerId []*big.Int) (*BidMarketBidAcceptedIterator, error) {
 
 	var orderIdRule []interface{}
 	for _, orderIdItem := range orderId {
 		orderIdRule = append(orderIdRule, orderIdItem)
 	}
-	var providerRule []interface{}
-	for _, providerItem := range provider {
-		providerRule = append(providerRule, providerItem)
+	var providerIdRule []interface{}
+	for _, providerIdItem := range providerId {
+		providerIdRule = append(providerIdRule, providerIdItem)
 	}
 
-	logs, sub, err := _BidMarket.contract.FilterLogs(opts, "BidAccepted", orderIdRule, providerRule)
+	logs, sub, err := _BidMarket.contract.FilterLogs(opts, "BidAccepted", orderIdRule, providerIdRule)
 	if err != nil {
 		return nil, err
 	}
 	return &BidMarketBidAcceptedIterator{contract: _BidMarket.contract, event: "BidAccepted", logs: logs, sub: sub}, nil
 }
 
-// WatchBidAccepted is a free log subscription operation binding the contract event 0x91a721693afff25f233ac308edbd2fa15ad7d4dfacdd164dd4e8c57ab72f4ae9.
+// WatchBidAccepted is a free log subscription operation binding the contract event 0x26ced84e7fcbbaaebd2c7b4da6342643cb90fd15d56673dfabe3954aea0bbe08.
 //
-// Solidity: event BidAccepted(uint256 indexed orderId, address indexed provider, uint256 price)
-func (_BidMarket *BidMarketFilterer) WatchBidAccepted(opts *bind.WatchOpts, sink chan<- *BidMarketBidAccepted, orderId []*big.Int, provider []common.Address) (event.Subscription, error) {
+// Solidity: event BidAccepted(uint256 indexed orderId, uint256 indexed providerId, uint256 machineId, uint256 bidIndex, uint256 pricePerSecond)
+func (_BidMarket *BidMarketFilterer) WatchBidAccepted(opts *bind.WatchOpts, sink chan<- *BidMarketBidAccepted, orderId []*big.Int, providerId []*big.Int) (event.Subscription, error) {
 
 	var orderIdRule []interface{}
 	for _, orderIdItem := range orderId {
 		orderIdRule = append(orderIdRule, orderIdItem)
 	}
-	var providerRule []interface{}
-	for _, providerItem := range provider {
-		providerRule = append(providerRule, providerItem)
+	var providerIdRule []interface{}
+	for _, providerIdItem := range providerId {
+		providerIdRule = append(providerIdRule, providerIdItem)
 	}
 
-	logs, sub, err := _BidMarket.contract.WatchLogs(opts, "BidAccepted", orderIdRule, providerRule)
+	logs, sub, err := _BidMarket.contract.WatchLogs(opts, "BidAccepted", orderIdRule, providerIdRule)
 	if err != nil {
 		return nil, err
 	}
@@ -1250,9 +1424,9 @@ func (_BidMarket *BidMarketFilterer) WatchBidAccepted(opts *bind.WatchOpts, sink
 	}), nil
 }
 
-// ParseBidAccepted is a log parse operation binding the contract event 0x91a721693afff25f233ac308edbd2fa15ad7d4dfacdd164dd4e8c57ab72f4ae9.
+// ParseBidAccepted is a log parse operation binding the contract event 0x26ced84e7fcbbaaebd2c7b4da6342643cb90fd15d56673dfabe3954aea0bbe08.
 //
-// Solidity: event BidAccepted(uint256 indexed orderId, address indexed provider, uint256 price)
+// Solidity: event BidAccepted(uint256 indexed orderId, uint256 indexed providerId, uint256 machineId, uint256 bidIndex, uint256 pricePerSecond)
 func (_BidMarket *BidMarketFilterer) ParseBidAccepted(log types.Log) (*BidMarketBidAccepted, error) {
 	event := new(BidMarketBidAccepted)
 	if err := _BidMarket.contract.UnpackLog(event, "BidAccepted", log); err != nil {
@@ -1331,48 +1505,49 @@ func (it *BidMarketBidCancelledIterator) Close() error {
 
 // BidMarketBidCancelled represents a BidCancelled event raised by the BidMarket contract.
 type BidMarketBidCancelled struct {
-	OrderId  *big.Int
-	Provider common.Address
-	BidIndex *big.Int
-	Raw      types.Log // Blockchain specific contextual infos
+	OrderId    *big.Int
+	ProviderId *big.Int
+	MachineId  *big.Int
+	BidIndex   *big.Int
+	Raw        types.Log // Blockchain specific contextual infos
 }
 
-// FilterBidCancelled is a free log retrieval operation binding the contract event 0xaf2f02012ea1953fe9293dd4a8bb5194c96792324f9385297c991c2cfeade3d9.
+// FilterBidCancelled is a free log retrieval operation binding the contract event 0x106d232e41d7e51c7022b8a413db661b40547f0bc2a27c9acab6fbd0052988e8.
 //
-// Solidity: event BidCancelled(uint256 indexed orderId, address indexed provider, uint256 bidIndex)
-func (_BidMarket *BidMarketFilterer) FilterBidCancelled(opts *bind.FilterOpts, orderId []*big.Int, provider []common.Address) (*BidMarketBidCancelledIterator, error) {
+// Solidity: event BidCancelled(uint256 indexed orderId, uint256 indexed providerId, uint256 machineId, uint256 bidIndex)
+func (_BidMarket *BidMarketFilterer) FilterBidCancelled(opts *bind.FilterOpts, orderId []*big.Int, providerId []*big.Int) (*BidMarketBidCancelledIterator, error) {
 
 	var orderIdRule []interface{}
 	for _, orderIdItem := range orderId {
 		orderIdRule = append(orderIdRule, orderIdItem)
 	}
-	var providerRule []interface{}
-	for _, providerItem := range provider {
-		providerRule = append(providerRule, providerItem)
+	var providerIdRule []interface{}
+	for _, providerIdItem := range providerId {
+		providerIdRule = append(providerIdRule, providerIdItem)
 	}
 
-	logs, sub, err := _BidMarket.contract.FilterLogs(opts, "BidCancelled", orderIdRule, providerRule)
+	logs, sub, err := _BidMarket.contract.FilterLogs(opts, "BidCancelled", orderIdRule, providerIdRule)
 	if err != nil {
 		return nil, err
 	}
 	return &BidMarketBidCancelledIterator{contract: _BidMarket.contract, event: "BidCancelled", logs: logs, sub: sub}, nil
 }
 
-// WatchBidCancelled is a free log subscription operation binding the contract event 0xaf2f02012ea1953fe9293dd4a8bb5194c96792324f9385297c991c2cfeade3d9.
+// WatchBidCancelled is a free log subscription operation binding the contract event 0x106d232e41d7e51c7022b8a413db661b40547f0bc2a27c9acab6fbd0052988e8.
 //
-// Solidity: event BidCancelled(uint256 indexed orderId, address indexed provider, uint256 bidIndex)
-func (_BidMarket *BidMarketFilterer) WatchBidCancelled(opts *bind.WatchOpts, sink chan<- *BidMarketBidCancelled, orderId []*big.Int, provider []common.Address) (event.Subscription, error) {
+// Solidity: event BidCancelled(uint256 indexed orderId, uint256 indexed providerId, uint256 machineId, uint256 bidIndex)
+func (_BidMarket *BidMarketFilterer) WatchBidCancelled(opts *bind.WatchOpts, sink chan<- *BidMarketBidCancelled, orderId []*big.Int, providerId []*big.Int) (event.Subscription, error) {
 
 	var orderIdRule []interface{}
 	for _, orderIdItem := range orderId {
 		orderIdRule = append(orderIdRule, orderIdItem)
 	}
-	var providerRule []interface{}
-	for _, providerItem := range provider {
-		providerRule = append(providerRule, providerItem)
+	var providerIdRule []interface{}
+	for _, providerIdItem := range providerId {
+		providerIdRule = append(providerIdRule, providerIdItem)
 	}
 
-	logs, sub, err := _BidMarket.contract.WatchLogs(opts, "BidCancelled", orderIdRule, providerRule)
+	logs, sub, err := _BidMarket.contract.WatchLogs(opts, "BidCancelled", orderIdRule, providerIdRule)
 	if err != nil {
 		return nil, err
 	}
@@ -1404,9 +1579,9 @@ func (_BidMarket *BidMarketFilterer) WatchBidCancelled(opts *bind.WatchOpts, sin
 	}), nil
 }
 
-// ParseBidCancelled is a log parse operation binding the contract event 0xaf2f02012ea1953fe9293dd4a8bb5194c96792324f9385297c991c2cfeade3d9.
+// ParseBidCancelled is a log parse operation binding the contract event 0x106d232e41d7e51c7022b8a413db661b40547f0bc2a27c9acab6fbd0052988e8.
 //
-// Solidity: event BidCancelled(uint256 indexed orderId, address indexed provider, uint256 bidIndex)
+// Solidity: event BidCancelled(uint256 indexed orderId, uint256 indexed providerId, uint256 machineId, uint256 bidIndex)
 func (_BidMarket *BidMarketFilterer) ParseBidCancelled(log types.Log) (*BidMarketBidCancelled, error) {
 	event := new(BidMarketBidCancelled)
 	if err := _BidMarket.contract.UnpackLog(event, "BidCancelled", log); err != nil {
@@ -1486,49 +1661,48 @@ func (it *BidMarketBidSubmittedIterator) Close() error {
 // BidMarketBidSubmitted represents a BidSubmitted event raised by the BidMarket contract.
 type BidMarketBidSubmitted struct {
 	OrderId    *big.Int
-	Provider   common.Address
-	Price      *big.Int
 	ProviderId *big.Int
 	MachineId  *big.Int
+	BidIndex   *big.Int
 	Raw        types.Log // Blockchain specific contextual infos
 }
 
-// FilterBidSubmitted is a free log retrieval operation binding the contract event 0x1b3d307c757cc471e124508de8fb270e98d9c23f6220af3df3e152cbefc05045.
+// FilterBidSubmitted is a free log retrieval operation binding the contract event 0xcdc10c00e9cccd871fee68b6389bcebf0975335bb62412f2e9175083d0076294.
 //
-// Solidity: event BidSubmitted(uint256 indexed orderId, address indexed provider, uint256 price, uint256 providerId, uint256 machineId)
-func (_BidMarket *BidMarketFilterer) FilterBidSubmitted(opts *bind.FilterOpts, orderId []*big.Int, provider []common.Address) (*BidMarketBidSubmittedIterator, error) {
+// Solidity: event BidSubmitted(uint256 indexed orderId, uint256 indexed providerId, uint256 machineId, uint256 bidIndex)
+func (_BidMarket *BidMarketFilterer) FilterBidSubmitted(opts *bind.FilterOpts, orderId []*big.Int, providerId []*big.Int) (*BidMarketBidSubmittedIterator, error) {
 
 	var orderIdRule []interface{}
 	for _, orderIdItem := range orderId {
 		orderIdRule = append(orderIdRule, orderIdItem)
 	}
-	var providerRule []interface{}
-	for _, providerItem := range provider {
-		providerRule = append(providerRule, providerItem)
+	var providerIdRule []interface{}
+	for _, providerIdItem := range providerId {
+		providerIdRule = append(providerIdRule, providerIdItem)
 	}
 
-	logs, sub, err := _BidMarket.contract.FilterLogs(opts, "BidSubmitted", orderIdRule, providerRule)
+	logs, sub, err := _BidMarket.contract.FilterLogs(opts, "BidSubmitted", orderIdRule, providerIdRule)
 	if err != nil {
 		return nil, err
 	}
 	return &BidMarketBidSubmittedIterator{contract: _BidMarket.contract, event: "BidSubmitted", logs: logs, sub: sub}, nil
 }
 
-// WatchBidSubmitted is a free log subscription operation binding the contract event 0x1b3d307c757cc471e124508de8fb270e98d9c23f6220af3df3e152cbefc05045.
+// WatchBidSubmitted is a free log subscription operation binding the contract event 0xcdc10c00e9cccd871fee68b6389bcebf0975335bb62412f2e9175083d0076294.
 //
-// Solidity: event BidSubmitted(uint256 indexed orderId, address indexed provider, uint256 price, uint256 providerId, uint256 machineId)
-func (_BidMarket *BidMarketFilterer) WatchBidSubmitted(opts *bind.WatchOpts, sink chan<- *BidMarketBidSubmitted, orderId []*big.Int, provider []common.Address) (event.Subscription, error) {
+// Solidity: event BidSubmitted(uint256 indexed orderId, uint256 indexed providerId, uint256 machineId, uint256 bidIndex)
+func (_BidMarket *BidMarketFilterer) WatchBidSubmitted(opts *bind.WatchOpts, sink chan<- *BidMarketBidSubmitted, orderId []*big.Int, providerId []*big.Int) (event.Subscription, error) {
 
 	var orderIdRule []interface{}
 	for _, orderIdItem := range orderId {
 		orderIdRule = append(orderIdRule, orderIdItem)
 	}
-	var providerRule []interface{}
-	for _, providerItem := range provider {
-		providerRule = append(providerRule, providerItem)
+	var providerIdRule []interface{}
+	for _, providerIdItem := range providerId {
+		providerIdRule = append(providerIdRule, providerIdItem)
 	}
 
-	logs, sub, err := _BidMarket.contract.WatchLogs(opts, "BidSubmitted", orderIdRule, providerRule)
+	logs, sub, err := _BidMarket.contract.WatchLogs(opts, "BidSubmitted", orderIdRule, providerIdRule)
 	if err != nil {
 		return nil, err
 	}
@@ -1560,9 +1734,9 @@ func (_BidMarket *BidMarketFilterer) WatchBidSubmitted(opts *bind.WatchOpts, sin
 	}), nil
 }
 
-// ParseBidSubmitted is a log parse operation binding the contract event 0x1b3d307c757cc471e124508de8fb270e98d9c23f6220af3df3e152cbefc05045.
+// ParseBidSubmitted is a log parse operation binding the contract event 0xcdc10c00e9cccd871fee68b6389bcebf0975335bb62412f2e9175083d0076294.
 //
-// Solidity: event BidSubmitted(uint256 indexed orderId, address indexed provider, uint256 price, uint256 providerId, uint256 machineId)
+// Solidity: event BidSubmitted(uint256 indexed orderId, uint256 indexed providerId, uint256 machineId, uint256 bidIndex)
 func (_BidMarket *BidMarketFilterer) ParseBidSubmitted(log types.Log) (*BidMarketBidSubmitted, error) {
 	event := new(BidMarketBidSubmitted)
 	if err := _BidMarket.contract.UnpackLog(event, "BidSubmitted", log); err != nil {
