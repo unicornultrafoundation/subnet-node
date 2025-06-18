@@ -31,6 +31,7 @@ func APIOption() ServeOption {
 
 		if cfg.GetBool("provider.enable", false) {
 			server.RegisterName("app", api.NewAppAPI(n.Apps))
+			server.RegisterName("deployments", api.NewDeployerAPI(n.Deployer))
 		}
 
 		server.RegisterName("account", api.NewAccountAPI(n.Account))

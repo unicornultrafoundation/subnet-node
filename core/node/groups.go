@@ -245,6 +245,7 @@ func Core(cfg *config.C) fx.Option {
 		fx.Provide(VerifierService),
 		fx.Provide(DockerService),
 		fx.Provide(account.EthereumService),
+		fx.Provide(DeployerService),
 	)
 }
 

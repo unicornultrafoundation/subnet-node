@@ -1,0 +1,119 @@
+{
+  "version": "2.0",
+  "services": {
+    "web": {
+      "image": "hashicorp/http-echo",
+      "command": ["/http-echo", "-text", "Hello from http-echo!"],
+      "count": 1,
+      "expose": [
+        {
+          "port": 5678,
+          "as": 80,
+          "proto": "TCP",
+          "to": [
+            {
+              "global": true
+            }
+          ]
+        }
+      ],
+      "params": {
+        "health": {
+          "readiness": {
+            "http": {
+              "path": "/",
+              "port": 5678
+            },
+            "initial_delay_seconds": 5,
+            "period_seconds": 10,
+            "timeout_seconds": 5,
+            "success_threshold": 1,
+            "failure_threshold": 3
+          },
+          "liveness": {
+            "http": {
+              "path": "/",
+              "port": 5678
+            },
+            "initial_delay_seconds": 15,
+            "period_seconds": 10,
+            "timeout_seconds": 5,
+            "success_threshold": 1,
+            "failure_threshold": 3
+          }
+        }
+      },
+      "resources": {
+        "cpu": {
+          "units": {
+            "value": 100,
+            "unit": "m"
+          }
+        },
+        "memory": {
+          "size": {
+            "value": 128,
+            "unit": "Mi"
+          }
+        }
+      }
+    }
+  },
+  "profiles": {
+    "compute": {
+      "default": {
+        "resources": {
+          "cpu": {
+            "request": "100m",
+            "limit": "200m"
+          },
+          "memory": {
+            "request": "128Mi",
+            "limit": "256Mi"
+          },
+          "storage": [
+            {
+              "name": "data",
+              "size": "1Gi",
+              "attributes": {
+                "persistent": false
+              }
+            }
+          ]
+        }
+      }
+    },
+    "placement": {
+      "default": {
+        "attributes": {
+          "region": "us-west"
+        },
+        "pricing": {
+          "cpu": {
+            "denom": "u2u",
+            "amount": 1000
+          },
+          "memory": {
+            "denom": "u2u",
+            "amount": 500
+          },
+          "storage": {
+            "denom": "u2u",
+            "amount": 200
+          }
+        }
+      }
+    }
+  },
+  "deployment": {
+    "default": {
+      "profile": "default",
+      "count": 1
+    }
+  },
+  "endpoints": {
+    "echo": {
+      "kind": "http"
+    }
+  }
+} 

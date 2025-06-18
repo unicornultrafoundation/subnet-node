@@ -1,0 +1,89 @@
+{
+  "version": "2.0",
+  "services": {
+    "web": {
+      "image": "nginx:latest",
+      "command": ["nginx", "-g", "daemon off;"],
+      "env": ["NGINX_HOST=example.com"],
+      "expose": [
+        {
+          "port": 80,
+          "as": 80,
+          "proto": "TCP",
+          "to": [
+            {
+              "global": true
+            }
+          ]
+        }
+      ],
+      "params": {
+        "health": {
+          "readiness": {
+            "http": {
+              "path": "/health",
+              "port": 80
+            },
+            "initial_delay_seconds": 5,
+            "period_seconds": 10,
+            "timeout_seconds": 3,
+            "success_threshold": 1,
+            "failure_threshold": 3
+          }
+        }
+      },
+      "count": 2,
+      "resources": {
+        "cpu": {
+          "units": {
+            "value": 500,
+            "unit": "m"
+          }
+        },
+        "memory": {
+          "size": {
+            "value": 512,
+            "unit": "Mi"
+          }
+        }
+      }
+    }
+  },
+  "profiles": {
+    "compute": {
+      "default": {
+        "resources": {
+          "cpu": {
+            "request": "500m",
+            "limit": "1000m"
+          },
+          "memory": {
+            "request": "512Mi",
+            "limit": "1Gi"
+          },
+          "storage": [
+            {
+              "name": "data",
+              "size": "10Gi",
+              "attributes": {
+                "persistent": true,
+                "class": "standard"
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  "deployment": {
+    "default": {
+      "profile": "default",
+      "count": 2
+    }
+  },
+  "endpoints": {
+    "web": {
+      "kind": "http"
+    }
+  }
+} 

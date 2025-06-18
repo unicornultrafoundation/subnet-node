@@ -1,0 +1,86 @@
+{
+  "version": "2.0",
+  "services": {
+    "network-service": {
+      "image": "nginx:latest",
+      "count": 2,
+      "resources": {
+        "cpu": {
+          "units": {
+            "value": 500,
+            "unit": "m"
+          }
+        },
+        "memory": {
+          "size": {
+            "value": 512,
+            "unit": "Mi"
+          }
+        },
+        "network": {
+          "bandwidth": "100M"
+        }
+      },
+      "expose": [
+        {
+          "port": 80,
+          "as": 80,
+          "proto": "TCP",
+          "to": [
+            {
+              "global": true
+            }
+          ],
+          "accept": [
+            "10.0.0.0/8",
+            "172.16.0.0/12",
+            "192.168.0.0/16"
+          ]
+        },
+        {
+          "port": 443,
+          "as": 443,
+          "proto": "TCP",
+          "to": [
+            {
+              "global": true
+            }
+          ],
+          "accept": [
+            "0.0.0.0/0"
+          ]
+        }
+      ]
+    }
+  },
+  "profiles": {
+    "compute": {
+      "default": {
+        "resources": {
+          "cpu": {
+            "request": "500m",
+            "limit": "1000m"
+          },
+          "memory": {
+            "request": "512Mi",
+            "limit": "1Gi"
+          },
+          "network": {
+            "bandwidth": "100M"
+          }
+        }
+      }
+    }
+  },
+  "deployment": {
+    "default": {
+      "profile": "default",
+      "count": 2
+    }
+  },
+  "endpoints": {
+    "network-service": {
+      "kind": "http"
+    }
+  }
+} 
