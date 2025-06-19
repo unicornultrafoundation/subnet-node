@@ -6,7 +6,9 @@ import (
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/watch"
 )
 
 // WaitForDeployment waits for all services in a deployment to be ready using the Watch API
@@ -94,4 +96,48 @@ func isDeploymentReady(deployment *appsv1.Deployment) bool {
 		deployment.Status.Replicas > 0 &&
 		deployment.Status.UpdatedReplicas == deployment.Status.Replicas &&
 		deployment.Status.AvailableReplicas == deployment.Status.Replicas
+}
+
+// WaitForNamespaceTermination waits for a namespace to be fully deleted
+func (c *KubeClient) WaitForNamespaceTermination(ctx context.Context, namespace string, timeout time.Duration) error {
+	c.Logger.WithField("namespace", namespace).Debug("Waiting for namespace termination")
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	// Check if namespace is already gone
+	ns, err := c.Client.CoreV1().Namespaces().Get(ctx, namespace, metav1.GetOptions{})
+	if err != nil {
+		if errors.IsNotFound(err) {
+			c.Logger.WithField("namespace", namespace).Debug("namespace already deleted")
+			return nil
+		}
+		return fmt.Errorf("failed to get namespace: %w", err)
+	}
+	c.Logger.WithField("namespace", namespace).WithField("phase", ns.Status.Phase).Debug("namespace found, waiting for deletion")
+
+	watcher, err := c.Client.CoreV1().Namespaces().Watch(ctx, metav1.ListOptions{
+		FieldSelector: fmt.Sprintf("metadata.name=%s", namespace),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to start namespace watcher: %w", err)
+	}
+	defer watcher.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("namespace %s was not terminated within %v: %w", namespace, timeout, ctx.Err())
+		case event, ok := <-watcher.ResultChan():
+			if !ok {
+				return fmt.Errorf("namespace watch channel closed unexpectedly")
+			}
+			c.Logger.WithField("namespace", namespace).
+				WithField("eventType", event.Type).
+				Debug("received namespace event (termination wait)")
+			if event.Type == watch.Deleted {
+				c.Logger.WithField("namespace", namespace).Debug("namespace deleted")
+				return nil
+			}
+		}
+	}
 }

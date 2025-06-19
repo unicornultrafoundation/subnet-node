@@ -64,6 +64,12 @@ func (s *Service) CleanupDeployment(ctx context.Context, orderID string) error {
 		return err
 	}
 
+	// Wait for the deployment to be terminated
+	if err := s.kubeClient.WaitForNamespaceTermination(ctx, orderID, s.cfg.DeploymentWaitTimeout); err != nil {
+		s.logger.WithField("orderID", orderID).Error("Failed to wait for deployment to be terminated", err)
+		return err
+	}
+
 	// Delete the deployment request
 	if err := s.store.DeleteDeploymentRequest(ctx, orderID); err != nil {
 		s.logger.WithField("orderID", orderID).Error("Failed to delete deployment request from datastore", err)
