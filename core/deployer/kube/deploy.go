@@ -55,7 +55,7 @@ func (c *KubeClient) Deploy(ctx context.Context, deployment types.Deployment) er
 	}()
 
 	// Validate namespace and create if needed
-	if err := c.validateAndCreateNamespace(ctx, deployment.ID, versionStr, deployment.ID); err != nil {
+	if err := c.validateAndCreateNamespace(ctx, deployment.ID, versionStr, deployment.ID, deployment.Requester.Hex()); err != nil {
 		return fmt.Errorf("namespace validation failed: %w", err)
 	}
 
@@ -118,7 +118,7 @@ func (c *KubeClient) Deploy(ctx context.Context, deployment types.Deployment) er
 					}
 
 					// Create deployment
-					if err := c.createDeployment(ctx, service, group, computeProfile, deployment.ID, versionStr, deployment.ID); err != nil {
+					if err := c.createDeployment(ctx, service, group, computeProfile, deployment.ID, versionStr, deployment.ID, deployment.Requester.Hex()); err != nil {
 						return fmt.Errorf("failed to create deployment for service %s: %w", serviceName, err)
 					}
 					createdResources = append(createdResources, struct {
@@ -134,7 +134,7 @@ func (c *KubeClient) Deploy(ctx context.Context, deployment types.Deployment) er
 					// Create services for exposed ports
 					for _, expose := range service.Expose {
 						if len(expose.To) > 0 {
-							if err := c.createService(ctx, service, group, expose, deployment.ID, versionStr, deployment.ID); err != nil {
+							if err := c.createService(ctx, service, group, expose, deployment.ID, versionStr, deployment.ID, deployment.Requester.Hex()); err != nil {
 								return fmt.Errorf("failed to create service for port %d: %w", expose.Port, err)
 							}
 							createdResources = append(createdResources, struct {
@@ -152,7 +152,7 @@ func (c *KubeClient) Deploy(ctx context.Context, deployment types.Deployment) er
 					// Create endpoints if specified
 					if deployment.Manifest.Endpoints != nil {
 						for endpointName, endpoint := range deployment.Manifest.Endpoints {
-							if err := c.createIngress(ctx, service, group, endpoint, endpointName, deployment.ID, deployment.ID); err != nil {
+							if err := c.createIngress(ctx, service, group, endpoint, endpointName, deployment.ID, deployment.ID, deployment.Requester.Hex()); err != nil {
 								return fmt.Errorf("failed to create ingress for endpoint %s: %w", endpointName, err)
 							}
 							createdResources = append(createdResources, struct {
@@ -420,7 +420,7 @@ func (c *KubeClient) createHealthCheckProbes(service manifest.Service) (*corev1.
 }
 
 // createDeployment creates a Kubernetes deployment for a service
-func (c *KubeClient) createDeployment(ctx context.Context, service manifest.Service, group manifest.Group, computeProfile *manifest.ComputeProfile, namespace, versionStr string, deploymentID string) error {
+func (c *KubeClient) createDeployment(ctx context.Context, service manifest.Service, group manifest.Group, computeProfile *manifest.ComputeProfile, namespace, versionStr string, deploymentID string, requester string) error {
 	resources, err := c.createResourceRequirements(service, computeProfile)
 	if err != nil {
 		return fmt.Errorf("failed to create resource requirements: %w", err)
@@ -450,6 +450,7 @@ func (c *KubeClient) createDeployment(ctx context.Context, service manifest.Serv
 				"service":      getServiceName(service),
 				"version":      truncateLabelValue(versionStr),
 				"deploymentID": truncateLabelValue(deploymentID),
+				"requester":    requester,
 			},
 			Annotations: map[string]string{
 				"deploymentID": deploymentID,
@@ -463,6 +464,7 @@ func (c *KubeClient) createDeployment(ctx context.Context, service manifest.Serv
 					"service":      getServiceName(service),
 					"version":      truncateLabelValue(versionStr),
 					"deploymentID": truncateLabelValue(deploymentID),
+					"requester":    requester,
 				},
 			},
 			Template: corev1.PodTemplateSpec{
@@ -472,6 +474,7 @@ func (c *KubeClient) createDeployment(ctx context.Context, service manifest.Serv
 						"service":      getServiceName(service),
 						"version":      truncateLabelValue(versionStr),
 						"deploymentID": truncateLabelValue(deploymentID),
+						"requester":    requester,
 					},
 					Annotations: map[string]string{
 						"deploymentID": deploymentID,
@@ -610,7 +613,7 @@ func (c *KubeClient) createEnvironmentVariables(service manifest.Service) []core
 }
 
 // createService creates a Kubernetes service for an exposed port
-func (c *KubeClient) createService(ctx context.Context, service manifest.Service, group manifest.Group, expose manifest.Expose, namespace, versionStr string, deploymentID string) error {
+func (c *KubeClient) createService(ctx context.Context, service manifest.Service, group manifest.Group, expose manifest.Expose, namespace, versionStr string, deploymentID string, requester string) error {
 	serviceName := fmt.Sprintf("%s-%s-%d-%s", group.Name, getServiceName(service), expose.Port, versionStr[:8])
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -621,6 +624,7 @@ func (c *KubeClient) createService(ctx context.Context, service manifest.Service
 				"service":      getServiceName(service),
 				"version":      truncateLabelValue(versionStr),
 				"deploymentID": truncateLabelValue(deploymentID),
+				"requester":    requester,
 			},
 			Annotations: map[string]string{
 				"deploymentID": deploymentID,
@@ -632,6 +636,7 @@ func (c *KubeClient) createService(ctx context.Context, service manifest.Service
 				"service":      getServiceName(service),
 				"version":      truncateLabelValue(versionStr),
 				"deploymentID": truncateLabelValue(deploymentID),
+				"requester":    requester,
 			},
 			Ports: []corev1.ServicePort{
 				{
@@ -690,7 +695,7 @@ func (c *KubeClient) createService(ctx context.Context, service manifest.Service
 }
 
 // createIngress creates a Kubernetes ingress for an endpoint
-func (c *KubeClient) createIngress(ctx context.Context, service manifest.Service, group manifest.Group, endpoint manifest.Endpoint, endpointName, namespace string, deploymentID string) error {
+func (c *KubeClient) createIngress(ctx context.Context, service manifest.Service, group manifest.Group, endpoint manifest.Endpoint, endpointName, namespace string, deploymentID string, requester string) error {
 	ingress := &networkingv1.Ingress{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      truncateLabelValue(fmt.Sprintf("%s-%s", group.Name, endpointName)),
@@ -700,6 +705,7 @@ func (c *KubeClient) createIngress(ctx context.Context, service manifest.Service
 				"service":      getServiceName(service),
 				"endpoint":     endpointName,
 				"deploymentID": truncateLabelValue(deploymentID),
+				"requester":    requester,
 			},
 			Annotations: map[string]string{
 				"kubernetes.io/ingress.class": endpoint.Kind,
@@ -752,13 +758,14 @@ func (c *KubeClient) createIngress(ctx context.Context, service manifest.Service
 }
 
 // createNamespace creates a Kubernetes namespace if it doesn't exist
-func (c *KubeClient) createNamespace(ctx context.Context, namespace, versionStr string, deploymentID string) error {
+func (c *KubeClient) createNamespace(ctx context.Context, namespace, versionStr string, deploymentID string, requester string) error {
 	_, err := c.Client.CoreV1().Namespaces().Create(ctx, &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: namespace,
 			Labels: map[string]string{
 				"version":      truncateLabelValue(versionStr),
 				"deploymentID": truncateLabelValue(deploymentID),
+				"requester":    requester,
 			},
 			Annotations: map[string]string{
 				"deploymentID": deploymentID,
@@ -834,13 +841,13 @@ func (c *KubeClient) cleanupResources(ctx context.Context, resources []struct {
 }
 
 // validateAndCreateNamespace validates and creates a namespace if needed
-func (c *KubeClient) validateAndCreateNamespace(ctx context.Context, namespace, versionStr string, deploymentID string) error {
+func (c *KubeClient) validateAndCreateNamespace(ctx context.Context, namespace, versionStr string, deploymentID string, requester string) error {
 	// Check if namespace exists
 	_, err := c.Client.CoreV1().Namespaces().Get(ctx, namespace, metav1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Create namespace
-			if err := c.createNamespace(ctx, namespace, versionStr, deploymentID); err != nil {
+			if err := c.createNamespace(ctx, namespace, versionStr, deploymentID, requester); err != nil {
 				return fmt.Errorf("failed to create namespace: %w", err)
 			}
 		} else {

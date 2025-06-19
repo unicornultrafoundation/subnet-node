@@ -5,6 +5,12 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/core/deployer/manifest"
 )
 
+type DeploymentResponse struct {
+	ID        string
+	Requester common.Address
+	Status    *DeploymentStatus
+}
+
 type Deployment struct {
 	ID        string
 	Requester common.Address

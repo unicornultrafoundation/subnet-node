@@ -60,28 +60,12 @@ func (s *Service) Stop(ctx context.Context) error {
 }
 
 // GetDeployments returns a list of deployment IDs for a specific requester
-func (s *Service) GetDeployments(ctx context.Context, requester string) ([]*types.Deployment, error) {
-	// Get deployment requests for the specific requester from the datastore
-	deploymentRequests, err := s.store.GetDeploymentRequests(ctx)
+func (s *Service) GetDeployments(ctx context.Context, requester string) ([]*types.DeploymentResponse, error) {
+	// Get deployment IDs for the specific requester from Kubernetes
+	deployments, err := s.kubeClient.GetDeployments(ctx, requester)
 	if err != nil {
-		s.logger.WithField("requester", requester).Error("Failed to get deployment requests by requester", err)
+		s.logger.WithField("requester", requester).Error("Failed to get deployments by requester", err)
 		return nil, err
-	}
-
-	var deploymentIDs []string
-	for _, req := range deploymentRequests {
-		deploymentIDs = append(deploymentIDs, req.OrderID)
-	}
-
-	var deployments []*types.Deployment
-	for _, deploymentID := range deploymentIDs {
-		deployment, err := s.kubeClient.GetDeployment(ctx, deploymentID)
-		if err != nil {
-			s.logger.WithField("deploymentID", deploymentID).Error("Failed to get deployment", err)
-		}
-		if deployment != nil {
-			deployments = append(deployments, deployment)
-		}
 	}
 
 	return deployments, nil

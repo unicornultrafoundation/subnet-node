@@ -514,7 +514,7 @@ func TestCreateNamespace(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := client.createNamespace(context.Background(), tt.namespace, tt.version, tt.deploymentID)
+			err := client.createNamespace(context.Background(), tt.namespace, tt.version, tt.deploymentID, "test-requester")
 			if tt.wantErr {
 				assert.Error(t, err)
 			} else {
@@ -524,6 +524,7 @@ func TestCreateNamespace(t *testing.T) {
 				assert.NotNil(t, ns)
 				assert.Equal(t, tt.version, ns.Labels["version"])
 				assert.Equal(t, tt.deploymentID, ns.Labels["deploymentID"])
+				assert.Equal(t, "test-requester", ns.Labels["requester"])
 			}
 		})
 	}
@@ -932,7 +933,7 @@ func TestCreateService(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := client.createService(context.Background(), tt.service, tt.group, tt.expose, tt.namespace, tt.versionStr, tt.deploymentID)
+			err := client.createService(context.Background(), tt.service, tt.group, tt.expose, tt.namespace, tt.versionStr, tt.deploymentID, "test-requester")
 			if tt.wantErr {
 				assert.Error(t, err)
 			} else {
@@ -944,6 +945,7 @@ func TestCreateService(t *testing.T) {
 				)
 				assert.NoError(t, err)
 				assert.NotNil(t, svc)
+				assert.Equal(t, "test-requester", svc.Labels["requester"])
 				if tt.expose.HTTPOptions != nil {
 					assert.Equal(t, fmt.Sprintf("%d", tt.expose.HTTPOptions.MaxBodySize), svc.Annotations["nginx.ingress.kubernetes.io/proxy-body-size"])
 				}
@@ -1002,7 +1004,7 @@ func TestCreateIngress(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := client.createIngress(context.Background(), tt.service, tt.group, tt.endpoint, tt.endpointName, tt.namespace, tt.deploymentID)
+			err := client.createIngress(context.Background(), tt.service, tt.group, tt.endpoint, tt.endpointName, tt.namespace, tt.deploymentID, "test-requester")
 			if tt.wantErr {
 				assert.Error(t, err)
 			} else {
@@ -1014,6 +1016,7 @@ func TestCreateIngress(t *testing.T) {
 				)
 				assert.NoError(t, err)
 				assert.NotNil(t, ingress)
+				assert.Equal(t, "test-requester", ingress.Labels["requester"])
 				if tt.service.Expose[0].HTTPOptions != nil {
 					assert.Equal(t, fmt.Sprintf("%d", tt.service.Expose[0].HTTPOptions.MaxBodySize), ingress.Annotations["nginx.ingress.kubernetes.io/proxy-body-size"])
 				}
@@ -1097,89 +1100,140 @@ func TestCleanupResources(t *testing.T) {
 	}
 
 	// Create test resources
-	namespace := "test-namespace"
-	ctx := context.Background()
-
-	// Create a deployment
-	deployment := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-deployment",
-			Namespace: namespace,
-		},
-	}
-	_, err := fakeClient.AppsV1().Deployments(namespace).Create(ctx, deployment, metav1.CreateOptions{})
-	assert.NoError(t, err)
-
-	// Create a service
-	service := &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-service",
-			Namespace: namespace,
-		},
-	}
-	_, err = fakeClient.CoreV1().Services(namespace).Create(ctx, service, metav1.CreateOptions{})
-	assert.NoError(t, err)
-
-	// Create an ingress
-	ingress := &networkingv1.Ingress{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-ingress",
-			Namespace: namespace,
-		},
-	}
-	_, err = fakeClient.NetworkingV1().Ingresses(namespace).Create(ctx, ingress, metav1.CreateOptions{})
-	assert.NoError(t, err)
-
-	// Create a secret
-	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-secret",
-			Namespace: namespace,
-		},
-	}
-	_, err = fakeClient.CoreV1().Secrets(namespace).Create(ctx, secret, metav1.CreateOptions{})
-	assert.NoError(t, err)
-
-	// Test cleanup
 	resources := []struct {
 		kind      string
 		name      string
 		namespace string
 	}{
+		{kind: "Deployment", name: "test-deployment", namespace: "test-namespace"},
+		{kind: "Service", name: "test-service", namespace: "test-namespace"},
+		{kind: "Ingress", name: "test-ingress", namespace: "test-namespace"},
+		{kind: "Secret", name: "test-secret", namespace: "test-namespace"},
+	}
+
+	// Create the resources first
+	for _, resource := range resources {
+		switch resource.kind {
+		case "Deployment":
+			_, err := fakeClient.AppsV1().Deployments(resource.namespace).Create(context.Background(), &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{Name: resource.name, Namespace: resource.namespace},
+			}, metav1.CreateOptions{})
+			assert.NoError(t, err)
+		case "Service":
+			_, err := fakeClient.CoreV1().Services(resource.namespace).Create(context.Background(), &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{Name: resource.name, Namespace: resource.namespace},
+			}, metav1.CreateOptions{})
+			assert.NoError(t, err)
+		case "Ingress":
+			_, err := fakeClient.NetworkingV1().Ingresses(resource.namespace).Create(context.Background(), &networkingv1.Ingress{
+				ObjectMeta: metav1.ObjectMeta{Name: resource.name, Namespace: resource.namespace},
+			}, metav1.CreateOptions{})
+			assert.NoError(t, err)
+		case "Secret":
+			_, err := fakeClient.CoreV1().Secrets(resource.namespace).Create(context.Background(), &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: resource.name, Namespace: resource.namespace},
+			}, metav1.CreateOptions{})
+			assert.NoError(t, err)
+		}
+	}
+
+	// Clean up resources
+	client.cleanupResources(context.Background(), resources)
+
+	// Verify resources are deleted
+	for _, resource := range resources {
+		switch resource.kind {
+		case "Deployment":
+			_, err := fakeClient.AppsV1().Deployments(resource.namespace).Get(context.Background(), resource.name, metav1.GetOptions{})
+			assert.Error(t, err)
+			assert.True(t, errors.IsNotFound(err))
+		case "Service":
+			_, err := fakeClient.CoreV1().Services(resource.namespace).Get(context.Background(), resource.name, metav1.GetOptions{})
+			assert.Error(t, err)
+			assert.True(t, errors.IsNotFound(err))
+		case "Ingress":
+			_, err := fakeClient.NetworkingV1().Ingresses(resource.namespace).Get(context.Background(), resource.name, metav1.GetOptions{})
+			assert.Error(t, err)
+			assert.True(t, errors.IsNotFound(err))
+		case "Secret":
+			_, err := fakeClient.CoreV1().Secrets(resource.namespace).Get(context.Background(), resource.name, metav1.GetOptions{})
+			assert.Error(t, err)
+			assert.True(t, errors.IsNotFound(err))
+		}
+	}
+}
+
+func TestGetDeployments(t *testing.T) {
+	fakeClient := fake.NewSimpleClientset()
+	logger := logrus.New().WithField("service", "kube").Logger
+	client := &KubeClient{
+		Client: fakeClient,
+		Logger: logger,
+	}
+
+	// Create test namespaces with different requesters
+	testRequester := "0x1234567890abcdef"
+	otherRequester := "0xfedcba0987654321"
+
+	// Create namespaces with requester labels
+	namespaces := []*corev1.Namespace{
 		{
-			kind:      "Deployment",
-			name:      "test-deployment",
-			namespace: namespace,
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "deployment-1",
+				Labels: map[string]string{
+					"requester":    testRequester,
+					"deploymentID": "deployment-1",
+				},
+			},
 		},
 		{
-			kind:      "Service",
-			name:      "test-service",
-			namespace: namespace,
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "deployment-2",
+				Labels: map[string]string{
+					"requester":    testRequester,
+					"deploymentID": "deployment-2",
+				},
+			},
 		},
 		{
-			kind:      "Ingress",
-			name:      "test-ingress",
-			namespace: namespace,
-		},
-		{
-			kind:      "Secret",
-			name:      "test-secret",
-			namespace: namespace,
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "deployment-3",
+				Labels: map[string]string{
+					"requester":    otherRequester,
+					"deploymentID": "deployment-3",
+				},
+			},
 		},
 	}
 
-	client.cleanupResources(ctx, resources)
+	// Create the namespaces
+	for _, ns := range namespaces {
+		_, err := fakeClient.CoreV1().Namespaces().Create(context.Background(), ns, metav1.CreateOptions{})
+		assert.NoError(t, err)
+	}
 
-	// Verify resources are deleted
-	_, err = fakeClient.AppsV1().Deployments(namespace).Get(ctx, "test-deployment", metav1.GetOptions{})
-	assert.True(t, errors.IsNotFound(err))
+	// Test getting deployments for the test requester
+	deployments, err := client.GetDeployments(context.Background(), testRequester)
+	assert.NoError(t, err)
+	assert.Len(t, deployments, 2)
 
-	_, err = fakeClient.CoreV1().Services(namespace).Get(ctx, "test-service", metav1.GetOptions{})
-	assert.True(t, errors.IsNotFound(err))
+	// Verify we got the correct deployments
+	deploymentIDs := make(map[string]bool)
+	for _, deployment := range deployments {
+		deploymentIDs[deployment.ID] = true
+	}
+	assert.True(t, deploymentIDs["deployment-1"])
+	assert.True(t, deploymentIDs["deployment-2"])
+	assert.False(t, deploymentIDs["deployment-3"])
 
-	_, err = fakeClient.NetworkingV1().Ingresses(namespace).Get(ctx, "test-ingress", metav1.GetOptions{})
-	assert.True(t, errors.IsNotFound(err))
+	// Test getting deployments for the other requester
+	deployments, err = client.GetDeployments(context.Background(), otherRequester)
+	assert.NoError(t, err)
+	assert.Len(t, deployments, 1)
+	assert.Equal(t, "deployment-3", deployments[0].ID)
 
-	_, err = fakeClient.CoreV1().Secrets(namespace).Get(ctx, "test-secret", metav1.GetOptions{})
-	assert.True(t, errors.IsNotFound(err))
+	// Test getting deployments for a non-existent requester
+	deployments, err = client.GetDeployments(context.Background(), "0xnonexistent")
+	assert.NoError(t, err)
+	assert.Len(t, deployments, 0)
 }

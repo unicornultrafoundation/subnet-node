@@ -20,11 +20,11 @@ func NewDeployerAPI(deployerService *deployer.Service) *DeployerAPI {
 	return &DeployerAPI{deployerService: deployerService}
 }
 
-func (api *DeployerAPI) RequestDeployment(ctx context.Context, req *types.DeploymentRequest) *DeployerResponse[*types.Deployment] {
+func (api *DeployerAPI) RequestDeployment(ctx context.Context, req *types.DeploymentRequest) *DeployerResponse[*types.DeploymentResponse] {
 	return WrapResponse(api.deployerService.RequestDeployment(ctx, req))
 }
 
-func (api *DeployerAPI) GetDeployment(ctx context.Context, orderID string) *DeployerResponse[*types.Deployment] {
+func (api *DeployerAPI) GetDeployment(ctx context.Context, orderID string) *DeployerResponse[*types.DeploymentResponse] {
 	return WrapResponse(api.deployerService.GetDeployment(ctx, orderID))
 }
 
@@ -32,7 +32,7 @@ func (api *DeployerAPI) CleanupDeployment(ctx context.Context, orderID string) *
 	return WrapResponse("Cleaned up deployment", api.deployerService.CleanupDeployment(ctx, orderID))
 }
 
-func (api *DeployerAPI) GetDeployments(ctx context.Context, requester string) *DeployerResponse[[]*types.Deployment] {
+func (api *DeployerAPI) GetDeployments(ctx context.Context, requester string) *DeployerResponse[[]*types.DeploymentResponse] {
 	return WrapResponse(api.deployerService.GetDeployments(ctx, requester))
 }
 

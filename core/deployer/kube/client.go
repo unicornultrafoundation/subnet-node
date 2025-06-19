@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/core/deployer/types"
 	corev1 "k8s.io/api/core/v1"
@@ -40,7 +41,7 @@ func NewKubeClient(ctx context.Context, kubeconfig string, logger *logrus.Logger
 	}, nil
 }
 
-func (c *KubeClient) GetDeployment(ctx context.Context, deploymentID string) (*types.Deployment, error) {
+func (c *KubeClient) GetDeployment(ctx context.Context, deploymentID string) (*types.DeploymentResponse, error) {
 	// Get the deployment information, including the current state of the deployment and the URIs of the services
 	namespace := deploymentID
 
@@ -49,7 +50,7 @@ func (c *KubeClient) GetDeployment(ctx context.Context, deploymentID string) (*t
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Return deployment with not found status
-			return &types.Deployment{
+			return &types.DeploymentResponse{
 				ID: deploymentID,
 				Status: &types.DeploymentStatus{
 					State: types.DeploymentStateNotFound,
@@ -258,14 +259,39 @@ func (c *KubeClient) GetDeployment(ctx context.Context, deploymentID string) (*t
 		UpdatedAt: time.Now().Format(time.RFC3339),
 	}
 
+	requester := ""
+	if len(deployments.Items) > 0 {
+		requester = deployments.Items[0].Labels["requester"]
+	}
+
 	// For now, we return a basic deployment structure
 	// In a real implementation, you would need to retrieve the original manifest and requester info
-	deployment := &types.Deployment{
-		ID:     deploymentID,
-		Status: deploymentStatus,
+	deployment := &types.DeploymentResponse{
+		ID:        deploymentID,
+		Requester: common.HexToAddress(requester),
+		Status:    deploymentStatus,
 		// Note: Manifest and Requester would need to be retrieved from storage/database
 		// as they're not stored in Kubernetes resources
 	}
 
 	return deployment, nil
+}
+
+func (c *KubeClient) GetDeployments(ctx context.Context, requester string) ([]*types.DeploymentResponse, error) {
+	namespaces, err := c.Client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{
+		LabelSelector: fmt.Sprintf("requester=%s", requester),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list namespaces for requester %s: %w", requester, err)
+	}
+
+	var deployments []*types.DeploymentResponse
+	for _, namespace := range namespaces.Items {
+		deployment, err := c.GetDeployment(ctx, namespace.Name)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get deployment %s: %w", namespace.Name, err)
+		}
+		deployments = append(deployments, deployment)
+	}
+	return deployments, nil
 }

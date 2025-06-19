@@ -7,7 +7,7 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/core/deployer/types"
 )
 
-func (s *Service) RequestDeployment(ctx context.Context, deploymentRequest *types.DeploymentRequest) (*types.Deployment, error) {
+func (s *Service) RequestDeployment(ctx context.Context, deploymentRequest *types.DeploymentRequest) (*types.DeploymentResponse, error) {
 	if err := deploymentRequest.Manifest.Validate(); err != nil {
 		s.logger.Error("Invalid deployment request", err)
 		return nil, err
@@ -47,7 +47,7 @@ func (s *Service) RequestDeployment(ctx context.Context, deploymentRequest *type
 	return s.kubeClient.GetDeployment(ctx, deploymentRequest.OrderID)
 }
 
-func (s *Service) GetDeployment(ctx context.Context, orderID string) (*types.Deployment, error) {
+func (s *Service) GetDeployment(ctx context.Context, orderID string) (*types.DeploymentResponse, error) {
 	return s.kubeClient.GetDeployment(ctx, orderID)
 }
 
