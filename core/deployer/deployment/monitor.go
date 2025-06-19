@@ -30,6 +30,18 @@ func (s *Service) MonitorDeployments(ctx context.Context) error {
 					continue
 				}
 
+				// TTL cleanup logic
+				if deployment.Status != nil && deployment.Status.TimeLeft == 0 {
+					logger.WithField("deploymentID", deploymentID).Warn("Deployment TTL expired, cleaning up")
+					err := s.CleanupDeployment(ctx, deploymentID)
+					if err != nil {
+						logger.WithField("deploymentID", deploymentID).Error("Failed to cleanup expired deployment", err)
+					} else {
+						logger.WithField("deploymentID", deploymentID).Info("Successfully cleaned up expired deployment")
+					}
+					continue
+				}
+
 				if deployment.Status.State != types.DeploymentStateRunning {
 					logger.WithField("deploymentID", deploymentID).WithField("state", deployment.Status.State).Warn("Deployment not running, waiting for it to be stable")
 					unstableList = append(unstableList, deploymentID)

@@ -19,7 +19,7 @@ type ServiceConfig struct {
 	LocalhostEnabled   bool
 
 	// Deployment configuration
-	DeploymentWaitTimeout time.Duration
+	DeploymentWaitTimeout time.Duration // Time to wait for the deployment to be ready after the deployment is created
 }
 
 func NewServiceConfigFromConfig(cfg *config.C) (*ServiceConfig, error) {

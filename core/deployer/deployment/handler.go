@@ -25,6 +25,7 @@ func (s *Service) RequestDeployment(ctx context.Context, deploymentRequest *type
 		ID:        deploymentRequest.OrderID,
 		Manifest:  manifest,
 		Requester: requester,
+		TTL:       deploymentRequest.TTL,
 	}
 
 	// Deploy the deployment request

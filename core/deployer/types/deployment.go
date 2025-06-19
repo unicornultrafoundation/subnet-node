@@ -16,6 +16,7 @@ type Deployment struct {
 	Requester common.Address
 	Manifest  *manifest.Manifest
 	Status    *DeploymentStatus
+	TTL       int64 // in minutes
 }
 
 type DeploymentRequest struct {
@@ -23,15 +24,19 @@ type DeploymentRequest struct {
 	Manifest  manifest.SDL `json:"manifest"`
 	Signature string       `json:"signature"`
 	Requester string       `json:"requester"`
+	TTL       int64        `json:"ttl"` // in minutes
 }
 
 // DeploymentStatus represents the current status of a deployment
 type DeploymentStatus struct {
-	State     DeploymentState `json:"state"`
-	Services  []ServiceStatus `json:"services"`
-	Endpoints []EndpointInfo  `json:"endpoints"`
-	CreatedAt string          `json:"createdAt"`
-	UpdatedAt string          `json:"updatedAt"`
+	State      DeploymentState `json:"state"`
+	Services   []ServiceStatus `json:"services"`
+	Endpoints  []EndpointInfo  `json:"endpoints"`
+	CreatedAt  string          `json:"createdAt"`
+	UpdatedAt  string          `json:"updatedAt"`
+	DeployedAt string          `json:"deployedAt"`
+	TTL        int64           `json:"ttl"`      // in minutes
+	TimeLeft   int64           `json:"timeLeft"` // in minutes, -1 if not set
 }
 
 // DeploymentState represents the overall state of a deployment
