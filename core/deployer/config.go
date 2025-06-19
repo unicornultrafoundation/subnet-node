@@ -17,6 +17,9 @@ type ServiceConfig struct {
 	// Service configuration
 	DefaultServiceType string
 	LocalhostEnabled   bool
+
+	// Deployment configuration
+	DeploymentWaitTimeout time.Duration
 }
 
 func NewServiceConfigFromConfig(cfg *config.C) (*ServiceConfig, error) {
@@ -32,6 +35,9 @@ func NewServiceConfigFromConfig(cfg *config.C) (*ServiceConfig, error) {
 	serviceConfig.DefaultServiceType = cfg.GetString("deployer.default_service_type", "NodePort")
 	serviceConfig.LocalhostEnabled = cfg.GetBool("deployer.localhost_enabled", true)
 
+	// Deployment configuration
+	serviceConfig.DeploymentWaitTimeout = cfg.GetDuration("deployer.deployment_wait_timeout", 30*time.Second)
+
 	if err := serviceConfig.Validate(); err != nil {
 		return nil, err
 	}
@@ -42,9 +48,10 @@ func NewServiceConfigFromConfig(cfg *config.C) (*ServiceConfig, error) {
 // DefaultServiceConfig returns a default service configuration
 func DefaultServiceConfig() *ServiceConfig {
 	return &ServiceConfig{
-		MonitorInterval:    30 * time.Second,
-		DefaultServiceType: "NodePort",
-		LocalhostEnabled:   true,
+		MonitorInterval:       30 * time.Second,
+		DefaultServiceType:    "NodePort",
+		LocalhostEnabled:      true,
+		DeploymentWaitTimeout: 30 * time.Second,
 	}
 }
 

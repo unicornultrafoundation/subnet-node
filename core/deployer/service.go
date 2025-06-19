@@ -49,7 +49,8 @@ func (s *Service) Start(ctx context.Context) error {
 	}
 
 	deploymentConfig := &deployment.Config{
-		MonitorInterval: s.config.MonitorInterval,
+		MonitorInterval:       s.config.MonitorInterval,
+		DeploymentWaitTimeout: s.config.DeploymentWaitTimeout,
 	}
 
 	s.deploymentService = deployment.NewService(kubeClient, s.storeService, s.logger, deploymentConfig)

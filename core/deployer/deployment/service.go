@@ -12,7 +12,8 @@ import (
 )
 
 type Config struct {
-	MonitorInterval time.Duration
+	MonitorInterval       time.Duration
+	DeploymentWaitTimeout time.Duration
 }
 
 type Service struct {

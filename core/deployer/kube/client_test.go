@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
@@ -1236,4 +1237,72 @@ func TestGetDeployments(t *testing.T) {
 	deployments, err = client.GetDeployments(context.Background(), "0xnonexistent")
 	assert.NoError(t, err)
 	assert.Len(t, deployments, 0)
+}
+
+func TestWaitForDeployment(t *testing.T) {
+	fakeClient := fake.NewSimpleClientset()
+	logger := logrus.New().WithField("service", "kube").Logger
+	client := &KubeClient{
+		Client: fakeClient,
+		Logger: logger,
+	}
+
+	// Create a test namespace
+	namespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-deployment",
+			Labels: map[string]string{
+				"requester":    "0x1234567890abcdef",
+				"deploymentID": "test-deployment",
+			},
+		},
+	}
+	_, err := fakeClient.CoreV1().Namespaces().Create(context.Background(), namespace, metav1.CreateOptions{})
+	assert.NoError(t, err)
+
+	// Create a deployment that's not ready
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-deployment",
+			Namespace: "test-deployment",
+			Labels: map[string]string{
+				"deploymentID": "test-deployment",
+			},
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: int32Ptr(2),
+		},
+		Status: appsv1.DeploymentStatus{
+			Replicas:          2,
+			ReadyReplicas:     0, // Not ready
+			AvailableReplicas: 0,
+			UpdatedReplicas:   0,
+		},
+	}
+	_, err = fakeClient.AppsV1().Deployments("test-deployment").Create(context.Background(), deployment, metav1.CreateOptions{})
+	assert.NoError(t, err)
+
+	// Test that waiting times out when deployment is not ready
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+
+	err = client.WaitForDeployment(ctx, "test-deployment", 500*time.Millisecond)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to become ready within")
+
+	// Update deployment to be ready
+	deployment.Status.ReadyReplicas = 2
+	deployment.Status.AvailableReplicas = 2
+	deployment.Status.UpdatedReplicas = 2
+	_, err = fakeClient.AppsV1().Deployments("test-deployment").Update(context.Background(), deployment, metav1.UpdateOptions{})
+	assert.NoError(t, err)
+
+	// Test that waiting succeeds when deployment is ready
+	err = client.WaitForDeployment(context.Background(), "test-deployment", 5*time.Second)
+	assert.NoError(t, err)
+}
+
+// Helper function for int32 pointers
+func int32Ptr(i int32) *int32 {
+	return &i
 }

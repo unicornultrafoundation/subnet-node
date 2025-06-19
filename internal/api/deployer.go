@@ -8,8 +8,8 @@ import (
 )
 
 type DeployerResponse[T any] struct {
-	Data  T     `json:"data"`
-	Error error `json:"error"`
+	Data  T      `json:"data"`
+	Error string `json:"error"`
 }
 
 type DeployerAPI struct {
@@ -21,24 +21,24 @@ func NewDeployerAPI(deployerService *deployer.Service) *DeployerAPI {
 }
 
 func (api *DeployerAPI) RequestDeployment(ctx context.Context, req *types.DeploymentRequest) *DeployerResponse[*types.DeploymentResponse] {
-	return WrapResponse(api.deployerService.RequestDeployment(ctx, req))
+	return wrapResponse(api.deployerService.RequestDeployment(ctx, req))
 }
 
 func (api *DeployerAPI) GetDeployment(ctx context.Context, orderID string) *DeployerResponse[*types.DeploymentResponse] {
-	return WrapResponse(api.deployerService.GetDeployment(ctx, orderID))
+	return wrapResponse(api.deployerService.GetDeployment(ctx, orderID))
 }
 
 func (api *DeployerAPI) CleanupDeployment(ctx context.Context, orderID string) *DeployerResponse[string] {
-	return WrapResponse("Cleaned up deployment", api.deployerService.CleanupDeployment(ctx, orderID))
+	return wrapResponse("Cleaned up deployment", api.deployerService.CleanupDeployment(ctx, orderID))
 }
 
 func (api *DeployerAPI) GetDeployments(ctx context.Context, requester string) *DeployerResponse[[]*types.DeploymentResponse] {
-	return WrapResponse(api.deployerService.GetDeployments(ctx, requester))
+	return wrapResponse(api.deployerService.GetDeployments(ctx, requester))
 }
 
-func WrapResponse[T any](data T, err error) *DeployerResponse[T] {
+func wrapResponse[T any](data T, err error) *DeployerResponse[T] {
 	if err != nil {
-		return &DeployerResponse[T]{Error: err}
+		return &DeployerResponse[T]{Error: err.Error()}
 	}
 	return &DeployerResponse[T]{Data: data}
 }

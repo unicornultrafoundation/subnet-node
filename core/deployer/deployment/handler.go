@@ -33,6 +33,12 @@ func (s *Service) RequestDeployment(ctx context.Context, deploymentRequest *type
 		return nil, err
 	}
 
+	// Wait for the deployment to be ready
+	if err := s.kubeClient.WaitForDeployment(ctx, deploymentRequest.OrderID, s.cfg.DeploymentWaitTimeout); err != nil {
+		s.logger.Error("Failed to wait for deployment to be ready", err)
+		return nil, err
+	}
+
 	// Store the deployment request
 	if err := s.store.StoreDeploymentRequest(ctx, deploymentRequest); err != nil {
 		s.logger.Error("Failed to store deployment request", err)
