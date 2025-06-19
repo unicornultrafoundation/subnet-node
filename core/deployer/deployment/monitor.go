@@ -11,6 +11,8 @@ import (
 func (s *Service) MonitorDeployments(ctx context.Context) error {
 	ticker := time.NewTicker(s.cfg.MonitorInterval)
 
+	logger := s.logger.WithField("component", "deployer-monitor")
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -19,25 +21,25 @@ func (s *Service) MonitorDeployments(ctx context.Context) error {
 			// Check for deployment requests in the datastore
 			deploymentIDs := s.GetDeploymentListCache()
 
-			unstableCount := 0
+			unstableList := []string{}
 			for _, deploymentID := range deploymentIDs {
 				deployment, err := s.kubeClient.GetDeployment(ctx, deploymentID)
 				if err != nil {
-					s.logger.Error("Failed to get deployment", err)
-					unstableCount++
+					logger.WithField("deploymentID", deploymentID).Error("Failed to get deployment", err)
+					unstableList = append(unstableList, deploymentID)
 					continue
 				}
 
 				if deployment.Status.State != types.DeploymentStateRunning {
-					s.logger.WithField("deploymentID", deploymentID).WithField("state", deployment.Status.State).Warn("Deployment not running, waiting for it to be stable")
-					unstableCount++
+					logger.WithField("deploymentID", deploymentID).WithField("state", deployment.Status.State).Warn("Deployment not running, waiting for it to be stable")
+					unstableList = append(unstableList, deploymentID)
 				}
 			}
 
-			if unstableCount > 0 {
-				s.logger.WithField("deployments", len(deploymentIDs)).WithField("unstable", unstableCount).Warn("Deployments are not stable, waiting for them to be stable")
+			if len(unstableList) > 0 {
+				logger.WithField("deployments", len(deploymentIDs)).WithField("unstableDeploymentIDs", unstableList).Warn("Some deployments are not stable")
 			} else {
-				s.logger.WithField("deployments", len(deploymentIDs)).Info("All deployments are stable")
+				logger.WithField("deployments", len(deploymentIDs)).Info("All deployments are stable")
 			}
 		}
 	}
