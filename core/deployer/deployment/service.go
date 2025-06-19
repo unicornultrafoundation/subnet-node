@@ -8,6 +8,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/core/deployer/kube"
 	"github.com/unicornultrafoundation/subnet-node/core/deployer/store"
+	"github.com/unicornultrafoundation/subnet-node/core/deployer/types"
 )
 
 type Config struct {
@@ -56,4 +57,32 @@ func (s *Service) Start(ctx context.Context) error {
 
 func (s *Service) Stop(ctx context.Context) error {
 	return nil
+}
+
+// GetDeployments returns a list of deployment IDs for a specific requester
+func (s *Service) GetDeployments(ctx context.Context, requester string) ([]*types.Deployment, error) {
+	// Get deployment requests for the specific requester from the datastore
+	deploymentRequests, err := s.store.GetDeploymentRequests(ctx)
+	if err != nil {
+		s.logger.WithField("requester", requester).Error("Failed to get deployment requests by requester", err)
+		return nil, err
+	}
+
+	var deploymentIDs []string
+	for _, req := range deploymentRequests {
+		deploymentIDs = append(deploymentIDs, req.OrderID)
+	}
+
+	var deployments []*types.Deployment
+	for _, deploymentID := range deploymentIDs {
+		deployment, err := s.kubeClient.GetDeployment(ctx, deploymentID)
+		if err != nil {
+			s.logger.WithField("deploymentID", deploymentID).Error("Failed to get deployment", err)
+		}
+		if deployment != nil {
+			deployments = append(deployments, deployment)
+		}
+	}
+
+	return deployments, nil
 }

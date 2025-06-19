@@ -17,3 +17,7 @@ func (s *Service) GetDeployment(ctx context.Context, orderID string) (*types.Dep
 func (s *Service) CleanupDeployment(ctx context.Context, orderID string) error {
 	return s.deploymentService.CleanupDeployment(ctx, orderID)
 }
+
+func (s *Service) GetDeployments(ctx context.Context, requester string) ([]*types.Deployment, error) {
+	return s.deploymentService.GetDeployments(ctx, requester)
+}
