@@ -19,12 +19,7 @@ func (c *KubeClient) GetDeployment(ctx context.Context, deploymentID string) (*t
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Return deployment with not found status
-			return &types.DeploymentResponse{
-				ID: deploymentID,
-				Status: &types.DeploymentStatus{
-					State: types.DeploymentStateNotFound,
-				},
-			}, nil
+			return nil, fmt.Errorf("deployment not found")
 		}
 		return nil, fmt.Errorf("failed to check namespace existence: %w", err)
 	}
