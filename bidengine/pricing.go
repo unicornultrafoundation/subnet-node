@@ -3,11 +3,12 @@ package bidengine
 import (
 	"github.com/holiman/uint256"
 	"github.com/sirupsen/logrus"
+	"github.com/unicornultrafoundation/subnet-node/bidengine/types"
 )
 
 // calculateMachineCost calculates the cost for running a workload on a specific machine
 // for a specified duration (in seconds)
-func (b *Service) calculateMachineCost(requirements *BidRequirements, machine *Machine, durationSeconds uint64) *uint256.Int {
+func (b *Service) calculateMachineCost(requirements *types.BidRequirements, machine *types.Machine, durationSeconds uint64) *uint256.Int {
 	// Calculate cost per second
 	cpuCost := new(uint256.Int).Mul(requirements.MinCPUCores, machine.CpuPricePerSec)
 	memCost := new(uint256.Int).Mul(requirements.MinMemoryMB, machine.MemoryPricePerSec)

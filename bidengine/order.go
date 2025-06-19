@@ -9,6 +9,7 @@ import (
 	"github.com/holiman/uint256"
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/bidengine/contracts"
+	"github.com/unicornultrafoundation/subnet-node/bidengine/types"
 )
 
 // watchNewOrders subscribes to new order events on the blockchain and processes them
@@ -66,7 +67,7 @@ func (b *Service) watchNewOrders(ctx context.Context) error {
 }
 
 // getOrder retrieves order details from the blockchain and converts to internal format
-func (b *Service) getOrder(ctx context.Context, orderId *uint256.Int) (*OrderInfo, error) {
+func (b *Service) getOrder(ctx context.Context, orderId *uint256.Int) (*types.OrderInfo, error) {
 	// Fetch complete order details from the blockchain
 	return b.bidMarket.GetOrder(&bind.CallOpts{
 		Context: ctx,
@@ -137,7 +138,7 @@ func (b *Service) processNewOrder(ctx context.Context, event *contracts.BidMarke
 }
 
 // checkOrderEligibility checks if we can and should bid on this order
-func (b *Service) checkOrderEligibility(_ context.Context, order *OrderInfo) (bool, error) {
+func (b *Service) checkOrderEligibility(_ context.Context, order *types.OrderInfo) (bool, error) {
 	// 1. Check if requirements meet our minimum criteria
 	if order.Requirements.MinCPUCores.Cmp(b.bidConfig.MinRequirements.MinCPUCores) < 0 ||
 		order.Requirements.MinMemoryMB.Cmp(b.bidConfig.MinRequirements.MinMemoryMB) < 0 ||
@@ -152,7 +153,7 @@ func (b *Service) checkOrderEligibility(_ context.Context, order *OrderInfo) (bo
 }
 
 // calculateBidAmount calculates the amount to bid based on the order and our config
-func (b *Service) calculateBidAmount(order *OrderInfo, machine *Machine) *uint256.Int {
+func (b *Service) calculateBidAmount(order *types.OrderInfo, machine *types.Machine) *uint256.Int {
 	// Calculate a bid amount between min and max percentages of the max price
 	minAmount := new(uint256.Int).Mul(order.MaxPrice, uint256.NewInt(uint64(b.bidConfig.MinBidPercent)))
 	minAmount = minAmount.Div(minAmount, uint256.NewInt(100))
@@ -186,7 +187,7 @@ func (b *Service) calculateBidAmount(order *OrderInfo, machine *Machine) *uint25
 }
 
 // GetOrder gets order details by order ID
-func (b *Service) GetOrder(ctx context.Context, orderId *uint256.Int) (*OrderInfo, error) {
+func (b *Service) GetOrder(ctx context.Context, orderId *uint256.Int) (*types.OrderInfo, error) {
 	order, err := b.getOrder(ctx, orderId)
 	if err != nil {
 		b.log.WithError(err).WithField("orderId", orderId).Error("Failed to get order details")

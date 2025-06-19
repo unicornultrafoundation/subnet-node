@@ -1,4 +1,4 @@
-package bidengine
+package types
 
 import (
 	"context"

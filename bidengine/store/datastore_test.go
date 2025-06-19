@@ -1,4 +1,4 @@
-package bidengine
+package store
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"github.com/unicornultrafoundation/subnet-node/bidengine/types"
 )
 
 // MockDatastore mocks the repo.Datastore interface
@@ -86,17 +87,17 @@ func TestStoreSaveBid(t *testing.T) {
 	store, err := NewStore(mockDs, log)
 	require.NoError(t, err)
 
-	bid := &Bid{
+	bid := &types.Bid{
 		ID:           uint256.NewInt(123),
 		OrderId:      uint256.NewInt(123),
 		ProviderId:   uint256.NewInt(1),
 		MachineId:    uint256.NewInt(2),
 		PricePerSec:  uint256.NewInt(1000000),
-		Status:       BidStatusPending,
+		Status:       types.BidStatusPending,
 		CreatedAt:    time.Now(),
 		UpdatedAt:    time.Now(),
 		ExpirationAt: time.Now().Add(time.Hour),
-		Requirements: &BidRequirements{
+		Requirements: &types.BidRequirements{
 			MinCPUCores: uint256.NewInt(4),
 		},
 		TxHash: "0xabc123",

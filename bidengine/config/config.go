@@ -1,7 +1,8 @@
-package bidengine
+package config
 
 import (
 	"github.com/holiman/uint256"
+	"github.com/unicornultrafoundation/subnet-node/bidengine/types"
 	"github.com/unicornultrafoundation/subnet-node/config"
 )
 
@@ -37,12 +38,12 @@ const (
 )
 
 // LoadBidConfig loads the bid configuration from the config file
-func LoadBidConfig(cfg *config.C) BidConfig {
-	bidConfig := BidConfig{
+func LoadBidConfig(cfg *config.C) types.BidConfig {
+	bidConfig := types.BidConfig{
 		MinBidPercent: cfg.GetInt(ConfigKeyMinBidPercent, 70),
 		MaxBidPercent: cfg.GetInt(ConfigKeyMaxBidPercent, 95),
 		PriceFactor:   float64(cfg.GetInt(ConfigKeyPriceFactor, 1)),
-		MinRequirements: &BidRequirements{
+		MinRequirements: &types.BidRequirements{
 			MinCPUCores:      uint256.NewInt(uint64(cfg.GetInt(ConfigKeyMinCPUCores, 1))),
 			MinMemoryMB:      uint256.NewInt(uint64(cfg.GetInt(ConfigKeyMinMemoryMB, 1024))),
 			MinDiskGB:        uint256.NewInt(uint64(cfg.GetInt(ConfigKeyMinDiskGB, 10))),

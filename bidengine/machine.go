@@ -10,22 +10,23 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/holiman/uint256"
 	"github.com/sirupsen/logrus"
+	"github.com/unicornultrafoundation/subnet-node/bidengine/types"
 )
 
 // machineCache provides in-memory caching of machine information
 type machineCache struct {
-	machines    map[string]*Machine // Map of providerId:machineId -> Machine
+	machines    map[string]*types.Machine // Map of providerId:machineId -> Machine
 	lastUpdated time.Time
 	mutex       sync.RWMutex
 }
 
 // Initialize the machine cache
 var mCache = &machineCache{
-	machines: make(map[string]*Machine),
+	machines: make(map[string]*types.Machine),
 }
 
 // Get machines for a provider with caching
-func (b *Service) getMachines(ctx context.Context, forceRefresh bool) ([]*Machine, error) {
+func (b *Service) getMachines(ctx context.Context, forceRefresh bool) ([]*types.Machine, error) {
 	// Create a cache key prefix
 	providerKey := b.providerId.String()
 
@@ -36,7 +37,7 @@ func (b *Service) getMachines(ctx context.Context, forceRefresh bool) ([]*Machin
 
 	if !forceRefresh && !cacheExpired {
 		// Return machines from cache if available for this provider
-		var providerMachines []*Machine
+		var providerMachines []*types.Machine
 
 		mCache.mutex.RLock()
 		for key, machine := range mCache.machines {
@@ -66,7 +67,7 @@ func (b *Service) getMachines(ctx context.Context, forceRefresh bool) ([]*Machin
 	}
 
 	if provider.MachineCount.IsZero() {
-		return []*Machine{}, nil
+		return []*types.Machine{}, nil
 	}
 
 	// Get all machines for our provider
@@ -104,9 +105,9 @@ func (b *Service) getMachines(ctx context.Context, forceRefresh bool) ([]*Machin
 }
 
 // updateMachineAllocatedResources updates a machine's allocated resources based on active bids
-func (b *Service) updateMachineAllocatedResources(ctx context.Context, machine *Machine) {
+func (b *Service) updateMachineAllocatedResources(ctx context.Context, machine *types.Machine) {
 	// Reset allocated resources
-	machine.AllocatedResources = &MachineResources{
+	machine.AllocatedResources = &types.MachineResources{
 		CpuCores: uint256.NewInt(0),
 		MemoryMB: uint256.NewInt(0),
 		DiskGB:   uint256.NewInt(0),
@@ -119,7 +120,7 @@ func (b *Service) updateMachineAllocatedResources(ctx context.Context, machine *
 	b.bidsMutex.RLock()
 	for _, bid := range b.activeBids {
 		// Only count bids that are pending or accepted for this machine
-		if (bid.Status == BidStatusPending || bid.Status == BidStatusAccepted) &&
+		if (bid.Status == types.BidStatusPending || bid.Status == types.BidStatusAccepted) &&
 			bid.MachineId.Eq(machine.ID) && bid.ProviderId.Eq(machine.ProviderId) {
 
 			// Add requirements to allocated resources
@@ -139,7 +140,7 @@ func (b *Service) updateMachineAllocatedResources(ctx context.Context, machine *
 }
 
 // GetMachine retrieves information about a specific machine
-func (b *Service) GetMachine(ctx context.Context, providerId, machineId *uint256.Int) (*Machine, error) {
+func (b *Service) GetMachine(ctx context.Context, providerId, machineId *uint256.Int) (*types.Machine, error) {
 	// Try to get from cache first
 	cacheKey := fmt.Sprintf("%s:%s", providerId.String(), machineId.String())
 
@@ -172,7 +173,7 @@ func (b *Service) GetMachine(ctx context.Context, providerId, machineId *uint256
 }
 
 // findSuitableMachine finds a suitable machine for the given requirements
-func (b *Service) findSuitableMachine(ctx context.Context, requirements *BidRequirements) *Machine {
+func (b *Service) findSuitableMachine(ctx context.Context, requirements *types.BidRequirements) *types.Machine {
 	// First get the provider ID from config or a previous initialization
 	if b.providerId == nil {
 		b.log.Error("Provider ID not set, cannot find suitable machine")
@@ -206,7 +207,7 @@ func (b *Service) findSuitableMachine(ctx context.Context, requirements *BidRequ
 
 	// Define machine candidates with their scores
 	type machineCandidate struct {
-		machine *Machine
+		machine *types.Machine
 		score   float64
 	}
 	var candidates []machineCandidate

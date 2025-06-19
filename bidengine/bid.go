@@ -9,10 +9,11 @@ import (
 	"github.com/holiman/uint256"
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/bidengine/contracts"
+	"github.com/unicornultrafoundation/subnet-node/bidengine/types"
 )
 
 // PlaceBid places a bid on a specific order in the BidMarket contract
-func (b *Service) PlaceBid(ctx context.Context, order *OrderInfo, providerId, machineId, pricePerSecond *uint256.Int, requirements *BidRequirements) (*Bid, error) {
+func (b *Service) PlaceBid(ctx context.Context, order *types.OrderInfo, providerId, machineId, pricePerSecond *uint256.Int, requirements *types.BidRequirements) (*types.Bid, error) {
 	// Check if machine is active
 	isActive, err := b.provider.IsMachineActive(&bind.CallOpts{Context: ctx}, providerId.ToBig(), machineId.ToBig())
 	if err != nil {
@@ -51,13 +52,13 @@ func (b *Service) PlaceBid(ctx context.Context, order *OrderInfo, providerId, ma
 		return nil, fmt.Errorf("failed to place bid on blockchain: %v", err)
 	}
 
-	bid := &Bid{
+	bid := &types.Bid{
 		ID:           order.OrderID, // Using order ID as bid ID for tracking
 		OrderId:      order.OrderID,
 		ProviderId:   providerId,
 		MachineId:    machineId,
 		PricePerSec:  pricePerSecond,
-		Status:       BidStatusPending,
+		Status:       types.BidStatusPending,
 		CreatedAt:    time.Now(),
 		UpdatedAt:    time.Now(),
 		ExpirationAt: time.Now().Add(time.Minute * 5), // Set expiration to 5 minutes
@@ -129,7 +130,7 @@ func (b *Service) cleanupNonAcceptedBids() {
 	removed := 0
 	for key, bid := range b.activeBids {
 		// Keep only accepted bids in memory
-		if bid.Status != BidStatusAccepted {
+		if bid.Status != types.BidStatusAccepted {
 			delete(b.activeBids, key)
 			removed++
 
@@ -252,7 +253,7 @@ func (b *Service) processBidAcceptance(ctx context.Context, event *contracts.Bid
 	// Acquire write lock to update bid status
 	b.bidsMutex.Lock()
 	// Update bid status
-	bid.Status = BidStatusAccepted
+	bid.Status = types.BidStatusAccepted
 	bid.UpdatedAt = time.Now()
 	b.bidsMutex.Unlock()
 
@@ -266,7 +267,7 @@ func (b *Service) processBidAcceptance(ctx context.Context, event *contracts.Bid
 }
 
 // handleAcceptedBid performs necessary actions after a bid is accepted
-func (b *Service) handleAcceptedBid(_ context.Context, bid *Bid) {
+func (b *Service) handleAcceptedBid(_ context.Context, bid *types.Bid) {
 	// Implement resource provisioning, notification to resource manager, etc.
 	b.log.WithFields(logrus.Fields{
 		"orderId":    bid.OrderId,

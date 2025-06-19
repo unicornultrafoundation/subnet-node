@@ -1,4 +1,4 @@
-package bidengine
+package types
 
 import (
 	"math/big"
@@ -10,8 +10,8 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/bidengine/contracts"
 )
 
-// ProviderServiceInterface defines the interface for interacting with the Provider contract
-type ProviderServiceInterface interface {
+// ProviderService defines the interface for interacting with the Provider contract
+type ProviderService interface {
 	// IsMachineActive checks if a machine is active
 	IsMachineActive(opts *bind.CallOpts, providerId, machineId *big.Int) (bool, error)
 
@@ -28,8 +28,8 @@ type ProviderServiceInterface interface {
 	GetMachinesPaginated(opts *bind.CallOpts, providerId *uint256.Int, startIndex, endIndex *uint256.Int) ([]*Machine, error)
 }
 
-// MarketServiceInterface defines the interface for interacting with the BidMarket contract
-type MarketServiceInterface interface {
+// MarketService defines the interface for interacting with the BidMarket contract
+type MarketService interface {
 	// GetOrder retrieves order details from the blockchain
 	GetOrder(opts *bind.CallOpts, orderId *uint256.Int) (*OrderInfo, error)
 

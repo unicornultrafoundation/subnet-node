@@ -1,4 +1,4 @@
-package bidengine
+package store
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"github.com/ipfs/go-datastore"
 	"github.com/ipfs/go-datastore/query"
 	"github.com/sirupsen/logrus"
+	"github.com/unicornultrafoundation/subnet-node/bidengine/types"
 	"github.com/unicornultrafoundation/subnet-node/repo"
 )
 
@@ -42,7 +43,7 @@ func bidKey(bidID string) datastore.Key {
 }
 
 // SaveBid stores or updates a bid in the datastore
-func (s *Store) SaveBid(ctx context.Context, bid *Bid) error {
+func (s *Store) SaveBid(ctx context.Context, bid *types.Bid) error {
 	if bid == nil || bid.ID == nil {
 		return fmt.Errorf("cannot save nil bid or bid with nil ID")
 	}
@@ -67,7 +68,7 @@ func (s *Store) SaveBid(ctx context.Context, bid *Bid) error {
 }
 
 // GetBidByID retrieves a bid by its ID
-func (s *Store) GetBidByID(ctx context.Context, bidID string) (*Bid, error) {
+func (s *Store) GetBidByID(ctx context.Context, bidID string) (*types.Bid, error) {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
 
@@ -80,7 +81,7 @@ func (s *Store) GetBidByID(ctx context.Context, bidID string) (*Bid, error) {
 		return nil, fmt.Errorf("failed to read bid from datastore: %v", err)
 	}
 
-	var bid Bid
+	var bid types.Bid
 	if err := json.Unmarshal(data, &bid); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal bid: %v", err)
 	}
@@ -89,32 +90,32 @@ func (s *Store) GetBidByID(ctx context.Context, bidID string) (*Bid, error) {
 }
 
 // ListActiveBids retrieves all active bids
-func (s *Store) ListActiveBids(ctx context.Context) ([]*Bid, error) {
-	return s.listBidsWithFilter(ctx, func(bid *Bid) bool {
-		return bid.Status != BidStatusExpired && bid.Status != BidStatusRejected
+func (s *Store) ListActiveBids(ctx context.Context) ([]*types.Bid, error) {
+	return s.listBidsWithFilter(ctx, func(bid *types.Bid) bool {
+		return bid.Status != types.BidStatusExpired && bid.Status != types.BidStatusRejected
 	})
 }
 
 // ListBidsByStatus retrieves bids by their status
-func (s *Store) ListBidsByStatus(ctx context.Context, status BidStatus) ([]*Bid, error) {
-	return s.listBidsWithFilter(ctx, func(bid *Bid) bool {
+func (s *Store) ListBidsByStatus(ctx context.Context, status types.BidStatus) ([]*types.Bid, error) {
+	return s.listBidsWithFilter(ctx, func(bid *types.Bid) bool {
 		return bid.Status == status
 	})
 }
 
 // ListAllBids retrieves all bids from the datastore
-func (s *Store) ListAllBids(ctx context.Context) ([]*Bid, error) {
-	return s.listBidsWithFilter(ctx, func(bid *Bid) bool {
+func (s *Store) ListAllBids(ctx context.Context) ([]*types.Bid, error) {
+	return s.listBidsWithFilter(ctx, func(bid *types.Bid) bool {
 		return true // Return all bids
 	})
 }
 
 // listBidsWithFilter is a helper function to list bids with a filter function
-func (s *Store) listBidsWithFilter(ctx context.Context, filter func(*Bid) bool) ([]*Bid, error) {
+func (s *Store) listBidsWithFilter(ctx context.Context, filter func(*types.Bid) bool) ([]*types.Bid, error) {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
 
-	var bids []*Bid
+	var bids []*types.Bid
 
 	// Query all keys with the bid prefix
 	results, err := s.ds.Query(ctx, query.Query{
@@ -137,7 +138,7 @@ func (s *Store) listBidsWithFilter(ctx context.Context, filter func(*Bid) bool) 
 		}
 
 		// Unmarshal the bid
-		var bid Bid
+		var bid types.Bid
 		if err := json.Unmarshal(result.Value, &bid); err != nil {
 			s.log.WithError(err).WithField("key", result.Key).Warn("Failed to unmarshal bid")
 			continue

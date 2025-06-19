@@ -6,10 +6,11 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/holiman/uint256"
 	"github.com/unicornultrafoundation/subnet-node/bidengine/contracts"
+	btypes "github.com/unicornultrafoundation/subnet-node/bidengine/types"
 )
 
-// Ensure ProviderService implements ProviderServiceInterface
-var _ ProviderServiceInterface = (*ProviderService)(nil)
+// Ensure ProviderService implements ProviderService
+var _ btypes.ProviderService = (*ProviderService)(nil)
 
 type ProviderService struct {
 	providerC *contracts.Provider
@@ -40,14 +41,14 @@ func (p *ProviderService) ValidateMachineRequirements(opts *bind.CallOpts, machi
 	return valid, nil
 }
 
-func (p *ProviderService) GetMachine(opts *bind.CallOpts, providerId, machineId *uint256.Int) (*Machine, error) {
+func (p *ProviderService) GetMachine(opts *bind.CallOpts, providerId, machineId *uint256.Int) (*btypes.Machine, error) {
 	bcMachine, err := p.providerC.ProviderMachines(opts, providerId.ToBig(), machineId.ToBig())
 
 	if err != nil {
 		return nil, err
 	}
 
-	machine := &Machine{
+	machine := &btypes.Machine{
 		ID:                machineId,
 		ProviderId:        providerId,
 		CpuCores:          uint256.MustFromBig(bcMachine.CpuCores),
@@ -65,7 +66,7 @@ func (p *ProviderService) GetMachine(opts *bind.CallOpts, providerId, machineId 
 		GpuPricePerSec:    uint256.MustFromBig(bcMachine.GpuPricePerSecond),
 
 		// Initialize tracking fields
-		AllocatedResources: &MachineResources{
+		AllocatedResources: &btypes.MachineResources{
 			CpuCores: uint256.NewInt(0),
 			MemoryMB: uint256.NewInt(0),
 			DiskGB:   uint256.NewInt(0),
@@ -78,14 +79,14 @@ func (p *ProviderService) GetMachine(opts *bind.CallOpts, providerId, machineId 
 	return machine, nil
 }
 
-func (p *ProviderService) GetProvider(opts *bind.CallOpts, providerId *uint256.Int) (*Provider, error) {
+func (p *ProviderService) GetProvider(opts *bind.CallOpts, providerId *uint256.Int) (*btypes.Provider, error) {
 	bcProvider, err := p.providerC.GetProvider(opts, providerId.ToBig())
 	if err != nil {
 		return nil, err
 	}
 
 	// Map fields from bcProvider (contracts.SubnetProviderProvider) to your local Provider struct
-	provider := &Provider{
+	provider := &btypes.Provider{
 		ID:                 providerId,
 		Name:               "",
 		Description:        "",
@@ -107,15 +108,15 @@ func (p *ProviderService) GetProvider(opts *bind.CallOpts, providerId *uint256.I
 	return provider, nil
 }
 
-func (p *ProviderService) GetMachinesPaginated(opts *bind.CallOpts, providerId *uint256.Int, startIndex, endIndex *uint256.Int) ([]*Machine, error) {
+func (p *ProviderService) GetMachinesPaginated(opts *bind.CallOpts, providerId *uint256.Int, startIndex, endIndex *uint256.Int) ([]*btypes.Machine, error) {
 	bcMachines, err := p.providerC.GetMachinesPaginated(opts, providerId.ToBig(), startIndex.ToBig(), endIndex.ToBig())
 	if err != nil {
 		return nil, err
 	}
 
-	var machines []*Machine
+	var machines []*btypes.Machine
 	for idx, bcMachine := range bcMachines {
-		machine := &Machine{
+		machine := &btypes.Machine{
 			ID:            uint256.NewInt(uint64(idx)), // Use index as ID for simplicity
 			ProviderId:    providerId,
 			CpuCores:      uint256.MustFromBig(bcMachine.CpuCores),
@@ -129,7 +130,7 @@ func (p *ProviderService) GetMachinesPaginated(opts *bind.CallOpts, providerId *
 			MachineType:   uint256.MustFromBig(bcMachine.MachineType),
 
 			// Initialize tracking fields
-			AllocatedResources: &MachineResources{
+			AllocatedResources: &btypes.MachineResources{
 				CpuCores: uint256.NewInt(0),
 				MemoryMB: uint256.NewInt(0),
 				DiskGB:   uint256.NewInt(0),

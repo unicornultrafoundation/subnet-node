@@ -1,4 +1,4 @@
-package bidengine
+package market
 
 import (
 	"math/big"
@@ -9,10 +9,11 @@ import (
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/holiman/uint256"
 	"github.com/unicornultrafoundation/subnet-node/bidengine/contracts"
+	btypes "github.com/unicornultrafoundation/subnet-node/bidengine/types"
 )
 
-// Ensure MarketService implements MarketServiceInterface
-var _ MarketServiceInterface = (*MarketService)(nil)
+// Ensure MarketService implements MarketService
+var _ btypes.MarketService = (*MarketService)(nil)
 
 type MarketService struct {
 	bidMarket *contracts.BidMarket
@@ -25,16 +26,16 @@ func NewMarketService(bidMarket *contracts.BidMarket) *MarketService {
 }
 
 // GetOrder retrieves order details from the blockchain
-func (s *MarketService) GetOrder(opts *bind.CallOpts, orderId *uint256.Int) (*OrderInfo, error) {
-	var result *OrderInfo
+func (s *MarketService) GetOrder(opts *bind.CallOpts, orderId *uint256.Int) (*btypes.OrderInfo, error) {
+	var result *btypes.OrderInfo
 	bcOrder, err := s.bidMarket.Orders(opts, orderId.ToBig())
 	if err != nil {
 		return nil, err
 	}
-	result = &OrderInfo{
+	result = &btypes.OrderInfo{
 		OrderID:     orderId,
 		RequesterID: bcOrder.Owner,
-		Requirements: &BidRequirements{
+		Requirements: &btypes.BidRequirements{
 			MinCPUCores:      uint256.MustFromBig(bcOrder.CpuCores),
 			MinMemoryMB:      uint256.MustFromBig(bcOrder.MemoryMB),
 			MinDiskGB:        uint256.MustFromBig(bcOrder.DiskGB),
@@ -53,25 +54,25 @@ func (s *MarketService) GetOrder(opts *bind.CallOpts, orderId *uint256.Int) (*Or
 	return result, nil
 }
 
-func (s *MarketService) GetOrderInfo(opts *bind.CallOpts, orderId *uint256.Int) (*OrderInfo, error) {
+func (s *MarketService) GetOrderInfo(opts *bind.CallOpts, orderId *uint256.Int) (*btypes.OrderInfo, error) {
 	return s.GetOrder(opts, orderId)
 }
 
-func (s *MarketService) GetBids(opts *bind.CallOpts, orderId *uint256.Int) ([]*Bid, error) {
+func (s *MarketService) GetBids(opts *bind.CallOpts, orderId *uint256.Int) ([]*btypes.Bid, error) {
 	bids, err := s.bidMarket.GetBids(opts, orderId.ToBig())
 	if err != nil {
 		return nil, err
 	}
 
-	var result []*Bid
+	var result []*btypes.Bid
 	for i, bid := range bids {
-		result = append(result, &Bid{
+		result = append(result, &btypes.Bid{
 			ID:          uint256.NewInt(uint64(i)),
 			OrderId:     orderId,
 			ProviderId:  uint256.MustFromBig(bid.ProviderId),
 			MachineId:   uint256.MustFromBig(bid.MachineId),
 			PricePerSec: uint256.MustFromBig(bid.PricePerSecond),
-			Status:      BidStatus(bid.Status),
+			Status:      btypes.BidStatus(bid.Status),
 			CreatedAt:   time.Unix(bid.CreatedAt.Int64(), 0),
 		})
 	}

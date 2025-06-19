@@ -10,7 +10,12 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/holiman/uint256"
 	"github.com/sirupsen/logrus"
+	bconfig "github.com/unicornultrafoundation/subnet-node/bidengine/config"
 	"github.com/unicornultrafoundation/subnet-node/bidengine/contracts"
+	"github.com/unicornultrafoundation/subnet-node/bidengine/market"
+	bs "github.com/unicornultrafoundation/subnet-node/bidengine/provider"
+	"github.com/unicornultrafoundation/subnet-node/bidengine/store"
+	"github.com/unicornultrafoundation/subnet-node/bidengine/types"
 	"github.com/unicornultrafoundation/subnet-node/config"
 	"github.com/unicornultrafoundation/subnet-node/core/account"
 	"github.com/unicornultrafoundation/subnet-node/repo"
@@ -22,15 +27,15 @@ type Service struct {
 	client        *ethclient.Client
 	auth          *bind.TransactOpts
 	log           *logrus.Logger
-	provider      ProviderServiceInterface
-	bidMarket     MarketServiceInterface
+	provider      types.ProviderService
+	bidMarket     types.MarketService
 	providerAddr  common.Address
 	bidMarketAddr common.Address
-	activeBids    map[string]*Bid
+	activeBids    map[string]*types.Bid
 	bidsMutex     sync.RWMutex
-	bidConfig     BidConfig
-	providerId    *uint256.Int // Our provider ID
-	store         BidDatastore // Added datastore interface
+	bidConfig     types.BidConfig
+	providerId    *uint256.Int       // Our provider ID
+	store         types.BidDatastore // Added datastore interface
 
 	shutdown chan struct{}
 	wg       sync.WaitGroup
@@ -69,7 +74,7 @@ func NewService(cfg *config.C, log *logrus.Logger, acc account.Service, ds repo.
 		return nil, fmt.Errorf("failed to create transactor: %v", err)
 	}
 
-	store, err := NewStore(ds, log)
+	store, err := store.NewStore(ds, log)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create bid store: %v", err)
 	}
@@ -78,11 +83,11 @@ func NewService(cfg *config.C, log *logrus.Logger, acc account.Service, ds repo.
 		cfg:           cfg,
 		client:        client,
 		log:           log,
-		provider:      NewProviderService(provider),
-		bidMarket:     NewMarketService(bidMarket),
+		provider:      bs.NewProviderService(provider),
+		bidMarket:     market.NewMarketService(bidMarket),
 		providerAddr:  providerAddr,
 		bidMarketAddr: bidMarketAddr,
-		activeBids:    make(map[string]*Bid),
+		activeBids:    make(map[string]*types.Bid),
 		shutdown:      make(chan struct{}),
 		auth:          auth,
 		store:         store,
@@ -94,7 +99,7 @@ func (b *Service) Start(ctx context.Context) error {
 	b.log.Info("Starting BidEngine...")
 
 	// Load bid configuration
-	b.bidConfig = LoadBidConfig(b.cfg)
+	b.bidConfig = bconfig.LoadBidConfig(b.cfg)
 
 	// Load active bids from datastore
 	bids, err := b.store.ListActiveBids(ctx)
