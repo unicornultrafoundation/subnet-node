@@ -3,29 +3,23 @@ package deployment
 func (s *Service) GetDeploymentListCache() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.deploymentListCache
+
+	// Convert map keys to slice
+	result := make([]string, 0, len(s.deploymentListCache))
+	for deploymentID := range s.deploymentListCache {
+		result = append(result, deploymentID)
+	}
+	return result
 }
 
 func (s *Service) DeleteDeploymentListCache(deploymentID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	// Check if the deploymentID is in the cache
-	for i, id := range s.deploymentListCache {
-		if id == deploymentID {
-			s.deploymentListCache = append(s.deploymentListCache[:i], s.deploymentListCache[i+1:]...)
-			return
-		}
-	}
+	delete(s.deploymentListCache, deploymentID)
 }
 
 func (s *Service) AddDeploymentListCache(deploymentID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	// Check if the deploymentID is already in the cache
-	for _, id := range s.deploymentListCache {
-		if id == deploymentID {
-			return
-		}
-	}
-	s.deploymentListCache = append(s.deploymentListCache, deploymentID)
+	s.deploymentListCache[deploymentID] = struct{}{}
 }

@@ -18,8 +18,8 @@ type Service struct {
 	kubeClient          *kube.KubeClient
 	store               *store.Service
 	logger              *logrus.Logger
-	mu                  sync.Mutex // Mutex to protect the deployment cache
-	deploymentListCache []string   // List of deployment IDs running in the cluster, used for monitoring
+	mu                  sync.Mutex          // Mutex to protect the deployment cache
+	deploymentListCache map[string]struct{} // Set of deployment IDs running in the cluster, used for monitoring
 	cfg                 *Config
 }
 
@@ -29,7 +29,7 @@ func NewService(kubeClient *kube.KubeClient, store *store.Service, logger *logru
 		store:               store,
 		logger:              logger,
 		cfg:                 cfg,
-		deploymentListCache: make([]string, 0),
+		deploymentListCache: make(map[string]struct{}),
 	}
 }
 
@@ -44,7 +44,7 @@ func (s *Service) Start(ctx context.Context) error {
 	// Load the deployments into the cache
 	for _, deployment := range deployments {
 		s.mu.Lock()
-		s.deploymentListCache = append(s.deploymentListCache, deployment.OrderID)
+		s.deploymentListCache[deployment.OrderID] = struct{}{}
 		s.mu.Unlock()
 	}
 
