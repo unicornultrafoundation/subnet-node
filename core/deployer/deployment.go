@@ -21,3 +21,7 @@ func (s *Service) CleanupDeployment(ctx context.Context, orderID string) error {
 func (s *Service) GetDeployments(ctx context.Context, requester string) ([]*types.DeploymentResponse, error) {
 	return s.deploymentService.GetDeployments(ctx, requester)
 }
+
+func (s *Service) GetDeploymentRequest(ctx context.Context, orderID string) (*types.DeploymentRequest, error) {
+	return s.storeService.GetDeploymentRequest(ctx, orderID)
+}
