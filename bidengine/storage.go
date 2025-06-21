@@ -165,7 +165,8 @@ func (s *Storage) UpdateOrder(ctx context.Context, order *Order) error {
 	existingData, err := s.ds.Get(ctx, key)
 	var storage OrderStorage
 
-	if err == nil {
+	switch err {
+	case nil:
 		// Update existing order
 		err = json.Unmarshal(existingData, &storage)
 		if err != nil {
@@ -173,14 +174,14 @@ func (s *Storage) UpdateOrder(ctx context.Context, order *Order) error {
 		}
 		storage.UpdatedAt = time.Now()
 		storage.LastSynced = time.Now()
-	} else if err == ds.ErrNotFound {
+	case ds.ErrNotFound:
 		// Create new order
 		storage = OrderStorage{
 			CreatedAt:  time.Now(),
 			UpdatedAt:  time.Now(),
 			LastSynced: time.Now(),
 		}
-	} else {
+	default:
 		return fmt.Errorf("failed to get existing order: %w", err)
 	}
 
@@ -281,14 +282,15 @@ func (s *Storage) UpdateBid(ctx context.Context, bid *Bid, orderID string, bidIn
 	existingData, err := s.ds.Get(ctx, key)
 	var storage BidStorage
 
-	if err == nil {
+	switch err {
+	case nil:
 		// Update existing bid
 		err = json.Unmarshal(existingData, &storage)
 		if err != nil {
 			return fmt.Errorf("failed to unmarshal existing bid: %w", err)
 		}
 		storage.UpdatedAt = time.Now()
-	} else if err == ds.ErrNotFound {
+	case ds.ErrNotFound:
 		// Create new bid
 		storage = BidStorage{
 			OrderID:   orderID,
@@ -296,7 +298,7 @@ func (s *Storage) UpdateBid(ctx context.Context, bid *Bid, orderID string, bidIn
 			CreatedAt: time.Now(),
 			UpdatedAt: time.Now(),
 		}
-	} else {
+	default:
 		return fmt.Errorf("failed to get existing bid: %w", err)
 	}
 
@@ -442,23 +444,22 @@ func (s *Storage) GetMarketData(ctx context.Context) (*MarketData, error) {
 	return storage.MarketData, nil
 }
 
-// CleanupOldData removes old data from storage
+// CleanupOldData removes orders and bids that are not matched or have been closed
 func (s *Storage) CleanupOldData(ctx context.Context, maxAge time.Duration) error {
+	// Clean up orders that are not matched or have been closed/cancelled/expired
+	err := s.cleanupOldOrders(ctx)
+	if err != nil {
+		s.logger.Warn("Failed to cleanup orders", "error", err)
+	}
+
+	// Clean up bids that are not accepted or have been cancelled/expired
+	err = s.cleanupOldBids(ctx)
+	if err != nil {
+		s.logger.Warn("Failed to cleanup bids", "error", err)
+	}
+
+	// Clean up old market data (still time-based)
 	cutoff := time.Now().Add(-maxAge)
-
-	// Clean up old orders
-	err := s.cleanupOldOrders(ctx, cutoff)
-	if err != nil {
-		s.logger.Warn("Failed to cleanup old orders", "error", err)
-	}
-
-	// Clean up old bids
-	err = s.cleanupOldBids(ctx, cutoff)
-	if err != nil {
-		s.logger.Warn("Failed to cleanup old bids", "error", err)
-	}
-
-	// Clean up old market data
 	err = s.cleanupOldMarketData(ctx, cutoff)
 	if err != nil {
 		s.logger.Warn("Failed to cleanup old market data", "error", err)
@@ -467,7 +468,7 @@ func (s *Storage) CleanupOldData(ctx context.Context, maxAge time.Duration) erro
 	return nil
 }
 
-func (s *Storage) cleanupOldOrders(ctx context.Context, cutoff time.Time) error {
+func (s *Storage) cleanupOldOrders(ctx context.Context) error {
 	q := query.Query{
 		Prefix: orderPrefix,
 	}
@@ -489,21 +490,30 @@ func (s *Storage) cleanupOldOrders(ctx context.Context, cutoff time.Time) error 
 			continue
 		}
 
-		if storage.UpdatedAt.Before(cutoff) {
+		// Only cleanup orders that are not matched or have been closed/cancelled/expired
+		switch storage.Status {
+		case OrderStatusClosed, OrderStatusExpired, OrderStatusCancelled:
+			// Clean up closed, expired, or cancelled orders
 			key := ds.NewKey(result.Key)
 			err = s.ds.Delete(ctx, key)
 			if err != nil {
-				s.logger.Warn("Failed to delete old order", "orderID", storage.Order.ID, "error", err)
+				s.logger.Warn("Failed to delete closed/expired/cancelled order", "orderID", storage.Order.ID, "status", storage.Status, "error", err)
 			} else {
-				s.logger.Debug("Deleted old order", "orderID", storage.Order.ID)
+				s.logger.Debug("Deleted closed/expired/cancelled order", "orderID", storage.Order.ID, "status", storage.Status)
 			}
+		case OrderStatusOpen:
+			// Keep open orders for potential matching
+			continue
+		case OrderStatusAccepted:
+			// Keep accepted orders as they are matched
+			continue
 		}
 	}
 
 	return nil
 }
 
-func (s *Storage) cleanupOldBids(ctx context.Context, cutoff time.Time) error {
+func (s *Storage) cleanupOldBids(ctx context.Context) error {
 	q := query.Query{
 		Prefix: bidPrefix,
 	}
@@ -525,14 +535,23 @@ func (s *Storage) cleanupOldBids(ctx context.Context, cutoff time.Time) error {
 			continue
 		}
 
-		if storage.UpdatedAt.Before(cutoff) {
+		// Only cleanup bids that are not accepted or have been cancelled/expired
+		switch storage.Status {
+		case BidStatusCancelled, BidStatusExpired:
+			// Clean up cancelled or expired bids
 			key := ds.NewKey(result.Key)
 			err = s.ds.Delete(ctx, key)
 			if err != nil {
-				s.logger.Warn("Failed to delete old bid", "bidIndex", storage.BidIndex, "error", err)
+				s.logger.Warn("Failed to delete cancelled/expired bid", "bidIndex", storage.BidIndex, "status", storage.Status, "error", err)
 			} else {
-				s.logger.Debug("Deleted old bid", "bidIndex", storage.BidIndex)
+				s.logger.Debug("Deleted cancelled/expired bid", "bidIndex", storage.BidIndex, "status", storage.Status)
 			}
+		case BidStatusActive:
+			// Keep active bids for potential acceptance
+			continue
+		case BidStatusAccepted:
+			// Keep accepted bids as they are matched
+			continue
 		}
 	}
 

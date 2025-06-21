@@ -228,9 +228,9 @@ func ExampleWithCustomComponents() {
 	datastore := ds.NewMapDatastore()
 
 	pricingEngine := NewPricingEngine(config, logger)
-	resourceManager := NewResourceManager(config, nil, logger, metrics, datastore) // nil for provider contract
-	orderMonitor := NewOrderMonitor(config, nil, logger, metrics, datastore)       // nil for bidMarket contract
-	bidManager := NewBidManager(config, nil, logger, metrics, datastore)           // nil for bidMarket contract
+	resourceManager := NewResourceManager(config, nil, logger, metrics, datastore)        // nil for provider contract
+	orderMonitor := NewOrderMonitor(config, nil, logger, metrics, datastore)              // nil for bidMarket contract
+	bidManager := NewBidManager(config, nil, logger, metrics, datastore, resourceManager) // nil for bidMarket contract
 	storage := NewStorage(datastore, logger)
 
 	// Create BidEngine with custom components

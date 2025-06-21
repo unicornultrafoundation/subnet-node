@@ -2,6 +2,7 @@ package bidengine
 
 import (
 	"context"
+	"fmt"
 	"math/big"
 	"time"
 
@@ -124,6 +125,52 @@ func (b *BidMarketContractImpl) SubmitBid(ctx context.Context, orderID *big.Int,
 	}
 
 	return b.contract.SubmitBid(transactOpts, orderID, pricePerSecond, providerID, machineID)
+}
+
+// GetBidIndexFromTransaction gets the bid index from a transaction receipt by parsing the BidSubmitted event
+func (b *BidMarketContractImpl) GetBidIndexFromTransaction(ctx context.Context, tx *types.Transaction, orderID *big.Int) (*big.Int, error) {
+	// Wait for transaction to be mined
+	receipt, err := b.waitForReceipt(ctx, tx.Hash(), 60*time.Second)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get transaction receipt: %w", err)
+	}
+
+	// Create filterer to parse events
+	filterer, err := contracts.NewBidMarketFilterer(b.address, b.client)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create filterer: %w", err)
+	}
+
+	// Parse logs to find BidSubmitted event
+	for _, vLog := range receipt.Logs {
+		event, err := filterer.ParseBidSubmitted(*vLog)
+		if err == nil && event.OrderId.Cmp(orderID) == 0 {
+			return event.BidIndex, nil
+		}
+	}
+
+	return nil, fmt.Errorf("BidSubmitted event not found in transaction receipt")
+}
+
+// waitForReceipt waits for a transaction receipt with a timeout
+func (b *BidMarketContractImpl) waitForReceipt(ctx context.Context, txHash common.Hash, timeout time.Duration) (*types.Receipt, error) {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		receipt, err := b.client.TransactionReceipt(ctx, txHash)
+		if err == nil && receipt != nil {
+			return receipt, nil
+		}
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("timeout waiting for transaction receipt")
+		case <-ticker.C:
+		}
+	}
 }
 
 // CancelBid cancels a bid
@@ -387,6 +434,24 @@ func (b *BidMarketContractImpl) WatchBidCancelled(ctx context.Context, sink chan
 	}()
 
 	return nil
+}
+
+// OrderBids retrieves a single bid by orderID and bidIndex
+func (b *BidMarketContractImpl) OrderBids(ctx context.Context, orderID *big.Int, bidIndex *big.Int) (*Bid, error) {
+	callOpts := &bind.CallOpts{Context: ctx}
+	bidData, err := b.contract.OrderBids(callOpts, orderID, bidIndex)
+	if err != nil {
+		return nil, err
+	}
+	return &Bid{
+		Provider:       bidData.Provider,
+		PricePerSecond: bidData.PricePerSecond,
+		Status:         BidStatus(bidData.Status),
+		CreatedAt:      bidData.CreatedAt,
+		ProviderId:     bidData.ProviderId,
+		MachineId:      bidData.MachineId,
+		Id:             bidIndex,
+	}, nil
 }
 
 // ProviderContractImpl implements ProviderContract interface

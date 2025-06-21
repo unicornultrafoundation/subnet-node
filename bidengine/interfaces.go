@@ -19,6 +19,7 @@ type BidMarketContract interface {
 
 	// Bid submission
 	SubmitBid(ctx context.Context, orderID *big.Int, pricePerSecond *big.Int, providerID *big.Int, machineID *big.Int) (*types.Transaction, error)
+	GetBidIndexFromTransaction(ctx context.Context, tx *types.Transaction, orderID *big.Int) (*big.Int, error)
 	CancelBid(ctx context.Context, orderID *big.Int, bidIndex *big.Int) (*types.Transaction, error)
 
 	// Order lifecycle
@@ -38,6 +39,9 @@ type BidMarketContract interface {
 	WatchBidSubmitted(ctx context.Context, sink chan<- *OrderEvent) error
 	WatchBidAccepted(ctx context.Context, sink chan<- *OrderEvent) error
 	WatchBidCancelled(ctx context.Context, sink chan<- *OrderEvent) error
+
+	// OrderBids retrieves a single bid by orderID and bidIndex
+	OrderBids(ctx context.Context, orderID *big.Int, bidIndex *big.Int) (*Bid, error)
 }
 
 // ProviderContract defines the interface for interacting with the provider contract
@@ -79,28 +83,24 @@ type PricingEngine interface {
 	AdjustPriceForStrategy(ctx context.Context, basePrice *big.Int, strategy *BidStrategy) (*big.Int, error)
 }
 
-// ResourceManager defines the interface for managing resources
+// ResourceManager defines the interface for resource management operations
 type ResourceManager interface {
-	// Resource allocation
-	AllocateResources(ctx context.Context, orderID *big.Int, machine *Machine, usage *ResourceUsage) error
-	DeallocateResources(ctx context.Context, orderID *big.Int) error
-
-	// Resource monitoring
-	GetCurrentUsage(ctx context.Context, machine *Machine) (*ResourceUsage, error)
-	GetAvailableResources(ctx context.Context, machine *Machine) (*ResourceUsage, error)
-
-	// Resource validation
-	CanAllocateResources(ctx context.Context, machine *Machine, required *ResourceUsage) (bool, error)
-
-	// Resource lifecycle
-	StartResource(ctx context.Context, orderID *big.Int, machine *Machine) error
-	StopResource(ctx context.Context, orderID *big.Int) error
-
 	// Machine management
 	RegisterMachine(ctx context.Context, machine *Machine) error
 	UnregisterMachine(ctx context.Context, machineID *big.Int) error
 	GetAllMachines(ctx context.Context) []*Machine
 	GetMachine(ctx context.Context, machineID *big.Int) (*Machine, error)
+
+	// Resource allocation
+	AllocateResources(ctx context.Context, orderID *big.Int, machine *Machine, usage *ResourceUsage) error
+	DeallocateResources(ctx context.Context, orderID *big.Int) error
+	GetCurrentUsage(ctx context.Context, machine *Machine) (*ResourceUsage, error)
+	GetAvailableResources(ctx context.Context, machine *Machine) (*ResourceUsage, error)
+	CanAllocateResources(ctx context.Context, machine *Machine, required *ResourceUsage) (bool, error)
+
+	// Resource lifecycle
+	StartResource(ctx context.Context, orderID *big.Int, machine *Machine) error
+	StopResource(ctx context.Context, orderID *big.Int) error
 }
 
 // OrderMonitor defines the interface for monitoring orders
@@ -132,6 +132,9 @@ type BidManager interface {
 	// Bid monitoring
 	MonitorBidStatus(ctx context.Context, orderID *big.Int, bidIndex *big.Int) error
 	CheckBidExpiry(ctx context.Context, orderID *big.Int, bidIndex *big.Int) error
+
+	// Order expiry management
+	CheckOrderExpiry(ctx context.Context, orderID *big.Int) error
 }
 
 // Logger defines the interface for logging

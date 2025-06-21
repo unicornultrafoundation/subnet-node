@@ -56,7 +56,7 @@ func NewBidEngine(
 	orderMonitor := NewOrderMonitor(config, bidMarket, logger, metrics, datastore)
 
 	// Create bid manager
-	bidManager := NewBidManager(config, bidMarket, logger, metrics, datastore)
+	bidManager := NewBidManager(config, bidMarket, logger, metrics, datastore, resourceManager)
 
 	// Create storage
 	storage := NewStorage(datastore, logger)

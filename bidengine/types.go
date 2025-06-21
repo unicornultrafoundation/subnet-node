@@ -60,6 +60,7 @@ type Order struct {
 
 // Bid represents a bid submitted by a provider
 type Bid struct {
+	Id             *big.Int
 	Provider       common.Address
 	PricePerSecond *big.Int
 	Status         BidStatus
