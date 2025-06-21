@@ -168,3 +168,9 @@ type Metrics interface {
 	RecordProfit(amount *big.Int)
 	RecordCost(amount *big.Int)
 }
+
+// AutoBidder defines the interface for automatic bidding on orders
+type AutoBidder interface {
+	// TryBidOnOrder attempts to bid on an order if conditions are met
+	TryBidOnOrder(ctx context.Context, order *Order) error
+}

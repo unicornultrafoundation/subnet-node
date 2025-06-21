@@ -202,3 +202,12 @@ var (
 	ErrOrderExpired              = fmt.Errorf("order expired")
 	ErrBidNotTracked             = fmt.Errorf("bid not tracked")
 )
+
+// IsOrderReadyToClose kiểm tra order đã hết hạn + 1 ngày chưa
+func IsOrderReadyToClose(order *Order, now int64) bool {
+	if order == nil || order.ExpiredAt == nil {
+		return false
+	}
+	const oneDay = int64(86400)
+	return now > order.ExpiredAt.Int64()+oneDay
+}

@@ -271,6 +271,64 @@ func (m *MockResourceManagerService) GetMachine(ctx context.Context, machineID *
 	return args.Get(0).(*Machine), args.Error(1)
 }
 
+// MockPricingEngine is a mock implementation of PricingEngine
+type MockPricingEngine struct {
+	mock.Mock
+}
+
+func (m *MockPricingEngine) CalculateBidPrice(ctx context.Context, order *Order, machine *Machine, marketData *MarketData) (*big.Int, error) {
+	args := m.Called(ctx, order, machine, marketData)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*big.Int), args.Error(1)
+}
+
+func (m *MockPricingEngine) AnalyzeMarket(ctx context.Context, orders []*Order) (*MarketData, error) {
+	args := m.Called(ctx, orders)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*MarketData), args.Error(1)
+}
+
+func (m *MockPricingEngine) CalculateResourcePrice(ctx context.Context, machine *Machine, usage *ResourceUsage) (*big.Int, error) {
+	args := m.Called(ctx, machine, usage)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*big.Int), args.Error(1)
+}
+
+func (m *MockPricingEngine) AdjustPriceForStrategy(ctx context.Context, basePrice *big.Int, strategy *BidStrategy) (*big.Int, error) {
+	args := m.Called(ctx, basePrice, strategy)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*big.Int), args.Error(1)
+}
+
+func createTestBidManager(config *BidEngineConfig) (*BidManagerService, *MockBidMarketContract, *MockLogger, *MockMetrics, *MockResourceManagerService, *MockPricingEngine) {
+	mockBidMarket := &MockBidMarketContract{}
+	mockLogger := &MockLogger{}
+	mockMetrics := &MockMetrics{}
+	mockDatastore := ds.NewMapDatastore()
+	mockResourceManager := &MockResourceManagerService{}
+	mockPricingEngine := &MockPricingEngine{}
+
+	bidManager := NewBidManager(
+		config,
+		mockBidMarket,
+		mockLogger,
+		mockMetrics,
+		mockDatastore,
+		mockResourceManager,
+		mockPricingEngine,
+	)
+
+	return bidManager, mockBidMarket, mockLogger, mockMetrics, mockResourceManager, mockPricingEngine
+}
+
 func TestSubmitBidUsesProviderIDFromConfig(t *testing.T) {
 	// Create test configuration with a specific provider ID
 	config := &BidEngineConfig{
@@ -300,21 +358,7 @@ func TestSubmitBidUsesProviderIDFromConfig(t *testing.T) {
 	}
 
 	// Create mocks
-	mockBidMarket := &MockBidMarketContract{}
-	mockLogger := &MockLogger{}
-	mockMetrics := &MockMetrics{}
-	mockDatastore := ds.NewMapDatastore()
-	mockResourceManager := &MockResourceManagerService{}
-
-	// Create bid manager
-	bidManager := NewBidManager(
-		config,
-		mockBidMarket,
-		mockLogger,
-		mockMetrics,
-		mockDatastore,
-		mockResourceManager,
-	)
+	testManager, testBidMarket, testLogger, testMetrics, testResourceManager, _ := createTestBidManager(config)
 
 	// Test data
 	orderID := big.NewInt(123)
@@ -342,19 +386,19 @@ func TestSubmitBidUsesProviderIDFromConfig(t *testing.T) {
 	}
 
 	// Setup mocks
-	mockBidMarket.On("SubmitBid", mock.Anything, orderID, pricePerSecond, providerID, machineID).Return(mockTx, nil)
-	mockBidMarket.On("GetBidIndexFromTransaction", mock.Anything, mockTx, orderID).Return(big.NewInt(1), nil)
-	mockBidMarket.On("GetOrder", mock.Anything, orderID).Return(order, nil)
-	mockResourceManager.On("GetMachine", mock.Anything, machineID).Return(machine, nil)
-	mockResourceManager.On("AllocateResources", mock.Anything, orderID, machine, mock.AnythingOfType("*bidengine.ResourceUsage")).Return(nil)
-	mockResourceManager.On("StartResource", mock.Anything, orderID, machine).Return(nil)
-	mockLogger.On("Info", mock.Anything, mock.Anything).Return()
-	mockLogger.On("Warn", mock.Anything, mock.Anything).Return()
-	mockLogger.On("Debug", mock.Anything, mock.Anything).Return()
-	mockMetrics.On("IncrementBidsSubmitted").Return()
+	testBidMarket.On("SubmitBid", mock.Anything, orderID, pricePerSecond, providerID, machineID).Return(mockTx, nil)
+	testBidMarket.On("GetBidIndexFromTransaction", mock.Anything, mockTx, orderID).Return(big.NewInt(1), nil)
+	testBidMarket.On("GetOrder", mock.Anything, orderID).Return(order, nil)
+	testResourceManager.On("GetMachine", mock.Anything, machineID).Return(machine, nil)
+	testResourceManager.On("AllocateResources", mock.Anything, orderID, machine, mock.AnythingOfType("*bidengine.ResourceUsage")).Return(nil)
+	testResourceManager.On("StartResource", mock.Anything, orderID, machine).Return(nil)
+	testLogger.On("Info", mock.Anything, mock.Anything).Return()
+	testLogger.On("Warn", mock.Anything, mock.Anything).Return()
+	testLogger.On("Debug", mock.Anything, mock.Anything).Return()
+	testMetrics.On("IncrementBidsSubmitted").Return()
 
 	// Call SubmitBid
-	result, err := bidManager.SubmitBid(context.Background(), orderID, pricePerSecond, machineID)
+	result, err := testManager.SubmitBid(context.Background(), orderID, pricePerSecond, machineID)
 
 	// Assertions
 	assert.NoError(t, err)
@@ -364,14 +408,14 @@ func TestSubmitBidUsesProviderIDFromConfig(t *testing.T) {
 	assert.Equal(t, mockTx.Hash(), result.TxHash)
 
 	// Verify that SubmitBid was called with the correct provider ID from config
-	mockBidMarket.AssertCalled(t, "SubmitBid", mock.Anything, orderID, pricePerSecond, config.ProviderID, machineID)
+	testBidMarket.AssertCalled(t, "SubmitBid", mock.Anything, orderID, pricePerSecond, config.ProviderID, machineID)
 
 	// Verify that the provider ID used was 42 (from config), not 1 (hardcoded)
-	mockBidMarket.AssertNotCalled(t, "SubmitBid", mock.Anything, orderID, pricePerSecond, big.NewInt(1), machineID)
+	testBidMarket.AssertNotCalled(t, "SubmitBid", mock.Anything, orderID, pricePerSecond, big.NewInt(1), machineID)
 
-	mockBidMarket.AssertExpectations(t)
-	mockLogger.AssertExpectations(t)
-	mockMetrics.AssertExpectations(t)
+	testBidMarket.AssertExpectations(t)
+	testLogger.AssertExpectations(t)
+	testMetrics.AssertExpectations(t)
 }
 
 func TestSubmitBidReturnsErrorWhenProviderIDNotConfigured(t *testing.T) {
@@ -403,21 +447,7 @@ func TestSubmitBidReturnsErrorWhenProviderIDNotConfigured(t *testing.T) {
 	}
 
 	// Create mocks
-	mockBidMarket := &MockBidMarketContract{}
-	mockLogger := &MockLogger{}
-	mockMetrics := &MockMetrics{}
-	mockDatastore := ds.NewMapDatastore()
-	mockResourceManager := &MockResourceManagerService{}
-
-	// Create bid manager
-	bidManager := NewBidManager(
-		config,
-		mockBidMarket,
-		mockLogger,
-		mockMetrics,
-		mockDatastore,
-		mockResourceManager,
-	)
+	bidManager, mockBidMarket, _, _, _, _ := createTestBidManager(config)
 
 	// Test data
 	orderID := big.NewInt(1)
@@ -441,25 +471,11 @@ func TestCheckOrderExpiry(t *testing.T) {
 	config := &BidEngineConfig{
 		ProviderID: big.NewInt(1),
 	}
-	mockBidMarket := &MockBidMarketContract{}
-	mockLogger := &MockLogger{}
-	mockMetrics := &MockMetrics{}
-	mockDatastore := ds.NewMapDatastore()
-	mockResourceManager := &MockResourceManagerService{}
+	bidManager, mockBidMarket, mockLogger, _, mockResourceManager, _ := createTestBidManager(config)
 
-	// Create bid manager
-	bidManager := NewBidManager(
-		config,
-		mockBidMarket,
-		mockLogger,
-		mockMetrics,
-		mockDatastore,
-		mockResourceManager,
-	)
-
-	// Test data
+	// Test data - order expired more than 1 day ago (should close)
 	orderID := big.NewInt(123)
-	expiredTime := big.NewInt(time.Now().Unix() - 3600) // 1 hour ago
+	expiredTime := big.NewInt(time.Now().Unix() - 90000) // More than 1 day ago (86400 + 3600 seconds)
 	order := &Order{
 		ID:        orderID,
 		ExpiredAt: expiredTime,
@@ -482,26 +498,43 @@ func TestCheckOrderExpiry(t *testing.T) {
 	mockLogger.AssertExpectations(t)
 }
 
+func TestCheckOrderExpiryNotYetReady(t *testing.T) {
+	// Setup
+	config := &BidEngineConfig{
+		ProviderID: big.NewInt(1),
+	}
+	bidManager, mockBidMarket, mockLogger, _, _, _ := createTestBidManager(config)
+
+	// Test data - order expired but less than 1 day ago (should not close)
+	orderID := big.NewInt(123)
+	expiredTime := big.NewInt(time.Now().Unix() - 3600) // 1 hour ago (less than 1 day)
+	order := &Order{
+		ID:        orderID,
+		ExpiredAt: expiredTime,
+	}
+
+	// Setup mocks
+	mockBidMarket.On("GetOrder", mock.Anything, orderID).Return(order, nil)
+	mockLogger.On("Debug", mock.Anything, mock.Anything).Return()
+
+	// Execute
+	err := bidManager.CheckOrderExpiry(context.Background(), orderID)
+
+	// Assert
+	assert.NoError(t, err)
+	mockBidMarket.AssertExpectations(t)
+	mockLogger.AssertExpectations(t)
+
+	// Verify that CloseOrder was not called
+	mockBidMarket.AssertNotCalled(t, "CloseOrder", mock.Anything, mock.Anything, mock.Anything)
+}
+
 func TestAllocateResourcesForBid(t *testing.T) {
 	// Setup
 	config := &BidEngineConfig{
 		ProviderID: big.NewInt(1),
 	}
-	mockBidMarket := &MockBidMarketContract{}
-	mockLogger := &MockLogger{}
-	mockMetrics := &MockMetrics{}
-	mockDatastore := ds.NewMapDatastore()
-	mockResourceManager := &MockResourceManagerService{}
-
-	// Create bid manager
-	bidManager := NewBidManager(
-		config,
-		mockBidMarket,
-		mockLogger,
-		mockMetrics,
-		mockDatastore,
-		mockResourceManager,
-	)
+	bidManager, mockBidMarket, mockLogger, _, mockResourceManager, _ := createTestBidManager(config)
 
 	// Test data
 	orderID := big.NewInt(123)
@@ -544,21 +577,7 @@ func TestDeallocateResourcesForBid(t *testing.T) {
 	config := &BidEngineConfig{
 		ProviderID: big.NewInt(1),
 	}
-	mockBidMarket := &MockBidMarketContract{}
-	mockLogger := &MockLogger{}
-	mockMetrics := &MockMetrics{}
-	mockDatastore := ds.NewMapDatastore()
-	mockResourceManager := &MockResourceManagerService{}
-
-	// Create bid manager
-	bidManager := NewBidManager(
-		config,
-		mockBidMarket,
-		mockLogger,
-		mockMetrics,
-		mockDatastore,
-		mockResourceManager,
-	)
+	bidManager, _, mockLogger, _, mockResourceManager, _ := createTestBidManager(config)
 
 	// Test data
 	orderID := big.NewInt(123)
@@ -575,4 +594,104 @@ func TestDeallocateResourcesForBid(t *testing.T) {
 	assert.NoError(t, err)
 	mockResourceManager.AssertExpectations(t)
 	mockLogger.AssertExpectations(t)
+}
+
+func TestCancelBid(t *testing.T) {
+	// Setup
+	config := &BidEngineConfig{
+		ProviderID: big.NewInt(1),
+	}
+	bidManager, mockBidMarket, mockLogger, _, mockResourceManager, _ := createTestBidManager(config)
+
+	// Test data
+	orderID := big.NewInt(123)
+	bidIndex := big.NewInt(0)
+	machineID := big.NewInt(456)
+
+	// Setup a pending bid first
+	bidManager.mu.Lock()
+	bidManager.pendingBids[orderID.String()] = &ExtendedBid{
+		Bid: &Bid{
+			Id:        bidIndex,
+			MachineId: machineID,
+			Status:    BidStatusActive,
+		},
+		OrderID:     orderID.String(),
+		SubmittedAt: time.Now(),
+	}
+	bidManager.mu.Unlock()
+
+	// Setup mocks
+	mockBidMarket.On("CancelBid", mock.Anything, orderID, bidIndex).Return(
+		types.NewTransaction(0, common.Address{}, big.NewInt(0), 0, big.NewInt(0), nil), nil)
+	mockResourceManager.On("StopResource", mock.Anything, orderID).Return(nil)
+	mockResourceManager.On("DeallocateResources", mock.Anything, orderID).Return(nil)
+	mockLogger.On("Info", mock.Anything, mock.Anything).Return()
+	mockLogger.On("Debug", mock.Anything, mock.Anything).Return()
+
+	// Execute
+	err := bidManager.CancelBid(context.Background(), orderID, bidIndex)
+
+	// Assert
+	assert.NoError(t, err)
+	mockBidMarket.AssertExpectations(t)
+	mockResourceManager.AssertExpectations(t)
+	mockLogger.AssertExpectations(t)
+
+	// Verify bid is removed from pending bids
+	bidManager.mu.RLock()
+	_, exists := bidManager.pendingBids[orderID.String()]
+	bidManager.mu.RUnlock()
+	assert.False(t, exists, "Bid should be removed from pending bids")
+}
+
+func TestCancelBidWithResourceDeallocationError(t *testing.T) {
+	// Setup
+	config := &BidEngineConfig{
+		ProviderID: big.NewInt(1),
+	}
+	bidManager, mockBidMarket, mockLogger, _, mockResourceManager, _ := createTestBidManager(config)
+
+	// Test data
+	orderID := big.NewInt(123)
+	bidIndex := big.NewInt(0)
+	machineID := big.NewInt(456)
+
+	// Setup a pending bid first
+	bidManager.mu.Lock()
+	bidManager.pendingBids[orderID.String()] = &ExtendedBid{
+		Bid: &Bid{
+			Id:        bidIndex,
+			MachineId: machineID,
+			Status:    BidStatusActive,
+		},
+		OrderID:     orderID.String(),
+		SubmittedAt: time.Now(),
+	}
+	bidManager.mu.Unlock()
+
+	// Setup mocks - resource deallocation fails
+	mockBidMarket.On("CancelBid", mock.Anything, orderID, bidIndex).Return(
+		types.NewTransaction(0, common.Address{}, big.NewInt(0), 0, big.NewInt(0), nil), nil)
+	mockResourceManager.On("StopResource", mock.Anything, orderID).Return(nil)
+	mockResourceManager.On("DeallocateResources", mock.Anything, orderID).Return(
+		assert.AnError)
+	mockLogger.On("Warn", mock.Anything, mock.Anything).Return()
+	mockLogger.On("Info", mock.Anything, mock.Anything).Return()
+	mockLogger.On("Debug", mock.Anything, mock.Anything).Return()
+
+	// Execute
+	err := bidManager.CancelBid(context.Background(), orderID, bidIndex)
+
+	// Assert - should still succeed even if resource deallocation fails
+	assert.NoError(t, err)
+	mockBidMarket.AssertExpectations(t)
+	mockResourceManager.AssertExpectations(t)
+	mockLogger.AssertExpectations(t)
+
+	// Verify bid is still removed from pending bids
+	bidManager.mu.RLock()
+	_, exists := bidManager.pendingBids[orderID.String()]
+	bidManager.mu.RUnlock()
+	assert.False(t, exists, "Bid should be removed from pending bids even if resource deallocation fails")
 }

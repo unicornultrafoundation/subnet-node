@@ -52,11 +52,11 @@ func NewBidEngine(
 	// Create resource manager
 	resourceManager := NewResourceManager(config, provider, logger, metrics, datastore)
 
-	// Create order monitor
-	orderMonitor := NewOrderMonitor(config, bidMarket, logger, metrics, datastore)
+	// Create bid manager first
+	bidManager := NewBidManager(config, bidMarket, logger, metrics, datastore, resourceManager, pricingEngine)
 
-	// Create bid manager
-	bidManager := NewBidManager(config, bidMarket, logger, metrics, datastore, resourceManager)
+	// Create order monitor with bid manager as auto bidder
+	orderMonitor := NewOrderMonitor(config, bidMarket, logger, metrics, datastore, bidManager)
 
 	// Create storage
 	storage := NewStorage(datastore, logger)

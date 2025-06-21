@@ -12,11 +12,12 @@ import (
 
 // OrderMonitorService monitors orders and their lifecycle
 type OrderMonitorService struct {
-	config    *BidEngineConfig
-	bidMarket BidMarketContract
-	logger    Logger
-	metrics   Metrics
-	storage   *Storage
+	config     *BidEngineConfig
+	bidMarket  BidMarketContract
+	logger     Logger
+	metrics    Metrics
+	storage    *Storage
+	autoBidder AutoBidder
 
 	mu        sync.RWMutex
 	isRunning bool
@@ -35,6 +36,7 @@ func NewOrderMonitor(
 	logger Logger,
 	metrics Metrics,
 	datastore ds.Datastore,
+	autoBidder AutoBidder,
 ) *OrderMonitorService {
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -44,6 +46,7 @@ func NewOrderMonitor(
 		logger:        logger,
 		metrics:       metrics,
 		storage:       NewStorage(datastore, logger),
+		autoBidder:    autoBidder,
 		ctx:           ctx,
 		cancel:        cancel,
 		trackedOrders: make(map[string]*Order),
@@ -129,6 +132,16 @@ func (om *OrderMonitorService) TrackOrder(ctx context.Context, orderID *big.Int)
 
 	om.logger.Info("Started tracking order", "orderID", orderID)
 	om.metrics.IncrementOrdersTracked()
+
+	// Try to bid on the new order
+	if om.autoBidder != nil {
+		go func() {
+			if err := om.autoBidder.TryBidOnOrder(ctx, order); err != nil {
+				om.logger.Warn("Failed to auto-bid on order", "orderID", orderID, "error", err)
+			}
+		}()
+	}
+
 	return nil
 }
 
@@ -204,28 +217,33 @@ func (om *OrderMonitorService) CheckOrderExpiry(ctx context.Context, orderID *bi
 		return fmt.Errorf("order %s is not being tracked", orderIDStr)
 	}
 
-	// Check if order has expired
-	if order.ExpiredAt != nil {
-		currentTime := big.NewInt(time.Now().Unix())
-		if currentTime.Cmp(order.ExpiredAt) > 0 {
-			om.logger.Info("Order has expired", "orderID", orderID, "expiredAt", order.ExpiredAt)
+	now := time.Now().Unix()
+	if IsOrderReadyToClose(order, now) {
+		om.logger.Info("Order has expired and 1 day grace period passed",
+			"orderID", orderID,
+			"expiredAt", order.ExpiredAt,
+			"currentTime", now)
 
-			// Update order status
-			order.Status = OrderStatusExpired
+		// Update order status
+		order.Status = OrderStatusExpired
 
-			// Update in storage
-			if err := om.storage.UpdateOrder(ctx, order); err != nil {
-				om.logger.Warn("Failed to update expired order in storage", "error", err)
-			}
-
-			// Send expiry event
-			om.orderEvents <- &OrderEvent{
-				Type:      "expired",
-				OrderID:   orderID,
-				Timestamp: time.Now(),
-				Data:      order,
-			}
+		// Update in storage
+		if err := om.storage.UpdateOrder(ctx, order); err != nil {
+			om.logger.Warn("Failed to update expired order in storage", "error", err)
 		}
+
+		// Send expiry event
+		om.orderEvents <- &OrderEvent{
+			Type:      "expired",
+			OrderID:   orderID,
+			Timestamp: time.Now(),
+			Data:      order,
+		}
+	} else {
+		om.logger.Debug("Order has expired but grace period not passed yet",
+			"orderID", orderID,
+			"expiredAt", order.ExpiredAt,
+			"currentTime", now)
 	}
 
 	return nil
@@ -259,15 +277,15 @@ func (om *OrderMonitorService) HandleOrderEvent(ctx context.Context, event *Orde
 
 // orderSyncLoop periodically syncs orders with blockchain
 func (om *OrderMonitorService) orderSyncLoop(ctx context.Context) {
-	ticker := time.NewTicker(om.config.OrderSyncInterval)
+	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
-
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
 			om.syncOrders(ctx)
+			om.filterTrackedOrders()
 		}
 	}
 }
@@ -335,6 +353,31 @@ func (om *OrderMonitorService) eventProcessingLoop(ctx context.Context) {
 	}
 }
 
+// cleanupUnrelatedOrdersInStorage xóa khỏi storage các order không open và không matched với provider hiện tại
+func (om *OrderMonitorService) cleanupUnrelatedOrdersInStorage(ctx context.Context) error {
+	orders, err := om.storage.ListOrders(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to list orders for cleanup: %w", err)
+	}
+	for _, order := range orders {
+		keep := false
+		if order.Status == OrderStatusOpen {
+			keep = true
+		} else if order.Status == OrderStatusAccepted &&
+			order.AcceptedProviderId != nil && om.config.ProviderID != nil &&
+			order.AcceptedProviderId.Cmp(om.config.ProviderID) == 0 {
+			keep = true
+		}
+		if !keep {
+			om.logger.Info("Deleting unrelated order from storage", "orderID", order.ID.String(), "status", order.Status)
+			if err := om.storage.DeleteOrder(ctx, order.ID.String()); err != nil {
+				om.logger.Warn("Failed to delete unrelated order from storage", "orderID", order.ID.String(), "error", err)
+			}
+		}
+	}
+	return nil
+}
+
 // loadPersistedOrders loads orders from storage on startup
 func (om *OrderMonitorService) loadPersistedOrders(ctx context.Context) error {
 	om.logger.Info("Loading persisted orders from storage")
@@ -344,13 +387,21 @@ func (om *OrderMonitorService) loadPersistedOrders(ctx context.Context) error {
 		return fmt.Errorf("failed to load orders: %w", err)
 	}
 
+	om.mu.Lock()
 	for _, order := range orders {
-		orderIDStr := order.ID.String()
-		om.trackedOrders[orderIDStr] = order
-		om.logger.Debug("Loaded order from storage", "orderID", orderIDStr)
+		om.trackedOrders[order.ID.String()] = order
+	}
+	om.mu.Unlock()
+
+	// Lọc lại các order không liên quan
+	om.filterTrackedOrders()
+
+	// Cleanup unrelated orders in storage
+	if err := om.cleanupUnrelatedOrdersInStorage(ctx); err != nil {
+		om.logger.Warn("Failed to cleanup unrelated orders in storage", "error", err)
 	}
 
-	om.logger.Info("Loaded persisted orders", "count", len(orders))
+	om.logger.Info("Loaded persisted orders", "trackedOrders", len(om.trackedOrders))
 	return nil
 }
 
@@ -378,5 +429,26 @@ func (om *OrderMonitorService) GetStats() map[string]interface{} {
 	return map[string]interface{}{
 		"trackedOrders": len(om.trackedOrders),
 		"isRunning":     om.isRunning,
+	}
+}
+
+// filterTrackedOrders giữ lại các order open để bid hoặc matched với provider hiện tại
+func (om *OrderMonitorService) filterTrackedOrders() {
+	om.mu.Lock()
+	defer om.mu.Unlock()
+
+	for orderIDStr, order := range om.trackedOrders {
+		keep := false
+		if order.Status == OrderStatusOpen {
+			keep = true
+		} else if order.Status == OrderStatusAccepted &&
+			order.AcceptedProviderId != nil && om.config.ProviderID != nil &&
+			order.AcceptedProviderId.Cmp(om.config.ProviderID) == 0 {
+			keep = true
+		}
+		if !keep {
+			om.logger.Info("Untracking unrelated order", "orderID", orderIDStr, "status", order.Status)
+			delete(om.trackedOrders, orderIDStr)
+		}
 	}
 }

@@ -27,6 +27,7 @@ type BidManagerService struct {
 	metrics         Metrics
 	storage         *Storage
 	resourceManager ResourceManager
+	pricingService  PricingEngine
 
 	mu        sync.RWMutex
 	isRunning bool
@@ -46,6 +47,7 @@ func NewBidManager(
 	metrics Metrics,
 	datastore ds.Datastore,
 	resourceManager ResourceManager,
+	pricingService PricingEngine,
 ) *BidManagerService {
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -56,6 +58,7 @@ func NewBidManager(
 		metrics:         metrics,
 		storage:         NewStorage(datastore, logger),
 		resourceManager: resourceManager,
+		pricingService:  pricingService,
 		ctx:             ctx,
 		cancel:          cancel,
 		pendingBids:     make(map[string]*ExtendedBid),
@@ -82,6 +85,9 @@ func (bm *BidManagerService) Start(ctx context.Context) error {
 
 	// Start monitoring goroutine
 	go bm.bidMonitoringLoop(ctx)
+
+	// Start expiry check goroutine
+	go bm.expiryCheckLoop(ctx)
 
 	bm.logger.Info("BidManager started successfully")
 	return nil
@@ -239,6 +245,17 @@ func (bm *BidManagerService) CancelBid(ctx context.Context, orderID *big.Int, bi
 		if err := bm.storage.UpdateBid(ctx, bid.Bid, bid.OrderID, int(bidIndex.Int64())); err != nil {
 			bm.logger.Warn("Failed to update bid in storage", "error", err)
 		}
+
+		// Deallocate resources for cancelled bid
+		// Unlock before calling deallocateResourcesForBid to avoid deadlock
+		bm.mu.Unlock()
+		if err := bm.deallocateResourcesForBid(ctx, orderID); err != nil {
+			bm.logger.Warn("Failed to deallocate resources for cancelled bid",
+				"orderID", orderID.String(),
+				"error", err)
+		}
+		// Re-lock to continue with cleanup
+		bm.mu.Lock()
 
 		delete(bm.pendingBids, bidKey)
 	}
@@ -607,12 +624,12 @@ func (bm *BidManagerService) CheckOrderExpiry(ctx context.Context, orderID *big.
 		return fmt.Errorf("failed to get order from blockchain: %w", err)
 	}
 
-	// Check if order has expired
-	currentTime := big.NewInt(time.Now().Unix())
-	if order.ExpiredAt != nil && currentTime.Cmp(order.ExpiredAt) > 0 {
-		bm.logger.Info("Order has expired, closing it",
+	now := time.Now().Unix()
+	if IsOrderReadyToClose(order, now) {
+		bm.logger.Info("Order has expired and 1 day grace period passed, closing it",
 			"orderID", orderID.String(),
-			"expiredAt", order.ExpiredAt.String())
+			"expiredAt", order.ExpiredAt.String(),
+			"currentTime", now)
 
 		// Deallocate resources first
 		if err := bm.deallocateResourcesForBid(ctx, orderID); err != nil {
@@ -640,6 +657,11 @@ func (bm *BidManagerService) CheckOrderExpiry(ctx context.Context, orderID *big.
 				"orderID", orderID.String())
 		}
 		bm.mu.Unlock()
+	} else {
+		bm.logger.Debug("Order has expired but grace period not passed yet",
+			"orderID", orderID.String(),
+			"expiredAt", order.ExpiredAt.String(),
+			"currentTime", now)
 	}
 
 	return nil
@@ -684,4 +706,140 @@ func (bm *BidManagerService) allocateResourcesForBid(ctx context.Context, orderI
 		"resourceUsage", resourceUsage)
 
 	return nil
+}
+
+// expiryCheckLoop periodically checks for expired orders and closes them
+func (bm *BidManagerService) expiryCheckLoop(ctx context.Context) {
+	ticker := time.NewTicker(time.Hour)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			bm.mu.RLock()
+			orderIDs := make([]*big.Int, 0, len(bm.pendingBids))
+			for bidKey := range bm.pendingBids {
+				orderID, ok := new(big.Int).SetString(bidKey, 10)
+				if ok {
+					orderIDs = append(orderIDs, orderID)
+				}
+			}
+			bm.mu.RUnlock()
+			for _, orderID := range orderIDs {
+				_ = bm.CheckOrderExpiry(ctx, orderID)
+			}
+		}
+	}
+}
+
+// TryBidOnOrder attempts to bid on an order if conditions are met
+func (bm *BidManagerService) TryBidOnOrder(ctx context.Context, order *Order) error {
+	// Check if order is open for bidding
+	if order.Status != OrderStatusOpen {
+		bm.logger.Debug("Order not open for bidding", "orderID", order.ID, "status", order.Status)
+		return nil
+	}
+
+	// Check if bidding is still open
+	isOpen, err := bm.bidMarket.IsBiddingOpen(ctx, order.ID)
+	if err != nil {
+		return fmt.Errorf("failed to check if bidding is open: %w", err)
+	}
+	if !isOpen {
+		bm.logger.Debug("Bidding is closed for order", "orderID", order.ID)
+		return nil
+	}
+
+	// Check if we already have a bid for this order
+	bm.mu.RLock()
+	bidKey := order.ID.String()
+	_, hasBid := bm.pendingBids[bidKey]
+	bm.mu.RUnlock()
+
+	if hasBid {
+		bm.logger.Debug("Already have a bid for order", "orderID", order.ID)
+		return nil
+	}
+
+	// Find suitable machine for this order
+	machine, err := bm.findSuitableMachine(ctx, order)
+	if err != nil {
+		bm.logger.Debug("No suitable machine found for order", "orderID", order.ID, "error", err)
+		return nil // Not an error, just no suitable machine
+	}
+
+	// Calculate bid price using PricingService
+	pricePerSecond, err := bm.pricingService.CalculateBidPrice(ctx, order, machine, nil) // TODO: Get market data
+	if err != nil {
+		return fmt.Errorf("failed to calculate bid price: %w", err)
+	}
+
+	// Check if price is within order limits
+	if pricePerSecond.Cmp(order.MaxBidPrice) > 0 {
+		bm.logger.Debug("Calculated price exceeds order max price",
+			"orderID", order.ID,
+			"calculatedPrice", pricePerSecond,
+			"maxPrice", order.MaxBidPrice)
+		return nil
+	}
+
+	// Submit bid
+	bm.logger.Info("Attempting to bid on order",
+		"orderID", order.ID,
+		"pricePerSecond", pricePerSecond,
+		"machineID", machine.ID)
+
+	result, err := bm.SubmitBid(ctx, order.ID, pricePerSecond, machine.ID)
+	if err != nil {
+		return fmt.Errorf("failed to submit bid: %w", err)
+	}
+
+	bm.logger.Info("Successfully submitted bid",
+		"orderID", order.ID,
+		"bidIndex", result.BidIndex,
+		"txHash", result.TxHash)
+
+	return nil
+}
+
+// findSuitableMachine finds a machine that can fulfill the order requirements
+func (bm *BidManagerService) findSuitableMachine(ctx context.Context, order *Order) (*Machine, error) {
+	machines := bm.resourceManager.GetAllMachines(ctx)
+
+	for _, machine := range machines {
+		if !machine.Active {
+			continue
+		}
+
+		// Check if machine type matches
+		if machine.MachineType.Cmp(order.MachineType) != 0 {
+			continue
+		}
+
+		// Check if region matches (if specified)
+		if order.Region != nil && machine.Region.Cmp(order.Region) != 0 {
+			continue
+		}
+
+		// Check if machine has sufficient resources
+		required := &ResourceUsage{
+			CPUUsed:    order.CpuCores,
+			GPUUsed:    order.GpuCores,
+			MemoryUsed: order.MemoryMB,
+			DiskUsed:   order.DiskGB,
+		}
+
+		canAllocate, err := bm.resourceManager.CanAllocateResources(ctx, machine, required)
+		if err != nil {
+			bm.logger.Debug("Failed to check resource allocation", "machineID", machine.ID, "error", err)
+			continue
+		}
+
+		if canAllocate {
+			return machine, nil
+		}
+	}
+
+	return nil, fmt.Errorf("no suitable machine found")
 }
