@@ -4,146 +4,197 @@ import (
 	"context"
 	"fmt"
 	"sync"
-
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/holiman/uint256"
-	"github.com/sirupsen/logrus"
-	bconfig "github.com/unicornultrafoundation/subnet-node/bidengine/config"
-	"github.com/unicornultrafoundation/subnet-node/bidengine/contracts"
-	"github.com/unicornultrafoundation/subnet-node/bidengine/market"
-	bs "github.com/unicornultrafoundation/subnet-node/bidengine/provider"
-	"github.com/unicornultrafoundation/subnet-node/bidengine/store"
-	"github.com/unicornultrafoundation/subnet-node/bidengine/types"
-	"github.com/unicornultrafoundation/subnet-node/config"
-	"github.com/unicornultrafoundation/subnet-node/core/account"
-	"github.com/unicornultrafoundation/subnet-node/repo"
 )
 
-// Service is responsible for managing bids on the BidMarket contract
-type Service struct {
-	cfg           *config.C
-	client        *ethclient.Client
-	auth          *bind.TransactOpts
-	log           *logrus.Logger
-	provider      types.ProviderService
-	bidMarket     types.MarketService
-	providerAddr  common.Address
-	bidMarketAddr common.Address
-	activeBids    map[string]*types.Bid
-	bidsMutex     sync.RWMutex
-	bidConfig     types.BidConfig
-	providerId    *uint256.Int       // Our provider ID
-	store         types.BidDatastore // Added datastore interface
+// BidEngine is the main service that coordinates bidding and resource management
+type BidEngine struct {
+	config *BidEngineConfig
 
-	shutdown chan struct{}
-	wg       sync.WaitGroup
+	// Contract interfaces
+	bidMarket BidMarketContract
+	provider  ProviderContract
+
+	// Core components
+	pricingEngine   PricingEngine
+	resourceManager ResourceManager
+	orderMonitor    OrderMonitor
+	bidManager      BidManager
+	storage         *Storage
+
+	// Utilities
+	logger  Logger
+	metrics Metrics
+
+	// Internal state
+	mu              sync.RWMutex
+	isRunning       bool
+	stopChan        chan struct{}
+	orderEventsChan chan *OrderEvent
+	bidEventsChan   chan *BidResult
+
+	// Tracking
+	trackedOrders map[string]*Order
+	trackedBids   map[string]*BidResult
+
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
-// NewService creates a new instance of the Service
-func NewService(cfg *config.C, log *logrus.Logger, acc account.Service, ds repo.Datastore) (*Service, error) {
-	client := acc.GetClient()
+// Start starts the bid engine
+func (be *BidEngine) Start(ctx context.Context) error {
+	be.mu.Lock()
+	defer be.mu.Unlock()
 
-	// Get contract addresses from config
-	providerAddrStr := cfg.GetString("contracts.provider", "")
-	if providerAddrStr == "" {
-		return nil, fmt.Errorf("contracts.provider address is not set in config")
-	}
-	providerAddr := common.HexToAddress(providerAddrStr)
-
-	bidMarketAddrStr := cfg.GetString("contracts.bid_market", "")
-	if bidMarketAddrStr == "" {
-		return nil, fmt.Errorf("contracts.bid_market address is not set in config")
-	}
-	bidMarketAddr := common.HexToAddress(bidMarketAddrStr)
-
-	// Initialize contracts
-	provider, err := contracts.NewProvider(providerAddr, client)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create provider contract: %v", err)
+	if be.isRunning {
+		return nil
 	}
 
-	bidMarket, err := contracts.NewBidMarket(bidMarketAddr, client)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create bid market contract: %v", err)
+	be.logger.Info("Starting BidEngine")
+	be.isRunning = true
+
+	// Load persisted data from storage
+	if err := be.loadPersistedData(ctx); err != nil {
+		be.logger.Warn("Failed to load persisted data", "error", err)
 	}
 
-	auth, err := acc.NewKeyedTransactor()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create transactor: %v", err)
-	}
-
-	store, err := store.NewStore(ds, log)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create bid store: %v", err)
-	}
-
-	return &Service{
-		cfg:           cfg,
-		client:        client,
-		log:           log,
-		provider:      bs.NewProviderService(provider),
-		bidMarket:     market.NewMarketService(bidMarket),
-		providerAddr:  providerAddr,
-		bidMarketAddr: bidMarketAddr,
-		activeBids:    make(map[string]*types.Bid),
-		shutdown:      make(chan struct{}),
-		auth:          auth,
-		store:         store,
-	}, nil
+	be.logger.Info("BidEngine started successfully")
+	return nil
 }
 
-// Start initializes and starts the bid engine processes
-func (b *Service) Start(ctx context.Context) error {
-	b.log.Info("Starting BidEngine...")
+// Stop stops the bid engine
+func (be *BidEngine) Stop(ctx context.Context) error {
+	be.mu.Lock()
+	defer be.mu.Unlock()
 
-	// Load bid configuration
-	b.bidConfig = bconfig.LoadBidConfig(b.cfg)
+	if !be.isRunning {
+		return nil
+	}
 
-	// Load active bids from datastore
-	bids, err := b.store.ListActiveBids(ctx)
+	be.logger.Info("Stopping BidEngine")
+	be.isRunning = false
+	close(be.stopChan)
+
+	// Save current state to storage
+	if err := be.savePersistedData(ctx); err != nil {
+		be.logger.Warn("Failed to save persisted data", "error", err)
+	}
+
+	// Cancel context
+	be.cancel()
+
+	be.logger.Info("BidEngine stopped successfully")
+	return nil
+}
+
+// IsRunning returns whether the bid engine is running
+func (be *BidEngine) IsRunning() bool {
+	be.mu.RLock()
+	defer be.mu.RUnlock()
+	return be.isRunning
+}
+
+// loadPersistedData loads data from storage on startup
+func (be *BidEngine) loadPersistedData(ctx context.Context) error {
+	be.logger.Info("Loading persisted data from storage")
+
+	// Load orders
+	orders, err := be.storage.ListOrders(ctx)
 	if err != nil {
-		b.log.WithError(err).Warn("Failed to load active bids from datastore")
-	} else {
-		b.log.WithField("count", len(bids)).Info("Loaded active bids from datastore")
-		b.bidsMutex.Lock()
-		for _, bid := range bids {
-			b.activeBids[bid.ID.String()] = bid
+		return fmt.Errorf("failed to load orders: %w", err)
+	}
+
+	be.mu.Lock()
+	for _, order := range orders {
+		orderKey := order.ID.String()
+		be.trackedOrders[orderKey] = order
+		be.logger.Debug("Loaded order from storage", "orderID", orderKey)
+	}
+	be.mu.Unlock()
+
+	// Load machines
+	machines, err := be.storage.ListMachines(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to load machines: %w", err)
+	}
+
+	// Register machines with resource manager
+	for _, machine := range machines {
+		if err := be.resourceManager.RegisterMachine(ctx, machine); err != nil {
+			be.logger.Warn("Failed to register machine from storage", "machineID", machine.ID, "error", err)
 		}
-		b.bidsMutex.Unlock()
 	}
 
-	// Start monitoring for active bids
-	b.wg.Add(1)
-	go b.monitorActiveBids(ctx)
+	be.logger.Info("Loaded persisted data", "orders", len(orders), "machines", len(machines))
+	return nil
+}
 
-	// Start watching for new orders directly from the blockchain
-	if err := b.watchNewOrders(ctx); err != nil {
-		return fmt.Errorf("failed to start watching orders: %v", err)
+// savePersistedData saves current state to storage
+func (be *BidEngine) savePersistedData(ctx context.Context) error {
+	be.logger.Info("Saving current state to storage")
+
+	be.mu.RLock()
+	orders := make([]*Order, 0, len(be.trackedOrders))
+	for _, order := range be.trackedOrders {
+		orders = append(orders, order)
+	}
+	be.mu.RUnlock()
+
+	// Save orders
+	for _, order := range orders {
+		if err := be.storage.UpdateOrder(ctx, order); err != nil {
+			be.logger.Warn("Failed to save order", "orderID", order.ID, "error", err)
+		}
+	}
+
+	// Save machines
+	machines := be.resourceManager.GetAllMachines(ctx)
+	for _, machine := range machines {
+		if err := be.storage.SaveMachine(ctx, machine); err != nil {
+			be.logger.Warn("Failed to save machine", "machineID", machine.ID, "error", err)
+		}
 	}
 
 	return nil
 }
 
-// Stop gracefully stops the bid engine
-func (b *Service) Stop(ctx context.Context) error {
-	b.log.Info("Stopping BidEngine...")
-	close(b.shutdown)
+// GetStats returns bid engine statistics
+func (be *BidEngine) GetStats() map[string]interface{} {
+	be.mu.RLock()
+	defer be.mu.RUnlock()
 
-	// Wait for all goroutines to finish with a timeout
-	done := make(chan struct{})
-	go func() {
-		b.wg.Wait()
-		close(done)
-	}()
-
-	select {
-	case <-done:
-		b.log.Info("BidEngine stopped gracefully")
-	case <-ctx.Done():
-		b.log.Warn("BidEngine stop timed out, some goroutines may still be running")
+	return map[string]interface{}{
+		"isRunning":     be.isRunning,
+		"trackedOrders": len(be.trackedOrders),
+		"trackedBids":   len(be.trackedBids),
 	}
+}
 
-	return nil
+// GetBidManager returns the bid manager
+func (be *BidEngine) GetBidManager() BidManager {
+	return be.bidManager
+}
+
+// GetOrderMonitor returns the order monitor
+func (be *BidEngine) GetOrderMonitor() OrderMonitor {
+	return be.orderMonitor
+}
+
+// GetResourceManager returns the resource manager
+func (be *BidEngine) GetResourceManager() ResourceManager {
+	return be.resourceManager
+}
+
+// GetPricingEngine returns the pricing engine
+func (be *BidEngine) GetPricingEngine() PricingEngine {
+	return be.pricingEngine
+}
+
+// GetLogger returns the logger
+func (be *BidEngine) GetLogger() Logger {
+	return be.logger
+}
+
+// GetMetrics returns the metrics
+func (be *BidEngine) GetMetrics() Metrics {
+	return be.metrics
 }

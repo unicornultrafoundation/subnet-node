@@ -14,6 +14,12 @@ bidengine:
   min_profit: 1000000000  # Minimum profit in wei (1 Gwei)
   max_profit: 1000000000000000000  # Maximum profit in wei (1 ETH)
   
+  # Operational parameters
+  max_concurrent_bids: 10      # Maximum number of concurrent bids
+  bid_timeout: "30s"           # Timeout for bid operations
+  order_sync_interval: "30s"   # Interval for syncing orders
+  bid_check_interval: "60s"    # Interval for checking bid status
+  
   # Minimum resource requirements to consider
   min_requirements:
     cpu_cores: 1       # Minimum CPU cores
@@ -37,6 +43,21 @@ bidengine:
     shared: 10      # 1.0x multiplier for shared resources
     vm: 15          # 1.5x multiplier for virtual machines
     bare_metal: 25  # 2.5x multiplier for bare metal servers
+
+  # Bidding strategy
+  strategy:
+    min_profit_margin: 0.05    # 5% minimum profit margin
+    max_profit_margin: 0.20    # 20% maximum profit margin
+    competitive_factor: 0.10   # 10% competitive factor
+    market_adjustment: 0.05    # 5% market adjustment
+    
+    # Resource weights for pricing
+    resource_weights:
+      cpu: 0.25
+      gpu: 0.35
+      memory: 0.20
+      disk: 0.15
+      network: 0.05
 
 account:
   keystore_path: "./keystore"
