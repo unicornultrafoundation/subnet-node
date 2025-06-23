@@ -1,4 +1,4 @@
-package bidengine
+package manager
 
 import (
 	"context"
@@ -8,26 +8,30 @@ import (
 	"time"
 
 	ds "github.com/ipfs/go-datastore"
+	"github.com/sirupsen/logrus"
+	"github.com/unicornultrafoundation/subnet-node/bidengine/storage"
+	"github.com/unicornultrafoundation/subnet-node/bidengine/types"
 )
 
 // ExtendedBid represents a bid with additional fields for internal use
 type ExtendedBid struct {
-	*Bid
+	*types.Bid
 	OrderID         string
 	TransactionHash string
 	SubmittedAt     time.Time
 	CancelledAt     time.Time
 }
 
-// BidManagerService manages bid submission and tracking
-type BidManagerService struct {
-	config          *BidEngineConfig
-	bidMarket       BidMarketContract
-	logger          Logger
-	metrics         Metrics
-	storage         *Storage
-	resourceManager ResourceManager
-	pricingService  PricingEngine
+// Manager manages bid submission and tracking
+type Manager struct {
+	config          *types.BidEngineConfig
+	bidMarket       types.BidMarketContract
+	logger          *logrus.Logger
+	metrics         types.Metrics
+	storage         types.Storage
+	resourceManager types.ResourceManager
+	pricingService  types.PricingEngine
+	orderMonitor    types.OrderMonitor
 
 	mu        sync.RWMutex
 	isRunning bool
@@ -36,38 +40,40 @@ type BidManagerService struct {
 
 	// Tracking
 	pendingBids map[string]*ExtendedBid
-	bidResults  map[string]*BidResult
+	bidResults  map[string]*types.BidResult
 }
 
 // NewBidManager creates a new BidManagerService instance
-func NewBidManager(
-	config *BidEngineConfig,
-	bidMarket BidMarketContract,
-	logger Logger,
-	metrics Metrics,
+func NewManager(
+	config *types.BidEngineConfig,
+	bidMarket types.BidMarketContract,
+	logger *logrus.Logger,
+	metrics types.Metrics,
 	datastore ds.Datastore,
-	resourceManager ResourceManager,
-	pricingService PricingEngine,
-) *BidManagerService {
+	resourceManager types.ResourceManager,
+	pricingService types.PricingEngine,
+	orderMonitor types.OrderMonitor,
+) *Manager {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	return &BidManagerService{
+	return &Manager{
 		config:          config,
 		bidMarket:       bidMarket,
 		logger:          logger,
 		metrics:         metrics,
-		storage:         NewStorage(datastore, logger),
+		storage:         storage.NewStorage(datastore, logger),
 		resourceManager: resourceManager,
 		pricingService:  pricingService,
+		orderMonitor:    orderMonitor,
 		ctx:             ctx,
 		cancel:          cancel,
 		pendingBids:     make(map[string]*ExtendedBid),
-		bidResults:      make(map[string]*BidResult),
+		bidResults:      make(map[string]*types.BidResult),
 	}
 }
 
 // Start starts the bid manager
-func (bm *BidManagerService) Start(ctx context.Context) error {
+func (bm *Manager) Start(ctx context.Context) error {
 	bm.mu.Lock()
 	if bm.isRunning {
 		bm.mu.Unlock()
@@ -83,18 +89,17 @@ func (bm *BidManagerService) Start(ctx context.Context) error {
 		bm.logger.Warn("Failed to load persisted bids", "error", err)
 	}
 
-	// Start monitoring goroutine
-	go bm.bidMonitoringLoop(ctx)
-
-	// Start expiry check goroutine
-	go bm.expiryCheckLoop(ctx)
+	bm.orderMonitor.RegisterEventHandler(types.OrderEventNew, bm.handleOrderCreate)
+	bm.orderMonitor.RegisterEventHandler(types.OrderEventClosed, bm.handleOrderClosed)
+	bm.orderMonitor.RegisterEventHandler(types.OrderEventExpired, bm.handleOrderExpired)
+	bm.orderMonitor.RegisterEventHandler(types.OrderEventAccepted, bm.handleOrderAccepted)
 
 	bm.logger.Info("BidManager started successfully")
 	return nil
 }
 
 // Stop stops the bid manager
-func (bm *BidManagerService) Stop(ctx context.Context) error {
+func (bm *Manager) Stop(ctx context.Context) error {
 	bm.mu.Lock()
 	if !bm.isRunning {
 		bm.mu.Unlock()
@@ -105,11 +110,6 @@ func (bm *BidManagerService) Stop(ctx context.Context) error {
 	bm.isRunning = false
 	bm.mu.Unlock()
 
-	// Save current state to storage (without lock)
-	if err := bm.savePersistedBids(ctx); err != nil {
-		bm.logger.Warn("Failed to save persisted bids", "error", err)
-	}
-
 	// Cancel context
 	bm.cancel()
 
@@ -117,8 +117,36 @@ func (bm *BidManagerService) Stop(ctx context.Context) error {
 	return nil
 }
 
+// handleOrderCreate handles new order events and attempts to place bids on them
+// This function is registered as an event handler for OrderEventNew events.
+// When a new order is created, it automatically tries to submit a bid if:
+// - The order is open for bidding
+// - A suitable machine is available
+// - The calculated price is within the order's price limits
+// - No existing bid has been placed for this order
+func (bm *Manager) handleOrderCreate(event *types.OrderEvent) {
+	// Extract order from event
+	order := event.Order
+	if order == nil {
+		bm.logger.Warn("Received order event without order data", "orderID", event.OrderID)
+		return
+	}
+
+	bm.logger.Info("Received new order event",
+		"orderID", order.ID.String(),
+		"status", order.Status,
+		"machineType", order.MachineType.String())
+
+	// Try to bid on the new order
+	if err := bm.TryBidOnOrder(bm.ctx, order); err != nil {
+		bm.logger.Warn("Failed to bid on new order",
+			"orderID", order.ID.String(),
+			"error", err)
+	}
+}
+
 // SubmitBid submits a bid to the blockchain
-func (bm *BidManagerService) SubmitBid(ctx context.Context, orderID *big.Int, pricePerSecond *big.Int, machineID *big.Int) (*BidResult, error) {
+func (bm *Manager) SubmitBid(ctx context.Context, orderID *big.Int, pricePerSecond *big.Int, machineID *big.Int) (*types.BidResult, error) {
 	bm.mu.Lock()
 	defer bm.mu.Unlock()
 
@@ -169,11 +197,11 @@ func (bm *BidManagerService) SubmitBid(ctx context.Context, orderID *big.Int, pr
 
 	// Create extended bid
 	extendedBid := &ExtendedBid{
-		Bid: &Bid{
+		Bid: &types.Bid{
 			Id:             bidIndex,
 			Provider:       bm.config.ProviderWallet,
 			PricePerSecond: pricePerSecond,
-			Status:         BidStatusActive,
+			Status:         types.BidStatusActive,
 			CreatedAt:      big.NewInt(time.Now().Unix()),
 			ProviderId:     providerID,
 			MachineId:      machineID,
@@ -193,7 +221,7 @@ func (bm *BidManagerService) SubmitBid(ctx context.Context, orderID *big.Int, pr
 	}
 
 	// Create bid result
-	bidResult := &BidResult{
+	bidResult := &types.BidResult{
 		OrderID:   orderID,
 		BidIndex:  bidIndex,
 		Success:   true,
@@ -221,7 +249,7 @@ func (bm *BidManagerService) SubmitBid(ctx context.Context, orderID *big.Int, pr
 }
 
 // CancelBid cancels a pending bid
-func (bm *BidManagerService) CancelBid(ctx context.Context, orderID *big.Int, bidIndex *big.Int) error {
+func (bm *Manager) CancelBid(ctx context.Context, orderID *big.Int, bidIndex *big.Int) error {
 	bm.mu.Lock()
 	defer bm.mu.Unlock()
 
@@ -238,7 +266,7 @@ func (bm *BidManagerService) CancelBid(ctx context.Context, orderID *big.Int, bi
 	// Update bid status using orderID only
 	bidKey := orderID.String()
 	if bid, exists := bm.pendingBids[bidKey]; exists {
-		bid.Status = BidStatusCancelled
+		bid.Bid.Status = types.BidStatusCancelled
 		bid.CancelledAt = time.Now()
 
 		// Update bid in storage with correct bidIndex
@@ -246,18 +274,11 @@ func (bm *BidManagerService) CancelBid(ctx context.Context, orderID *big.Int, bi
 			bm.logger.Warn("Failed to update bid in storage", "error", err)
 		}
 
-		// Deallocate resources for cancelled bid
-		// Unlock before calling deallocateResourcesForBid to avoid deadlock
+		// Cleanup the cancelled bid
 		bm.mu.Unlock()
-		if err := bm.deallocateResourcesForBid(ctx, orderID); err != nil {
-			bm.logger.Warn("Failed to deallocate resources for cancelled bid",
-				"orderID", orderID.String(),
-				"error", err)
-		}
+		bm.cleanupBid(orderID, "bid_cancelled_by_provider")
 		// Re-lock to continue with cleanup
 		bm.mu.Lock()
-
-		delete(bm.pendingBids, bidKey)
 	}
 
 	bm.logger.Info("Bid cancelled successfully",
@@ -269,7 +290,7 @@ func (bm *BidManagerService) CancelBid(ctx context.Context, orderID *big.Int, bi
 }
 
 // TrackBid tracks a bid
-func (bm *BidManagerService) TrackBid(ctx context.Context, orderID *big.Int, bidIndex *big.Int) error {
+func (bm *Manager) TrackBid(ctx context.Context, orderID *big.Int, bidIndex *big.Int) error {
 	bm.mu.Lock()
 	defer bm.mu.Unlock()
 
@@ -277,7 +298,7 @@ func (bm *BidManagerService) TrackBid(ctx context.Context, orderID *big.Int, bid
 }
 
 // trackBidInternal is an internal method for tracking a bid
-func (bm *BidManagerService) trackBidInternal(ctx context.Context, orderID *big.Int, bidIndex *big.Int) error {
+func (bm *Manager) trackBidInternal(ctx context.Context, orderID *big.Int, bidIndex *big.Int) error {
 	// Track bid using orderID only
 	bidKey := orderID.String()
 	if _, exists := bm.pendingBids[bidKey]; exists {
@@ -286,7 +307,7 @@ func (bm *BidManagerService) trackBidInternal(ctx context.Context, orderID *big.
 
 	// Create extended bid for tracking
 	extendedBid := &ExtendedBid{
-		Bid: &Bid{
+		Bid: &types.Bid{
 			Id: bidIndex,
 		},
 		OrderID:     orderID.String(),
@@ -300,7 +321,7 @@ func (bm *BidManagerService) trackBidInternal(ctx context.Context, orderID *big.
 }
 
 // UntrackBid untracks a bid
-func (bm *BidManagerService) UntrackBid(ctx context.Context, orderID *big.Int, bidIndex *big.Int) error {
+func (bm *Manager) UntrackBid(ctx context.Context, orderID *big.Int, bidIndex *big.Int) error {
 	bm.mu.Lock()
 	defer bm.mu.Unlock()
 
@@ -308,7 +329,7 @@ func (bm *BidManagerService) UntrackBid(ctx context.Context, orderID *big.Int, b
 }
 
 // untrackBidInternal is an internal method for untracking a bid
-func (bm *BidManagerService) untrackBidInternal(ctx context.Context, orderID *big.Int, bidIndex *big.Int) error {
+func (bm *Manager) untrackBidInternal(ctx context.Context, orderID *big.Int, bidIndex *big.Int) error {
 	// Untrack bid using orderID only
 	bidKey := orderID.String()
 	if _, exists := bm.pendingBids[bidKey]; !exists {
@@ -322,7 +343,7 @@ func (bm *BidManagerService) untrackBidInternal(ctx context.Context, orderID *bi
 }
 
 // GetTrackedBids returns all tracked bids
-func (bm *BidManagerService) GetTrackedBids(ctx context.Context) (map[*big.Int][]*big.Int, error) {
+func (bm *Manager) GetTrackedBids(ctx context.Context) (map[*big.Int][]*big.Int, error) {
 	bm.mu.RLock()
 	defer bm.mu.RUnlock()
 
@@ -346,43 +367,8 @@ func (bm *BidManagerService) GetTrackedBids(ctx context.Context) (map[*big.Int][
 	return result, nil
 }
 
-// MonitorBidStatus monitors the status of a specific bid
-func (bm *BidManagerService) MonitorBidStatus(ctx context.Context, orderID *big.Int, bidIndex *big.Int) error {
-	bm.mu.Lock()
-	defer bm.mu.Unlock()
-
-	// Check if bid is tracked using orderID only
-	bidKey := orderID.String()
-	if _, exists := bm.pendingBids[bidKey]; !exists {
-		return fmt.Errorf("bid not tracked for order %s", orderID.String())
-	}
-
-	// Start monitoring (implementation would depend on your monitoring strategy)
-	bm.logger.Info("Bid status monitoring started", "orderID", orderID.String(), "bidIndex", bidIndex.String())
-
-	return nil
-}
-
-// CheckBidExpiry checks if a bid has expired
-func (bm *BidManagerService) CheckBidExpiry(ctx context.Context, orderID *big.Int, bidIndex *big.Int) error {
-	bm.mu.RLock()
-	defer bm.mu.RUnlock()
-
-	// Check bid expiry using orderID only
-	bidKey := orderID.String()
-	_, exists := bm.pendingBids[bidKey]
-	if !exists {
-		return fmt.Errorf("bid not tracked for order %s", orderID.String())
-	}
-
-	// Check if bid has expired (implementation would depend on your expiry logic)
-	bm.logger.Info("Bid expiry check", "orderID", orderID.String(), "bidIndex", bidIndex.String())
-
-	return nil
-}
-
 // GetBid retrieves a bid by order ID and bid index
-func (bm *BidManagerService) GetBid(ctx context.Context, orderID string, bidIndex int) (*Bid, error) {
+func (bm *Manager) GetBid(ctx context.Context, orderID string, bidIndex int) (*types.Bid, error) {
 	// Try to get from storage first
 	bids, err := bm.storage.GetBids(ctx, orderID)
 	if err != nil {
@@ -397,18 +383,18 @@ func (bm *BidManagerService) GetBid(ctx context.Context, orderID string, bidInde
 }
 
 // GetBids retrieves all bids for an order
-func (bm *BidManagerService) GetBids(ctx context.Context, orderID string) ([]*Bid, error) {
+func (bm *Manager) GetBids(ctx context.Context, orderID string) ([]*types.Bid, error) {
 	return bm.storage.GetBids(ctx, orderID)
 }
 
 // GetPendingBids returns all pending bids
-func (bm *BidManagerService) GetPendingBids(ctx context.Context) []*Bid {
+func (bm *Manager) GetPendingBids(ctx context.Context) []*types.Bid {
 	bm.mu.RLock()
 	defer bm.mu.RUnlock()
 
-	var pendingBids []*Bid
+	var pendingBids []*types.Bid
 	for _, extendedBid := range bm.pendingBids {
-		if extendedBid.Status == BidStatusActive {
+		if extendedBid.Bid.Status == types.BidStatusActive {
 			pendingBids = append(pendingBids, extendedBid.Bid)
 		}
 	}
@@ -416,118 +402,163 @@ func (bm *BidManagerService) GetPendingBids(ctx context.Context) []*Bid {
 	return pendingBids
 }
 
-// bidMonitoringLoop monitors bid statuses
-func (bm *BidManagerService) bidMonitoringLoop(ctx context.Context) {
-	ticker := time.NewTicker(bm.config.BidCheckInterval)
-	defer ticker.Stop()
+// cleanupBid properly cleans up a bid by removing it from tracking and deallocating resources
+// This function should be called when a bid is no longer needed (rejected, cancelled, expired, etc.)
+func (bm *Manager) cleanupBid(orderID *big.Int, reason string) {
+	bidKey := orderID.String()
 
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			bm.checkBidStatuses(ctx)
-		}
+	bm.mu.Lock()
+	bid, exists := bm.pendingBids[bidKey]
+	bm.mu.Unlock()
+
+	if !exists {
+		bm.logger.Debug("No pending bid found for cleanup", "orderID", orderID.String(), "reason", reason)
+		return
 	}
+
+	bm.logger.Info("Cleaning up bid",
+		"orderID", orderID.String(),
+		"bidIndex", bid.Bid.Id.String(),
+		"reason", reason)
+
+	// Remove from pending bids
+	bm.mu.Lock()
+	delete(bm.pendingBids, bidKey)
+	bm.mu.Unlock()
+
+	// Deallocate resources
+	if err := bm.deallocateResourcesForBid(bm.ctx, orderID); err != nil {
+		bm.logger.Error("Failed to deallocate resources during bid cleanup",
+			"orderID", orderID.String(),
+			"reason", reason,
+			"error", err)
+	}
+
+	// Update bid status in storage
+	bid.Bid.Status = types.BidStatusCancelled
+	if err := bm.storage.UpdateBid(bm.ctx, bid.Bid, bid.OrderID, int(bid.Bid.Id.Int64())); err != nil {
+		bm.logger.Warn("Failed to update bid status in storage during cleanup",
+			"orderID", orderID.String(),
+			"error", err)
+	}
+
+	// Record metrics for rejected bid
+	bm.metrics.IncrementBidsRejected()
+
+	bm.logger.Info("Bid cleanup completed",
+		"orderID", orderID.String(),
+		"bidIndex", bid.Bid.Id.String(),
+		"reason", reason)
 }
 
-// checkBidStatuses checks the status of pending bids
-func (bm *BidManagerService) checkBidStatuses(ctx context.Context) {
-	bm.mu.RLock()
-	bids := make([]*ExtendedBid, 0, len(bm.pendingBids))
-	for bidKey, bid := range bm.pendingBids {
-		// Parse orderID from bidKey (which is now just orderID)
-		orderID, ok := new(big.Int).SetString(bidKey, 10)
-		if !ok {
-			bm.logger.Warn("Invalid orderID in bidKey", "bidKey", bidKey)
-			continue
-		}
-		// Create a copy to avoid race conditions
-		bidCopy := &ExtendedBid{
-			Bid:             bid.Bid,
-			OrderID:         orderID.String(),
-			TransactionHash: bid.TransactionHash,
-			SubmittedAt:     bid.SubmittedAt,
-			CancelledAt:     bid.CancelledAt,
-		}
-		bids = append(bids, bidCopy)
+// handleOrderClosed handles order closed events
+// This function is registered as an event handler for OrderEventClosed events.
+// When an order is closed, it removes the order from pending bids tracking.
+func (bm *Manager) handleOrderClosed(event *types.OrderEvent) {
+	// Extract order from event
+	order := event.Order
+	if order == nil {
+		bm.logger.Warn("Received order event without order data", "orderID", event.OrderID)
+		return
 	}
-	bm.mu.RUnlock()
 
-	for _, bid := range bids {
-		if err := bm.checkBidStatus(ctx, bid); err != nil {
-			bm.logger.Warn("Failed to check bid status", "error", err)
-		}
-	}
+	bm.logger.Info("Received order closed event", "orderID", order.ID.String())
+
+	// Cleanup bid if exists
+	bm.cleanupBid(order.ID, "order_closed")
 }
 
-// checkBidStatus checks the status of a specific bid
-func (bm *BidManagerService) checkBidStatus(ctx context.Context, bid *ExtendedBid) error {
-	// Convert string ID to big.Int
-	orderID, ok := new(big.Int).SetString(bid.OrderID, 10)
-	if !ok {
-		return fmt.Errorf("invalid order ID: %s", bid.OrderID)
+// handleOrderExpired handles order expired events
+// This function is registered as an event handler for OrderEventExpired events.
+// When an order expires, it removes the order from pending bids tracking.
+func (bm *Manager) handleOrderExpired(event *types.OrderEvent) {
+	// Extract order from event
+	order := event.Order
+	if order == nil {
+		bm.logger.Warn("Received order event without order data", "orderID", event.OrderID)
+		return
 	}
 
-	// Get the bid from blockchain by orderID and bidIndex
-	blockchainBid, err := bm.bidMarket.OrderBids(ctx, orderID, bid.Bid.Id)
-	if err != nil {
-		return fmt.Errorf("failed to get bid from blockchain: %w", err)
+	bm.logger.Info("Received order expired event", "orderID", order.ID.String())
+
+	// Cleanup bid if exists
+	bm.cleanupBid(order.ID, "order_expired")
+}
+
+// handleOrderAccepted handles order accepted events
+// This function is registered as an event handler for OrderEventAccepted events.
+// When an order is accepted, it checks if our bid was accepted or another provider's bid.
+// If our bid was accepted, it updates the bid status and records metrics.
+// If another provider's bid was accepted, it untracks the order since it's no longer relevant.
+func (bm *Manager) handleOrderAccepted(event *types.OrderEvent) {
+	// Extract order from event
+	order := event.Order
+	if order == nil {
+		bm.logger.Warn("Received order event without order data", "orderID", event.OrderID)
+		return
 	}
 
-	// Update bid status based on blockchain status
-	oldStatus := bid.Status
-	newStatus := blockchainBid.Status
+	bm.logger.Info("Received order accepted event", "orderID", order.ID.String())
 
-	if newStatus != oldStatus {
-		bm.logger.Info("Bid status updated",
-			"orderID", bid.OrderID,
-			"machineID", bid.MachineId.String(),
-			"oldStatus", oldStatus,
-			"newStatus", newStatus)
+	// Check if we have a pending bid for this order
+	bm.mu.Lock()
+	bidKey := order.ID.String()
+	if bid, exists := bm.pendingBids[bidKey]; exists {
+		// Check if our bid was accepted by comparing provider IDs
+		if order.AcceptedProviderId != nil && bid.Bid.ProviderId != nil &&
+			order.AcceptedProviderId.Cmp(bid.Bid.ProviderId) == 0 {
+			// Our bid was accepted
+			oldBidStatus := bid.Bid.Status
+			bid.Bid.Status = types.BidStatusAccepted
 
-		// Lock to update the actual bid in pendingBids
-		bm.mu.Lock()
-		bidKey := bid.OrderID
-		if actualBid, exists := bm.pendingBids[bidKey]; exists {
-			actualBid.Status = newStatus
 			// Update bid in storage
-			if err := bm.storage.UpdateBid(ctx, actualBid.Bid, actualBid.OrderID, int(actualBid.Bid.Id.Int64())); err != nil {
+			if err := bm.storage.UpdateBid(bm.ctx, bid.Bid, bid.OrderID, int(bid.Bid.Id.Int64())); err != nil {
 				bm.logger.Warn("Failed to update bid in storage", "error", err)
 			}
 
-			// Handle resource deallocation when bid is cancelled or expired
-			if (newStatus == BidStatusCancelled || newStatus == BidStatusExpired) &&
-				(oldStatus != BidStatusCancelled && oldStatus != BidStatusExpired) {
-				// Unlock before calling deallocateResourcesForBid to avoid deadlock
-				bm.mu.Unlock()
-				if err := bm.deallocateResourcesForBid(ctx, orderID); err != nil {
-					bm.logger.Error("Failed to deallocate resources for cancelled/expired bid",
-						"orderID", bid.OrderID,
-						"error", err)
-				}
-				// Re-lock to continue with metrics
-				bm.mu.Lock()
-			}
-
-			// Record metrics
-			switch newStatus {
-			case BidStatusAccepted:
+			// Record metrics for accepted bid
+			if oldBidStatus != types.BidStatusAccepted {
 				bm.metrics.IncrementBidsAccepted()
-			case BidStatusCancelled:
-				bm.metrics.IncrementBidsRejected()
-			case BidStatusExpired:
-				bm.metrics.IncrementBidsRejected()
 			}
-		}
-		bm.mu.Unlock()
-	}
 
-	return nil
+			bm.logger.Info("Our bid was accepted",
+				"orderID", order.ID.String(),
+				"bidIndex", bid.Bid.Id.String(),
+				"providerID", bid.Bid.ProviderId.String(),
+				"machineID", bid.Bid.MachineId.String())
+		} else {
+			// Another provider's bid was accepted, not ours
+			bm.logger.Info("Another provider's bid was accepted, untracking order",
+				"orderID", order.ID.String(),
+				"acceptedProviderID", order.AcceptedProviderId,
+				"ourProviderID", bid.Bid.ProviderId)
+
+			// Cleanup our rejected bid
+			bm.mu.Unlock()
+			bm.cleanupBid(order.ID, "bid_rejected_by_another_provider")
+
+			// Untrack the order since it's no longer relevant to us
+			if err := bm.orderMonitor.UntrackOrder(bm.ctx, order.ID); err != nil {
+				bm.logger.Warn("Failed to untrack accepted order", "orderID", order.ID.String(), "error", err)
+			}
+			return
+		}
+	} else {
+		// No pending bid for this order, it was accepted by another provider
+		bm.logger.Info("Order accepted by another provider (no pending bid), untracking order", "orderID", order.ID.String())
+
+		// Untrack the order since it's no longer relevant to us
+		bm.mu.Unlock()
+		if err := bm.orderMonitor.UntrackOrder(bm.ctx, order.ID); err != nil {
+			bm.logger.Warn("Failed to untrack accepted order", "orderID", order.ID.String(), "error", err)
+		}
+		return
+	}
+	bm.mu.Unlock()
 }
 
 // deallocateResourcesForBid deallocates resources for a bid
-func (bm *BidManagerService) deallocateResourcesForBid(ctx context.Context, orderID *big.Int) error {
+func (bm *Manager) deallocateResourcesForBid(ctx context.Context, orderID *big.Int) error {
 	// Stop the resource first
 	if err := bm.resourceManager.StopResource(ctx, orderID); err != nil {
 		bm.logger.Warn("Failed to stop resource",
@@ -547,7 +578,7 @@ func (bm *BidManagerService) deallocateResourcesForBid(ctx context.Context, orde
 }
 
 // loadPersistedBids loads bids from storage on startup
-func (bm *BidManagerService) loadPersistedBids(ctx context.Context) error {
+func (bm *Manager) loadPersistedBids(ctx context.Context) error {
 	bm.logger.Info("Loading persisted bids from storage")
 
 	// Get all orders to load their bids
@@ -567,7 +598,7 @@ func (bm *BidManagerService) loadPersistedBids(ctx context.Context) error {
 		}
 
 		for i, bid := range bids {
-			if bid.Status == BidStatusActive {
+			if bid.Status == types.BidStatusActive {
 				// Use orderID only as key (consistent with new approach)
 				bidKey := order.ID.String()
 				extendedBid := &ExtendedBid{
@@ -584,28 +615,8 @@ func (bm *BidManagerService) loadPersistedBids(ctx context.Context) error {
 	return nil
 }
 
-// savePersistedBids saves current bid state to storage
-func (bm *BidManagerService) savePersistedBids(ctx context.Context) error {
-	bm.logger.Info("Saving persisted bids to storage")
-
-	bm.mu.RLock()
-	defer bm.mu.RUnlock()
-
-	for bidKey, extendedBid := range bm.pendingBids {
-		// Extract bid index from key (this is a simplified approach)
-		// In a real implementation, you'd need to track bid indices properly
-		bidIndex := 0 // Placeholder
-
-		if err := bm.storage.UpdateBid(ctx, extendedBid.Bid, extendedBid.OrderID, bidIndex); err != nil {
-			bm.logger.Warn("Failed to save bid to storage", "bidKey", bidKey, "error", err)
-		}
-	}
-
-	return nil
-}
-
 // GetStats returns bid manager statistics
-func (bm *BidManagerService) GetStats() map[string]interface{} {
+func (bm *Manager) GetStats() map[string]interface{} {
 	bm.mu.RLock()
 	defer bm.mu.RUnlock()
 
@@ -616,59 +627,8 @@ func (bm *BidManagerService) GetStats() map[string]interface{} {
 	}
 }
 
-// CheckOrderExpiry checks if an order has expired and closes it if necessary
-func (bm *BidManagerService) CheckOrderExpiry(ctx context.Context, orderID *big.Int) error {
-	// Get order from blockchain to check expiry
-	order, err := bm.bidMarket.GetOrder(ctx, orderID)
-	if err != nil {
-		return fmt.Errorf("failed to get order from blockchain: %w", err)
-	}
-
-	now := time.Now().Unix()
-	if IsOrderReadyToClose(order, now) {
-		bm.logger.Info("Order has expired and 1 day grace period passed, closing it",
-			"orderID", orderID.String(),
-			"expiredAt", order.ExpiredAt.String(),
-			"currentTime", now)
-
-		// Deallocate resources first
-		if err := bm.deallocateResourcesForBid(ctx, orderID); err != nil {
-			bm.logger.Warn("Failed to deallocate resources for expired order",
-				"orderID", orderID.String(),
-				"error", err)
-		}
-
-		// Close the order on blockchain
-		tx, err := bm.bidMarket.CloseOrder(ctx, orderID, "Order expired")
-		if err != nil {
-			return fmt.Errorf("failed to close expired order: %w", err)
-		}
-
-		bm.logger.Info("Order closed successfully",
-			"orderID", orderID.String(),
-			"txHash", tx.Hash().String())
-
-		// Remove from pending bids if exists
-		bm.mu.Lock()
-		bidKey := orderID.String()
-		if _, exists := bm.pendingBids[bidKey]; exists {
-			delete(bm.pendingBids, bidKey)
-			bm.logger.Info("Removed expired order from pending bids",
-				"orderID", orderID.String())
-		}
-		bm.mu.Unlock()
-	} else {
-		bm.logger.Debug("Order has expired but grace period not passed yet",
-			"orderID", orderID.String(),
-			"expiredAt", order.ExpiredAt.String(),
-			"currentTime", now)
-	}
-
-	return nil
-}
-
 // allocateResourcesForBid allocates resources for a bid
-func (bm *BidManagerService) allocateResourcesForBid(ctx context.Context, orderID *big.Int, machineID *big.Int) error {
+func (bm *Manager) allocateResourcesForBid(ctx context.Context, orderID *big.Int, machineID *big.Int) error {
 	// Get order details to determine resource requirements
 	order, err := bm.bidMarket.GetOrder(ctx, orderID)
 	if err != nil {
@@ -682,7 +642,7 @@ func (bm *BidManagerService) allocateResourcesForBid(ctx context.Context, orderI
 	}
 
 	// Create resource usage based on order requirements
-	resourceUsage := &ResourceUsage{
+	resourceUsage := &types.ResourceUsage{
 		CPUUsed:     order.CpuCores,
 		GPUUsed:     order.GpuCores,
 		MemoryUsed:  order.MemoryMB,
@@ -708,35 +668,10 @@ func (bm *BidManagerService) allocateResourcesForBid(ctx context.Context, orderI
 	return nil
 }
 
-// expiryCheckLoop periodically checks for expired orders and closes them
-func (bm *BidManagerService) expiryCheckLoop(ctx context.Context) {
-	ticker := time.NewTicker(time.Hour)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			bm.mu.RLock()
-			orderIDs := make([]*big.Int, 0, len(bm.pendingBids))
-			for bidKey := range bm.pendingBids {
-				orderID, ok := new(big.Int).SetString(bidKey, 10)
-				if ok {
-					orderIDs = append(orderIDs, orderID)
-				}
-			}
-			bm.mu.RUnlock()
-			for _, orderID := range orderIDs {
-				_ = bm.CheckOrderExpiry(ctx, orderID)
-			}
-		}
-	}
-}
-
 // TryBidOnOrder attempts to bid on an order if conditions are met
-func (bm *BidManagerService) TryBidOnOrder(ctx context.Context, order *Order) error {
+func (bm *Manager) TryBidOnOrder(ctx context.Context, order *types.Order) error {
 	// Check if order is open for bidding
-	if order.Status != OrderStatusOpen {
+	if order.Status != types.OrderStatusOpen {
 		bm.logger.Debug("Order not open for bidding", "orderID", order.ID, "status", order.Status)
 		return nil
 	}
@@ -804,7 +739,7 @@ func (bm *BidManagerService) TryBidOnOrder(ctx context.Context, order *Order) er
 }
 
 // findSuitableMachine finds a machine that can fulfill the order requirements
-func (bm *BidManagerService) findSuitableMachine(ctx context.Context, order *Order) (*Machine, error) {
+func (bm *Manager) findSuitableMachine(ctx context.Context, order *types.Order) (*types.Machine, error) {
 	machines := bm.resourceManager.GetAllMachines(ctx)
 
 	for _, machine := range machines {
@@ -823,7 +758,7 @@ func (bm *BidManagerService) findSuitableMachine(ctx context.Context, order *Ord
 		}
 
 		// Check if machine has sufficient resources
-		required := &ResourceUsage{
+		required := &types.ResourceUsage{
 			CPUUsed:    order.CpuCores,
 			GPUUsed:    order.GpuCores,
 			MemoryUsed: order.MemoryMB,

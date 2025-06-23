@@ -1,25 +1,26 @@
-package bidengine
+package storage
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math/big"
 	"strconv"
 	"time"
 
 	ds "github.com/ipfs/go-datastore"
 	"github.com/ipfs/go-datastore/query"
+	"github.com/sirupsen/logrus"
+	"github.com/unicornultrafoundation/subnet-node/bidengine/types"
 )
 
 // Storage provides persistent storage for BidEngine data
 type Storage struct {
 	ds     ds.Datastore
-	logger Logger
+	logger *logrus.Logger
 }
 
 // NewStorage creates a new storage instance
-func NewStorage(datastore ds.Datastore, logger Logger) *Storage {
+func NewStorage(datastore ds.Datastore, logger *logrus.Logger) *Storage {
 	return &Storage{
 		ds:     datastore,
 		logger: logger,
@@ -71,18 +72,25 @@ type MarketDataStorage struct {
 	UpdatedAt  time.Time   `json:"updated_at"`
 }
 
-// ResourceAllocation represents stored resource allocation data
-type ResourceAllocation struct {
-	OrderID   *big.Int       `json:"order_id"`
-	Usage     *ResourceUsage `json:"usage"`
-	CreatedAt time.Time      `json:"created_at"`
-	UpdatedAt time.Time      `json:"updated_at"`
-}
-
 // Error definitions
 var (
-	ErrOrderNotFound = fmt.Errorf("order not found")
-	ErrBidNotFound   = fmt.Errorf("bid not found")
+	ErrOrderNotFound   = fmt.Errorf("order not found")
+	ErrBidNotFound     = fmt.Errorf("bid not found")
+	ErrMachineNotFound = fmt.Errorf("machine not found")
+)
+
+// Status constants
+const (
+	OrderStatusOpen      = types.OrderStatusOpen
+	OrderStatusClosed    = types.OrderStatusClosed
+	OrderStatusExpired   = types.OrderStatusExpired
+	OrderStatusCancelled = types.OrderStatusCancelled
+	OrderStatusAccepted  = types.OrderStatusAccepted
+
+	BidStatusActive    = types.BidStatusActive
+	BidStatusAccepted  = types.BidStatusAccepted
+	BidStatusCancelled = types.BidStatusCancelled
+	BidStatusExpired   = types.BidStatusExpired
 )
 
 // SaveOrder saves an order to storage
@@ -661,3 +669,16 @@ func (s *Storage) ListResourceAllocations(ctx context.Context) ([]*ResourceAlloc
 
 	return allocations, nil
 }
+
+// Type aliases to make storage compatible with types package
+type (
+	Order              = types.Order
+	Bid                = types.Bid
+	Machine            = types.Machine
+	MarketData         = types.MarketData
+	ResourceUsage      = types.ResourceUsage
+	ResourceAllocation = types.ResourceAllocation
+	OrderStatus        = types.OrderStatus
+	BidStatus          = types.BidStatus
+	Logger             = types.Logger
+)

@@ -4,26 +4,29 @@ import (
 	"context"
 	"fmt"
 	"sync"
+
+	"github.com/sirupsen/logrus"
+	"github.com/unicornultrafoundation/subnet-node/bidengine/types"
 )
 
 // BidEngine is the main service that coordinates bidding and resource management
 type BidEngine struct {
-	config *BidEngineConfig
+	config *types.BidEngineConfig
 
 	// Contract interfaces
-	bidMarket BidMarketContract
-	provider  ProviderContract
+	bidMarket types.BidMarketContract
+	provider  types.ProviderContract
 
 	// Core components
-	pricingEngine   PricingEngine
-	resourceManager ResourceManager
-	orderMonitor    OrderMonitor
-	bidManager      BidManager
-	storage         *Storage
+	pricingEngine   types.PricingEngine
+	resourceManager types.ResourceManager
+	orderMonitor    types.OrderMonitor
+	bidManager      types.BidManager
+	storage         types.Storage
 
 	// Utilities
-	logger  Logger
-	metrics Metrics
+	logger  *logrus.Logger
+	metrics types.Metrics
 
 	// Internal state
 	mu        sync.RWMutex
@@ -34,16 +37,16 @@ type BidEngine struct {
 
 // NewBidEngine creates a new BidEngine instance
 func NewBidEngine(
-	config *BidEngineConfig,
-	bidMarket BidMarketContract,
-	provider ProviderContract,
-	pricingEngine PricingEngine,
-	resourceManager ResourceManager,
-	orderMonitor OrderMonitor,
-	bidManager BidManager,
-	storage *Storage,
-	logger Logger,
-	metrics Metrics,
+	config *types.BidEngineConfig,
+	bidMarket types.BidMarketContract,
+	provider types.ProviderContract,
+	pricingEngine types.PricingEngine,
+	resourceManager types.ResourceManager,
+	orderMonitor types.OrderMonitor,
+	bidManager types.BidManager,
+	storage types.Storage,
+	logger *logrus.Logger,
+	metrics types.Metrics,
 ) *BidEngine {
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -201,46 +204,41 @@ func (be *BidEngine) GetStats() map[string]interface{} {
 }
 
 // GetBidManager returns the bid manager
-func (be *BidEngine) GetBidManager() BidManager {
+func (be *BidEngine) GetBidManager() types.BidManager {
 	return be.bidManager
 }
 
 // GetOrderMonitor returns the order monitor
-func (be *BidEngine) GetOrderMonitor() OrderMonitor {
+func (be *BidEngine) GetOrderMonitor() types.OrderMonitor {
 	return be.orderMonitor
 }
 
 // GetResourceManager returns the resource manager
-func (be *BidEngine) GetResourceManager() ResourceManager {
+func (be *BidEngine) GetResourceManager() types.ResourceManager {
 	return be.resourceManager
 }
 
 // GetPricingEngine returns the pricing engine
-func (be *BidEngine) GetPricingEngine() PricingEngine {
+func (be *BidEngine) GetPricingEngine() types.PricingEngine {
 	return be.pricingEngine
 }
 
-// GetLogger returns the logger
-func (be *BidEngine) GetLogger() Logger {
-	return be.logger
-}
-
 // GetMetrics returns the metrics
-func (be *BidEngine) GetMetrics() Metrics {
+func (be *BidEngine) GetMetrics() types.Metrics {
 	return be.metrics
 }
 
 // GetBidMarket returns the bid market contract
-func (be *BidEngine) GetBidMarket() BidMarketContract {
+func (be *BidEngine) GetBidMarket() types.BidMarketContract {
 	return be.bidMarket
 }
 
 // GetProvider returns the provider contract
-func (be *BidEngine) GetProvider() ProviderContract {
+func (be *BidEngine) GetProvider() types.ProviderContract {
 	return be.provider
 }
 
 // GetStorage returns the storage
-func (be *BidEngine) GetStorage() *Storage {
+func (be *BidEngine) GetStorage() types.Storage {
 	return be.storage
 }

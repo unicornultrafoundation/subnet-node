@@ -1,4 +1,4 @@
-package bidengine
+package types
 
 import (
 	"fmt"
@@ -165,12 +165,24 @@ type BidResult struct {
 	Timestamp time.Time
 }
 
-// OrderEvent represents an event related to an order
+// OrderEventType represents the type of order event
+type OrderEventType string
+
+const (
+	OrderEventNew      OrderEventType = "new"
+	OrderEventClosed   OrderEventType = "closed"
+	OrderEventExpired  OrderEventType = "expired"
+	OrderEventUpdated  OrderEventType = "updated"
+	OrderEventAccepted OrderEventType = "accepted"
+)
+
+// OrderEvent represents an order lifecycle event
 type OrderEvent struct {
-	Type      string
+	Type      OrderEventType
 	OrderID   *big.Int
+	Order     *Order
 	Timestamp time.Time
-	Data      interface{}
+	Data      map[string]interface{}
 }
 
 // ResourceUsage represents current resource usage
@@ -190,6 +202,14 @@ type MarketData struct {
 	TotalOrders           *big.Int
 	ActiveOrders          *big.Int
 	LastUpdated           time.Time
+}
+
+// ResourceAllocation represents stored resource allocation data
+type ResourceAllocation struct {
+	OrderID   *big.Int       `json:"order_id"`
+	Usage     *ResourceUsage `json:"usage"`
+	CreatedAt time.Time      `json:"created_at"`
+	UpdatedAt time.Time      `json:"updated_at"`
 }
 
 // Error definitions

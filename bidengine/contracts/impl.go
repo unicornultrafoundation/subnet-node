@@ -1,4 +1,4 @@
-package bidengine
+package contracts
 
 import (
 	"context"
@@ -10,20 +10,20 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/unicornultrafoundation/subnet-node/bidengine/contracts"
+	bidenginetypes "github.com/unicornultrafoundation/subnet-node/bidengine/types"
 )
 
 // BidMarketContractImpl implements BidMarketContract interface
 type BidMarketContractImpl struct {
 	client     *ethclient.Client
-	contract   *contracts.BidMarket
+	contract   *BidMarket
 	address    common.Address
 	transactor *bind.TransactOpts
 }
 
 // NewBidMarketContract creates a new BidMarketContract instance
 func NewBidMarketContract(client *ethclient.Client, address common.Address, transactor *bind.TransactOpts) (*BidMarketContractImpl, error) {
-	contract, err := contracts.NewBidMarket(address, client)
+	contract, err := NewBidMarket(address, client)
 	if err != nil {
 		return nil, err
 	}
@@ -37,7 +37,7 @@ func NewBidMarketContract(client *ethclient.Client, address common.Address, tran
 }
 
 // GetOrder retrieves an order by ID
-func (b *BidMarketContractImpl) GetOrder(ctx context.Context, orderID *big.Int) (*Order, error) {
+func (b *BidMarketContractImpl) GetOrder(ctx context.Context, orderID *big.Int) (*bidenginetypes.Order, error) {
 	callOpts := &bind.CallOpts{Context: ctx}
 
 	orderData, err := b.contract.Orders(callOpts, orderID)
@@ -45,11 +45,11 @@ func (b *BidMarketContractImpl) GetOrder(ctx context.Context, orderID *big.Int) 
 		return nil, err
 	}
 
-	return &Order{
+	return &bidenginetypes.Order{
 		ID:                        orderID,
 		MachineType:               orderData.MachineType,
 		Owner:                     orderData.Owner,
-		Status:                    OrderStatus(orderData.Status),
+		Status:                    bidenginetypes.OrderStatus(orderData.Status),
 		CreatedAt:                 orderData.CreatedAt,
 		Duration:                  orderData.Duration,
 		MinBidPrice:               orderData.MinBidPrice,
@@ -86,12 +86,12 @@ func (b *BidMarketContractImpl) OrderCount(ctx context.Context) (*big.Int, error
 }
 
 // Orders retrieves order details by ID (alias for GetOrder)
-func (b *BidMarketContractImpl) Orders(ctx context.Context, orderID *big.Int) (*Order, error) {
+func (b *BidMarketContractImpl) Orders(ctx context.Context, orderID *big.Int) (*bidenginetypes.Order, error) {
 	return b.GetOrder(ctx, orderID)
 }
 
 // GetBids retrieves all bids for an order
-func (b *BidMarketContractImpl) GetBids(ctx context.Context, orderID *big.Int) ([]Bid, error) {
+func (b *BidMarketContractImpl) GetBids(ctx context.Context, orderID *big.Int) ([]bidenginetypes.Bid, error) {
 	callOpts := &bind.CallOpts{Context: ctx}
 
 	bidsData, err := b.contract.GetBids(callOpts, orderID)
@@ -99,12 +99,12 @@ func (b *BidMarketContractImpl) GetBids(ctx context.Context, orderID *big.Int) (
 		return nil, err
 	}
 
-	bids := make([]Bid, len(bidsData))
+	bids := make([]bidenginetypes.Bid, len(bidsData))
 	for i, bidData := range bidsData {
-		bids[i] = Bid{
+		bids[i] = bidenginetypes.Bid{
 			Provider:       bidData.Provider,
 			PricePerSecond: bidData.PricePerSecond,
-			Status:         BidStatus(bidData.Status),
+			Status:         bidenginetypes.BidStatus(bidData.Status),
 			CreatedAt:      bidData.CreatedAt,
 			ProviderId:     bidData.ProviderId,
 			MachineId:      bidData.MachineId,
@@ -146,7 +146,7 @@ func (b *BidMarketContractImpl) GetBidIndexFromTransaction(ctx context.Context, 
 	}
 
 	// Create filterer to parse events
-	filterer, err := contracts.NewBidMarketFilterer(b.address, b.client)
+	filterer, err := NewBidMarketFilterer(b.address, b.client)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create filterer: %w", err)
 	}
@@ -239,7 +239,7 @@ func (b *BidMarketContractImpl) ExtendOrder(ctx context.Context, orderID *big.In
 }
 
 // GetUsedResource gets the used resources for a machine
-func (b *BidMarketContractImpl) GetUsedResource(ctx context.Context, providerID *big.Int, machineID *big.Int) (*ResourceUsage, error) {
+func (b *BidMarketContractImpl) GetUsedResource(ctx context.Context, providerID *big.Int, machineID *big.Int) (*bidenginetypes.ResourceUsage, error) {
 	callOpts := &bind.CallOpts{Context: ctx}
 
 	usage, err := b.contract.GetUsedResource(callOpts, providerID, machineID)
@@ -247,7 +247,7 @@ func (b *BidMarketContractImpl) GetUsedResource(ctx context.Context, providerID 
 		return nil, err
 	}
 
-	return &ResourceUsage{
+	return &bidenginetypes.ResourceUsage{
 		CPUUsed:    usage.CpuCores,
 		GPUUsed:    usage.GpuCores,
 		MemoryUsed: usage.MemoryMB,
@@ -267,10 +267,10 @@ func (b *BidMarketContractImpl) ReleaseOrderResource(ctx context.Context, orderI
 }
 
 // WatchOrderCreated watches for order created events
-func (b *BidMarketContractImpl) WatchOrderCreated(ctx context.Context, sink chan<- *OrderEvent) error {
+func (b *BidMarketContractImpl) WatchOrderCreated(ctx context.Context, sink chan<- *bidenginetypes.OrderEvent) error {
 	watchOpts := &bind.WatchOpts{Context: ctx}
 
-	eventSink := make(chan *contracts.BidMarketOrderCreated)
+	eventSink := make(chan *BidMarketOrderCreated)
 	sub, err := b.contract.WatchOrderCreated(watchOpts, eventSink, nil)
 	if err != nil {
 		return err
@@ -281,11 +281,14 @@ func (b *BidMarketContractImpl) WatchOrderCreated(ctx context.Context, sink chan
 		for {
 			select {
 			case event := <-eventSink:
-				sink <- &OrderEvent{
-					Type:      "OrderCreated",
+				sink <- &bidenginetypes.OrderEvent{
+					Type:      bidenginetypes.OrderEventNew,
 					OrderID:   event.OrderId,
 					Timestamp: time.Now(),
-					Data:      event,
+					Data: map[string]interface{}{
+						"owner":    event.Owner,
+						"duration": event.Duration,
+					},
 				}
 			case <-ctx.Done():
 				return
@@ -297,10 +300,10 @@ func (b *BidMarketContractImpl) WatchOrderCreated(ctx context.Context, sink chan
 }
 
 // WatchOrderClosed watches for order closed events
-func (b *BidMarketContractImpl) WatchOrderClosed(ctx context.Context, sink chan<- *OrderEvent) error {
+func (b *BidMarketContractImpl) WatchOrderClosed(ctx context.Context, sink chan<- *bidenginetypes.OrderEvent) error {
 	watchOpts := &bind.WatchOpts{Context: ctx}
 
-	eventSink := make(chan *contracts.BidMarketOrderClosed)
+	eventSink := make(chan *BidMarketOrderClosed)
 	sub, err := b.contract.WatchOrderClosed(watchOpts, eventSink, nil)
 	if err != nil {
 		return err
@@ -311,11 +314,14 @@ func (b *BidMarketContractImpl) WatchOrderClosed(ctx context.Context, sink chan<
 		for {
 			select {
 			case event := <-eventSink:
-				sink <- &OrderEvent{
-					Type:      "OrderClosed",
+				sink <- &bidenginetypes.OrderEvent{
+					Type:      bidenginetypes.OrderEventClosed,
 					OrderID:   event.OrderId,
 					Timestamp: time.Now(),
-					Data:      event,
+					Data: map[string]interface{}{
+						"refundAmount": event.RefundAmount,
+						"reason":       event.Reason,
+					},
 				}
 			case <-ctx.Done():
 				return
@@ -327,10 +333,10 @@ func (b *BidMarketContractImpl) WatchOrderClosed(ctx context.Context, sink chan<
 }
 
 // WatchOrderExpired watches for order expired events
-func (b *BidMarketContractImpl) WatchOrderExpired(ctx context.Context, sink chan<- *OrderEvent) error {
+func (b *BidMarketContractImpl) WatchOrderExpired(ctx context.Context, sink chan<- *bidenginetypes.OrderEvent) error {
 	watchOpts := &bind.WatchOpts{Context: ctx}
 
-	eventSink := make(chan *contracts.BidMarketBidTimeExpired)
+	eventSink := make(chan *BidMarketBidTimeExpired)
 	sub, err := b.contract.WatchBidTimeExpired(watchOpts, eventSink, nil)
 	if err != nil {
 		return err
@@ -341,11 +347,11 @@ func (b *BidMarketContractImpl) WatchOrderExpired(ctx context.Context, sink chan
 		for {
 			select {
 			case event := <-eventSink:
-				sink <- &OrderEvent{
-					Type:      "OrderExpired",
+				sink <- &bidenginetypes.OrderEvent{
+					Type:      bidenginetypes.OrderEventExpired,
 					OrderID:   event.OrderId,
 					Timestamp: time.Now(),
-					Data:      event,
+					Data:      map[string]interface{}{},
 				}
 			case <-ctx.Done():
 				return
@@ -357,10 +363,10 @@ func (b *BidMarketContractImpl) WatchOrderExpired(ctx context.Context, sink chan
 }
 
 // WatchBidSubmitted watches for bid submitted events
-func (b *BidMarketContractImpl) WatchBidSubmitted(ctx context.Context, sink chan<- *OrderEvent) error {
+func (b *BidMarketContractImpl) WatchBidSubmitted(ctx context.Context, sink chan<- *bidenginetypes.OrderEvent) error {
 	watchOpts := &bind.WatchOpts{Context: ctx}
 
-	eventSink := make(chan *contracts.BidMarketBidSubmitted)
+	eventSink := make(chan *BidMarketBidSubmitted)
 	sub, err := b.contract.WatchBidSubmitted(watchOpts, eventSink, nil, nil)
 	if err != nil {
 		return err
@@ -371,11 +377,15 @@ func (b *BidMarketContractImpl) WatchBidSubmitted(ctx context.Context, sink chan
 		for {
 			select {
 			case event := <-eventSink:
-				sink <- &OrderEvent{
-					Type:      "BidSubmitted",
+				sink <- &bidenginetypes.OrderEvent{
+					Type:      bidenginetypes.OrderEventUpdated,
 					OrderID:   event.OrderId,
 					Timestamp: time.Now(),
-					Data:      event,
+					Data: map[string]interface{}{
+						"providerId": event.ProviderId,
+						"machineId":  event.MachineId,
+						"bidIndex":   event.BidIndex,
+					},
 				}
 			case <-ctx.Done():
 				return
@@ -387,10 +397,10 @@ func (b *BidMarketContractImpl) WatchBidSubmitted(ctx context.Context, sink chan
 }
 
 // WatchBidAccepted watches for bid accepted events
-func (b *BidMarketContractImpl) WatchBidAccepted(ctx context.Context, sink chan<- *OrderEvent) error {
+func (b *BidMarketContractImpl) WatchBidAccepted(ctx context.Context, sink chan<- *bidenginetypes.OrderEvent) error {
 	watchOpts := &bind.WatchOpts{Context: ctx}
 
-	eventSink := make(chan *contracts.BidMarketBidAccepted)
+	eventSink := make(chan *BidMarketBidAccepted)
 	sub, err := b.contract.WatchBidAccepted(watchOpts, eventSink, nil, nil)
 	if err != nil {
 		return err
@@ -401,11 +411,16 @@ func (b *BidMarketContractImpl) WatchBidAccepted(ctx context.Context, sink chan<
 		for {
 			select {
 			case event := <-eventSink:
-				sink <- &OrderEvent{
-					Type:      "BidAccepted",
+				sink <- &bidenginetypes.OrderEvent{
+					Type:      bidenginetypes.OrderEventUpdated,
 					OrderID:   event.OrderId,
 					Timestamp: time.Now(),
-					Data:      event,
+					Data: map[string]interface{}{
+						"providerId":     event.ProviderId,
+						"machineId":      event.MachineId,
+						"bidIndex":       event.BidIndex,
+						"pricePerSecond": event.PricePerSecond,
+					},
 				}
 			case <-ctx.Done():
 				return
@@ -417,10 +432,10 @@ func (b *BidMarketContractImpl) WatchBidAccepted(ctx context.Context, sink chan<
 }
 
 // WatchBidCancelled watches for bid cancelled events
-func (b *BidMarketContractImpl) WatchBidCancelled(ctx context.Context, sink chan<- *OrderEvent) error {
+func (b *BidMarketContractImpl) WatchBidCancelled(ctx context.Context, sink chan<- *bidenginetypes.OrderEvent) error {
 	watchOpts := &bind.WatchOpts{Context: ctx}
 
-	eventSink := make(chan *contracts.BidMarketBidCancelled)
+	eventSink := make(chan *BidMarketBidCancelled)
 	sub, err := b.contract.WatchBidCancelled(watchOpts, eventSink, nil, nil)
 	if err != nil {
 		return err
@@ -431,11 +446,15 @@ func (b *BidMarketContractImpl) WatchBidCancelled(ctx context.Context, sink chan
 		for {
 			select {
 			case event := <-eventSink:
-				sink <- &OrderEvent{
-					Type:      "BidCancelled",
+				sink <- &bidenginetypes.OrderEvent{
+					Type:      bidenginetypes.OrderEventUpdated,
 					OrderID:   event.OrderId,
 					Timestamp: time.Now(),
-					Data:      event,
+					Data: map[string]interface{}{
+						"providerId": event.ProviderId,
+						"machineId":  event.MachineId,
+						"bidIndex":   event.BidIndex,
+					},
 				}
 			case <-ctx.Done():
 				return
@@ -447,16 +466,16 @@ func (b *BidMarketContractImpl) WatchBidCancelled(ctx context.Context, sink chan
 }
 
 // OrderBids retrieves a single bid by orderID and bidIndex
-func (b *BidMarketContractImpl) OrderBids(ctx context.Context, orderID *big.Int, bidIndex *big.Int) (*Bid, error) {
+func (b *BidMarketContractImpl) OrderBids(ctx context.Context, orderID *big.Int, bidIndex *big.Int) (*bidenginetypes.Bid, error) {
 	callOpts := &bind.CallOpts{Context: ctx}
 	bidData, err := b.contract.OrderBids(callOpts, orderID, bidIndex)
 	if err != nil {
 		return nil, err
 	}
-	return &Bid{
+	return &bidenginetypes.Bid{
 		Provider:       bidData.Provider,
 		PricePerSecond: bidData.PricePerSecond,
-		Status:         BidStatus(bidData.Status),
+		Status:         bidenginetypes.BidStatus(bidData.Status),
 		CreatedAt:      bidData.CreatedAt,
 		ProviderId:     bidData.ProviderId,
 		MachineId:      bidData.MachineId,
@@ -467,14 +486,14 @@ func (b *BidMarketContractImpl) OrderBids(ctx context.Context, orderID *big.Int,
 // ProviderContractImpl implements ProviderContract interface
 type ProviderContractImpl struct {
 	client     *ethclient.Client
-	contract   *contracts.Provider
+	contract   *Provider
 	address    common.Address
 	transactor *bind.TransactOpts
 }
 
 // NewProviderContract creates a new ProviderContract instance
 func NewProviderContract(client *ethclient.Client, address common.Address, transactor *bind.TransactOpts) (*ProviderContractImpl, error) {
-	contract, err := contracts.NewProvider(address, client)
+	contract, err := NewProvider(address, client)
 	if err != nil {
 		return nil, err
 	}
@@ -488,7 +507,7 @@ func NewProviderContract(client *ethclient.Client, address common.Address, trans
 }
 
 // GetProvider retrieves provider information
-func (p *ProviderContractImpl) GetProvider(ctx context.Context, providerID *big.Int) (*Provider, error) {
+func (p *ProviderContractImpl) GetProvider(ctx context.Context, providerID *big.Int) (*bidenginetypes.Provider, error) {
 	callOpts := &bind.CallOpts{Context: ctx}
 
 	providerData, err := p.contract.GetProvider(callOpts, providerID)
@@ -496,7 +515,7 @@ func (p *ProviderContractImpl) GetProvider(ctx context.Context, providerID *big.
 		return nil, err
 	}
 
-	return &Provider{
+	return &bidenginetypes.Provider{
 		Operator:           providerData.Operator,
 		Registered:         providerData.Registered,
 		Reputation:         providerData.Reputation,
@@ -533,7 +552,7 @@ func (p *ProviderContractImpl) IsVerified(ctx context.Context, providerID *big.I
 }
 
 // GetMachines retrieves all machines for a provider
-func (p *ProviderContractImpl) GetMachines(ctx context.Context, providerID *big.Int) ([]Machine, error) {
+func (p *ProviderContractImpl) GetMachines(ctx context.Context, providerID *big.Int) ([]*bidenginetypes.Machine, error) {
 	callOpts := &bind.CallOpts{Context: ctx}
 
 	machinesData, err := p.contract.GetMachines(callOpts, providerID)
@@ -541,9 +560,10 @@ func (p *ProviderContractImpl) GetMachines(ctx context.Context, providerID *big.
 		return nil, err
 	}
 
-	machines := make([]Machine, len(machinesData))
+	machines := make([]*bidenginetypes.Machine, len(machinesData))
 	for i, machineData := range machinesData {
-		machines[i] = Machine{
+		machines[i] = &bidenginetypes.Machine{
+			ID:                   big.NewInt(int64(i)),
 			Active:               machineData.Active,
 			MachineType:          machineData.MachineType,
 			Region:               machineData.Region,
@@ -572,7 +592,7 @@ func (p *ProviderContractImpl) GetMachines(ctx context.Context, providerID *big.
 }
 
 // GetActiveMachinesPaginated gets active machines with pagination
-func (p *ProviderContractImpl) GetActiveMachinesPaginated(ctx context.Context, providerID *big.Int, start *big.Int, limit *big.Int) ([]Machine, error) {
+func (p *ProviderContractImpl) GetActiveMachinesPaginated(ctx context.Context, providerID *big.Int, start *big.Int, limit *big.Int) ([]bidenginetypes.Machine, error) {
 	callOpts := &bind.CallOpts{Context: ctx}
 
 	machinesData, err := p.contract.GetActiveMachinesPaginated(callOpts, providerID, start, limit)
@@ -580,9 +600,9 @@ func (p *ProviderContractImpl) GetActiveMachinesPaginated(ctx context.Context, p
 		return nil, err
 	}
 
-	machines := make([]Machine, len(machinesData))
+	machines := make([]bidenginetypes.Machine, len(machinesData))
 	for i, machineData := range machinesData {
-		machines[i] = Machine{
+		machines[i] = bidenginetypes.Machine{
 			Active:               machineData.Active,
 			MachineType:          machineData.MachineType,
 			Region:               machineData.Region,
@@ -617,7 +637,7 @@ func (p *ProviderContractImpl) IsMachineActive(ctx context.Context, providerID *
 }
 
 // GetMachineResourcePrice gets the resource prices for a machine
-func (p *ProviderContractImpl) GetMachineResourcePrice(ctx context.Context, providerID *big.Int, machineID *big.Int) (*ResourceUsage, error) {
+func (p *ProviderContractImpl) GetMachineResourcePrice(ctx context.Context, providerID *big.Int, machineID *big.Int) (*bidenginetypes.ResourceUsage, error) {
 	callOpts := &bind.CallOpts{Context: ctx}
 
 	prices, err := p.contract.GetMachineResourcePrice(callOpts, providerID, machineID)
@@ -625,7 +645,7 @@ func (p *ProviderContractImpl) GetMachineResourcePrice(ctx context.Context, prov
 		return nil, err
 	}
 
-	return &ResourceUsage{
+	return &bidenginetypes.ResourceUsage{
 		CPUUsed:    prices.CpuPricePerSecond,
 		GPUUsed:    prices.GpuPricePerSecond,
 		MemoryUsed: prices.MemoryPricePerSecond,
@@ -634,7 +654,7 @@ func (p *ProviderContractImpl) GetMachineResourcePrice(ctx context.Context, prov
 }
 
 // AddMachine adds a new machine
-func (p *ProviderContractImpl) AddMachine(ctx context.Context, providerID *big.Int, machine Machine) (*types.Transaction, error) {
+func (p *ProviderContractImpl) AddMachine(ctx context.Context, providerID *big.Int, machine bidenginetypes.Machine) (*types.Transaction, error) {
 	transactOpts := &bind.TransactOpts{
 		Context: ctx,
 		From:    p.transactor.From,
@@ -648,7 +668,7 @@ func (p *ProviderContractImpl) AddMachine(ctx context.Context, providerID *big.I
 }
 
 // UpdateMachine updates an existing machine
-func (p *ProviderContractImpl) UpdateMachine(ctx context.Context, providerID *big.Int, machineID *big.Int, machine Machine) (*types.Transaction, error) {
+func (p *ProviderContractImpl) UpdateMachine(ctx context.Context, providerID *big.Int, machineID *big.Int, machine bidenginetypes.Machine) (*types.Transaction, error) {
 	transactOpts := &bind.TransactOpts{
 		Context: ctx,
 		From:    p.transactor.From,
@@ -673,7 +693,7 @@ func (p *ProviderContractImpl) RemoveMachine(ctx context.Context, providerID *bi
 }
 
 // SetMachineResourcePrice sets the resource prices for a machine
-func (p *ProviderContractImpl) SetMachineResourcePrice(ctx context.Context, providerID *big.Int, machineID *big.Int, prices *ResourceUsage) (*types.Transaction, error) {
+func (p *ProviderContractImpl) SetMachineResourcePrice(ctx context.Context, providerID *big.Int, machineID *big.Int, prices *bidenginetypes.ResourceUsage) (*types.Transaction, error) {
 	transactOpts := &bind.TransactOpts{
 		Context: ctx,
 		From:    p.transactor.From,
@@ -685,7 +705,7 @@ func (p *ProviderContractImpl) SetMachineResourcePrice(ctx context.Context, prov
 }
 
 // ValidateMachineRequirements validates if a machine meets requirements
-func (p *ProviderContractImpl) ValidateMachineRequirements(ctx context.Context, machineType *big.Int, providerID *big.Int, machineID *big.Int, requirements *ResourceUsage) (bool, error) {
+func (p *ProviderContractImpl) ValidateMachineRequirements(ctx context.Context, machineType *big.Int, providerID *big.Int, machineID *big.Int, requirements *bidenginetypes.ResourceUsage) (bool, error) {
 	callOpts := &bind.CallOpts{Context: ctx}
 
 	return p.contract.ValidateMachineRequirements(callOpts, machineType, providerID, machineID,

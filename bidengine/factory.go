@@ -10,20 +10,26 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	ds "github.com/ipfs/go-datastore"
+	"github.com/sirupsen/logrus"
+	"github.com/unicornultrafoundation/subnet-node/bidengine/contracts"
+	managerpkg "github.com/unicornultrafoundation/subnet-node/bidengine/manager"
+	"github.com/unicornultrafoundation/subnet-node/bidengine/metrics"
+	"github.com/unicornultrafoundation/subnet-node/bidengine/order"
+	pricingpkg "github.com/unicornultrafoundation/subnet-node/bidengine/princing"
+	resourcepkg "github.com/unicornultrafoundation/subnet-node/bidengine/resource"
+	storagepkg "github.com/unicornultrafoundation/subnet-node/bidengine/storage"
+	"github.com/unicornultrafoundation/subnet-node/bidengine/types"
 	"github.com/unicornultrafoundation/subnet-node/config"
 )
 
 // CreateBidEngine creates a new BidEngine instance with all dependencies
 func CreateBidEngine(
 	ctx context.Context,
-	config *BidEngineConfig,
-	bidMarket BidMarketContract,
-	provider ProviderContract,
+	config *types.BidEngineConfig,
+	bidMarket types.BidMarketContract,
+	provider types.ProviderContract,
 	datastore ds.Datastore,
 ) (*BidEngine, error) {
-	if config == nil {
-		return nil, fmt.Errorf("config cannot be nil")
-	}
 
 	if bidMarket == nil {
 		return nil, fmt.Errorf("bidMarket contract cannot be nil")
@@ -37,42 +43,39 @@ func CreateBidEngine(
 		return nil, fmt.Errorf("datastore cannot be nil")
 	}
 
-	// Create logger
-	logger, err := NewLogger(config.LogLevel, config.LogFile)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create logger: %w", err)
-	}
-
-	// Create metrics
-	metrics := NewMetrics()
-
-	// Create pricing engine
-	pricingEngine := NewPricingEngine(config, logger)
-
-	// Create resource manager
-	resourceManager := NewResourceManager(config, provider, logger, metrics, datastore)
-
-	// Create bid manager first
-	bidManager := NewBidManager(config, bidMarket, logger, metrics, datastore, resourceManager, pricingEngine)
-
-	// Create order monitor with bid manager as auto bidder
-	orderMonitor := NewOrderMonitor(config, bidMarket, logger, metrics, datastore, bidManager)
+	// Create a simple logger (placeholder - should be implemented)
+	logger := logrus.New()
 
 	// Create storage
-	storage := NewStorage(datastore, logger)
+	storage := storagepkg.NewStorage(datastore, logger)
+
+	// Create metrics
+	metricsService := metrics.NewMetrics()
+
+	// Create pricing engine
+	princingEngine := pricingpkg.NewEngine(config, logger)
+
+	// Create resource manager
+	resourceManager := resourcepkg.NewManager(config, provider, logger, metricsService, storage)
+
+	// Create order monitor with bid manager as auto bidder
+	orderMonitor := order.NewMonitor(config, bidMarket, logger, metricsService, storage)
+
+	// Create bid manager first
+	bidManager := managerpkg.NewManager(config, bidMarket, logger, metricsService, datastore, resourceManager, princingEngine, orderMonitor)
 
 	// Create bid engine using the new constructor
 	bidEngine := NewBidEngine(
 		config,
 		bidMarket,
 		provider,
-		pricingEngine,
+		princingEngine,
 		resourceManager,
 		orderMonitor,
 		bidManager,
 		storage,
 		logger,
-		metrics,
+		metricsService,
 	)
 
 	return bidEngine, nil
@@ -80,19 +83,19 @@ func CreateBidEngine(
 
 // NewBidEngineFromConfig creates a new BidEngine instance from configuration
 func NewBidEngineFromConfig(
-	config *BidEngineConfig,
+	config *types.BidEngineConfig,
 	client *ethclient.Client,
 	transactor *bind.TransactOpts,
 	datastore ds.Datastore,
 ) (*BidEngine, error) {
 	// Create bid market contract
-	bidMarket, err := NewBidMarketContract(client, config.BidMarketAddress, transactor)
+	bidMarket, err := contracts.NewBidMarketContract(client, config.BidMarketAddress, transactor)
 	if err != nil {
 		return nil, err
 	}
 
 	// Create provider contract
-	provider, err := NewProviderContract(client, config.ProviderAddress, transactor)
+	provider, err := contracts.NewProviderContract(client, config.ProviderAddress, transactor)
 	if err != nil {
 		return nil, err
 	}
@@ -126,7 +129,7 @@ func NewBidEngineFromConfigC(
 		return nil, fmt.Errorf("bid market address not found in config")
 	}
 
-	bidMarket, err := NewBidMarketContract(client, bidMarketAddress, transactor)
+	bidMarket, err := contracts.NewBidMarketContract(client, bidMarketAddress, transactor)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create bid market contract: %w", err)
 	}
@@ -137,7 +140,7 @@ func NewBidEngineFromConfigC(
 		return nil, fmt.Errorf("provider address not found in config")
 	}
 
-	provider, err := NewProviderContract(client, providerAddress, transactor)
+	provider, err := contracts.NewProviderContract(client, providerAddress, transactor)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create provider contract: %w", err)
 	}
@@ -153,8 +156,8 @@ func NewBidEngineFromConfigC(
 }
 
 // ParseBidEngineConfigFromC parses BidEngineConfig from config.C
-func ParseBidEngineConfigFromC(cfg *config.C) (*BidEngineConfig, error) {
-	config := &BidEngineConfig{}
+func ParseBidEngineConfigFromC(cfg *config.C) (*types.BidEngineConfig, error) {
+	config := &types.BidEngineConfig{}
 
 	// Parse contract addresses
 	config.BidMarketAddress = common.HexToAddress(cfg.GetString("contracts.bid_market", ""))
@@ -233,7 +236,7 @@ func ParseBidEngineConfigFromC(cfg *config.C) (*BidEngineConfig, error) {
 	}
 
 	// Parse resource weights (use new structure if available, fallback to defaults)
-	config.BidStrategy.ResourceWeight = ResourceWeight{
+	config.BidStrategy.ResourceWeight = types.ResourceWeight{
 		CPU:     0.25, // Default values
 		GPU:     0.35,
 		Memory:  0.20,
@@ -294,18 +297,18 @@ func DefaultBidEngineConfig(
 	providerAddress common.Address,
 	providerID *big.Int,
 	providerWallet common.Address,
-) *BidEngineConfig {
-	return &BidEngineConfig{
+) *types.BidEngineConfig {
+	return &types.BidEngineConfig{
 		BidMarketAddress: bidMarketAddress,
 		ProviderAddress:  providerAddress,
 		ProviderID:       providerID,
 		ProviderWallet:   providerWallet,
-		BidStrategy: BidStrategy{
+		BidStrategy: types.BidStrategy{
 			MinProfitMargin:   0.05, // 5% minimum profit margin
 			MaxProfitMargin:   0.20, // 20% maximum profit margin
 			CompetitiveFactor: 0.10, // 10% competitive factor
 			MarketAdjustment:  0.05, // 5% market adjustment
-			ResourceWeight: ResourceWeight{
+			ResourceWeight: types.ResourceWeight{
 				CPU:     0.25,
 				GPU:     0.35,
 				Memory:  0.20,
@@ -323,7 +326,7 @@ func DefaultBidEngineConfig(
 }
 
 // ValidateBidEngineConfig validates the bid engine configuration
-func ValidateBidEngineConfig(config *BidEngineConfig) error {
+func ValidateBidEngineConfig(config *types.BidEngineConfig) error {
 	if config.BidMarketAddress == (common.Address{}) {
 		return fmt.Errorf("bid market address is required")
 	}
@@ -372,3 +375,12 @@ func ValidateBidEngineConfig(config *BidEngineConfig) error {
 
 	return nil
 }
+
+// SimpleLogger is a basic logger implementation
+type SimpleLogger struct{}
+
+func (l *SimpleLogger) Debug(msg string, fields ...interface{}) {}
+func (l *SimpleLogger) Info(msg string, fields ...interface{})  {}
+func (l *SimpleLogger) Warn(msg string, fields ...interface{})  {}
+func (l *SimpleLogger) Error(msg string, fields ...interface{}) {}
+func (l *SimpleLogger) Fatal(msg string, fields ...interface{}) {}

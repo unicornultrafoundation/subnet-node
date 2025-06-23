@@ -1,30 +1,33 @@
-package bidengine
+package pricing
 
 import (
 	"context"
 	"math/big"
 	"math/rand"
 	"time"
+
+	"github.com/sirupsen/logrus"
+	"github.com/unicornultrafoundation/subnet-node/bidengine/types"
 )
 
-// PricingService implements PricingEngine interface
-type PricingService struct {
-	config *BidEngineConfig
-	logger Logger
+// Engine implements PricingEngine interface
+type Engine struct {
+	config *types.BidEngineConfig
+	logger *logrus.Logger
 }
 
-// NewPricingEngine creates a new PricingService instance
-func NewPricingEngine(config *BidEngineConfig, logger Logger) *PricingService {
-	return &PricingService{
+// NewEngine creates a new Engine instance
+func NewEngine(config *types.BidEngineConfig, logger *logrus.Logger) *Engine {
+	return &Engine{
 		config: config,
 		logger: logger,
 	}
 }
 
 // CalculateBidPrice calculates the optimal bid price for an order
-func (p *PricingService) CalculateBidPrice(ctx context.Context, order *Order, machine *Machine, marketData *MarketData) (*big.Int, error) {
+func (p *Engine) CalculateBidPrice(ctx context.Context, order *types.Order, machine *types.Machine, marketData *types.MarketData) (*big.Int, error) {
 	// Calculate base resource price
-	basePrice, err := p.CalculateResourcePrice(ctx, machine, &ResourceUsage{
+	basePrice, err := p.CalculateResourcePrice(ctx, machine, &types.ResourceUsage{
 		CPUUsed:     order.CpuCores,
 		GPUUsed:     order.GpuCores,
 		MemoryUsed:  order.MemoryMB,
@@ -59,9 +62,9 @@ func (p *PricingService) CalculateBidPrice(ctx context.Context, order *Order, ma
 }
 
 // AnalyzeMarket analyzes market conditions for pricing
-func (p *PricingService) AnalyzeMarket(ctx context.Context, orders []*Order) (*MarketData, error) {
+func (p *Engine) AnalyzeMarket(ctx context.Context, orders []*types.Order) (*types.MarketData, error) {
 	if len(orders) == 0 {
-		return &MarketData{
+		return &types.MarketData{
 			AveragePricePerSecond: big.NewInt(0),
 			MinPricePerSecond:     big.NewInt(0),
 			MaxPricePerSecond:     big.NewInt(0),
@@ -77,7 +80,7 @@ func (p *PricingService) AnalyzeMarket(ctx context.Context, orders []*Order) (*M
 	activeOrders := 0
 
 	for _, order := range orders {
-		if order.Status == OrderStatusOpen {
+		if order.Status == types.OrderStatusOpen {
 			activeOrders++
 
 			// Use min bid price as reference
@@ -97,7 +100,7 @@ func (p *PricingService) AnalyzeMarket(ctx context.Context, orders []*Order) (*M
 		averagePrice.Div(&totalPrice, big.NewInt(int64(activeOrders)))
 	}
 
-	return &MarketData{
+	return &types.MarketData{
 		AveragePricePerSecond: &averagePrice,
 		MinPricePerSecond:     minPrice,
 		MaxPricePerSecond:     maxPrice,
@@ -108,7 +111,7 @@ func (p *PricingService) AnalyzeMarket(ctx context.Context, orders []*Order) (*M
 }
 
 // CalculateResourcePrice calculates the price for specific resources
-func (p *PricingService) CalculateResourcePrice(ctx context.Context, machine *Machine, usage *ResourceUsage) (*big.Int, error) {
+func (p *Engine) CalculateResourcePrice(ctx context.Context, machine *types.Machine, usage *types.ResourceUsage) (*big.Int, error) {
 	var totalPrice big.Int
 
 	// Calculate CPU cost
@@ -151,7 +154,7 @@ func (p *PricingService) CalculateResourcePrice(ctx context.Context, machine *Ma
 }
 
 // AdjustPriceForStrategy adjusts price based on bidding strategy
-func (p *PricingService) AdjustPriceForStrategy(ctx context.Context, basePrice *big.Int, strategy *BidStrategy) (*big.Int, error) {
+func (p *Engine) AdjustPriceForStrategy(ctx context.Context, basePrice *big.Int, strategy *types.BidStrategy) (*big.Int, error) {
 	// Calculate profit margin
 	minProfitMargin := strategy.MinProfitMargin
 	maxProfitMargin := strategy.MaxProfitMargin
@@ -182,7 +185,7 @@ func (p *PricingService) AdjustPriceForStrategy(ctx context.Context, basePrice *
 }
 
 // adjustPriceForMarket adjusts price based on market conditions
-func (p *PricingService) adjustPriceForMarket(basePrice *big.Int, marketData *MarketData) *big.Int {
+func (p *Engine) adjustPriceForMarket(basePrice *big.Int, marketData *types.MarketData) *big.Int {
 	if marketData == nil || marketData.AveragePricePerSecond == nil {
 		return basePrice
 	}
@@ -215,7 +218,7 @@ func (p *PricingService) adjustPriceForMarket(basePrice *big.Int, marketData *Ma
 }
 
 // constrainPriceToOrderLimits ensures price is within order constraints
-func (p *PricingService) constrainPriceToOrderLimits(price *big.Int, order *Order) *big.Int {
+func (p *Engine) constrainPriceToOrderLimits(price *big.Int, order *types.Order) *big.Int {
 	// Ensure price is not below minimum
 	if order.MinBidPrice != nil && price.Cmp(order.MinBidPrice) < 0 {
 		return order.MinBidPrice

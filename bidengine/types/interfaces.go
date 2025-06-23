@@ -1,8 +1,9 @@
-package bidengine
+package types
 
 import (
 	"context"
 	"math/big"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -55,7 +56,7 @@ type ProviderContract interface {
 	IsVerified(ctx context.Context, providerID *big.Int) (bool, error)
 
 	// Machine management
-	GetMachines(ctx context.Context, providerID *big.Int) ([]Machine, error)
+	GetMachines(ctx context.Context, providerID *big.Int) ([]*Machine, error)
 	GetActiveMachinesPaginated(ctx context.Context, providerID *big.Int, start *big.Int, limit *big.Int) ([]Machine, error)
 	IsMachineActive(ctx context.Context, providerID *big.Int, machineID *big.Int) (bool, error)
 	GetMachineResourcePrice(ctx context.Context, providerID *big.Int, machineID *big.Int) (*ResourceUsage, error)
@@ -112,12 +113,8 @@ type OrderMonitor interface {
 	UntrackOrder(ctx context.Context, orderID *big.Int) error
 	GetTrackedOrders(ctx context.Context) ([]*big.Int, error)
 
-	// Status monitoring
-	MonitorOrderStatus(ctx context.Context, orderID *big.Int) error
-	CheckOrderExpiry(ctx context.Context, orderID *big.Int) error
-
 	// Event handling
-	HandleOrderEvent(ctx context.Context, event *OrderEvent) error
+	RegisterEventHandler(eventType OrderEventType, handler func(*OrderEvent))
 }
 
 // BidManager defines the interface for managing bids
@@ -130,13 +127,37 @@ type BidManager interface {
 	// Bid lifecycle
 	SubmitBid(ctx context.Context, orderID *big.Int, pricePerSecond *big.Int, machineID *big.Int) (*BidResult, error)
 	CancelBid(ctx context.Context, orderID *big.Int, bidIndex *big.Int) error
+}
 
-	// Bid monitoring
-	MonitorBidStatus(ctx context.Context, orderID *big.Int, bidIndex *big.Int) error
-	CheckBidExpiry(ctx context.Context, orderID *big.Int, bidIndex *big.Int) error
+// Storage defines the interface for persistent storage operations
+type Storage interface {
+	// Order operations
+	SaveOrder(ctx context.Context, order *Order) error
+	GetOrder(ctx context.Context, orderID string) (*Order, error)
+	ListOrders(ctx context.Context) ([]*Order, error)
+	UpdateOrder(ctx context.Context, order *Order) error
+	DeleteOrder(ctx context.Context, orderID string) error
 
-	// Order expiry management
-	CheckOrderExpiry(ctx context.Context, orderID *big.Int) error
+	// Bid operations
+	SaveBid(ctx context.Context, bid *Bid, orderID string, bidIndex int) error
+	GetBids(ctx context.Context, orderID string) ([]*Bid, error)
+	UpdateBid(ctx context.Context, bid *Bid, orderID string, bidIndex int) error
+
+	// Machine operations
+	SaveMachine(ctx context.Context, machine *Machine) error
+	GetMachine(ctx context.Context, machineID string) (*Machine, error)
+	ListMachines(ctx context.Context) ([]*Machine, error)
+
+	// Market data operations
+	SaveMarketData(ctx context.Context, marketData *MarketData) error
+	GetMarketData(ctx context.Context) (*MarketData, error)
+
+	// Resource allocation operations
+	SaveResourceAllocation(ctx context.Context, allocation *ResourceAllocation) error
+	ListResourceAllocations(ctx context.Context) ([]*ResourceAllocation, error)
+
+	// Maintenance operations
+	CleanupOldData(ctx context.Context, maxAge time.Duration) error
 }
 
 // Logger defines the interface for logging
