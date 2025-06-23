@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/big"
 	"sync"
+	"time"
 
 	ds "github.com/ipfs/go-datastore"
 )
@@ -25,6 +26,10 @@ type ResourceManagerService struct {
 	// Resource tracking
 	machines           map[string]*Machine
 	allocatedResources map[string]*ResourceUsage // orderID -> usage
+
+	// Contract sync
+	lastSyncTime time.Time
+	syncInterval time.Duration
 }
 
 // NewResourceManager creates a new ResourceManagerService instance
@@ -47,6 +52,7 @@ func NewResourceManager(
 		cancel:             cancel,
 		machines:           make(map[string]*Machine),
 		allocatedResources: make(map[string]*ResourceUsage),
+		syncInterval:       5 * time.Minute, // Sync every 5 minutes
 	}
 }
 
@@ -66,6 +72,19 @@ func (rm *ResourceManagerService) Start(ctx context.Context) error {
 	if err := rm.loadPersistedMachines(ctx); err != nil {
 		rm.logger.Warn("Failed to load persisted machines", "error", err)
 	}
+
+	// Load persisted allocations from storage
+	if err := rm.loadPersistedAllocations(ctx); err != nil {
+		rm.logger.Warn("Failed to load persisted allocations", "error", err)
+	}
+
+	// Initial sync with contract
+	if err := rm.syncMachinesFromContract(ctx); err != nil {
+		rm.logger.Warn("Failed to sync machines from contract", "error", err)
+	}
+
+	// Start sync loop
+	go rm.syncLoop(ctx)
 
 	rm.logger.Info("ResourceManager started successfully")
 	return nil
@@ -88,6 +107,10 @@ func (rm *ResourceManagerService) Stop(ctx context.Context) error {
 		rm.logger.Warn("Failed to save persisted machines", "error", err)
 	}
 
+	if err := rm.savePersistedAllocations(ctx); err != nil {
+		rm.logger.Warn("Failed to save persisted allocations", "error", err)
+	}
+
 	// Cancel context
 	rm.cancel()
 
@@ -95,7 +118,160 @@ func (rm *ResourceManagerService) Stop(ctx context.Context) error {
 	return nil
 }
 
-// RegisterMachine registers a new machine
+// syncLoop runs the periodic sync with the contract
+func (rm *ResourceManagerService) syncLoop(ctx context.Context) {
+	ticker := time.NewTicker(rm.syncInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := rm.syncMachinesFromContract(ctx); err != nil {
+				rm.logger.Warn("Failed to sync machines from contract", "error", err)
+			}
+		}
+	}
+}
+
+// syncMachinesFromContract syncs machines from the smart contract
+func (rm *ResourceManagerService) syncMachinesFromContract(ctx context.Context) error {
+	if rm.provider == nil {
+		rm.logger.Debug("No provider contract available, skipping sync")
+		return nil
+	}
+
+	rm.logger.Debug("Starting machine sync from contract")
+
+	// Get provider ID from config
+	providerID := rm.config.ProviderID
+	if providerID == nil {
+		rm.logger.Warn("Provider ID not configured, cannot sync machines")
+		return fmt.Errorf("provider ID not configured")
+	}
+
+	// Get machines from contract
+	contractMachines, err := rm.provider.GetMachines(ctx, providerID)
+	if err != nil {
+		return fmt.Errorf("failed to get machines from contract: %w", err)
+	}
+
+	rm.mu.Lock()
+	defer rm.mu.Unlock()
+
+	// Track which machines are still active in contract
+	activeMachineIDs := make(map[string]bool)
+
+	for i, contractMachine := range contractMachines {
+		// Only sync active machines
+		if !contractMachine.Active {
+			continue
+		}
+
+		// Use index as machine ID since contract returns machines in order
+		machineID := big.NewInt(int64(i))
+		machineIDStr := machineID.String()
+		activeMachineIDs[machineIDStr] = true
+
+		// Convert contract machine to our Machine type
+		machine := &Machine{
+			ID:                   machineID,
+			Active:               contractMachine.Active,
+			MachineType:          contractMachine.MachineType,
+			Region:               contractMachine.Region,
+			CpuCores:             contractMachine.CpuCores,
+			GpuCores:             contractMachine.GpuCores,
+			GpuMemory:            contractMachine.GpuMemory,
+			MemoryMB:             contractMachine.MemoryMB,
+			DiskGB:               contractMachine.DiskGB,
+			UploadSpeed:          contractMachine.UploadSpeed,
+			DownloadSpeed:        contractMachine.DownloadSpeed,
+			CreatedAt:            contractMachine.CreatedAt,
+			UpdatedAt:            contractMachine.UpdatedAt,
+			StakeAmount:          contractMachine.StakeAmount,
+			RemovedAt:            contractMachine.RemovedAt,
+			UnlockTime:           contractMachine.UnlockTime,
+			WithdrawalProcessed:  contractMachine.WithdrawalProcessed,
+			Metadata:             contractMachine.Metadata,
+			CpuPricePerSecond:    contractMachine.CpuPricePerSecond,
+			GpuPricePerSecond:    contractMachine.GpuPricePerSecond,
+			MemoryPricePerSecond: contractMachine.MemoryPricePerSecond,
+			DiskPricePerSecond:   contractMachine.DiskPricePerSecond,
+		}
+
+		// Check if machine already exists and needs update
+		existingMachine, exists := rm.machines[machineIDStr]
+		if !exists {
+			// New machine from contract
+			rm.machines[machineIDStr] = machine
+			rm.logger.Info("Added new machine from contract", "machineID", machineIDStr)
+
+			// Save to storage
+			if err := rm.storage.SaveMachine(ctx, machine); err != nil {
+				rm.logger.Warn("Failed to save machine to storage", "machineID", machineIDStr, "error", err)
+			}
+		} else {
+			// Update existing machine if needed
+			if rm.machineNeedsUpdate(existingMachine, machine) {
+				rm.machines[machineIDStr] = machine
+				rm.logger.Info("Updated machine from contract", "machineID", machineIDStr)
+
+				// Update in storage
+				if err := rm.storage.SaveMachine(ctx, machine); err != nil {
+					rm.logger.Warn("Failed to update machine in storage", "machineID", machineIDStr, "error", err)
+				}
+			}
+		}
+	}
+
+	// Remove machines that are no longer active in contract
+	for machineID := range rm.machines {
+		if !activeMachineIDs[machineID] {
+			delete(rm.machines, machineID)
+			rm.logger.Info("Removed inactive machine from contract", "machineID", machineID)
+		}
+	}
+
+	rm.lastSyncTime = time.Now()
+	rm.logger.Info("Machine sync completed",
+		"totalMachines", len(rm.machines),
+		"contractMachines", len(contractMachines),
+		"activeMachines", len(activeMachineIDs))
+
+	return nil
+}
+
+// machineNeedsUpdate checks if a machine needs to be updated
+func (rm *ResourceManagerService) machineNeedsUpdate(existing, updated *Machine) bool {
+	// Compare key fields that might change
+	if existing.UpdatedAt.Cmp(updated.UpdatedAt) < 0 {
+		return true
+	}
+
+	if existing.CpuPricePerSecond.Cmp(updated.CpuPricePerSecond) != 0 ||
+		existing.GpuPricePerSecond.Cmp(updated.GpuPricePerSecond) != 0 ||
+		existing.MemoryPricePerSecond.Cmp(updated.MemoryPricePerSecond) != 0 ||
+		existing.DiskPricePerSecond.Cmp(updated.DiskPricePerSecond) != 0 {
+		return true
+	}
+
+	return false
+}
+
+// ForceSync forces an immediate sync with the contract
+func (rm *ResourceManagerService) ForceSync(ctx context.Context) error {
+	return rm.syncMachinesFromContract(ctx)
+}
+
+// GetLastSyncTime returns the last sync time
+func (rm *ResourceManagerService) GetLastSyncTime() time.Time {
+	rm.mu.RLock()
+	defer rm.mu.RUnlock()
+	return rm.lastSyncTime
+}
+
+// RegisterMachine registers a new machine locally (for backward compatibility)
 func (rm *ResourceManagerService) RegisterMachine(ctx context.Context, machine *Machine) error {
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
@@ -119,7 +295,7 @@ func (rm *ResourceManagerService) RegisterMachine(ctx context.Context, machine *
 	return nil
 }
 
-// UnregisterMachine unregisters a machine
+// UnregisterMachine unregisters a machine locally (for backward compatibility)
 func (rm *ResourceManagerService) UnregisterMachine(ctx context.Context, machineID *big.Int) error {
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
@@ -162,7 +338,7 @@ func (rm *ResourceManagerService) GetMachine(ctx context.Context, machineID *big
 	return machine, nil
 }
 
-// AllocateResources allocates resources for an order
+// AllocateResources allocates resources for an order and persists to database
 func (rm *ResourceManagerService) AllocateResources(ctx context.Context, orderID *big.Int, machine *Machine, usage *ResourceUsage) error {
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
@@ -184,8 +360,22 @@ func (rm *ResourceManagerService) AllocateResources(ctx context.Context, orderID
 		return ErrInsufficientResources
 	}
 
-	// Allocate resources
+	// Allocate resources in memory
 	rm.allocatedResources[orderIDStr] = usage
+
+	// Persist allocation to database
+	allocation := &ResourceAllocation{
+		OrderID:   orderID,
+		Usage:     usage,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+
+	if err := rm.storage.SaveResourceAllocation(ctx, allocation); err != nil {
+		// Rollback memory allocation if database save fails
+		delete(rm.allocatedResources, orderIDStr)
+		return fmt.Errorf("failed to persist resource allocation: %w", err)
+	}
 
 	rm.logger.Info("Resources allocated successfully",
 		"orderID", orderID,
@@ -196,7 +386,7 @@ func (rm *ResourceManagerService) AllocateResources(ctx context.Context, orderID
 	return nil
 }
 
-// DeallocateResources deallocates resources for an order
+// DeallocateResources deallocates resources for an order and removes from database
 func (rm *ResourceManagerService) DeallocateResources(ctx context.Context, orderID *big.Int) error {
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
@@ -207,7 +397,23 @@ func (rm *ResourceManagerService) DeallocateResources(ctx context.Context, order
 		return ErrResourcesNotAllocated
 	}
 
+	// Remove from memory
 	delete(rm.allocatedResources, orderIDStr)
+
+	// Remove from database
+	allocation := &ResourceAllocation{
+		OrderID: orderID,
+	}
+
+	// Note: Storage doesn't have a delete method, but we can mark as deallocated
+	// by setting usage to nil or removing the allocation
+	allocation.Usage = nil
+	allocation.UpdatedAt = time.Now()
+
+	if err := rm.storage.SaveResourceAllocation(ctx, allocation); err != nil {
+		rm.logger.Warn("Failed to update deallocation in storage", "orderID", orderIDStr, "error", err)
+	}
+
 	rm.logger.Info("Resources deallocated", "orderID", orderID)
 	return nil
 }
@@ -362,6 +568,28 @@ func (rm *ResourceManagerService) loadPersistedMachines(ctx context.Context) err
 	return nil
 }
 
+// loadPersistedAllocations loads allocated resources from storage on startup
+func (rm *ResourceManagerService) loadPersistedAllocations(ctx context.Context) error {
+	rm.logger.Info("Loading persisted resource allocations from storage")
+
+	allocations, err := rm.storage.ListResourceAllocations(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to load resource allocations: %w", err)
+	}
+
+	for _, allocation := range allocations {
+		// Only load allocations that have actual usage (not deallocated)
+		if allocation.Usage != nil {
+			orderIDStr := allocation.OrderID.String()
+			rm.allocatedResources[orderIDStr] = allocation.Usage
+			rm.logger.Debug("Loaded resource allocation from storage", "orderID", orderIDStr)
+		}
+	}
+
+	rm.logger.Info("Loaded persisted resource allocations", "count", len(allocations))
+	return nil
+}
+
 // savePersistedMachines saves current machine state to storage
 func (rm *ResourceManagerService) savePersistedMachines(ctx context.Context) error {
 	rm.logger.Info("Saving persisted machines to storage")
@@ -378,6 +606,34 @@ func (rm *ResourceManagerService) savePersistedMachines(ctx context.Context) err
 	return nil
 }
 
+// savePersistedAllocations saves current resource allocations to storage
+func (rm *ResourceManagerService) savePersistedAllocations(ctx context.Context) error {
+	rm.logger.Info("Saving persisted resource allocations to storage")
+
+	rm.mu.RLock()
+	defer rm.mu.RUnlock()
+
+	for orderIDStr, usage := range rm.allocatedResources {
+		orderID, ok := new(big.Int).SetString(orderIDStr, 10)
+		if !ok {
+			rm.logger.Warn("Invalid order ID format", "orderID", orderIDStr)
+			continue
+		}
+
+		allocation := &ResourceAllocation{
+			OrderID:   orderID,
+			Usage:     usage,
+			UpdatedAt: time.Now(),
+		}
+
+		if err := rm.storage.SaveResourceAllocation(ctx, allocation); err != nil {
+			rm.logger.Warn("Failed to save resource allocation to storage", "orderID", orderIDStr, "error", err)
+		}
+	}
+
+	return nil
+}
+
 // GetStats returns resource manager statistics
 func (rm *ResourceManagerService) GetStats() map[string]interface{} {
 	rm.mu.RLock()
@@ -387,5 +643,6 @@ func (rm *ResourceManagerService) GetStats() map[string]interface{} {
 		"registeredMachines": len(rm.machines),
 		"allocatedResources": len(rm.allocatedResources),
 		"isRunning":          rm.isRunning,
+		"lastSyncTime":       rm.lastSyncTime,
 	}
 }

@@ -13,6 +13,8 @@ type BidMarketContract interface {
 	// Order management
 	GetOrder(ctx context.Context, orderID *big.Int) (*Order, error)
 	GetOrderCount(ctx context.Context) (*big.Int, error)
+	OrderCount(ctx context.Context) (*big.Int, error)
+	Orders(ctx context.Context, orderID *big.Int) (*Order, error)
 	GetBids(ctx context.Context, orderID *big.Int) ([]Bid, error)
 	IsBiddingOpen(ctx context.Context, orderID *big.Int) (bool, error)
 	GetRemainingBidTime(ctx context.Context, orderID *big.Int) (*big.Int, error)

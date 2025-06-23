@@ -123,6 +123,22 @@ func (m *MockBidMarketContract) OrderBids(ctx context.Context, orderID *big.Int,
 	return args.Get(0).(*Bid), args.Error(1)
 }
 
+func (m *MockBidMarketContract) OrderCount(ctx context.Context) (*big.Int, error) {
+	args := m.Called(ctx)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*big.Int), args.Error(1)
+}
+
+func (m *MockBidMarketContract) Orders(ctx context.Context, orderID *big.Int) (*Order, error) {
+	args := m.Called(ctx, orderID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*Order), args.Error(1)
+}
+
 // MockLogger is a mock implementation of Logger
 type MockLogger struct {
 	mock.Mock

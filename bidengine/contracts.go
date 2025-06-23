@@ -80,6 +80,16 @@ func (b *BidMarketContractImpl) GetOrderCount(ctx context.Context) (*big.Int, er
 	return b.contract.OrderCount(callOpts)
 }
 
+// OrderCount retrieves the total number of orders (alias for GetOrderCount)
+func (b *BidMarketContractImpl) OrderCount(ctx context.Context) (*big.Int, error) {
+	return b.GetOrderCount(ctx)
+}
+
+// Orders retrieves order details by ID (alias for GetOrder)
+func (b *BidMarketContractImpl) Orders(ctx context.Context, orderID *big.Int) (*Order, error) {
+	return b.GetOrder(ctx, orderID)
+}
+
 // GetBids retrieves all bids for an order
 func (b *BidMarketContractImpl) GetBids(ctx context.Context, orderID *big.Int) ([]Bid, error) {
 	callOpts := &bind.CallOpts{Context: ctx}

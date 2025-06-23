@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"strconv"
 	"time"
 
@@ -27,10 +28,11 @@ func NewStorage(datastore ds.Datastore, logger Logger) *Storage {
 
 // Storage keys
 const (
-	orderPrefix   = "/bidengine/orders/"
-	bidPrefix     = "/bidengine/bids/"
-	machinePrefix = "/bidengine/machines/"
-	marketPrefix  = "/bidengine/market/"
+	orderPrefix      = "/bidengine/orders/"
+	bidPrefix        = "/bidengine/bids/"
+	machinePrefix    = "/bidengine/machines/"
+	marketPrefix     = "/bidengine/market/"
+	allocationPrefix = "/bidengine/allocations/"
 )
 
 // OrderStorage represents stored order data
@@ -67,6 +69,14 @@ type MarketDataStorage struct {
 	MarketData *MarketData `json:"market_data"`
 	CreatedAt  time.Time   `json:"created_at"`
 	UpdatedAt  time.Time   `json:"updated_at"`
+}
+
+// ResourceAllocation represents stored resource allocation data
+type ResourceAllocation struct {
+	OrderID   *big.Int       `json:"order_id"`
+	Usage     *ResourceUsage `json:"usage"`
+	CreatedAt time.Time      `json:"created_at"`
+	UpdatedAt time.Time      `json:"updated_at"`
 }
 
 // Error definitions
@@ -592,4 +602,62 @@ func (s *Storage) cleanupOldMarketData(ctx context.Context, cutoff time.Time) er
 	}
 
 	return nil
+}
+
+// SaveResourceAllocation saves a resource allocation to storage
+func (s *Storage) SaveResourceAllocation(ctx context.Context, allocation *ResourceAllocation) error {
+	orderID := allocation.OrderID.String()
+	key := ds.NewKey(allocationPrefix + orderID)
+
+	storage := &ResourceAllocation{
+		OrderID:   allocation.OrderID,
+		Usage:     allocation.Usage,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+
+	data, err := json.Marshal(storage)
+	if err != nil {
+		return fmt.Errorf("failed to marshal resource allocation: %w", err)
+	}
+
+	err = s.ds.Put(ctx, key, data)
+	if err != nil {
+		return fmt.Errorf("failed to save resource allocation: %w", err)
+	}
+
+	s.logger.Debug("Saved resource allocation to storage", "orderID", orderID)
+	return nil
+}
+
+// ListResourceAllocations retrieves all resource allocations from storage
+func (s *Storage) ListResourceAllocations(ctx context.Context) ([]*ResourceAllocation, error) {
+	q := query.Query{
+		Prefix: allocationPrefix,
+	}
+
+	results, err := s.ds.Query(ctx, q)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query resource allocations: %w", err)
+	}
+	defer results.Close()
+
+	var allocations []*ResourceAllocation
+	for result := range results.Next() {
+		if result.Error != nil {
+			s.logger.Warn("Error reading resource allocation from storage", "error", result.Error)
+			continue
+		}
+
+		var allocation ResourceAllocation
+		err := json.Unmarshal(result.Value, &allocation)
+		if err != nil {
+			s.logger.Warn("Failed to unmarshal resource allocation", "error", err)
+			continue
+		}
+
+		allocations = append(allocations, &allocation)
+	}
+
+	return allocations, nil
 }
