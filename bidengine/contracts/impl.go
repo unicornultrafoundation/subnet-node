@@ -139,8 +139,7 @@ func (b *BidMarketContractImpl) SubmitBid(ctx context.Context, orderID *big.Int,
 
 // GetBidIndexFromTransaction gets the bid index from a transaction receipt by parsing the BidSubmitted event
 func (b *BidMarketContractImpl) GetBidIndexFromTransaction(ctx context.Context, tx *types.Transaction, orderID *big.Int) (*big.Int, error) {
-	// Wait for transaction to be mined
-	receipt, err := b.waitForReceipt(ctx, tx.Hash(), 60*time.Second)
+	receipt, err := bind.WaitMined(ctx, b.client, tx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get transaction receipt: %w", err)
 	}
@@ -160,27 +159,6 @@ func (b *BidMarketContractImpl) GetBidIndexFromTransaction(ctx context.Context, 
 	}
 
 	return nil, fmt.Errorf("BidSubmitted event not found in transaction receipt")
-}
-
-// waitForReceipt waits for a transaction receipt with a timeout
-func (b *BidMarketContractImpl) waitForReceipt(ctx context.Context, txHash common.Hash, timeout time.Duration) (*types.Receipt, error) {
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
-	ticker := time.NewTicker(1 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		receipt, err := b.client.TransactionReceipt(ctx, txHash)
-		if err == nil && receipt != nil {
-			return receipt, nil
-		}
-		select {
-		case <-ctx.Done():
-			return nil, fmt.Errorf("timeout waiting for transaction receipt")
-		case <-ticker.C:
-		}
-	}
 }
 
 // CancelBid cancels a bid
