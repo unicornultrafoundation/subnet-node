@@ -26,21 +26,44 @@ type BidEngine struct {
 	metrics Metrics
 
 	// Internal state
-	mu              sync.RWMutex
-	isRunning       bool
-	stopChan        chan struct{}
-	orderEventsChan chan *OrderEvent
-	bidEventsChan   chan *BidResult
-
-	// Tracking
-	trackedOrders map[string]*Order
-	trackedBids   map[string]*BidResult
-
-	ctx    context.Context
-	cancel context.CancelFunc
+	mu        sync.RWMutex
+	isRunning bool
+	ctx       context.Context
+	cancel    context.CancelFunc
 }
 
-// Start starts the bid engine
+// NewBidEngine creates a new BidEngine instance
+func NewBidEngine(
+	config *BidEngineConfig,
+	bidMarket BidMarketContract,
+	provider ProviderContract,
+	pricingEngine PricingEngine,
+	resourceManager ResourceManager,
+	orderMonitor OrderMonitor,
+	bidManager BidManager,
+	storage *Storage,
+	logger Logger,
+	metrics Metrics,
+) *BidEngine {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	return &BidEngine{
+		config:          config,
+		bidMarket:       bidMarket,
+		provider:        provider,
+		pricingEngine:   pricingEngine,
+		resourceManager: resourceManager,
+		orderMonitor:    orderMonitor,
+		bidManager:      bidManager,
+		storage:         storage,
+		logger:          logger,
+		metrics:         metrics,
+		ctx:             ctx,
+		cancel:          cancel,
+	}
+}
+
+// Start starts the bid engine and all its components
 func (be *BidEngine) Start(ctx context.Context) error {
 	be.mu.Lock()
 	defer be.mu.Unlock()
@@ -50,18 +73,32 @@ func (be *BidEngine) Start(ctx context.Context) error {
 	}
 
 	be.logger.Info("Starting BidEngine")
-	be.isRunning = true
 
-	// Load persisted data from storage
-	if err := be.loadPersistedData(ctx); err != nil {
-		be.logger.Warn("Failed to load persisted data", "error", err)
+	// Start components if they have Start method
+	if starter, ok := be.resourceManager.(interface{ Start(context.Context) error }); ok {
+		if err := starter.Start(ctx); err != nil {
+			return fmt.Errorf("failed to start resource manager: %w", err)
+		}
 	}
 
+	if starter, ok := be.orderMonitor.(interface{ Start(context.Context) error }); ok {
+		if err := starter.Start(ctx); err != nil {
+			return fmt.Errorf("failed to start order monitor: %w", err)
+		}
+	}
+
+	if starter, ok := be.bidManager.(interface{ Start(context.Context) error }); ok {
+		if err := starter.Start(ctx); err != nil {
+			return fmt.Errorf("failed to start bid manager: %w", err)
+		}
+	}
+
+	be.isRunning = true
 	be.logger.Info("BidEngine started successfully")
 	return nil
 }
 
-// Stop stops the bid engine
+// Stop stops the bid engine and all its components
 func (be *BidEngine) Stop(ctx context.Context) error {
 	be.mu.Lock()
 	defer be.mu.Unlock()
@@ -71,15 +108,27 @@ func (be *BidEngine) Stop(ctx context.Context) error {
 	}
 
 	be.logger.Info("Stopping BidEngine")
-	be.isRunning = false
-	close(be.stopChan)
 
-	// Save current state to storage
-	if err := be.savePersistedData(ctx); err != nil {
-		be.logger.Warn("Failed to save persisted data", "error", err)
+	// Stop components in reverse order if they have Stop method
+	if stopper, ok := be.bidManager.(interface{ Stop(context.Context) error }); ok {
+		if err := stopper.Stop(ctx); err != nil {
+			be.logger.Warn("Failed to stop bid manager", "error", err)
+		}
 	}
 
-	// Cancel context
+	if stopper, ok := be.orderMonitor.(interface{ Stop(context.Context) error }); ok {
+		if err := stopper.Stop(ctx); err != nil {
+			be.logger.Warn("Failed to stop order monitor", "error", err)
+		}
+	}
+
+	if stopper, ok := be.resourceManager.(interface{ Stop(context.Context) error }); ok {
+		if err := stopper.Stop(ctx); err != nil {
+			be.logger.Warn("Failed to stop resource manager", "error", err)
+		}
+	}
+
+	be.isRunning = false
 	be.cancel()
 
 	be.logger.Info("BidEngine stopped successfully")
@@ -93,67 +142,30 @@ func (be *BidEngine) IsRunning() bool {
 	return be.isRunning
 }
 
-// loadPersistedData loads data from storage on startup
-func (be *BidEngine) loadPersistedData(ctx context.Context) error {
-	be.logger.Info("Loading persisted data from storage")
+// ForceSync forces synchronization of all components
+func (be *BidEngine) ForceSync(ctx context.Context) error {
+	be.logger.Info("Forcing synchronization of all components")
 
-	// Load orders
-	orders, err := be.storage.ListOrders(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to load orders: %w", err)
-	}
-
-	be.mu.Lock()
-	for _, order := range orders {
-		orderKey := order.ID.String()
-		be.trackedOrders[orderKey] = order
-		be.logger.Debug("Loaded order from storage", "orderID", orderKey)
-	}
-	be.mu.Unlock()
-
-	// Load machines
-	machines, err := be.storage.ListMachines(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to load machines: %w", err)
-	}
-
-	// Register machines with resource manager
-	for _, machine := range machines {
-		if err := be.resourceManager.RegisterMachine(ctx, machine); err != nil {
-			be.logger.Warn("Failed to register machine from storage", "machineID", machine.ID, "error", err)
+	// Force sync components if they have ForceSync method
+	if syncer, ok := be.resourceManager.(interface{ ForceSync(context.Context) error }); ok {
+		if err := syncer.ForceSync(ctx); err != nil {
+			be.logger.Warn("Failed to force sync resource manager", "error", err)
 		}
 	}
 
-	be.logger.Info("Loaded persisted data", "orders", len(orders), "machines", len(machines))
-	return nil
-}
-
-// savePersistedData saves current state to storage
-func (be *BidEngine) savePersistedData(ctx context.Context) error {
-	be.logger.Info("Saving current state to storage")
-
-	be.mu.RLock()
-	orders := make([]*Order, 0, len(be.trackedOrders))
-	for _, order := range be.trackedOrders {
-		orders = append(orders, order)
-	}
-	be.mu.RUnlock()
-
-	// Save orders
-	for _, order := range orders {
-		if err := be.storage.UpdateOrder(ctx, order); err != nil {
-			be.logger.Warn("Failed to save order", "orderID", order.ID, "error", err)
+	if syncer, ok := be.orderMonitor.(interface{ ForceSync(context.Context) error }); ok {
+		if err := syncer.ForceSync(ctx); err != nil {
+			be.logger.Warn("Failed to force sync order monitor", "error", err)
 		}
 	}
 
-	// Save machines
-	machines := be.resourceManager.GetAllMachines(ctx)
-	for _, machine := range machines {
-		if err := be.storage.SaveMachine(ctx, machine); err != nil {
-			be.logger.Warn("Failed to save machine", "machineID", machine.ID, "error", err)
+	if syncer, ok := be.bidManager.(interface{ ForceSync(context.Context) error }); ok {
+		if err := syncer.ForceSync(ctx); err != nil {
+			be.logger.Warn("Failed to force sync bid manager", "error", err)
 		}
 	}
 
+	be.logger.Info("Force synchronization completed")
 	return nil
 }
 
@@ -162,11 +174,30 @@ func (be *BidEngine) GetStats() map[string]interface{} {
 	be.mu.RLock()
 	defer be.mu.RUnlock()
 
-	return map[string]interface{}{
-		"isRunning":     be.isRunning,
-		"trackedOrders": len(be.trackedOrders),
-		"trackedBids":   len(be.trackedBids),
+	stats := map[string]interface{}{
+		"isRunning": be.isRunning,
 	}
+
+	// Get stats from components if they have GetStats method
+	if statser, ok := be.resourceManager.(interface{ GetStats() map[string]interface{} }); ok {
+		if resourceStats := statser.GetStats(); resourceStats != nil {
+			stats["resourceManager"] = resourceStats
+		}
+	}
+
+	if statser, ok := be.orderMonitor.(interface{ GetStats() map[string]interface{} }); ok {
+		if orderStats := statser.GetStats(); orderStats != nil {
+			stats["orderMonitor"] = orderStats
+		}
+	}
+
+	if statser, ok := be.bidManager.(interface{ GetStats() map[string]interface{} }); ok {
+		if bidStats := statser.GetStats(); bidStats != nil {
+			stats["bidManager"] = bidStats
+		}
+	}
+
+	return stats
 }
 
 // GetBidManager returns the bid manager
@@ -197,4 +228,19 @@ func (be *BidEngine) GetLogger() Logger {
 // GetMetrics returns the metrics
 func (be *BidEngine) GetMetrics() Metrics {
 	return be.metrics
+}
+
+// GetBidMarket returns the bid market contract
+func (be *BidEngine) GetBidMarket() BidMarketContract {
+	return be.bidMarket
+}
+
+// GetProvider returns the provider contract
+func (be *BidEngine) GetProvider() ProviderContract {
+	return be.provider
+}
+
+// GetStorage returns the storage
+func (be *BidEngine) GetStorage() *Storage {
+	return be.storage
 }

@@ -234,23 +234,18 @@ func ExampleWithCustomComponents() {
 	storage := NewStorage(datastore, logger)
 
 	// Create BidEngine with custom components
-	bidEngine := &BidEngine{
-		config:          config,
-		bidMarket:       nil, // You would pass a real contract here
-		provider:        nil, // You would pass a real contract here
-		pricingEngine:   pricingEngine,
-		resourceManager: resourceManager,
-		orderMonitor:    orderMonitor,
-		bidManager:      bidManager,
-		storage:         storage,
-		logger:          logger,
-		metrics:         metrics,
-		stopChan:        make(chan struct{}),
-		orderEventsChan: make(chan *OrderEvent, 100),
-		bidEventsChan:   make(chan *BidResult, 100),
-		trackedOrders:   make(map[string]*Order),
-		trackedBids:     make(map[string]*BidResult),
-	}
+	bidEngine := NewBidEngine(
+		config,
+		nil, // bidMarket - You would pass a real contract here
+		nil, // provider - You would pass a real contract here
+		pricingEngine,
+		resourceManager,
+		orderMonitor,
+		bidManager,
+		storage,
+		logger,
+		metrics,
+	)
 
 	fmt.Printf("Created BidEngine with custom components: %+v\n", bidEngine)
 }

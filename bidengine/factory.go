@@ -13,8 +13,8 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/config"
 )
 
-// NewBidEngine creates a new BidEngine instance with all dependencies
-func NewBidEngine(
+// CreateBidEngine creates a new BidEngine instance with all dependencies
+func CreateBidEngine(
 	ctx context.Context,
 	config *BidEngineConfig,
 	bidMarket BidMarketContract,
@@ -61,24 +61,19 @@ func NewBidEngine(
 	// Create storage
 	storage := NewStorage(datastore, logger)
 
-	// Create bid engine
-	bidEngine := &BidEngine{
-		config:          config,
-		bidMarket:       bidMarket,
-		provider:        provider,
-		pricingEngine:   pricingEngine,
-		resourceManager: resourceManager,
-		orderMonitor:    orderMonitor,
-		bidManager:      bidManager,
-		metrics:         metrics,
-		storage:         storage,
-		logger:          logger,
-	}
-
-	// Load persisted data
-	if err := bidEngine.loadPersistedData(ctx); err != nil {
-		logger.Warn("Failed to load persisted data", "error", err)
-	}
+	// Create bid engine using the new constructor
+	bidEngine := NewBidEngine(
+		config,
+		bidMarket,
+		provider,
+		pricingEngine,
+		resourceManager,
+		orderMonitor,
+		bidManager,
+		storage,
+		logger,
+		metrics,
+	)
 
 	return bidEngine, nil
 }
@@ -103,7 +98,7 @@ func NewBidEngineFromConfig(
 	}
 
 	// Create and return the bid engine
-	return NewBidEngine(
+	return CreateBidEngine(
 		context.Background(),
 		config,
 		bidMarket,
@@ -148,7 +143,7 @@ func NewBidEngineFromConfigC(
 	}
 
 	// Create and return the bid engine
-	return NewBidEngine(
+	return CreateBidEngine(
 		context.Background(),
 		bidEngineConfig,
 		bidMarket,
