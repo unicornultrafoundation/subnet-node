@@ -3,7 +3,6 @@ package types
 import (
 	"context"
 	"math/big"
-	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -155,9 +154,6 @@ type Storage interface {
 	// Resource allocation operations
 	SaveResourceAllocation(ctx context.Context, allocation *ResourceAllocation) error
 	ListResourceAllocations(ctx context.Context) ([]*ResourceAllocation, error)
-
-	// Maintenance operations
-	CleanupOldData(ctx context.Context, maxAge time.Duration) error
 }
 
 // Logger defines the interface for logging
