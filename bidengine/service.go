@@ -25,7 +25,7 @@ type BidEngine struct {
 	storage         types.Storage
 
 	// Utilities
-	logger  *logrus.Logger
+	logger  *logrus.Entry
 	metrics types.Metrics
 
 	// Internal state
@@ -45,7 +45,7 @@ func NewBidEngine(
 	orderMonitor types.OrderMonitor,
 	bidManager types.BidManager,
 	storage types.Storage,
-	logger *logrus.Logger,
+	logger *logrus.Entry,
 	metrics types.Metrics,
 ) *BidEngine {
 	ctx, cancel := context.WithCancel(context.Background())

@@ -16,11 +16,11 @@ import (
 // Storage provides persistent storage for BidEngine data
 type Storage struct {
 	ds     ds.Datastore
-	logger *logrus.Logger
+	logger *logrus.Entry
 }
 
 // NewStorage creates a new storage instance
-func NewStorage(datastore ds.Datastore, logger *logrus.Logger) *Storage {
+func NewStorage(datastore ds.Datastore, logger *logrus.Entry) *Storage {
 	return &Storage{
 		ds:     datastore,
 		logger: logger,

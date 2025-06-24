@@ -18,8 +18,7 @@ func testEngine() *Engine {
 			CompetitiveFactor: 0.10,
 		},
 	}
-	logger := logrus.New()
-	logger.SetLevel(logrus.ErrorLevel)
+	logger := logrus.WithField("service", "bidengine")
 	return NewEngine(cfg, logger)
 }
 

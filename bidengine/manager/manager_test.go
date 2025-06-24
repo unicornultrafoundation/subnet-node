@@ -222,7 +222,7 @@ func (b *bidMarketMock) GetBidIndexFromTransaction(ctx context.Context, tx *etht
 }
 
 func TestTrackAndUntrackBid(t *testing.T) {
-	logger := logrus.New()
+	logger := logrus.WithField("service", "bidengine")
 	manager := NewManager(
 		&types.BidEngineConfig{ProviderID: big.NewInt(1)},
 		&mockBidMarket{},
@@ -256,7 +256,7 @@ func TestTrackAndUntrackBid(t *testing.T) {
 }
 
 func TestGetTrackedBids(t *testing.T) {
-	logger := logrus.New()
+	logger := logrus.WithField("service", "bidengine")
 	manager := NewManager(
 		&types.BidEngineConfig{ProviderID: big.NewInt(1)},
 		&mockBidMarket{},
@@ -306,7 +306,7 @@ func TestGetTrackedBids(t *testing.T) {
 }
 
 func TestSubmitBid(t *testing.T) {
-	logger := logrus.New()
+	logger := logrus.WithField("service", "bidengine")
 	manager := NewManager(
 		&types.BidEngineConfig{
 			ProviderID:     big.NewInt(1),
@@ -337,7 +337,7 @@ func TestSubmitBid(t *testing.T) {
 }
 
 func TestTryBidOnOrder(t *testing.T) {
-	logger := logrus.New()
+	logger := logrus.WithField("service", "bidengine")
 	manager := NewManager(
 		&types.BidEngineConfig{ProviderID: big.NewInt(1)},
 		&mockBidMarket{},
@@ -373,7 +373,7 @@ func TestTryBidOnOrder(t *testing.T) {
 }
 
 func TestHandleOrderCreate(t *testing.T) {
-	logger := logrus.New()
+	logger := logrus.WithField("service", "bidengine")
 	manager := NewManager(
 		&types.BidEngineConfig{ProviderID: big.NewInt(1)},
 		&mockBidMarket{},
@@ -407,7 +407,7 @@ func TestHandleOrderCreate(t *testing.T) {
 }
 
 func TestHandleOrderClosed(t *testing.T) {
-	logger := logrus.New()
+	logger := logrus.WithField("service", "bidengine")
 	manager := NewManager(
 		&types.BidEngineConfig{ProviderID: big.NewInt(1)},
 		&mockBidMarket{},
@@ -441,7 +441,7 @@ func TestHandleOrderClosed(t *testing.T) {
 }
 
 func TestHandleOrderExpired(t *testing.T) {
-	logger := logrus.New()
+	logger := logrus.WithField("service", "bidengine")
 	manager := NewManager(
 		&types.BidEngineConfig{ProviderID: big.NewInt(1)},
 		&mockBidMarket{},
@@ -475,7 +475,7 @@ func TestHandleOrderExpired(t *testing.T) {
 }
 
 func TestHandleOrderAccepted(t *testing.T) {
-	logger := logrus.New()
+	logger := logrus.WithField("service", "bidengine")
 	manager := NewManager(
 		&types.BidEngineConfig{ProviderID: big.NewInt(1)},
 		&mockBidMarket{},
@@ -514,7 +514,7 @@ func TestHandleOrderAccepted(t *testing.T) {
 }
 
 func TestGetStats(t *testing.T) {
-	logger := logrus.New()
+	logger := logrus.WithField("service", "bidengine")
 	manager := NewManager(
 		&types.BidEngineConfig{ProviderID: big.NewInt(1)},
 		&mockBidMarket{},

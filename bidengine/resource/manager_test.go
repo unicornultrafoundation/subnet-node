@@ -37,7 +37,7 @@ type mockMetrics struct{ types.Metrics }
 func (m *mockMetrics) RecordResourceAllocation(usage *types.ResourceUsage) {}
 
 func TestRegisterAndUnregisterMachine(t *testing.T) {
-	logger := logrus.New()
+	logger := logrus.WithField("service", "bidengine")
 	manager := NewManager(
 		&types.BidEngineConfig{ProviderID: big.NewInt(1)},
 		&mockProviderContract{},
@@ -58,7 +58,7 @@ func TestRegisterAndUnregisterMachine(t *testing.T) {
 }
 
 func TestAllocateAndDeallocateResources(t *testing.T) {
-	logger := logrus.New()
+	logger := logrus.WithField("service", "bidengine")
 	manager := NewManager(
 		&types.BidEngineConfig{ProviderID: big.NewInt(1)},
 		&mockProviderContract{},
@@ -103,7 +103,7 @@ func TestAllocateAndDeallocateResources(t *testing.T) {
 }
 
 func TestCanAllocateResources(t *testing.T) {
-	logger := logrus.New()
+	logger := logrus.WithField("service", "bidengine")
 	manager := NewManager(
 		&types.BidEngineConfig{ProviderID: big.NewInt(1)},
 		&mockProviderContract{},
@@ -136,7 +136,7 @@ func TestCanAllocateResources(t *testing.T) {
 }
 
 func TestGetMachine(t *testing.T) {
-	logger := logrus.New()
+	logger := logrus.WithField("service", "bidengine")
 	manager := NewManager(
 		&types.BidEngineConfig{ProviderID: big.NewInt(1)},
 		&mockProviderContract{},
@@ -161,7 +161,7 @@ func TestGetMachine(t *testing.T) {
 }
 
 func TestDuplicateRegistration(t *testing.T) {
-	logger := logrus.New()
+	logger := logrus.WithField("service", "bidengine")
 	manager := NewManager(
 		&types.BidEngineConfig{ProviderID: big.NewInt(1)},
 		&mockProviderContract{},
@@ -183,7 +183,7 @@ func TestDuplicateRegistration(t *testing.T) {
 }
 
 func TestUnregisterNonExistentMachine(t *testing.T) {
-	logger := logrus.New()
+	logger := logrus.WithField("service", "bidengine")
 	manager := NewManager(
 		&types.BidEngineConfig{ProviderID: big.NewInt(1)},
 		&mockProviderContract{},

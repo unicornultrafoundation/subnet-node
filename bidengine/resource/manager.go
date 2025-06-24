@@ -15,7 +15,7 @@ import (
 type Manager struct {
 	config   *types.BidEngineConfig
 	provider types.ProviderContract
-	logger   *logrus.Logger
+	logger   *logrus.Entry
 	metrics  types.Metrics
 	storage  types.Storage
 
@@ -37,7 +37,7 @@ type Manager struct {
 func NewManager(
 	config *types.BidEngineConfig,
 	provider types.ProviderContract,
-	logger *logrus.Logger,
+	logger *logrus.Entry,
 	metrics types.Metrics,
 	storage types.Storage,
 ) *Manager {

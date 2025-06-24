@@ -146,8 +146,7 @@ func startsWith(s, prefix string) bool {
 
 func testStorage() (*Storage, *MockDatastore) {
 	mockDS := NewMockDatastore()
-	logger := logrus.New()
-	logger.SetLevel(logrus.ErrorLevel)
+	logger := logrus.WithField("service", "bidengine")
 	storage := NewStorage(mockDS, logger)
 	return storage, mockDS
 }

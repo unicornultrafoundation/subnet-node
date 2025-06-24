@@ -15,7 +15,7 @@ import (
 type Monitor struct {
 	config    *types.BidEngineConfig
 	bidMarket types.BidMarketContract
-	logger    *logrus.Logger
+	logger    *logrus.Entry
 	metrics   types.Metrics
 	storage   types.Storage
 
@@ -39,7 +39,7 @@ type Monitor struct {
 func NewMonitor(
 	config *types.BidEngineConfig,
 	bidMarket types.BidMarketContract,
-	logger *logrus.Logger,
+	logger *logrus.Entry,
 	metrics types.Metrics,
 	storage types.Storage,
 ) *Monitor {

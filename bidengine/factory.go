@@ -44,7 +44,9 @@ func CreateBidEngine(
 	}
 
 	// Create a simple logger (placeholder - should be implemented)
-	logger := logrus.New()
+	logger := logrus.WithFields(logrus.Fields{
+		"service": "bidengine",
+	})
 
 	// Create storage
 	storage := storagepkg.NewStorage(datastore, logger)
@@ -124,7 +126,7 @@ func NewBidEngineFromConfigC(
 	}
 
 	// Create bid market contract
-	bidMarketAddress := common.HexToAddress(cfg.GetString("contracts.bid_market", ""))
+	bidMarketAddress := common.HexToAddress(cfg.GetString("contracts.bid_market", config.DefaultBidMarketAddr))
 	if bidMarketAddress == (common.Address{}) {
 		return nil, fmt.Errorf("bid market address not found in config")
 	}
@@ -135,7 +137,7 @@ func NewBidEngineFromConfigC(
 	}
 
 	// Create provider contract
-	providerAddress := common.HexToAddress(cfg.GetString("contracts.provider", ""))
+	providerAddress := common.HexToAddress(cfg.GetString("contracts.provider", config.DefaultSubnetProviderAddr))
 	if providerAddress == (common.Address{}) {
 		return nil, fmt.Errorf("provider address not found in config")
 	}
@@ -157,86 +159,80 @@ func NewBidEngineFromConfigC(
 
 // ParseBidEngineConfigFromC parses BidEngineConfig from config.C
 func ParseBidEngineConfigFromC(cfg *config.C) (*types.BidEngineConfig, error) {
-	config := &types.BidEngineConfig{}
+	bcfg := &types.BidEngineConfig{}
 
 	// Parse contract addresses
-	config.BidMarketAddress = common.HexToAddress(cfg.GetString("contracts.bid_market", ""))
-	config.ProviderAddress = common.HexToAddress(cfg.GetString("contracts.provider", ""))
+	bcfg.BidMarketAddress = common.HexToAddress(cfg.GetString("contracts.bid_market", config.DefaultBidMarketAddr))
+	bcfg.ProviderAddress = common.HexToAddress(cfg.GetString("contracts.provider", config.DefaultSubnetProviderAddr))
 
 	// Parse provider_id if present
 	if cfg.IsSet("bidengine.provider_id") {
 		if v := cfg.Get("bidengine.provider_id"); v != nil {
 			switch val := v.(type) {
 			case int:
-				config.ProviderID = big.NewInt(int64(val))
+				bcfg.ProviderID = big.NewInt(int64(val))
 			case int64:
-				config.ProviderID = big.NewInt(val)
+				bcfg.ProviderID = big.NewInt(val)
 			case float64:
-				config.ProviderID = big.NewInt(int64(val))
+				bcfg.ProviderID = big.NewInt(int64(val))
 			case string:
 				if i, ok := new(big.Int).SetString(val, 10); ok {
-					config.ProviderID = i
+					bcfg.ProviderID = i
 				}
 			}
 		}
 	}
-	// Parse provider_wallet if present
-	if cfg.IsSet("bidengine.provider_wallet") {
-		if v := cfg.GetString("bidengine.provider_wallet", ""); v != "" {
-			config.ProviderWallet = common.HexToAddress(v)
-		}
-	}
 
 	// If not set, use default values (should be set by application)
-	if config.ProviderID == nil {
-		config.ProviderID = big.NewInt(0)
+	if bcfg.ProviderID == nil {
+		bcfg.ProviderID = big.NewInt(0)
 	}
-	if config.ProviderWallet == (common.Address{}) {
-		config.ProviderWallet = common.Address{}
+	if bcfg.ProviderWallet == (common.Address{}) {
+		bcfg.ProviderWallet = common.Address{}
 	}
 
 	// Parse profit margins from percentage values
 	minBidPercent := cfg.GetInt("bidengine.min_bid_percent", 70)
 	maxBidPercent := cfg.GetInt("bidengine.max_bid_percent", 95)
-	config.BidStrategy.MinProfitMargin = float64(minBidPercent) / 100.0
-	config.BidStrategy.MaxProfitMargin = float64(maxBidPercent) / 100.0
+	bcfg.BidStrategy.MinProfitMargin = float64(minBidPercent) / 100.0
+	bcfg.BidStrategy.MaxProfitMargin = float64(maxBidPercent) / 100.0
 
 	// Parse strategy parameters (use new structure if available, fallback to defaults)
 	if cfg.IsSet("bidengine.strategy.min_profit_margin") {
 		if val := cfg.Get("bidengine.strategy.min_profit_margin"); val != nil {
 			if f, ok := val.(float64); ok {
-				config.BidStrategy.MinProfitMargin = f
+				bcfg.BidStrategy.MinProfitMargin = f
 			}
 		}
 	}
 	if cfg.IsSet("bidengine.strategy.max_profit_margin") {
 		if val := cfg.Get("bidengine.strategy.max_profit_margin"); val != nil {
 			if f, ok := val.(float64); ok {
-				config.BidStrategy.MaxProfitMargin = f
+				bcfg.BidStrategy.MaxProfitMargin = f
 			}
 		}
 	}
 	if cfg.IsSet("bidengine.strategy.competitive_factor") {
 		if val := cfg.Get("bidengine.strategy.competitive_factor"); val != nil {
 			if f, ok := val.(float64); ok {
-				config.BidStrategy.CompetitiveFactor = f
+				bcfg.BidStrategy.CompetitiveFactor = f
 			}
 		}
 	} else {
-		config.BidStrategy.CompetitiveFactor = 0.10 // Default value
+		bcfg.BidStrategy.CompetitiveFactor = 0.10 // Default value
 	}
 	if cfg.IsSet("bidengine.strategy.market_adjustment") {
 		if val := cfg.Get("bidengine.strategy.market_adjustment"); val != nil {
 			if f, ok := val.(float64); ok {
-				config.BidStrategy.MarketAdjustment = f
+				bcfg.BidStrategy.MarketAdjustment = f
 			}
 		}
 	} else {
-		config.BidStrategy.MarketAdjustment = 0.05 // Default value
+		bcfg.BidStrategy.MarketAdjustment = 0.05 // Default value
 	}
 
 	// Parse resource weights (use new structure if available, fallback to defaults)
-	config.BidStrategy.ResourceWeight = types.ResourceWeight{
+	bcfg.BidStrategy.ResourceWeight = types.ResourceWeight{
 		CPU:     0.25, // Default values
 		GPU:     0.35,
 		Memory:  0.20,
@@ -248,47 +244,47 @@ func ParseBidEngineConfigFromC(cfg *config.C) (*types.BidEngineConfig, error) {
 	if cfg.IsSet("bidengine.strategy.resource_weights") {
 		if val := cfg.Get("bidengine.strategy.resource_weights.cpu"); val != nil {
 			if f, ok := val.(float64); ok {
-				config.BidStrategy.ResourceWeight.CPU = f
+				bcfg.BidStrategy.ResourceWeight.CPU = f
 			}
 		}
 		if val := cfg.Get("bidengine.strategy.resource_weights.gpu"); val != nil {
 			if f, ok := val.(float64); ok {
-				config.BidStrategy.ResourceWeight.GPU = f
+				bcfg.BidStrategy.ResourceWeight.GPU = f
 			}
 		}
 		if val := cfg.Get("bidengine.strategy.resource_weights.memory"); val != nil {
 			if f, ok := val.(float64); ok {
-				config.BidStrategy.ResourceWeight.Memory = f
+				bcfg.BidStrategy.ResourceWeight.Memory = f
 			}
 		}
 		if val := cfg.Get("bidengine.strategy.resource_weights.disk"); val != nil {
 			if f, ok := val.(float64); ok {
-				config.BidStrategy.ResourceWeight.Disk = f
+				bcfg.BidStrategy.ResourceWeight.Disk = f
 			}
 		}
 		if val := cfg.Get("bidengine.strategy.resource_weights.network"); val != nil {
 			if f, ok := val.(float64); ok {
-				config.BidStrategy.ResourceWeight.Network = f
+				bcfg.BidStrategy.ResourceWeight.Network = f
 			}
 		}
 	}
 
 	// Parse operational parameters
-	config.MaxConcurrentBids = cfg.GetInt("bidengine.max_concurrent_bids", 10)
-	config.BidTimeout = cfg.GetDuration("bidengine.bid_timeout", 30*time.Second)
-	config.OrderSyncInterval = cfg.GetDuration("bidengine.order_sync_interval", 30*time.Second)
-	config.BidCheckInterval = cfg.GetDuration("bidengine.bid_check_interval", 60*time.Second)
+	bcfg.MaxConcurrentBids = cfg.GetInt("bidengine.max_concurrent_bids", 10)
+	bcfg.BidTimeout = cfg.GetDuration("bidengine.bid_timeout", 30*time.Second)
+	bcfg.OrderSyncInterval = cfg.GetDuration("bidengine.order_sync_interval", 30*time.Second)
+	bcfg.BidCheckInterval = cfg.GetDuration("bidengine.bid_check_interval", 60*time.Second)
 
 	// Parse logging configuration
-	config.LogLevel = cfg.GetString("logging.level", "INFO")
-	config.LogFile = cfg.GetString("logging.file_path", "")
+	bcfg.LogLevel = cfg.GetString("logging.level", "INFO")
+	bcfg.LogFile = cfg.GetString("logging.file_path", "")
 
 	// Validate the configuration
-	if err := ValidateBidEngineConfig(config); err != nil {
+	if err := ValidateBidEngineConfig(bcfg); err != nil {
 		return nil, fmt.Errorf("invalid bid engine configuration: %w", err)
 	}
 
-	return config, nil
+	return bcfg, nil
 }
 
 // DefaultBidEngineConfig creates a default configuration for the bid engine
@@ -336,9 +332,7 @@ func ValidateBidEngineConfig(config *types.BidEngineConfig) error {
 	if config.ProviderID == nil {
 		return fmt.Errorf("provider ID is required")
 	}
-	if config.ProviderWallet == (common.Address{}) {
-		return fmt.Errorf("provider wallet is required")
-	}
+
 	if config.MaxConcurrentBids <= 0 {
 		return fmt.Errorf("max concurrent bids must be positive")
 	}

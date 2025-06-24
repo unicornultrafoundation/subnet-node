@@ -13,11 +13,11 @@ import (
 // Engine implements PricingEngine interface
 type Engine struct {
 	config *types.BidEngineConfig
-	logger *logrus.Logger
+	logger *logrus.Entry
 }
 
 // NewEngine creates a new Engine instance
-func NewEngine(config *types.BidEngineConfig, logger *logrus.Logger) *Engine {
+func NewEngine(config *types.BidEngineConfig, logger *logrus.Entry) *Engine {
 	return &Engine{
 		config: config,
 		logger: logger,

@@ -26,7 +26,7 @@ type ExtendedBid struct {
 type Manager struct {
 	config          *types.BidEngineConfig
 	bidMarket       types.BidMarketContract
-	logger          *logrus.Logger
+	logger          *logrus.Entry
 	metrics         types.Metrics
 	storage         types.Storage
 	resourceManager types.ResourceManager
@@ -47,7 +47,7 @@ type Manager struct {
 func NewManager(
 	config *types.BidEngineConfig,
 	bidMarket types.BidMarketContract,
-	logger *logrus.Logger,
+	logger *logrus.Entry,
 	metrics types.Metrics,
 	datastore ds.Datastore,
 	resourceManager types.ResourceManager,

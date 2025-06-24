@@ -41,7 +41,7 @@ type mockMetrics struct{ types.Metrics }
 func (m *mockMetrics) IncrementOrdersTracked() {}
 
 func TestTrackAndUntrackOrder(t *testing.T) {
-	logger := logrus.New()
+	logger := logrus.WithField("service", "bidengine")
 	monitor := NewMonitor(
 		&types.BidEngineConfig{},
 		&mockBidMarket{},
@@ -69,7 +69,7 @@ func TestTrackAndUntrackOrder(t *testing.T) {
 }
 
 func TestGetTrackedOrders(t *testing.T) {
-	logger := logrus.New()
+	logger := logrus.WithField("service", "bidengine")
 	monitor := NewMonitor(
 		&types.BidEngineConfig{},
 		&mockBidMarket{},
@@ -88,7 +88,7 @@ func TestGetTrackedOrders(t *testing.T) {
 }
 
 func TestMonitorOrderStatus(t *testing.T) {
-	logger := logrus.New()
+	logger := logrus.WithField("service", "bidengine")
 	monitor := NewMonitor(
 		&types.BidEngineConfig{},
 		&mockBidMarket{},
@@ -109,7 +109,7 @@ func TestMonitorOrderStatus(t *testing.T) {
 }
 
 func TestRegisterEventHandlerAndEmit(t *testing.T) {
-	logger := logrus.New()
+	logger := logrus.WithField("service", "bidengine")
 	monitor := NewMonitor(
 		&types.BidEngineConfig{},
 		&mockBidMarket{},
