@@ -82,3 +82,7 @@ func (s *Service) CleanupDeployment(ctx context.Context, orderID string) error {
 
 	return nil
 }
+
+func (s *Service) GetDeploymentLogs(ctx context.Context, orderID string) ([]*types.ServiceLog, error) {
+	return s.kubeClient.GetDeploymentLogs(ctx, orderID, nil)
+}

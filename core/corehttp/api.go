@@ -4,6 +4,7 @@ import (
 	"net"
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/unicornultrafoundation/subnet-node/core"
 	"github.com/unicornultrafoundation/subnet-node/core/coreapi"
 	"github.com/unicornultrafoundation/subnet-node/internal/api"
@@ -32,6 +33,12 @@ func APIOption() ServeOption {
 		if cfg.GetBool("provider.enable", false) {
 			server.RegisterName("app", api.NewAppAPI(n.Apps))
 			server.RegisterName("deployments", api.NewDeployerAPI(n.Deployer))
+
+			wsDeployerApi := api.NewDeployerWSAPI(n.Deployer)
+			// Create a mux by Chi and register the handler
+			wsMux := chi.NewRouter()
+			wsMux.HandleFunc("/deployments/{orderID}/logs", wsDeployerApi.GetLogsHandler())
+			smux.Handle("/ws/", http.StripPrefix("/ws", wsMux))
 		}
 
 		server.RegisterName("account", api.NewAccountAPI(n.Account))
