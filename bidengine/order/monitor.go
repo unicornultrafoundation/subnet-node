@@ -257,13 +257,22 @@ func (om *Monitor) TrackOrder(ctx context.Context, orderID *big.Int) error {
 	om.logger.Info("Started tracking order", "orderID", orderID)
 	om.metrics.IncrementOrdersTracked()
 
-	// Emit new order event
-	om.emitEvent(&types.OrderEvent{
+	// Create event before unlocking
+	event := &types.OrderEvent{
 		Type:      types.OrderEventNew,
 		OrderID:   orderID,
 		Order:     order,
 		Timestamp: time.Now(),
-	})
+	}
+
+	// Unlock before emitting event to avoid deadlock
+	om.mu.Unlock()
+
+	// Emit new order event (no lock needed)
+	om.emitEvent(event)
+
+	// Re-lock for defer
+	om.mu.Lock()
 
 	return nil
 }

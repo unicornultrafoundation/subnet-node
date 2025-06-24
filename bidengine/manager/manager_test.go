@@ -210,6 +210,17 @@ func (m *mockMetrics) RecordRevenue(amount *big.Int)                        {}
 func (m *mockMetrics) RecordProfit(amount *big.Int)                         {}
 func (m *mockMetrics) RecordCost(amount *big.Int)                           {}
 
+// Local struct for bidMarket mock for TestSubmitBid
+type bidMarketMock struct{ mockBidMarket }
+
+func (b *bidMarketMock) SubmitBid(ctx context.Context, orderID, pricePerSecond, providerID, machineID *big.Int) (*ethtypes.Transaction, error) {
+	tx := ethtypes.NewTx(&ethtypes.LegacyTx{})
+	return tx, nil
+}
+func (b *bidMarketMock) GetBidIndexFromTransaction(ctx context.Context, tx *ethtypes.Transaction, orderID *big.Int) (*big.Int, error) {
+	return big.NewInt(0), nil
+}
+
 func TestTrackAndUntrackBid(t *testing.T) {
 	logger := logrus.New()
 	manager := NewManager(
@@ -261,15 +272,37 @@ func TestGetTrackedBids(t *testing.T) {
 	ctx := context.Background()
 	orderID := big.NewInt(456)
 	bidIndex := big.NewInt(0)
-	_ = manager.TrackBid(ctx, orderID, bidIndex)
 
+	// Track the bid
+	err := manager.TrackBid(ctx, orderID, bidIndex)
+	assert.NoError(t, err)
+
+	// Debug: check if bid was actually tracked
+	assert.Equal(t, 1, len(manager.pendingBids))
+
+	// Get tracked bids
 	bids, err := manager.GetTrackedBids(ctx)
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(bids))
-	ids, ok := bids[orderID]
-	assert.True(t, ok)
-	assert.Greater(t, len(ids), 0)
-	assert.Equal(t, orderID.String(), ids[0].String())
+
+	// Debug: print the actual bids map
+	t.Logf("Bids map: %+v", bids)
+	t.Logf("OrderID: %s", orderID.String())
+
+	// Find the correct key in the map (handle potential plus sign)
+	var foundOrderID *big.Int
+	var foundIds []*big.Int
+	for key, ids := range bids {
+		if key.Cmp(orderID) == 0 {
+			foundOrderID = key
+			foundIds = ids
+			break
+		}
+	}
+
+	assert.NotNil(t, foundOrderID, "OrderID should exist in bids map")
+	assert.Greater(t, len(foundIds), 0, "Bid slice should not be empty")
+	assert.Equal(t, bidIndex.String(), foundIds[0].String(), "Bid index should match")
 }
 
 func TestSubmitBid(t *testing.T) {
@@ -294,6 +327,8 @@ func TestSubmitBid(t *testing.T) {
 	pricePerSecond := big.NewInt(100)
 	machineID := big.NewInt(1)
 
+	manager.bidMarket = &bidMarketMock{}
+
 	result, err := manager.SubmitBid(ctx, orderID, pricePerSecond, machineID)
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
@@ -317,6 +352,9 @@ func TestTryBidOnOrder(t *testing.T) {
 
 	ctx := context.Background()
 	orderID := big.NewInt(123)
+
+	// Use bidMarketMock with valid SubmitBid and GetBidIndexFromTransaction
+	manager.bidMarket = &bidMarketMock{}
 
 	order := &types.Order{
 		ID:          orderID,
@@ -347,6 +385,9 @@ func TestHandleOrderCreate(t *testing.T) {
 		&mockOrderMonitor{},
 	)
 	manager.storage = &mockStorage{}
+
+	// Use bidMarketMock with valid SubmitBid and GetBidIndexFromTransaction
+	manager.bidMarket = &bidMarketMock{}
 
 	orderID := big.NewInt(123)
 	order := &types.Order{

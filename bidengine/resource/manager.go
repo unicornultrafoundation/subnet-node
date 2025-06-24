@@ -303,17 +303,17 @@ func (rm *Manager) GetMachine(ctx context.Context, machineID *big.Int) (*types.M
 
 // AllocateResources allocates resources for an order and persists to database
 func (rm *Manager) AllocateResources(ctx context.Context, orderID *big.Int, machine *types.Machine, usage *types.ResourceUsage) error {
-	rm.mu.Lock()
-	defer rm.mu.Unlock()
-
 	orderIDStr := orderID.String()
 
-	// Check if resources are already allocated for this order
+	// Check if resources are already allocated for this order (need lock for read)
+	rm.mu.RLock()
 	if _, exists := rm.allocatedResources[orderIDStr]; exists {
+		rm.mu.RUnlock()
 		return types.ErrResourcesAlreadyAllocated
 	}
+	rm.mu.RUnlock()
 
-	// Validate that machine can allocate the required resources
+	// Validate that machine can allocate the required resources (no lock needed, uses RLock internally)
 	canAllocate, err := rm.CanAllocateResources(ctx, machine, usage)
 	if err != nil {
 		return fmt.Errorf("failed to check resource availability: %w", err)
@@ -321,6 +321,15 @@ func (rm *Manager) AllocateResources(ctx context.Context, orderID *big.Int, mach
 
 	if !canAllocate {
 		return types.ErrInsufficientResources
+	}
+
+	// Now lock for write to allocate
+	rm.mu.Lock()
+	defer rm.mu.Unlock()
+
+	// Double check in case of race
+	if _, exists := rm.allocatedResources[orderIDStr]; exists {
+		return types.ErrResourcesAlreadyAllocated
 	}
 
 	// Allocate resources in memory
