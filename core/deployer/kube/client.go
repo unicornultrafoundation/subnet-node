@@ -6,11 +6,13 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
 type KubeClient struct {
 	Client             kubernetes.Interface
+	Config             *rest.Config
 	Logger             *logrus.Logger
 	DefaultServiceType string
 	LocalhostEnabled   bool
@@ -29,6 +31,7 @@ func NewKubeClient(ctx context.Context, kubeconfig string, logger *logrus.Logger
 
 	return &KubeClient{
 		Client:             clientset,
+		Config:             config,
 		Logger:             logger,
 		DefaultServiceType: defaultServiceType,
 		LocalhostEnabled:   localhostEnabled,

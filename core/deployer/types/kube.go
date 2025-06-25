@@ -18,3 +18,7 @@ type ServiceLogMessage struct {
 	Name    string `json:"name"`
 	Message string `json:"message"`
 }
+
+type ExecResult interface {
+	ExitCode() int
+}

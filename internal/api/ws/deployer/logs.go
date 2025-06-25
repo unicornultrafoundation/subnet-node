@@ -1,4 +1,4 @@
-package api
+package deployer
 
 import (
 	"bufio"
@@ -10,38 +10,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/gorilla/websocket"
-	"github.com/sirupsen/logrus"
-	"github.com/unicornultrafoundation/subnet-node/core/deployer"
 	"github.com/unicornultrafoundation/subnet-node/core/deployer/types"
+	"github.com/unicornultrafoundation/subnet-node/internal/api/ws"
 )
-
-const (
-	// Time allowed writing the file to the client.
-	pingWait = 15 * time.Second
-
-	// Time allowed reading the next pong message from the client.
-	pongWait = 15 * time.Second
-
-	// Send pings to a client with this period. Must be less than pongWait.
-	pingPeriod = 10 * time.Second
-)
-
-var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool { return true },
-}
-
-// Rename DeployerWS to API for go-ethereum compatibility
-type DeployerWSAPI struct {
-	deployerService *deployer.Service
-	logger          *logrus.Logger
-}
-
-func NewDeployerWSAPI(deployerService *deployer.Service) *DeployerWSAPI {
-	return &DeployerWSAPI{
-		deployerService: deployerService,
-		logger:          logrus.New(),
-	}
-}
 
 // GetLogsHandler returns an http.HandlerFunc that extracts orderID using chi path parameters.
 func (api *DeployerWSAPI) GetLogsHandler() http.HandlerFunc {
@@ -56,35 +27,12 @@ func (api *DeployerWSAPI) GetLogsHandler() http.HandlerFunc {
 	}
 }
 
-// Add a helper to setup the websocket connection
-func setupWebSocket(w http.ResponseWriter, r *http.Request, logger *logrus.Entry) (*websocket.Conn, error) {
-	conn, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		logger.WithError(err).Error("Failed to upgrade WebSocket connection")
-		// Return a proper error response instead of letting the handler continue
-		http.Error(w, fmt.Sprintf("WebSocket upgrade failed: %v", err), http.StatusBadRequest)
-		return nil, err
-	}
-
-	conn.SetPongHandler(func(string) error {
-		return conn.SetReadDeadline(time.Now().Add(pingWait))
-	})
-
-	logger.Debug("WebSocket connection established")
-
-	// Set up connection with proper read deadline
-	conn.SetReadLimit(512)                                 // Limit message size
-	conn.SetReadDeadline(time.Now().Add(30 * time.Second)) // Initial read deadline
-
-	return conn, nil
-}
-
 // HandleLogs handles WebSocket connections for log streaming
 func (api *DeployerWSAPI) HandleLogs(w http.ResponseWriter, r *http.Request, orderID string) {
 	logger := api.logger.WithField("orderID", orderID)
 	logger.Debug("WebSocket logs connection requested")
 
-	conn, err := setupWebSocket(w, r, logger)
+	conn, err := ws.SetupWebSocket(w, r, logger)
 	if err != nil {
 		return
 	}
@@ -117,8 +65,9 @@ func (api *DeployerWSAPI) HandleLogs(w http.ResponseWriter, r *http.Request, ord
 	logs, err := api.deployerService.GetDeploymentLogs(ctx, orderID)
 	if err != nil {
 		logger.WithError(err).Error("Failed to get deployment logs")
-		errorMsg := fmt.Sprintf(`{"error":"failed to get logs: %s"}`, err.Error())
-		conn.WriteMessage(websocket.TextMessage, []byte(errorMsg))
+		if err := ws.SendErrorResponse(conn, fmt.Sprintf("failed to get logs: %s", err.Error())); err != nil {
+			logger.WithError(err).Error("Failed to send error response")
+		}
 		return
 	}
 	// Defer cleanup of all log streams
@@ -166,7 +115,7 @@ func (api *DeployerWSAPI) HandleLogs(w http.ResponseWriter, r *http.Request, ord
 		close(donech)
 	}()
 
-	pingTicker := time.NewTicker(pingPeriod)
+	pingTicker := time.NewTicker(ws.PingPeriod)
 	defer pingTicker.Stop()
 
 	// Main event loop
@@ -178,11 +127,11 @@ func (api *DeployerWSAPI) HandleLogs(w http.ResponseWriter, r *http.Request, ord
 				return
 			}
 		case <-pingTicker.C:
-			if err = conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(5*time.Second)); err != nil {
+			if err = ws.SendPing(conn); err != nil {
 				logger.WithError(err).Error("Failed to send ping")
 				return
 			}
-			if err = conn.SetReadDeadline(time.Now().Add(pongWait)); err != nil {
+			if err = conn.SetReadDeadline(time.Now().Add(ws.PongWait)); err != nil {
 				logger.WithError(err).Error("Failed to set read deadline")
 				return
 			}

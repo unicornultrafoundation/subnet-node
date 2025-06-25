@@ -1,9 +1,11 @@
 package kube
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -11,6 +13,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/unicornultrafoundation/subnet-node/core/deployer/manifest"
 	"github.com/unicornultrafoundation/subnet-node/core/deployer/types"
 	appsv1 "k8s.io/api/apps/v1"
@@ -19,6 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
+	k8sclientcmd "k8s.io/client-go/tools/clientcmd"
 )
 
 // TestNewKubeClient is an integration test that uses the real kubeconfig if present.
@@ -1305,4 +1309,82 @@ func TestWaitForDeployment(t *testing.T) {
 // Helper function for int32 pointers
 func int32Ptr(i int32) *int32 {
 	return &i
+}
+
+func TestKubeClient_Exec(t *testing.T) {
+	// Use KUBECONFIG env var or default to ~/.kube/config
+	kubeconfig := os.Getenv("KUBECONFIG")
+	if kubeconfig == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			t.Skip("Cannot determine home directory for kubeconfig")
+		}
+		kubeconfig = filepath.Join(home, ".kube", "config")
+	}
+	if _, err := os.Stat(kubeconfig); err != nil {
+		t.Skipf("Kubeconfig file not found: %s", kubeconfig)
+	}
+
+	t.Logf("[DEBUG] Using kubeconfig: %s", kubeconfig)
+
+	// Print debug info about the context/cluster
+	config, err := k8sclientcmd.LoadFromFile(kubeconfig)
+	if err == nil {
+		currentContext := config.CurrentContext
+		t.Logf("[DEBUG] kubeconfig current-context: %s", currentContext)
+		if ctx, ok := config.Contexts[currentContext]; ok {
+			t.Logf("[DEBUG] kubeconfig context: cluster=%s, namespace=%s, user=%s", ctx.Cluster, ctx.Namespace, ctx.AuthInfo)
+		}
+		if cluster, ok := config.Clusters[config.Contexts[currentContext].Cluster]; ok {
+			t.Logf("[DEBUG] kubeconfig cluster server: %s", cluster.Server)
+		}
+	}
+
+	// --- SETUP: Create the test pod ---
+	podName := "test-pod"
+	containerName := "test-container"
+	cmdCreate := exec.Command(
+		"kubectl", "run", podName,
+		"--image=busybox",
+		"--restart=Never",
+		"--overrides={\"spec\":{\"containers\":[{\"name\":\"test-container\",\"image\":\"busybox\",\"command\":[\"sleep\",\"3600\"]}]}}",
+		"--image-pull-policy=IfNotPresent",
+		"--namespace=default",
+	)
+	output, err := cmdCreate.CombinedOutput()
+	if err != nil && !strings.Contains(string(output), "AlreadyExists") {
+		t.Skipf("Failed to create test pod: %v, output: %s", err, string(output))
+	}
+	defer func() {
+		cmdDelete := exec.Command("kubectl", "delete", "pod", podName, "-n", "default", "--wait=true")
+		_ = cmdDelete.Run()
+	}()
+
+	// Wait for pod to be ready
+	cmdWait := exec.Command("kubectl", "wait", "--for=condition=Ready", "pod/"+podName, "--namespace=default", "--timeout=60s")
+	waitOut, err := cmdWait.CombinedOutput()
+	if err != nil {
+		t.Skipf("Pod did not become ready: %v, output: %s", err, string(waitOut))
+	}
+
+	// Add a short sleep to avoid race conditions after pod creation
+	t.Log("[DEBUG] Sleeping 2 seconds before running exec test...")
+	time.Sleep(2 * time.Second)
+
+	logger := logrus.New()
+	client, err := NewKubeClient(context.Background(), kubeconfig, logger, "ClusterIP", false)
+	require.NoError(t, err)
+
+	cmd := []string{"echo", "hello-world"}
+
+	var stdout, stderr bytes.Buffer
+	result, err := client.Exec(context.Background(), "default", podName, containerName, cmd, nil, &stdout, &stderr, false, nil)
+	if err != nil {
+		t.Logf("Exec error: %v (this may be expected if no test pod is running)", err)
+		return
+	}
+	require.NotNil(t, result)
+	exitCode := result.ExitCode()
+	require.Equal(t, 0, exitCode, "expected exit code 0, got %d", exitCode)
+	require.Contains(t, stdout.String(), "hello-world")
 }

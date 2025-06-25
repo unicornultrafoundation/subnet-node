@@ -8,6 +8,7 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/core"
 	"github.com/unicornultrafoundation/subnet-node/core/coreapi"
 	"github.com/unicornultrafoundation/subnet-node/internal/api"
+	wsDeployerAPI "github.com/unicornultrafoundation/subnet-node/internal/api/ws/deployer"
 	"github.com/unicornultrafoundation/subnet-node/rpc"
 )
 
@@ -34,10 +35,11 @@ func APIOption() ServeOption {
 			server.RegisterName("app", api.NewAppAPI(n.Apps))
 			server.RegisterName("deployments", api.NewDeployerAPI(n.Deployer))
 
-			wsDeployerApi := api.NewDeployerWSAPI(n.Deployer)
+			wsDeployer := wsDeployerAPI.NewDeployerWSAPI(n.Deployer)
 			// Create a mux by Chi and register the handler
 			wsMux := chi.NewRouter()
-			wsMux.HandleFunc("/deployments/{orderID}/logs", wsDeployerApi.GetLogsHandler())
+			wsMux.HandleFunc("/deployments/{orderID}/logs", wsDeployer.GetLogsHandler())
+			wsMux.HandleFunc("/deployments/{orderID}/exec", wsDeployer.GetExecHandler())
 			smux.Handle("/ws/", http.StripPrefix("/ws", wsMux))
 		}
 
