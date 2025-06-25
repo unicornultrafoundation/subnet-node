@@ -18,6 +18,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/routing"
 	ma "github.com/multiformats/go-multiaddr"
 	"github.com/sirupsen/logrus"
+	"github.com/unicornultrafoundation/subnet-node/bidengine"
 	"github.com/unicornultrafoundation/subnet-node/core/account"
 	"github.com/unicornultrafoundation/subnet-node/core/apps"
 	"github.com/unicornultrafoundation/subnet-node/core/apps/verifier"
@@ -69,6 +70,8 @@ type SubnetNode struct {
 	DHTClient routing.Routing `name:"dhtc" optional:"true"`
 
 	P2P *p2p.P2P `optional:"true"`
+
+	BidEngine *bidengine.BidEngine `optional:"true"`
 
 	stop func() error
 
