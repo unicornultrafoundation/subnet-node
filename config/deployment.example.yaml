@@ -1,0 +1,153 @@
+# Deployment Configuration Example
+# This file contains configuration for the deployment module
+
+deployment:
+  # Working directory for deployments
+  work_dir: "./deployments"
+  
+  # Port pool configuration
+  port_pool:
+    start: 10000  # Start port for allocation
+    end: 20000    # End port for allocation
+  
+  # Resource limits per tenant
+  resource_limits:
+    max_cpu_cores: 8        # Maximum CPU cores per tenant
+    max_memory_gb: 16       # Maximum memory in GB per tenant
+    max_disk_gb: 100        # Maximum disk space in GB per tenant
+    max_containers: 10      # Maximum containers per tenant
+    max_ports: 50           # Maximum ports per tenant
+  
+  # Network configuration
+  network:
+    default_driver: "bridge"
+    subnet_pool:
+      start: "172.16.0.0/12"  # Start subnet for tenant networks
+      end: "172.31.0.0/12"    # End subnet for tenant networks
+    enable_ipv6: false
+  
+  # Storage configuration
+  storage:
+    type: "file"  # file, database
+    path: "./deployment_data"
+    database:
+      driver: "sqlite3"
+      dsn: "./deployment.db"
+  
+  # Event configuration
+  events:
+    enabled: true
+    buffer_size: 1000
+    retention_days: 30
+  
+  # Health check configuration
+  health_check:
+    enabled: true
+    interval: "60s"
+    timeout: "30s"
+    retries: 3
+  
+  # Logging configuration
+  logging:
+    level: "info"
+    format: "json"
+    file: "./logs/deployment.log"
+    max_size: 100  # MB
+    max_age: 30    # days
+    max_backups: 10
+  
+  # Security configuration
+  security:
+    # Enable isolation between tenants
+    tenant_isolation: true
+    
+    # Enable resource quotas
+    resource_quotas: true
+    
+    # Enable network isolation
+    network_isolation: true
+    
+    # Allowed image registries
+    allowed_registries:
+      - "docker.io"
+      - "gcr.io"
+      - "quay.io"
+    
+    # Blocked image patterns
+    blocked_images:
+      - "malware/*"
+      - "test/*"
+  
+  # Monitoring configuration
+  monitoring:
+    enabled: true
+    metrics_port: 9090
+    prometheus_enabled: true
+    
+    # Resource monitoring intervals
+    cpu_interval: "30s"
+    memory_interval: "30s"
+    disk_interval: "60s"
+    network_interval: "30s"
+  
+  # Backup configuration
+  backup:
+    enabled: true
+    schedule: "0 2 * * *"  # Daily at 2 AM
+    retention_days: 7
+    storage_path: "./backups"
+  
+  # Templates configuration
+  templates:
+    # Default templates for common applications
+    nginx:
+      path: "./templates/nginx.yaml"
+      description: "Nginx web server"
+    
+    postgres:
+      path: "./templates/postgres.yaml"
+      description: "PostgreSQL database"
+    
+    redis:
+      path: "./templates/redis.yaml"
+      description: "Redis cache"
+    
+    wordpress:
+      path: "./templates/wordpress.yaml"
+      description: "WordPress CMS"
+  
+  # Docker Compose configuration
+  compose:
+    # Docker Compose version to use
+    version: "3.8"
+    
+    # Default environment variables
+    default_env:
+      TZ: "UTC"
+      LANG: "en_US.UTF-8"
+    
+    # Default restart policy
+    default_restart_policy: "unless-stopped"
+    
+    # Default logging configuration
+    default_logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+  
+  # Tenant configuration
+  tenant:
+    # Default tenant settings
+    default_labels:
+      environment: "production"
+      managed_by: "subnet-node"
+    
+    # Auto-cleanup settings
+    auto_cleanup:
+      enabled: true
+      inactive_days: 30
+      check_interval: "24h"
+    
+    # Resource allocation strategy
+    resource_strategy: "fair"  # fair, priority, custom 

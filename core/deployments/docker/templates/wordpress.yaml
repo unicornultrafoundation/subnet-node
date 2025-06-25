@@ -1,0 +1,103 @@
+version: '3.8'
+
+services:
+  wordpress:
+    image: wordpress:php8.1-apache
+    container_name: "{{.TenantID}}_wordpress"
+    restart: unless-stopped
+    ports:
+      - "{{.Port}}:80"
+    volumes:
+      - wordpress_data:/var/www/html
+      - ./uploads.ini:/usr/local/etc/php/conf.d/uploads.ini:ro
+    environment:
+      - WORDPRESS_DB_HOST=mysql:3306
+      - WORDPRESS_DB_NAME={{.Database}}
+      - WORDPRESS_DB_USER={{.Username}}
+      - WORDPRESS_DB_PASSWORD={{.Password}}
+      - WORDPRESS_TABLE_PREFIX={{.TablePrefix}}
+      - WORDPRESS_DEBUG={{.Debug}}
+      - WORDPRESS_CONFIG_EXTRA=
+        define('WP_HOME','http://{{.Domain}}');
+        define('WP_SITEURL','http://{{.Domain}}');
+    labels:
+      tenant.id: "{{.TenantID}}"
+      app: wordpress
+      version: "{{.Version}}"
+    networks:
+      - tenant_network
+    depends_on:
+      - mysql
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/wp-admin/install.php"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: {{.MemoryLimit}}
+          cpus: '{{.CPULimit}}'
+        reservations:
+          memory: {{.MemoryReservation}}
+          cpus: '{{.CPUReservation}}'
+
+  mysql:
+    image: mysql:8.0
+    container_name: "{{.TenantID}}_mysql"
+    restart: unless-stopped
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./mysql.cnf:/etc/mysql/conf.d/custom.cnf:ro
+    environment:
+      - MYSQL_ROOT_PASSWORD={{.RootPassword}}
+      - MYSQL_DATABASE={{.Database}}
+      - MYSQL_USER={{.Username}}
+      - MYSQL_PASSWORD={{.Password}}
+    labels:
+      tenant.id: "{{.TenantID}}"
+      app: mysql
+      version: "{{.Version}}"
+    networks:
+      - tenant_network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: {{.MySQLMemoryLimit}}
+          cpus: '{{.MySQLCPULimit}}'
+        reservations:
+          memory: {{.MySQLMemoryReservation}}
+          cpus: '{{.MySQLCPUReservation}}'
+
+volumes:
+  wordpress_data:
+    driver: local
+    labels:
+      tenant.id: "{{.TenantID}}"
+  mysql_data:
+    driver: local
+    labels:
+      tenant.id: "{{.TenantID}}"
+
+networks:
+  tenant_network:
+    driver: bridge
+    labels:
+      tenant.id: "{{.TenantID}}" 
