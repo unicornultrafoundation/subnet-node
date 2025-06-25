@@ -86,6 +86,14 @@ func (c *KubeClient) getDeploymentStatusInternal(ctx context.Context, deployment
 		return nil, fmt.Errorf("failed to list services: %w", err)
 	}
 
+	// Get all pods in the namespace
+	pods, err := c.Client.CoreV1().Pods(deploymentID).List(ctx, metav1.ListOptions{
+		LabelSelector: fmt.Sprintf("deploymentID=%s", deploymentID),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list pods: %w", err)
+	}
+
 	// Get all ingresses in the namespace
 	ingresses, err := c.Client.NetworkingV1().Ingresses(deploymentID).List(ctx, metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("deploymentID=%s", deploymentID),
@@ -120,7 +128,124 @@ func (c *KubeClient) getDeploymentStatusInternal(ctx context.Context, deployment
 
 	// Build service statuses
 	var serviceStatuses []types.ServiceStatus
+	var podStatuses []types.PodStatus
 	deploymentState := types.DeploymentStateRunning
+
+	// Process pods first to build pod statuses
+	for _, pod := range pods.Items {
+		// Extract service information from pod labels
+		serviceName := pod.Labels["service"]
+		groupName := pod.Labels["app"]
+
+		// Determine pod state based on pod phase
+		var podState types.PodState
+		switch pod.Status.Phase {
+		case corev1.PodRunning:
+			podState = types.PodStateRunning
+		case corev1.PodPending:
+			podState = types.PodStatePending
+		case corev1.PodFailed:
+			podState = types.PodStateFailed
+		case corev1.PodSucceeded:
+			podState = types.PodStateStopped
+		default:
+			podState = types.PodStateUnknown
+		}
+
+		// Get container statuses
+		var containerStatuses []types.ContainerStatus
+		for _, container := range pod.Status.ContainerStatuses {
+			// Determine container state
+			var containerState string
+			if container.State.Running != nil {
+				containerState = "running"
+			} else if container.State.Waiting != nil {
+				containerState = "waiting"
+			} else if container.State.Terminated != nil {
+				containerState = "terminated"
+			} else {
+				containerState = "unknown"
+			}
+
+			containerStatus := types.ContainerStatus{
+				Name:         container.Name,
+				Image:        container.Image,
+				Ready:        container.Ready,
+				RestartCount: container.RestartCount,
+				State:        containerState,
+			}
+			if container.State.Running != nil {
+				containerStatus.StartedAt = container.State.Running.StartedAt.Format(time.RFC3339)
+			}
+			containerStatuses = append(containerStatuses, containerStatus)
+		}
+
+		// Get resource usage from pod spec
+		var resourceUsage *types.ResourceUsage
+		if len(pod.Spec.Containers) > 0 {
+			container := pod.Spec.Containers[0]
+			if container.Resources.Requests != nil {
+				resourceUsage = &types.ResourceUsage{
+					CPU:    container.Resources.Requests.Cpu().String(),
+					Memory: container.Resources.Requests.Memory().String(),
+				}
+			}
+		}
+
+		// Get restart count (max of all containers)
+		var maxRestartCount int32
+		for _, container := range pod.Status.ContainerStatuses {
+			if container.RestartCount > maxRestartCount {
+				maxRestartCount = container.RestartCount
+			}
+		}
+
+		// Get last restart time
+		var lastRestartTime string
+		for _, container := range pod.Status.ContainerStatuses {
+			if container.LastTerminationState.Terminated != nil {
+				restartTime := container.LastTerminationState.Terminated.FinishedAt.Format(time.RFC3339)
+				if lastRestartTime == "" || restartTime > lastRestartTime {
+					lastRestartTime = restartTime
+				}
+			}
+		}
+
+		// Get image from pod spec
+		var image string
+		if len(pod.Spec.Containers) > 0 {
+			image = pod.Spec.Containers[0].Image
+		}
+
+		// Determine if pod is ready by checking conditions
+		var podReady bool
+		for _, condition := range pod.Status.Conditions {
+			if condition.Type == corev1.PodReady {
+				podReady = condition.Status == corev1.ConditionTrue
+				break
+			}
+		}
+
+		podStatus := types.PodStatus{
+			Name:              pod.Name,
+			ServiceName:       serviceName,
+			Group:             groupName,
+			Image:             image,
+			State:             podState,
+			Phase:             string(pod.Status.Phase),
+			Ready:             podReady,
+			RestartCount:      maxRestartCount,
+			IP:                pod.Status.PodIP,
+			HostIP:            pod.Status.HostIP,
+			Resources:         resourceUsage,
+			CreatedAt:         pod.CreationTimestamp.Format(time.RFC3339),
+			StartedAt:         pod.Status.StartTime.Format(time.RFC3339),
+			LastRestartTime:   lastRestartTime,
+			ContainerStatuses: containerStatuses,
+		}
+
+		podStatuses = append(podStatuses, podStatus)
+	}
 
 	for _, deployment := range deployments.Items {
 		// Extract service information from deployment labels
@@ -288,6 +413,7 @@ func (c *KubeClient) getDeploymentStatusInternal(ctx context.Context, deployment
 	deploymentStatus := &types.DeploymentStatus{
 		State:      deploymentState,
 		Services:   serviceStatuses,
+		Pods:       podStatuses,
 		Endpoints:  endpointInfos,
 		CreatedAt:  time.Now().Format(time.RFC3339), // This should come from deployment metadata
 		UpdatedAt:  time.Now().Format(time.RFC3339),
@@ -297,6 +423,44 @@ func (c *KubeClient) getDeploymentStatusInternal(ctx context.Context, deployment
 	}
 
 	return deploymentStatus, nil
+}
+
+func (c *KubeClient) GetServiceStatus(ctx context.Context, deploymentID string, serviceName string) (*types.ServiceStatus, error) {
+	deploymentStatus, err := c.getDeploymentStatusInternal(ctx, deploymentID)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, svc := range deploymentStatus.Services {
+		if svc.Name == serviceName {
+			return &svc, nil
+		}
+	}
+
+	// If not found, return a not found status
+	return &types.ServiceStatus{
+		Name:  serviceName,
+		State: types.ServiceStateNotFound,
+	}, nil
+}
+
+func (c *KubeClient) GetPodStatus(ctx context.Context, deploymentID string, podName string) (*types.PodStatus, error) {
+	deploymentStatus, err := c.getDeploymentStatusInternal(ctx, deploymentID)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, pod := range deploymentStatus.Pods {
+		if pod.Name == podName {
+			return &pod, nil
+		}
+	}
+
+	// If not found, return a not found status
+	return &types.PodStatus{
+		Name:  podName,
+		State: types.PodStateUnknown,
+	}, nil
 }
 
 func parseTTL(ttlStr string) (int64, error) {

@@ -31,6 +31,7 @@ type DeploymentRequest struct {
 type DeploymentStatus struct {
 	State      DeploymentState `json:"state"`
 	Services   []ServiceStatus `json:"services"`
+	Pods       []PodStatus     `json:"pods"`
 	Endpoints  []EndpointInfo  `json:"endpoints"`
 	CreatedAt  string          `json:"createdAt"`
 	UpdatedAt  string          `json:"updatedAt"`
@@ -63,6 +64,46 @@ type ServiceStatus struct {
 	Ports             []ServicePort  `json:"ports"`
 	Resources         *ResourceUsage `json:"resources"`
 	LastUpdated       string         `json:"lastUpdated"`
+}
+
+// PodStatus represents the status of a pod within a deployment
+type PodStatus struct {
+	Name              string            `json:"name"`
+	ServiceName       string            `json:"serviceName"`
+	Group             string            `json:"group"`
+	Image             string            `json:"image"`
+	State             PodState          `json:"state"`
+	Phase             string            `json:"phase"`
+	Ready             bool              `json:"ready"`
+	RestartCount      int32             `json:"restartCount"`
+	IP                string            `json:"ip"`
+	HostIP            string            `json:"hostIP"`
+	Resources         *ResourceUsage    `json:"resources"`
+	CreatedAt         string            `json:"createdAt"`
+	StartedAt         string            `json:"startedAt"`
+	LastRestartTime   string            `json:"lastRestartTime"`
+	ContainerStatuses []ContainerStatus `json:"containerStatuses"`
+}
+
+// PodState represents the state of a pod
+type PodState string
+
+const (
+	PodStateRunning PodState = "running"
+	PodStateStopped PodState = "stopped"
+	PodStateFailed  PodState = "failed"
+	PodStatePending PodState = "pending"
+	PodStateUnknown PodState = "unknown"
+)
+
+// ContainerStatus represents the status of a container within a pod
+type ContainerStatus struct {
+	Name         string `json:"name"`
+	Image        string `json:"image"`
+	Ready        bool   `json:"ready"`
+	RestartCount int32  `json:"restartCount"`
+	State        string `json:"state"`
+	StartedAt    string `json:"startedAt"`
 }
 
 // ServiceState represents the state of a service
