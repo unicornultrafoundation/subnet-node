@@ -50,3 +50,13 @@ type NetworkManager struct {
 func NewNetworkManager(client *Client, logger *logrus.Entry) *NetworkManager {
 	return &NetworkManager{logger: logger}
 }
+
+// CloudInitManager is a stub implementation
+type CloudInitManager struct {
+	logger *logrus.Entry
+}
+
+// NewCloudInitManager returns a stub cloud-init manager
+func NewCloudInitManager(logger *logrus.Entry) *CloudInitManager {
+	return &CloudInitManager{logger: logger}
+}

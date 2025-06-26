@@ -3,6 +3,7 @@ package kvm
 import (
 	"context"
 	"fmt"
+	"os"
 	"sync"
 	"time"
 
@@ -28,6 +29,7 @@ type Service struct {
 	domainManager    *libvirt.DomainManager
 	storageManager   *libvirt.StorageManager
 	networkManager   *libvirt.NetworkManager
+	cloudInitManager *libvirt.CloudInitManager
 
 	// In-memory VM storage (used in both modes)
 	vms     map[string]*VM
@@ -35,15 +37,17 @@ type Service struct {
 	mu      sync.RWMutex
 
 	// Configuration
-	enabled     bool
-	maxVMs      int
-	maxCPUCores int
-	maxMemoryMB int
-	maxDiskGB   int
-	libvirtURI  string
-	storagePool string
-	storagePath string
-	networkName string
+	enabled       bool
+	maxVMs        int
+	maxCPUCores   int
+	maxMemoryMB   int
+	maxDiskGB     int
+	libvirtURI    string
+	storagePool   string
+	storagePath   string
+	networkName   string
+	ubuntuVersion string
+	sshKeyPath    string
 }
 
 // NewService creates a new KVM service
@@ -62,15 +66,17 @@ func NewService(
 		vmStats:     make(map[string]*VMStats),
 
 		// Load configuration
-		enabled:     cfg.GetBool("kvm.enabled", false),
-		maxVMs:      cfg.GetInt("kvm.max_vms", 5),
-		maxCPUCores: cfg.GetInt("kvm.max_cpu_cores", 4),
-		maxMemoryMB: cfg.GetInt("kvm.max_memory_mb", 4096),
-		maxDiskGB:   cfg.GetInt("kvm.max_disk_gb", 50),
-		libvirtURI:  cfg.GetString("kvm.libvirt_uri", "qemu:///system"),
-		storagePool: cfg.GetString("kvm.storage_pool", "subnet-vms"),
-		storagePath: cfg.GetString("kvm.storage_path", "/var/lib/libvirt/images/subnet"),
-		networkName: cfg.GetString("kvm.network_name", "subnet-net"),
+		enabled:       cfg.GetBool("kvm.enabled", false),
+		maxVMs:        cfg.GetInt("kvm.max_vms", 5),
+		maxCPUCores:   cfg.GetInt("kvm.max_cpu_cores", 4),
+		maxMemoryMB:   cfg.GetInt("kvm.max_memory_mb", 4096),
+		maxDiskGB:     cfg.GetInt("kvm.max_disk_gb", 50),
+		libvirtURI:    cfg.GetString("kvm.libvirt_uri", "qemu:///system"),
+		storagePool:   cfg.GetString("kvm.storage_pool", "subnet-vms"),
+		storagePath:   cfg.GetString("kvm.storage_path", "/var/lib/libvirt/images/subnet"),
+		networkName:   cfg.GetString("kvm.network_name", "subnet-net"),
+		ubuntuVersion: cfg.GetString("kvm.ubuntu_version", "22.04"),
+		sshKeyPath:    cfg.GetString("kvm.ssh_key_path", ""),
 	}
 
 	// Try to initialize libvirt if enabled
@@ -105,7 +111,49 @@ func (s *Service) tryInitLibvirt() error {
 	s.domainManager = libvirt.NewDomainManager(s.client, s.logger)
 	s.storageManager = libvirt.NewStorageManager(s.client, s.logger)
 	s.networkManager = libvirt.NewNetworkManager(s.client, s.logger)
+	s.cloudInitManager = libvirt.NewCloudInitManager(s.logger)
 
+	// Ensure storage pool exists
+	if err := s.storageManager.EnsureDefaultPool(s.storagePool, s.storagePath); err != nil {
+		return fmt.Errorf("failed to ensure storage pool: %w", err)
+	}
+
+	// Ensure network exists
+	if err := s.ensureNetwork(); err != nil {
+		return fmt.Errorf("failed to ensure network: %w", err)
+	}
+
+	return nil
+}
+
+// ensureNetwork ensures the default network exists
+func (s *Service) ensureNetwork() error {
+	// Try to get existing network
+	_, err := s.client.GetNetworkByName(s.networkName)
+	if err == nil {
+		// Network exists
+		return nil
+	}
+
+	// Create default network
+	networkXML := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
+<network>
+  <name>%s</name>
+  <forward mode="nat"/>
+  <bridge name="virbr1" stp="on" delay="0"/>
+  <ip address="192.168.122.1" netmask="255.255.255.0">
+    <dhcp>
+      <range start="192.168.122.2" end="192.168.122.254"/>
+    </dhcp>
+  </ip>
+</network>`, s.networkName)
+
+	_, err = s.client.CreateNetwork(networkXML)
+	if err != nil {
+		return fmt.Errorf("failed to create network: %w", err)
+	}
+
+	s.logger.WithField("network", s.networkName).Info("Default network created")
 	return nil
 }
 
@@ -167,24 +215,20 @@ func (s *Service) CreateVM(ctx context.Context, req *CreateVMRequest) (*VM, erro
 	if !s.enabled {
 		return nil, fmt.Errorf("KVM service is not enabled")
 	}
-
 	s.logger.WithFields(logrus.Fields{
 		"name":      req.Name,
 		"cpu_cores": req.CPUCores,
 		"memory_mb": req.MemoryMB,
 		"disk_gb":   req.DiskGB,
 	}).Info("Creating VM")
-
 	// Validate request
 	if err := s.validateCreateRequest(req); err != nil {
 		return nil, fmt.Errorf("validation failed: %w", err)
 	}
-
 	// Check resource availability
 	if err := s.checkResourceAvailability(ctx, req); err != nil {
 		return nil, fmt.Errorf("insufficient resources: %w", err)
 	}
-
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -192,7 +236,6 @@ func (s *Service) CreateVM(ctx context.Context, req *CreateVMRequest) (*VM, erro
 	if len(s.vms) >= s.maxVMs {
 		return nil, fmt.Errorf("maximum VM limit (%d) reached", s.maxVMs)
 	}
-
 	// Create VM
 	now := time.Now()
 	vm := &VM{
@@ -207,9 +250,15 @@ func (s *Service) CreateVM(ctx context.Context, req *CreateVMRequest) (*VM, erro
 		Metadata:  req.Metadata,
 	}
 
-	// In a real implementation, this would create actual VM resources
-	// For now, we just simulate the creation
-	vm.IPAddress = s.generateMockIP()
+	// Create real VM if libvirt is available
+	if s.libvirtAvailable {
+		if err := s.createRealVM(vm); err != nil {
+			return nil, fmt.Errorf("failed to create real VM: %w", err)
+		}
+	} else {
+		// Fallback to simulation mode
+		vm.IPAddress = s.generateMockIP()
+	}
 
 	// Store VM
 	s.vms[vm.ID] = vm
@@ -226,6 +275,64 @@ func (s *Service) CreateVM(ctx context.Context, req *CreateVMRequest) (*VM, erro
 	}).Info("VM created successfully")
 
 	return vm, nil
+}
+
+// createRealVM creates a real VM using libvirt
+func (s *Service) createRealVM(vm *VM) error {
+	// Generate SSH key if not exists
+	sshKeyPath := s.sshKeyPath
+	if sshKeyPath == "" {
+		sshKeyPath = "/var/lib/libvirt/ssh/subnet-key"
+	}
+
+	publicKey, err := s.cloudInitManager.GenerateSSHKey(sshKeyPath)
+	if err != nil {
+		return fmt.Errorf("failed to generate SSH key: %w", err)
+	}
+
+	// Create VM disk from Ubuntu cloud image
+	diskPath, err := s.storageManager.CreateVMFromUbuntuImage(s.storagePool, vm.Name, vm.DiskGB, s.ubuntuVersion, "amd64")
+	if err != nil {
+		return fmt.Errorf("failed to create VM disk: %w", err)
+	}
+
+	// Create cloud-init configuration
+	cloudInitConfig := s.cloudInitManager.CreateDefaultCloudInitConfig(vm.Name, "ubuntu")
+	cloudInitConfig.SSHKey = publicKey
+
+	// Create cloud-init ISO
+	cloudInitISOPath := fmt.Sprintf("%s/%s-cloud-init.iso", s.storagePath, vm.Name)
+	if err := s.cloudInitManager.CreateCloudInitISO(cloudInitISOPath, cloudInitConfig); err != nil {
+		return fmt.Errorf("failed to create cloud-init ISO: %w", err)
+	}
+
+	// Create libvirt domain
+	domain, err := s.domainManager.CreateDomainWithCloudInit(
+		vm.Name,
+		vm.ID,
+		vm.MemoryMB,
+		vm.CPUCores,
+		diskPath,
+		s.networkName,
+		cloudInitISOPath,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create domain: %w", err)
+	}
+
+	// Store domain reference (you might want to store this in the VM struct)
+	_ = domain
+
+	// Generate IP address (in a real implementation, you'd get this from DHCP)
+	vm.IPAddress = s.generateMockIP()
+
+	s.logger.WithFields(logrus.Fields{
+		"vm_id":          vm.ID,
+		"disk_path":      diskPath,
+		"cloud_init_iso": cloudInitISOPath,
+	}).Info("Real VM created with libvirt")
+
+	return nil
 }
 
 // GetVM retrieves a VM by ID
@@ -282,24 +389,54 @@ func (s *Service) StartVM(ctx context.Context, vmID string) error {
 
 	s.logger.WithField("vm_id", vmID).Info("Starting VM")
 
-	// Simulate VM startup
+	// Update status to starting
 	vm.Status = VMStatusStarting
 	vm.UpdatedAt = time.Now()
 
-	// In a real implementation, this would start the actual VM
-	go func() {
-		time.Sleep(2 * time.Second) // Simulate startup time
+	// Start real VM if libvirt is available
+	if s.libvirtAvailable {
+		if err := s.startRealVM(vm); err != nil {
+			vm.Status = VMStatusError
+			s.saveVMToDatastore(context.Background(), vm)
+			return fmt.Errorf("failed to start real VM: %w", err)
+		}
+	} else {
+		// Fallback to simulation mode
+		go func() {
+			time.Sleep(2 * time.Second) // Simulate startup time
 
-		s.mu.Lock()
-		vm.Status = VMStatusRunning
-		vm.UpdatedAt = time.Now()
-		s.mu.Unlock()
+			s.mu.Lock()
+			vm.Status = VMStatusRunning
+			vm.UpdatedAt = time.Now()
+			s.mu.Unlock()
 
-		s.saveVMToDatastore(context.Background(), vm)
-		s.logger.WithField("vm_id", vmID).Info("VM started successfully")
-	}()
+			s.saveVMToDatastore(context.Background(), vm)
+			s.logger.WithField("vm_id", vmID).Info("VM started successfully (simulation)")
+		}()
+	}
 
 	return s.saveVMToDatastore(ctx, vm)
+}
+
+// startRealVM starts a real VM using libvirt
+func (s *Service) startRealVM(vm *VM) error {
+	// Get domain by name
+	domain, err := s.domainManager.GetDomain(vm.Name)
+	if err != nil {
+		return fmt.Errorf("failed to get domain: %w", err)
+	}
+
+	// Start domain
+	if err := s.domainManager.StartDomain(domain); err != nil {
+		return fmt.Errorf("failed to start domain: %w", err)
+	}
+
+	// Update VM status
+	vm.Status = VMStatusRunning
+	vm.UpdatedAt = time.Now()
+
+	s.logger.WithField("vm_id", vm.ID).Info("Real VM started with libvirt")
+	return nil
 }
 
 // StopVM stops a virtual machine
@@ -322,24 +459,54 @@ func (s *Service) StopVM(ctx context.Context, vmID string) error {
 
 	s.logger.WithField("vm_id", vmID).Info("Stopping VM")
 
-	// Simulate VM shutdown
+	// Update status to stopping
 	vm.Status = VMStatusStopping
 	vm.UpdatedAt = time.Now()
 
-	// In a real implementation, this would stop the actual VM
-	go func() {
-		time.Sleep(1 * time.Second) // Simulate shutdown time
+	// Stop real VM if libvirt is available
+	if s.libvirtAvailable {
+		if err := s.stopRealVM(vm); err != nil {
+			vm.Status = VMStatusError
+			s.saveVMToDatastore(context.Background(), vm)
+			return fmt.Errorf("failed to stop real VM: %w", err)
+		}
+	} else {
+		// Fallback to simulation mode
+		go func() {
+			time.Sleep(1 * time.Second) // Simulate shutdown time
 
-		s.mu.Lock()
-		vm.Status = VMStatusStopped
-		vm.UpdatedAt = time.Now()
-		s.mu.Unlock()
+			s.mu.Lock()
+			vm.Status = VMStatusStopped
+			vm.UpdatedAt = time.Now()
+			s.mu.Unlock()
 
-		s.saveVMToDatastore(context.Background(), vm)
-		s.logger.WithField("vm_id", vmID).Info("VM stopped successfully")
-	}()
+			s.saveVMToDatastore(context.Background(), vm)
+			s.logger.WithField("vm_id", vmID).Info("VM stopped successfully (simulation)")
+		}()
+	}
 
 	return s.saveVMToDatastore(ctx, vm)
+}
+
+// stopRealVM stops a real VM using libvirt
+func (s *Service) stopRealVM(vm *VM) error {
+	// Get domain by name
+	domain, err := s.domainManager.GetDomain(vm.Name)
+	if err != nil {
+		return fmt.Errorf("failed to get domain: %w", err)
+	}
+
+	// Stop domain gracefully
+	if err := s.domainManager.StopDomain(domain); err != nil {
+		return fmt.Errorf("failed to stop domain: %w", err)
+	}
+
+	// Update VM status
+	vm.Status = VMStatusStopped
+	vm.UpdatedAt = time.Now()
+
+	s.logger.WithField("vm_id", vm.ID).Info("Real VM stopped with libvirt")
+	return nil
 }
 
 // DeleteVM deletes a virtual machine
@@ -362,6 +529,13 @@ func (s *Service) DeleteVM(ctx context.Context, vmID string) error {
 
 	s.logger.WithField("vm_id", vmID).Info("Deleting VM")
 
+	// Delete real VM if libvirt is available
+	if s.libvirtAvailable {
+		if err := s.deleteRealVM(vm); err != nil {
+			return fmt.Errorf("failed to delete real VM: %w", err)
+		}
+	}
+
 	// Remove from memory
 	delete(s.vms, vmID)
 	delete(s.vmStats, vmID)
@@ -374,6 +548,35 @@ func (s *Service) DeleteVM(ctx context.Context, vmID string) error {
 	}
 
 	s.logger.WithField("vm_id", vmID).Info("VM deleted successfully")
+	return nil
+}
+
+// deleteRealVM deletes a real VM using libvirt
+func (s *Service) deleteRealVM(vm *VM) error {
+	// Get domain by name
+	domain, err := s.domainManager.GetDomain(vm.Name)
+	if err != nil {
+		// Domain might not exist, which is fine for deletion
+		s.logger.WithField("vm_name", vm.Name).Warn("Domain not found during deletion")
+	} else {
+		// Delete domain
+		if err := s.domainManager.DeleteDomain(domain); err != nil {
+			return fmt.Errorf("failed to delete domain: %w", err)
+		}
+	}
+
+	// Delete VM disk
+	if err := s.storageManager.DeleteDiskImage(s.storagePool, vm.Name); err != nil {
+		s.logger.WithError(err).Warn("Failed to delete VM disk")
+	}
+
+	// Delete cloud-init ISO
+	cloudInitISOPath := fmt.Sprintf("%s/%s-cloud-init.iso", s.storagePath, vm.Name)
+	if err := os.Remove(cloudInitISOPath); err != nil && !os.IsNotExist(err) {
+		s.logger.WithError(err).Warn("Failed to delete cloud-init ISO")
+	}
+
+	s.logger.WithField("vm_id", vm.ID).Info("Real VM deleted with libvirt")
 	return nil
 }
 

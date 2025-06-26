@@ -6,6 +6,8 @@ package libvirt
 import (
 	"encoding/xml"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -311,4 +313,114 @@ func (sm *StorageManager) GetPoolInfo(poolName string) (*libvirt.StoragePoolInfo
 	}
 
 	return info, nil
+}
+
+// DownloadUbuntuCloudImage downloads Ubuntu cloud image if not already present
+func (sm *StorageManager) DownloadUbuntuCloudImage(version, arch string, poolPath string) (string, error) {
+	// Default to Ubuntu 22.04 LTS if version not specified
+	if version == "" {
+		version = "jammy"
+	}
+	if arch == "" {
+		arch = "amd64"
+	}
+
+	// Construct image filename
+	imageName := fmt.Sprintf("ubuntu-%s.qcow2", version)
+	imagePath := filepath.Join(poolPath, imageName)
+
+	// Check if image already exists
+	if _, err := os.Stat(imagePath); err == nil {
+		sm.logger.WithField("image_path", imagePath).Info("Ubuntu cloud image already exists")
+		return imagePath, nil
+	}
+
+	// Construct download URL
+	url := fmt.Sprintf("https://cloud-images.ubuntu.com/%s/current/%s-server-cloudimg-%s.img", version, version, arch)
+
+	sm.logger.WithFields(logrus.Fields{
+		"url":        url,
+		"image_path": imagePath,
+	}).Info("Downloading Ubuntu cloud image")
+
+	// Download the image
+	if err := sm.downloadFile(url, imagePath); err != nil {
+		return "", fmt.Errorf("failed to download Ubuntu cloud image: %w", err)
+	}
+
+	sm.logger.WithField("image_path", imagePath).Info("Ubuntu cloud image downloaded successfully")
+	return imagePath, nil
+}
+
+// downloadFile downloads a file from URL to local path
+func (sm *StorageManager) downloadFile(url, filepath string) error {
+	// Create the file
+	out, err := os.Create(filepath)
+	if err != nil {
+		return fmt.Errorf("failed to create file: %w", err)
+	}
+	defer out.Close()
+
+	// Get the data
+	resp, err := http.Get(url)
+	if err != nil {
+		return fmt.Errorf("failed to download file: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Check server response
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("bad status: %s", resp.Status)
+	}
+
+	// Write the body to file
+	_, err = io.Copy(out, resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to write file: %w", err)
+	}
+
+	return nil
+}
+
+// CreateVMFromUbuntuImage creates a VM disk from Ubuntu cloud image
+func (sm *StorageManager) CreateVMFromUbuntuImage(poolName, vmName string, sizeGB int, ubuntuVersion, arch string) (string, error) {
+	// Get pool path
+	pool, err := sm.client.GetStoragePoolByName(poolName)
+	if err != nil {
+		return "", fmt.Errorf("failed to get storage pool: %w", err)
+	}
+
+	poolXMLStr, err := pool.GetXMLDesc(0)
+	if err != nil {
+		return "", fmt.Errorf("failed to get pool XML: %w", err)
+	}
+
+	var poolXML StoragePoolXML
+	if err := xml.Unmarshal([]byte(poolXMLStr), &poolXML); err != nil {
+		return "", fmt.Errorf("failed to parse pool XML: %w", err)
+	}
+
+	// Download Ubuntu cloud image if not present
+	baseImagePath, err := sm.DownloadUbuntuCloudImage(ubuntuVersion, arch, poolXML.Target.Path)
+	if err != nil {
+		return "", fmt.Errorf("failed to get Ubuntu cloud image: %w", err)
+	}
+
+	// Create VM disk using qemu-img
+	vmDiskPath := filepath.Join(poolXML.Target.Path, vmName+".qcow2")
+
+	// Use qemu-img to create a new disk based on the Ubuntu image
+	cmd := exec.Command("qemu-img", "create", "-f", "qcow2", "-b", baseImagePath, vmDiskPath, fmt.Sprintf("%dG", sizeGB))
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return "", fmt.Errorf("qemu-img failed: %s, %w", string(output), err)
+	}
+
+	sm.logger.WithFields(logrus.Fields{
+		"vm_name":    vmName,
+		"disk_path":  vmDiskPath,
+		"size":       fmt.Sprintf("%dGB", sizeGB),
+		"base_image": baseImagePath,
+	}).Info("VM disk created from Ubuntu cloud image")
+
+	return vmDiskPath, nil
 }

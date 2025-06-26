@@ -6,6 +6,10 @@ package libvirt
 import (
 	"encoding/xml"
 	"fmt"
+	"math/rand"
+	"strings"
+	"text/template"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	"libvirt.org/go/libvirt"
@@ -427,4 +431,136 @@ func StateToString(state libvirt.DomainState) string {
 	default:
 		return "unknown"
 	}
+}
+
+// CreateDomainWithCloudInit creates a new VM domain with cloud-init support
+func (dm *DomainManager) CreateDomainWithCloudInit(name, uuid string, memoryMB, vcpus int, diskPath, networkName, cloudInitISOPath string) (*libvirt.Domain, error) {
+	// Generate MAC address
+	macAddr := dm.generateMACAddress()
+
+	// Generate domain XML with cloud-init
+	domainXML, err := dm.GenerateDomainXMLWithCloudInit(name, uuid, memoryMB, vcpus, diskPath, networkName, macAddr, cloudInitISOPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate domain XML: %w", err)
+	}
+
+	// Create domain
+	domain, err := dm.CreateDomain(domainXML)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create domain: %w", err)
+	}
+
+	dm.logger.WithFields(logrus.Fields{
+		"name": name,
+		"uuid": uuid,
+		"mac":  macAddr,
+	}).Info("Domain created with cloud-init support")
+
+	return domain, nil
+}
+
+// GenerateDomainXMLWithCloudInit generates domain XML with cloud-init CD-ROM
+func (dm *DomainManager) GenerateDomainXMLWithCloudInit(name, uuid string, memoryMB, vcpus int, diskPath, networkName, macAddr, cloudInitISOPath string) (string, error) {
+	xmlTemplate := `<?xml version="1.0" encoding="UTF-8"?>
+<domain type="kvm">
+  <name>{{.Name}}</name>
+  <uuid>{{.UUID}}</uuid>
+  <memory unit="MiB">{{.MemoryMB}}</memory>
+  <currentMemory unit="MiB">{{.MemoryMB}}</currentMemory>
+  <vcpu placement="static">{{.VCPUs}}</vcpu>
+  <os>
+    <type arch="x86_64" machine="pc-q35-2.12">hvm</type>
+    <boot dev="hd"/>
+    <boot dev="cdrom"/>
+  </os>
+  <features>
+    <acpi/>
+    <apic/>
+    <vmx state="on"/>
+  </features>
+  <cpu mode="host-model" check="partial"/>
+  <clock offset="utc"/>
+  <on_poweroff>destroy</on_poweroff>
+  <on_reboot>restart</on_reboot>
+  <on_crash>destroy</on_crash>
+  <devices>
+    <emulator>/usr/bin/qemu-system-x86_64</emulator>
+    <disk type="file" device="disk">
+      <driver name="qemu" type="qcow2"/>
+      <source file="{{.DiskPath}}"/>
+      <target dev="vda" bus="virtio"/>
+      <boot order="1"/>
+    </disk>
+    <disk type="file" device="cdrom">
+      <driver name="qemu" type="raw"/>
+      <source file="{{.CloudInitISOPath}}"/>
+      <target dev="sda" bus="sata"/>
+      <readonly/>
+      <boot order="2"/>
+    </disk>
+    <interface type="network">
+      <source network="{{.NetworkName}}"/>
+      <model type="virtio"/>
+      <mac address="{{.MACAddr}}"/>
+    </interface>
+    <console type="pty">
+      <target type="serial" port="0"/>
+    </console>
+    <graphics type="vnc" autoport="yes" listen="0.0.0.0"/>
+    <video>
+      <model type="qxl"/>
+    </video>
+    <memballoon model="virtio"/>
+    <rng model="virtio">
+      <backend model="random">/dev/urandom</backend>
+    </rng>
+  </devices>
+</domain>`
+
+	data := struct {
+		Name             string
+		UUID             string
+		MemoryMB         int
+		VCPUs            int
+		DiskPath         string
+		NetworkName      string
+		MACAddr          string
+		CloudInitISOPath string
+	}{
+		Name:             name,
+		UUID:             uuid,
+		MemoryMB:         memoryMB,
+		VCPUs:            vcpus,
+		DiskPath:         diskPath,
+		NetworkName:      networkName,
+		MACAddr:          macAddr,
+		CloudInitISOPath: cloudInitISOPath,
+	}
+
+	tmpl, err := template.New("domain").Parse(xmlTemplate)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse domain template: %w", err)
+	}
+
+	var buf strings.Builder
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return "", fmt.Errorf("failed to execute domain template: %w", err)
+	}
+
+	return buf.String(), nil
+}
+
+// generateMACAddress generates a unique MAC address
+func (dm *DomainManager) generateMACAddress() string {
+	// Generate a random MAC address in the QEMU range (52:54:00:xx:xx:xx)
+	// This is a simple implementation - in production you'd want better uniqueness
+	rand.Seed(time.Now().UnixNano())
+
+	// QEMU MAC prefix: 52:54:00
+	// Generate random bytes for the last 3 octets
+	octet1 := rand.Intn(256)
+	octet2 := rand.Intn(256)
+	octet3 := rand.Intn(256)
+
+	return fmt.Sprintf("52:54:00:%02x:%02x:%02x", octet1, octet2, octet3)
 }
