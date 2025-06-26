@@ -3,6 +3,7 @@ package deployments
 import (
 	"context"
 	"fmt"
+	"math/big"
 	"net/http"
 	"time"
 
@@ -26,7 +27,11 @@ type Server struct {
 // NewServer creates a new deployment API server
 func NewServer(cfg *config.C, service ServiceManager, bidMarket bidenginetypes.BidMarketContract, logger *logrus.Logger) *Server {
 	router := mux.NewRouter()
-	api := NewAPI(service, bidMarket, logger)
+
+	// Get provider configuration from config
+	configProviderID := big.NewInt(int64(cfg.GetInt("deployment.provider_id", 0)))
+
+	api := NewAPI(service, bidMarket, logger, configProviderID)
 
 	server := &Server{
 		cfg:       cfg,

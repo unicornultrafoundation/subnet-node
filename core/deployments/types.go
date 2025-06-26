@@ -22,6 +22,7 @@ type Deployment struct {
 	Type        DeploymentType    `json:"type" yaml:"type"`
 	Manifest    interface{}       `json:"manifest" yaml:"manifest"` // Type-specific manifest
 	Status      string            `json:"status" yaml:"status"`
+	Owner       string            `json:"owner" yaml:"owner"` // Ethereum address of deployment owner
 	CreatedAt   time.Time         `json:"created_at" yaml:"created_at"`
 	UpdatedAt   time.Time         `json:"updated_at" yaml:"updated_at"`
 	Labels      map[string]string `json:"labels" yaml:"labels"`

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -24,15 +25,63 @@ type API struct {
 	service   ServiceManager
 	logger    *logrus.Logger
 	bidMarket bidenginetypes.BidMarketContract
+
+	// Rate limiting
+	rateLimiter *RateLimiter
+
+	// Provider configuration
+	configProviderID *big.Int
 }
 
-// NewAPI creates a new deployment API server
-func NewAPI(service ServiceManager, bidMarket bidenginetypes.BidMarketContract, logger *logrus.Logger) *API {
-	return &API{
-		service:   service,
-		bidMarket: bidMarket,
-		logger:    logger,
+// RateLimiter implements simple rate limiting per address
+type RateLimiter struct {
+	requests map[string][]time.Time
+	mux      sync.RWMutex
+	limit    int
+	window   time.Duration
+}
+
+// NewRateLimiter creates a new rate limiter
+func NewRateLimiter(limit int, window time.Duration) *RateLimiter {
+	return &RateLimiter{
+		requests: make(map[string][]time.Time),
+		limit:    limit,
+		window:   window,
 	}
+}
+
+// Allow checks if a request is allowed for the given address
+func (rl *RateLimiter) Allow(address string) bool {
+	rl.mux.Lock()
+	defer rl.mux.Unlock()
+
+	now := time.Now()
+	windowStart := now.Add(-rl.window)
+
+	// Get existing requests for this address
+	requests, exists := rl.requests[address]
+	if !exists {
+		requests = []time.Time{}
+	}
+
+	// Remove old requests outside the window
+	var validRequests []time.Time
+	for _, reqTime := range requests {
+		if reqTime.After(windowStart) {
+			validRequests = append(validRequests, reqTime)
+		}
+	}
+
+	// Check if we're under the limit
+	if len(validRequests) >= rl.limit {
+		return false
+	}
+
+	// Add current request
+	validRequests = append(validRequests, now)
+	rl.requests[address] = validRequests
+
+	return true
 }
 
 // AuthorizationRequest represents the authorization data in request headers
@@ -157,30 +206,28 @@ func (api *API) validateDeploymentAuthorization(w http.ResponseWriter, r *http.R
 		return common.Address{}, false
 	}
 
-	// Parse deployment ID as order ID
-	orderID, ok := new(big.Int).SetString(deploymentID, 10)
-	if !ok {
-		api.writeError(w, http.StatusBadRequest, "Invalid deployment ID format")
-		return common.Address{}, false
-	}
-
-	// Get order from bid market
-	order, err := api.bidMarket.GetOrder(r.Context(), orderID)
-	if err != nil {
-		api.logger.WithError(err).Error("Failed to get order from bid market")
-		api.writeError(w, http.StatusInternalServerError, "Failed to get order information")
-		return common.Address{}, false
-	}
-
-	// Check if the signer is the order owner
-	if order.Owner != signerAddr {
-		api.writeError(w, http.StatusForbidden, "Not authorized: not the deployment owner")
-		return common.Address{}, false
-	}
-
-	// Verify signature
+	// Verify signature first (local operation, fast)
 	if !api.verifySignature(authReq.Message, authReq.Signature, signerAddr) {
 		api.writeError(w, http.StatusUnauthorized, "Invalid signature")
+		return common.Address{}, false
+	}
+
+	// Get deployment to check ownership
+	deployment, err := api.service.GetDeployment(r.Context(), deploymentID)
+	if err != nil {
+		api.writeError(w, http.StatusNotFound, "Deployment not found")
+		return common.Address{}, false
+	}
+
+	// Check if the signer is the deployment owner
+	deploymentOwner := common.HexToAddress(deployment.Owner)
+	if deploymentOwner == (common.Address{}) {
+		api.writeError(w, http.StatusInternalServerError, "Deployment owner not set")
+		return common.Address{}, false
+	}
+
+	if deploymentOwner != signerAddr {
+		api.writeError(w, http.StatusForbidden, "Not authorized: not the deployment owner")
 		return common.Address{}, false
 	}
 
@@ -233,6 +280,17 @@ func abs(x int64) int64 {
 	return x
 }
 
+// NewAPI creates a new deployment API server
+func NewAPI(service ServiceManager, bidMarket bidenginetypes.BidMarketContract, logger *logrus.Logger, configProviderID *big.Int) *API {
+	return &API{
+		service:          service,
+		bidMarket:        bidMarket,
+		logger:           logger,
+		rateLimiter:      NewRateLimiter(5, time.Minute), // 5 requests per minute per address
+		configProviderID: configProviderID,
+	}
+}
+
 // Deployment management handlers
 
 func (api *API) createDeployment(w http.ResponseWriter, r *http.Request) {
@@ -242,10 +300,82 @@ func (api *API) createDeployment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate authorization for deployment creation
-	if _, authorized := api.validateDeploymentAuthorization(w, r, deployment.ID); !authorized {
+	// Get authorization data from headers
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" {
+		api.writeError(w, http.StatusUnauthorized, "Missing authorization header")
 		return
 	}
+
+	// Parse authorization data
+	var authReq AuthorizationRequest
+	if err := json.Unmarshal([]byte(authHeader), &authReq); err != nil {
+		api.writeError(w, http.StatusBadRequest, "Invalid authorization format")
+		return
+	}
+
+	// Validate timestamp
+	now := time.Now().Unix()
+	if abs(now-authReq.Timestamp) >= 300 {
+		api.writeError(w, http.StatusUnauthorized, "Authorization timestamp expired")
+		return
+	}
+
+	// Parse the signer address
+	signerAddr := common.HexToAddress(authReq.Address)
+	if signerAddr == (common.Address{}) {
+		api.writeError(w, http.StatusBadRequest, "Invalid signer address")
+		return
+	}
+
+	// Check rate limiting
+	if !api.rateLimiter.Allow(signerAddr.Hex()) {
+		api.writeError(w, http.StatusTooManyRequests, "Rate limit exceeded. Please try again later.")
+		return
+	}
+
+	// Verify signature
+	if !api.verifySignature(authReq.Message, authReq.Signature, signerAddr) {
+		api.writeError(w, http.StatusUnauthorized, "Invalid signature")
+		return
+	}
+
+	// For new deployments, validate ownership from blockchain
+	orderID, ok := new(big.Int).SetString(deployment.ID, 10)
+	if !ok {
+		api.writeError(w, http.StatusBadRequest, "Invalid deployment ID format")
+		return
+	}
+
+	// Get order from bid market to validate ownership and existence
+	order, err := api.bidMarket.GetOrder(r.Context(), orderID)
+	if err != nil {
+		api.logger.WithError(err).Error("Failed to get order from bid market")
+		api.writeError(w, http.StatusNotFound, "Order not found or invalid")
+		return
+	}
+
+	// Check if the signer is the order owner
+	if order.Owner != signerAddr {
+		api.writeError(w, http.StatusForbidden, "Not authorized: not the order owner")
+		return
+	}
+
+	// Validate order state to prevent spam
+	if !api.isOrderValidForDeployment(order) {
+		api.writeError(w, http.StatusBadRequest, "Order is not in a valid state for deployment")
+		return
+	}
+
+	// Check if deployment already exists to prevent duplicate creation
+	existingDeployment, err := api.service.GetDeployment(r.Context(), deployment.ID)
+	if err == nil && existingDeployment != nil {
+		api.writeError(w, http.StatusConflict, "Deployment already exists")
+		return
+	}
+
+	// Set the deployment owner
+	deployment.Owner = signerAddr.Hex()
 
 	if err := api.service.CreateDeployment(r.Context(), &deployment); err != nil {
 		api.writeError(w, http.StatusInternalServerError, err.Error())
@@ -253,6 +383,36 @@ func (api *API) createDeployment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	api.writeJSON(w, http.StatusCreated, Response{Success: true, Data: deployment})
+}
+
+// isOrderValidForDeployment checks if an order is in a valid state for deployment creation
+func (api *API) isOrderValidForDeployment(order *bidenginetypes.Order) bool {
+	// Check if order is open (ready for deployment)
+	if order.Status != bidenginetypes.OrderStatusOpen {
+		return false
+	}
+
+	// Check if order has not expired
+	if order.ExpiredAt != nil && time.Now().Unix() > order.ExpiredAt.Int64() {
+		return false
+	}
+
+	// Check if order has valid resource requirements
+	if order.CpuCores == nil || order.CpuCores.Sign() <= 0 {
+		return false
+	}
+
+	// Check if order has valid pricing
+	if order.MinBidPrice == nil || order.MinBidPrice.Sign() <= 0 {
+		return false
+	}
+
+	// Check if order has valid duration
+	if order.Duration == nil || order.Duration.Sign() <= 0 {
+		return false
+	}
+
+	return true
 }
 
 func (api *API) listDeployments(w http.ResponseWriter, r *http.Request) {

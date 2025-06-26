@@ -3,62 +3,257 @@ package deployments
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"math/big"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
+	"github.com/gorilla/mux"
 	"github.com/sirupsen/logrus"
 	bidenginetypes "github.com/unicornultrafoundation/subnet-node/bidengine/types"
 	"github.com/unicornultrafoundation/subnet-node/config"
 )
 
+// SimpleMockBidMarketContract is a simple mock implementation for examples
+type SimpleMockBidMarketContract struct{}
+
+func (m *SimpleMockBidMarketContract) GetOrder(ctx context.Context, orderID *big.Int) (*bidenginetypes.Order, error) {
+	return &bidenginetypes.Order{
+		ID:                 orderID,
+		Owner:              common.HexToAddress("0x123456789abcdef123456789abcdef123456789a"),
+		Status:             bidenginetypes.OrderStatusOpen,
+		AcceptedProviderId: big.NewInt(123),
+		AcceptedMachineId:  big.NewInt(1),
+		CpuCores:           big.NewInt(4),
+		MinBidPrice:        big.NewInt(1000000000000000000),
+		Duration:           big.NewInt(3600),
+		ExpiredAt:          big.NewInt(time.Now().Add(24 * time.Hour).Unix()),
+	}, nil
+}
+
+func (m *SimpleMockBidMarketContract) GetOrderCount(ctx context.Context) (*big.Int, error) {
+	return big.NewInt(0), nil
+}
+
+func (m *SimpleMockBidMarketContract) OrderCount(ctx context.Context) (*big.Int, error) {
+	return big.NewInt(0), nil
+}
+
+func (m *SimpleMockBidMarketContract) Orders(ctx context.Context, orderID *big.Int) (*bidenginetypes.Order, error) {
+	return m.GetOrder(ctx, orderID)
+}
+
+func (m *SimpleMockBidMarketContract) GetBids(ctx context.Context, orderID *big.Int) ([]bidenginetypes.Bid, error) {
+	return []bidenginetypes.Bid{}, nil
+}
+
+func (m *SimpleMockBidMarketContract) IsBiddingOpen(ctx context.Context, orderID *big.Int) (bool, error) {
+	return true, nil
+}
+
+func (m *SimpleMockBidMarketContract) GetRemainingBidTime(ctx context.Context, orderID *big.Int) (*big.Int, error) {
+	return big.NewInt(3600), nil
+}
+
+func (m *SimpleMockBidMarketContract) SubmitBid(ctx context.Context, orderID *big.Int, pricePerSecond *big.Int, providerID *big.Int, machineID *big.Int) (*ethtypes.Transaction, error) {
+	return &ethtypes.Transaction{}, nil
+}
+
+func (m *SimpleMockBidMarketContract) GetBidIndexFromTransaction(ctx context.Context, tx *ethtypes.Transaction, orderID *big.Int) (*big.Int, error) {
+	return big.NewInt(0), nil
+}
+
+func (m *SimpleMockBidMarketContract) CancelBid(ctx context.Context, orderID *big.Int, bidIndex *big.Int) (*ethtypes.Transaction, error) {
+	return &ethtypes.Transaction{}, nil
+}
+
+func (m *SimpleMockBidMarketContract) AcceptBid(ctx context.Context, orderID *big.Int, bidIndex *big.Int) (*ethtypes.Transaction, error) {
+	return &ethtypes.Transaction{}, nil
+}
+
+func (m *SimpleMockBidMarketContract) CancelOrder(ctx context.Context, orderID *big.Int) (*ethtypes.Transaction, error) {
+	return &ethtypes.Transaction{}, nil
+}
+
+func (m *SimpleMockBidMarketContract) CloseOrder(ctx context.Context, orderID *big.Int, reason string) (*ethtypes.Transaction, error) {
+	return &ethtypes.Transaction{}, nil
+}
+
+func (m *SimpleMockBidMarketContract) ExtendOrder(ctx context.Context, orderID *big.Int, amount *big.Int) (*ethtypes.Transaction, error) {
+	return &ethtypes.Transaction{}, nil
+}
+
+func (m *SimpleMockBidMarketContract) GetUsedResource(ctx context.Context, providerID *big.Int, machineID *big.Int) (*bidenginetypes.ResourceUsage, error) {
+	return &bidenginetypes.ResourceUsage{}, nil
+}
+
+func (m *SimpleMockBidMarketContract) ReleaseOrderResource(ctx context.Context, orderID *big.Int) (*ethtypes.Transaction, error) {
+	return &ethtypes.Transaction{}, nil
+}
+
+func (m *SimpleMockBidMarketContract) WatchOrderCreated(ctx context.Context, sink chan<- *bidenginetypes.OrderEvent) error {
+	return nil
+}
+
+func (m *SimpleMockBidMarketContract) WatchOrderClosed(ctx context.Context, sink chan<- *bidenginetypes.OrderEvent) error {
+	return nil
+}
+
+func (m *SimpleMockBidMarketContract) WatchOrderExpired(ctx context.Context, sink chan<- *bidenginetypes.OrderEvent) error {
+	return nil
+}
+
+func (m *SimpleMockBidMarketContract) WatchBidSubmitted(ctx context.Context, sink chan<- *bidenginetypes.OrderEvent) error {
+	return nil
+}
+
+func (m *SimpleMockBidMarketContract) WatchBidAccepted(ctx context.Context, sink chan<- *bidenginetypes.OrderEvent) error {
+	return nil
+}
+
+func (m *SimpleMockBidMarketContract) WatchBidCancelled(ctx context.Context, sink chan<- *bidenginetypes.OrderEvent) error {
+	return nil
+}
+
+func (m *SimpleMockBidMarketContract) OrderBids(ctx context.Context, orderID *big.Int, bidIndex *big.Int) (*bidenginetypes.Bid, error) {
+	return &bidenginetypes.Bid{}, nil
+}
+
+// SimpleMockServiceManager is a simple mock implementation for examples
+type SimpleMockServiceManager struct{}
+
+func (m *SimpleMockServiceManager) Start(ctx context.Context) error {
+	return nil
+}
+
+func (m *SimpleMockServiceManager) Stop(ctx context.Context) error {
+	return nil
+}
+
+func (m *SimpleMockServiceManager) CreateDeployment(ctx context.Context, deployment *Deployment) error {
+	return nil
+}
+
+func (m *SimpleMockServiceManager) GetDeployment(ctx context.Context, id string) (*Deployment, error) {
+	return nil, fmt.Errorf("deployment not found")
+}
+
+func (m *SimpleMockServiceManager) ListDeployments(ctx context.Context) ([]*Deployment, error) {
+	return []*Deployment{}, nil
+}
+
+func (m *SimpleMockServiceManager) StartDeployment(ctx context.Context, id string) error {
+	return nil
+}
+
+func (m *SimpleMockServiceManager) StopDeployment(ctx context.Context, id string) error {
+	return nil
+}
+
+func (m *SimpleMockServiceManager) DeleteDeployment(ctx context.Context, id string) error {
+	return nil
+}
+
+func (m *SimpleMockServiceManager) GetDeploymentLogs(ctx context.Context, deploymentID, serviceName string, tail int) (io.ReadCloser, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (m *SimpleMockServiceManager) StreamDeploymentLogs(ctx context.Context, deploymentID, serviceName string, follow bool) (<-chan LogEntry, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (m *SimpleMockServiceManager) ExecConsole(ctx context.Context, deploymentID, serviceName string, command []string, tty bool) (ExecSession, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (m *SimpleMockServiceManager) InspectDeployment(ctx context.Context, deploymentID string) (*DeploymentInspection, error) {
+	return &DeploymentInspection{}, nil
+}
+
+func (m *SimpleMockServiceManager) InspectService(ctx context.Context, deploymentID, serviceName string) (*ServiceInspection, error) {
+	return &ServiceInspection{}, nil
+}
+
+func (m *SimpleMockServiceManager) GetDeploymentMetrics(ctx context.Context, deploymentID string, duration time.Duration) (*DeploymentMetrics, error) {
+	return &DeploymentMetrics{}, nil
+}
+
+func (m *SimpleMockServiceManager) GetServiceMetrics(ctx context.Context, deploymentID, serviceName string, duration time.Duration) (*ServiceMetrics, error) {
+	return &ServiceMetrics{}, nil
+}
+
+func (m *SimpleMockServiceManager) UpdateDeploymentImage(ctx context.Context, deploymentID, serviceName, image string) error {
+	return nil
+}
+
 // ExampleServer demonstrates how to use the deployment API server
 func ExampleServer() {
-	// Create logger
+	// Initialize logger
 	logger := logrus.New()
 	logger.SetLevel(logrus.InfoLevel)
 
-	// Create config
+	// Load configuration
 	cfg := config.NewC(logger)
 
-	// Load configuration from file
-	err := cfg.Load("./config.yaml")
-	if err != nil {
-		log.Fatal("Failed to load config:", err)
+	// Get provider ID from config
+	providerID := big.NewInt(int64(cfg.GetInt("deployment.provider_id", 123)))
+
+	// Initialize mock bid market contract
+	mockBidMarket := &SimpleMockBidMarketContract{}
+
+	// Initialize service manager
+	serviceManager := &SimpleMockServiceManager{}
+
+	// Initialize API with provider validation
+	api := NewAPI(serviceManager, mockBidMarket, logger, providerID)
+
+	// Set up router
+	router := mux.NewRouter()
+	api.RegisterRoutes(router)
+
+	// Add middleware
+	router.Use(corsMiddleware)
+	router.Use(loggingMiddleware(logger))
+	router.Use(recoveryMiddleware(logger))
+
+	// Create server
+	server := &http.Server{
+		Addr:         ":8080",
+		Handler:      router,
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 30 * time.Second,
+		IdleTimeout:  120 * time.Second,
 	}
 
-	// Create deployment service
-	service := NewService(cfg, logger)
-
-	// Create mock bid market contract
-	bidMarket := &mockBidMarket{}
-
-	// Create API server
-	server := NewServer(cfg, service, bidMarket, logger)
-
-	// Set up signal handling for graceful shutdown
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// Handle shutdown signals
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-
+	// Start server in goroutine
 	go func() {
-		sig := <-sigChan
-		logger.WithField("signal", sig).Info("Received shutdown signal")
-		cancel()
+		logger.Info("Starting deployment API server on :8080")
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.WithError(err).Fatal("Server failed to start")
+		}
 	}()
 
-	// Start the server
-	logger.Info("Starting deployment API server")
-	if err := server.Start(ctx); err != nil {
-		logger.WithError(err).Fatal("Server error")
+	// Wait for interrupt signal
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	// Graceful shutdown
+	logger.Info("Shutting down server...")
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := server.Shutdown(ctx); err != nil {
+		logger.WithError(err).Error("Server forced to shutdown")
 	}
+
+	logger.Info("Server exited")
 }
 
 // ExampleServerWithCustomConfig demonstrates how to create a server with custom configuration
@@ -87,6 +282,11 @@ deployment:
       rate_limit:
         enabled: true
         requests_per_minute: 200
+  provider_id: 123
+  machine_ids:
+    - "1"
+    - "2"
+    - "3"
 `
 
 	err := cfg.LoadString(configYAML)
@@ -98,7 +298,7 @@ deployment:
 	service := NewService(cfg, logger)
 
 	// Create mock bid market contract
-	bidMarket := &mockBidMarket{}
+	bidMarket := &SimpleMockBidMarketContract{}
 
 	// Create API server
 	server := NewServer(cfg, service, bidMarket, logger)
@@ -145,7 +345,7 @@ func ExampleServerWithEnvironmentVariables() {
 	service := NewService(cfg, logger)
 
 	// Create mock bid market contract
-	bidMarket := &mockBidMarket{}
+	bidMarket := &SimpleMockBidMarketContract{}
 
 	// Create API server
 	server := NewServer(cfg, service, bidMarket, logger)
@@ -172,104 +372,6 @@ func ExampleServerWithEnvironmentVariables() {
 
 	// Wait for shutdown
 	<-ctx.Done()
-}
-
-// mockBidMarket is a mock implementation of the bid market contract
-type mockBidMarket struct{}
-
-func (m *mockBidMarket) GetOrder(ctx context.Context, orderID *big.Int) (*bidenginetypes.Order, error) {
-	return &bidenginetypes.Order{
-		ID:    orderID,
-		Owner: common.HexToAddress("0x1234567890123456789012345678901234567890"),
-	}, nil
-}
-
-func (m *mockBidMarket) GetOrderCount(ctx context.Context) (*big.Int, error) {
-	return big.NewInt(0), nil
-}
-
-func (m *mockBidMarket) OrderCount(ctx context.Context) (*big.Int, error) {
-	return big.NewInt(0), nil
-}
-
-func (m *mockBidMarket) Orders(ctx context.Context, orderID *big.Int) (*bidenginetypes.Order, error) {
-	return m.GetOrder(ctx, orderID)
-}
-
-func (m *mockBidMarket) GetBids(ctx context.Context, orderID *big.Int) ([]bidenginetypes.Bid, error) {
-	return []bidenginetypes.Bid{}, nil
-}
-
-func (m *mockBidMarket) IsBiddingOpen(ctx context.Context, orderID *big.Int) (bool, error) {
-	return true, nil
-}
-
-func (m *mockBidMarket) GetRemainingBidTime(ctx context.Context, orderID *big.Int) (*big.Int, error) {
-	return big.NewInt(3600), nil
-}
-
-func (m *mockBidMarket) SubmitBid(ctx context.Context, orderID *big.Int, pricePerSecond *big.Int, providerID *big.Int, machineID *big.Int) (*ethtypes.Transaction, error) {
-	return &ethtypes.Transaction{}, nil
-}
-
-func (m *mockBidMarket) GetBidIndexFromTransaction(ctx context.Context, tx *ethtypes.Transaction, orderID *big.Int) (*big.Int, error) {
-	return big.NewInt(0), nil
-}
-
-func (m *mockBidMarket) CancelBid(ctx context.Context, orderID *big.Int, bidIndex *big.Int) (*ethtypes.Transaction, error) {
-	return &ethtypes.Transaction{}, nil
-}
-
-func (m *mockBidMarket) AcceptBid(ctx context.Context, orderID *big.Int, bidIndex *big.Int) (*ethtypes.Transaction, error) {
-	return &ethtypes.Transaction{}, nil
-}
-
-func (m *mockBidMarket) CancelOrder(ctx context.Context, orderID *big.Int) (*ethtypes.Transaction, error) {
-	return &ethtypes.Transaction{}, nil
-}
-
-func (m *mockBidMarket) CloseOrder(ctx context.Context, orderID *big.Int, reason string) (*ethtypes.Transaction, error) {
-	return &ethtypes.Transaction{}, nil
-}
-
-func (m *mockBidMarket) ExtendOrder(ctx context.Context, orderID *big.Int, amount *big.Int) (*ethtypes.Transaction, error) {
-	return &ethtypes.Transaction{}, nil
-}
-
-func (m *mockBidMarket) GetUsedResource(ctx context.Context, providerID *big.Int, machineID *big.Int) (*bidenginetypes.ResourceUsage, error) {
-	return &bidenginetypes.ResourceUsage{}, nil
-}
-
-func (m *mockBidMarket) ReleaseOrderResource(ctx context.Context, orderID *big.Int) (*ethtypes.Transaction, error) {
-	return &ethtypes.Transaction{}, nil
-}
-
-func (m *mockBidMarket) WatchOrderCreated(ctx context.Context, sink chan<- *bidenginetypes.OrderEvent) error {
-	return nil
-}
-
-func (m *mockBidMarket) WatchOrderClosed(ctx context.Context, sink chan<- *bidenginetypes.OrderEvent) error {
-	return nil
-}
-
-func (m *mockBidMarket) WatchOrderExpired(ctx context.Context, sink chan<- *bidenginetypes.OrderEvent) error {
-	return nil
-}
-
-func (m *mockBidMarket) WatchBidSubmitted(ctx context.Context, sink chan<- *bidenginetypes.OrderEvent) error {
-	return nil
-}
-
-func (m *mockBidMarket) WatchBidAccepted(ctx context.Context, sink chan<- *bidenginetypes.OrderEvent) error {
-	return nil
-}
-
-func (m *mockBidMarket) WatchBidCancelled(ctx context.Context, sink chan<- *bidenginetypes.OrderEvent) error {
-	return nil
-}
-
-func (m *mockBidMarket) OrderBids(ctx context.Context, orderID *big.Int, bidIndex *big.Int) (*bidenginetypes.Bid, error) {
-	return &bidenginetypes.Bid{}, nil
 }
 
 // ExampleConfigurationStructure shows the expected configuration structure
@@ -303,6 +405,13 @@ deployment:
       rate_limit:
         enabled: true
         requests_per_minute: 100
+
+  # Provider and machine configuration
+  provider_id: 123
+  machine_ids:
+    - "1"
+    - "2"
+    - "3"
 
   # Kubernetes configuration
   kubernetes:
@@ -340,4 +449,109 @@ bid_market:
 
 	fmt.Println("Example configuration structure:")
 	fmt.Println(configExample)
+}
+
+// ExampleLoadConfigFromString demonstrates loading config from a string
+func ExampleLoadConfigFromString() {
+	logger := logrus.New()
+	cfg := config.NewC(logger)
+
+	// Load config from string
+	configYAML := `
+bidengine:
+  provider_id: 123
+  min_bid_percent: 70
+  max_bid_percent: 95
+contracts:
+  provider: "0x123456789abcdef123456789abcdef123456789a"
+  bid_market: "0xabcdef123456789abcdef123456789abcdef1234"
+logging:
+  level: "info"
+`
+
+	if err := cfg.LoadString(configYAML); err != nil {
+		log.Fatal("Failed to load config from string:", err)
+	}
+
+	// Get provider ID
+	providerID := big.NewInt(123) // From config above
+
+	// Initialize API
+	mockBidMarket := &SimpleMockBidMarketContract{}
+	serviceManager := &SimpleMockServiceManager{}
+	api := NewAPI(serviceManager, mockBidMarket, logger, providerID)
+
+	fmt.Printf("API initialized with provider ID: %s\n", providerID.String())
+
+	// Use api...
+	_ = api
+}
+
+// ExampleLoadConfigFromEnvironment demonstrates loading config from environment variables
+func ExampleLoadConfigFromEnvironment() {
+	logger := logrus.New()
+
+	// Set environment variables
+	os.Setenv("BIDENGINE_PROVIDER_ID", "456")
+	os.Setenv("BIDENGINE_MIN_BID_PERCENT", "75")
+	os.Setenv("CONTRACTS_PROVIDER", "0x987654321fedcba987654321fedcba987654321f")
+
+	// Load config from environment (you would need to implement this)
+	// For now, we'll use the values directly
+	providerID := big.NewInt(456)
+
+	// Initialize API
+	mockBidMarket := &SimpleMockBidMarketContract{}
+	serviceManager := &SimpleMockServiceManager{}
+	api := NewAPI(serviceManager, mockBidMarket, logger, providerID)
+
+	fmt.Printf("API initialized with provider ID: %s\n", providerID.String())
+
+	// Use api...
+	_ = api
+}
+
+// Middleware functions
+func corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+func loggingMiddleware(logger *logrus.Logger) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			start := time.Now()
+			next.ServeHTTP(w, r)
+			logger.WithFields(logrus.Fields{
+				"method":     r.Method,
+				"path":       r.URL.Path,
+				"duration":   time.Since(start),
+				"user_agent": r.UserAgent(),
+			}).Info("HTTP request")
+		})
+	}
+}
+
+func recoveryMiddleware(logger *logrus.Logger) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			defer func() {
+				if err := recover(); err != nil {
+					logger.WithField("error", err).Error("Panic recovered")
+					http.Error(w, "Internal server error", http.StatusInternalServerError)
+				}
+			}()
+			next.ServeHTTP(w, r)
+		})
+	}
 }
