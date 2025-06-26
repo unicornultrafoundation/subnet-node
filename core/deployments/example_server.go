@@ -192,6 +192,81 @@ func (m *SimpleMockServiceManager) UpdateDeploymentImage(ctx context.Context, de
 	return nil
 }
 
+func (m *SimpleMockServiceManager) ListServices(ctx context.Context, deploymentID string) ([]*ServiceInfo, error) {
+	// Return mock services
+	return []*ServiceInfo{
+		{
+			Name:     "web",
+			Image:    "nginx:latest",
+			Status:   "running",
+			Replicas: 2,
+			Ports: []*PortInfo{
+				{
+					HostPort:      8080,
+					ContainerPort: 80,
+					Protocol:      "tcp",
+					HostIP:        "0.0.0.0",
+				},
+			},
+			Environment: []*EnvVar{
+				{Name: "NODE_ENV", Value: "production"},
+			},
+			Resources: &ResourceUsage{
+				CPUUsage:    25.5,
+				MemoryUsage: 512 * 1024 * 1024, // 512MB
+				DiskUsage:   100 * 1024 * 1024, // 100MB
+				Timestamp:   time.Now(),
+			},
+			Health: &HealthStatus{
+				Status:    "healthy",
+				Message:   "All health checks passed",
+				LastCheck: time.Now(),
+			},
+			CreatedAt: time.Now().Add(-time.Hour),
+			UpdatedAt: time.Now(),
+		},
+		{
+			Name:     "api",
+			Image:    "node:18-alpine",
+			Status:   "running",
+			Replicas: 1,
+			Ports: []*PortInfo{
+				{
+					HostPort:      3000,
+					ContainerPort: 3000,
+					Protocol:      "tcp",
+					HostIP:        "0.0.0.0",
+				},
+			},
+			Environment: []*EnvVar{
+				{Name: "PORT", Value: "3000"},
+				{Name: "DB_HOST", Value: "postgres"},
+			},
+			Resources: &ResourceUsage{
+				CPUUsage:    15.2,
+				MemoryUsage: 256 * 1024 * 1024, // 256MB
+				DiskUsage:   50 * 1024 * 1024,  // 50MB
+				Timestamp:   time.Now(),
+			},
+			Health: &HealthStatus{
+				Status:    "healthy",
+				Message:   "API responding correctly",
+				LastCheck: time.Now(),
+			},
+			CreatedAt: time.Now().Add(-time.Hour),
+			UpdatedAt: time.Now(),
+		},
+	}, nil
+}
+
+func (m *SimpleMockServiceManager) GetDeploymentEvents(ctx context.Context, deploymentID string, limit int) ([]*DeploymentEvent, error) {
+	return []*DeploymentEvent{}, nil
+}
+
+func (m *SimpleMockServiceManager) StreamDeploymentEvents(ctx context.Context, deploymentID string) (<-chan *DeploymentEvent, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
 // ExampleServer demonstrates how to use the deployment API server
 func ExampleServer() {
 	// Initialize logger

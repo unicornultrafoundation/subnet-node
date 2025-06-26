@@ -7,6 +7,8 @@ import (
 	"io"
 	"math/big"
 	"net/http"
+	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -120,6 +122,9 @@ func (api *API) RegisterRoutes(router *mux.Router) {
 	router.HandleFunc("/api/v1/deployments/{id}/start", api.startDeployment).Methods("POST")
 	router.HandleFunc("/api/v1/deployments/{id}/stop", api.stopDeployment).Methods("POST")
 	router.HandleFunc("/api/v1/deployments/{id}/restart", api.restartDeployment).Methods("POST")
+
+	// Services management
+	router.HandleFunc("/api/v1/deployments/{id}/services", api.listServices).Methods("GET")
 
 	// Monitoring and inspection
 	router.HandleFunc("/api/v1/deployments/{id}/inspect", api.inspectDeployment).Methods("GET")
@@ -416,13 +421,190 @@ func (api *API) isOrderValidForDeployment(order *bidenginetypes.Order) bool {
 }
 
 func (api *API) listDeployments(w http.ResponseWriter, r *http.Request) {
+	// Get authorization data from headers
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" {
+		api.writeError(w, http.StatusUnauthorized, "Missing authorization header")
+		return
+	}
+
+	// Parse authorization data
+	var authReq AuthorizationRequest
+	if err := json.Unmarshal([]byte(authHeader), &authReq); err != nil {
+		api.writeError(w, http.StatusBadRequest, "Invalid authorization format")
+		return
+	}
+
+	// Validate timestamp
+	now := time.Now().Unix()
+	if abs(now-authReq.Timestamp) >= 300 {
+		api.writeError(w, http.StatusUnauthorized, "Authorization timestamp expired")
+		return
+	}
+
+	// Parse the signer address
+	signerAddr := common.HexToAddress(authReq.Address)
+	if signerAddr == (common.Address{}) {
+		api.writeError(w, http.StatusBadRequest, "Invalid signer address")
+		return
+	}
+
+	// Verify signature
+	if !api.verifySignature(authReq.Message, authReq.Signature, signerAddr) {
+		api.writeError(w, http.StatusUnauthorized, "Invalid signature")
+		return
+	}
+
+	// Check rate limiting
+	if !api.rateLimiter.Allow(signerAddr.Hex()) {
+		api.writeError(w, http.StatusTooManyRequests, "Rate limit exceeded. Please try again later.")
+		return
+	}
+
+	// Get all deployments
 	deployments, err := api.service.ListDeployments(r.Context())
 	if err != nil {
 		api.writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	api.writeJSON(w, http.StatusOK, Response{Success: true, Data: deployments})
+	// Filter deployments by owner (only return deployments owned by the signer)
+	var userDeployments []*Deployment
+	for _, deployment := range deployments {
+		if deployment.Owner == signerAddr.Hex() {
+			userDeployments = append(userDeployments, deployment)
+		}
+	}
+
+	// Apply additional filters from query parameters
+	filteredDeployments := api.filterDeployments(userDeployments, r.URL.Query())
+
+	// Apply pagination
+	limit := api.getIntQueryParam(r, "limit", 50)
+	offset := api.getIntQueryParam(r, "offset", 0)
+
+	if limit > 100 {
+		limit = 100 // Max limit
+	}
+
+	if offset >= len(filteredDeployments) {
+		offset = len(filteredDeployments)
+	}
+
+	end := offset + limit
+	if end > len(filteredDeployments) {
+		end = len(filteredDeployments)
+	}
+
+	paginatedDeployments := filteredDeployments[offset:end]
+
+	// Create response with pagination info
+	response := map[string]interface{}{
+		"deployments": paginatedDeployments,
+		"pagination": map[string]interface{}{
+			"total":    len(filteredDeployments),
+			"limit":    limit,
+			"offset":   offset,
+			"has_more": end < len(filteredDeployments),
+		},
+	}
+
+	api.writeJSON(w, http.StatusOK, Response{Success: true, Data: response})
+}
+
+// filterDeployments applies filters to deployments based on query parameters
+func (api *API) filterDeployments(deployments []*Deployment, query url.Values) []*Deployment {
+	var filtered []*Deployment
+
+	for _, deployment := range deployments {
+		include := true
+
+		// Filter by status
+		if status := query.Get("status"); status != "" {
+			if string(deployment.Status) != status {
+				include = false
+			}
+		}
+
+		// Filter by name (partial match)
+		if name := query.Get("name"); name != "" {
+			if !strings.Contains(strings.ToLower(deployment.Name), strings.ToLower(name)) {
+				include = false
+			}
+		}
+
+		// Filter by type
+		if deploymentType := query.Get("type"); deploymentType != "" {
+			if string(deployment.Type) != deploymentType {
+				include = false
+			}
+		}
+
+		// Filter by date range
+		if createdAfter := query.Get("created_after"); createdAfter != "" {
+			if after, err := time.Parse(time.RFC3339, createdAfter); err == nil {
+				if deployment.CreatedAt.Before(after) {
+					include = false
+				}
+			}
+		}
+
+		if createdBefore := query.Get("created_before"); createdBefore != "" {
+			if before, err := time.Parse(time.RFC3339, createdBefore); err == nil {
+				if deployment.CreatedAt.After(before) {
+					include = false
+				}
+			}
+		}
+
+		if include {
+			filtered = append(filtered, deployment)
+		}
+	}
+
+	// Apply sorting
+	if sortBy := query.Get("sort_by"); sortBy != "" {
+		api.sortDeployments(filtered, sortBy, query.Get("sort_order") == "desc")
+	}
+
+	return filtered
+}
+
+// sortDeployments sorts deployments by the specified field
+func (api *API) sortDeployments(deployments []*Deployment, sortBy string, desc bool) {
+	switch sortBy {
+	case "name":
+		sort.Slice(deployments, func(i, j int) bool {
+			if desc {
+				return deployments[i].Name > deployments[j].Name
+			}
+			return deployments[i].Name < deployments[j].Name
+		})
+	case "created_at":
+		sort.Slice(deployments, func(i, j int) bool {
+			if desc {
+				return deployments[i].CreatedAt.After(deployments[j].CreatedAt)
+			}
+			return deployments[i].CreatedAt.Before(deployments[j].CreatedAt)
+		})
+	case "status":
+		sort.Slice(deployments, func(i, j int) bool {
+			if desc {
+				return deployments[i].Status > deployments[j].Status
+			}
+			return deployments[i].Status < deployments[j].Status
+		})
+	}
+}
+
+// getIntQueryParam gets an integer query parameter with a default value
+func (api *API) getIntQueryParam(r *http.Request, key string, defaultValue int) int {
+	if value := r.URL.Query().Get(key); value != "" {
+		if intValue, err := strconv.Atoi(value); err == nil {
+			return intValue
+		}
+	}
+	return defaultValue
 }
 
 func (api *API) getDeployment(w http.ResponseWriter, r *http.Request) {
@@ -996,4 +1178,22 @@ func (api *API) restartDeployment(w http.ResponseWriter, r *http.Request) {
 
 	// TODO: Add deployment restart logic
 	api.writeJSON(w, http.StatusOK, Response{Success: true})
+}
+
+func (api *API) listServices(w http.ResponseWriter, r *http.Request) {
+	vars := api.getVars(r)
+	deploymentID := vars["id"]
+
+	// Validate authorization
+	if _, authorized := api.validateDeploymentAuthorization(w, r, deploymentID); !authorized {
+		return
+	}
+
+	services, err := api.service.ListServices(r.Context(), deploymentID)
+	if err != nil {
+		api.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	api.writeJSON(w, http.StatusOK, Response{Success: true, Data: services})
 }

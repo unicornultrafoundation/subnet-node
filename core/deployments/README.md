@@ -115,25 +115,114 @@ Authorization: {"signature":"...","address":"0x...","message":"123:create:164099
 {
   "id": "123",
   "name": "web-application",
-  "image": "nginx:latest",
-  "ports": [
-    {
-      "containerPort": 80,
-      "hostPort": 8080,
-      "protocol": "tcp"
-    }
-  ],
-  "environment": {
-    "NODE_ENV": "production",
-    "DATABASE_URL": "postgresql://user:pass@localhost:5432/db"
-  },
-  "resources": {
-    "cpu": "1000m",
-    "memory": "1Gi",
-    "storage": "10Gi"
-  },
-  "replicas": 3
+  "order_id": "456",
+  "type": "kubernetes",
+  "manifest": "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: web-application\n  labels:\n    app: web-application\nspec:\n  replicas: 3\n  selector:\n    matchLabels:\n      app: web-application\n  template:\n    metadata:\n      labels:\n        app: web-application\n    spec:\n      containers:\n      - name: web\n        image: nginx:latest\n        ports:\n        - containerPort: 80\n        env:\n        - name: NODE_ENV\n          value: production\n        - name: DATABASE_URL\n          value: postgresql://user:pass@localhost:5432/db\n        resources:\n          requests:\n            cpu: 1000m\n            memory: 1Gi\n          limits:\n            cpu: 2000m\n            memory: 2Gi\n        livenessProbe:\n          httpGet:\n            path: /health\n            port: 80\n          initialDelaySeconds: 30\n          periodSeconds: 10\n        readinessProbe:\n          httpGet:\n            path: /ready\n            port: 80\n          initialDelaySeconds: 5\n          periodSeconds: 5\n---\napiVersion: v1\nkind: Service\nmetadata:\n  name: web-application-service\nspec:\n  selector:\n    app: web-application\n  ports:\n  - port: 80\n    targetPort: 80\n    protocol: TCP\n  type: ClusterIP"
 }
+```
+
+**Request Body Fields:**
+- `id` (required): Unique deployment identifier
+- `name` (required): Human-readable deployment name
+- `order_id` (required): ID of the order from the bid market
+- `type` (required): Deployment type (`kubernetes`, `docker`, etc.)
+- `manifest` (required): YAML string containing the deployment configuration
+
+**Manifest Format:**
+The `manifest` field should contain a valid YAML string that defines the deployment configuration. For Kubernetes deployments, this typically includes:
+
+- **Deployment**: Defines the application pods and replicas
+- **Service**: Exposes the deployment internally or externally
+- **ConfigMap/Secret**: Configuration and sensitive data
+- **Ingress**: External access rules (if needed)
+- **PersistentVolumeClaim**: Storage requirements (if needed)
+
+**Example YAML Manifest:**
+```yaml
+# Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-application
+  labels:
+    app: web-application
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: web-application
+  template:
+    metadata:
+      labels:
+        app: web-application
+    spec:
+      containers:
+      - name: web
+        image: nginx:latest
+        ports:
+        - containerPort: 80
+        env:
+        - name: NODE_ENV
+          value: production
+        - name: DATABASE_URL
+          value: postgresql://user:pass@localhost:5432/db
+        resources:
+          requests:
+            cpu: 1000m
+            memory: 1Gi
+          limits:
+            cpu: 2000m
+            memory: 2Gi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 80
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 5
+
+---
+# Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-application-service
+spec:
+  selector:
+    app: web-application
+  ports:
+  - port: 80
+    targetPort: 80
+    protocol: TCP
+  type: ClusterIP
+
+---
+# ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: web-application-config
+data:
+  nginx.conf: |
+    server {
+      listen 80;
+      server_name localhost;
+      
+      location / {
+        root /usr/share/nginx/html;
+        index index.html index.htm;
+      }
+      
+      location /health {
+        access_log off;
+        return 200 "healthy\n";
+      }
+    }
 ```
 
 **Response:**
@@ -144,6 +233,8 @@ Authorization: {"signature":"...","address":"0x...","message":"123:create:164099
     "id": "123",
     "name": "web-application",
     "owner": "0x123456789abcdef123456789abcdef123456789a",
+    "order_id": "456",
+    "type": "kubernetes",
     "status": "created",
     "created_at": "2024-01-01T12:00:00Z",
     "updated_at": "2024-01-01T12:00:00Z"
@@ -166,17 +257,92 @@ Authorization: {"signature":"...","address":"0x...","message":"123:create:164099
 - Order must be in "open" status
 - Order must not be expired
 - Deployment ID must be unique
+- Manifest must be valid YAML format
+- Provider ID in order must match configured provider ID
 
 ---
 
 ### 4. List Deployments
 
 #### GET `/deployments`
-List all deployments.
+List all deployments owned by the authenticated user with filtering, pagination, and sorting.
 
 **Request:**
 ```http
-GET /deployments
+GET /deployments?status=running&name=web&limit=10&offset=0&sort_by=created_at&sort_order=desc
+Authorization: {"signature":"...","address":"0x...","message":"list:1640995200","timestamp":1640995200}
+```
+
+**Query Parameters:**
+- `status` (optional): Filter by deployment status (`running`, `stopped`, `failed`, etc.)
+- `name` (optional): Filter by deployment name (partial match, case-insensitive)
+- `type` (optional): Filter by deployment type (`kubernetes`, `docker`, etc.)
+- `created_after` (optional): Filter deployments created after this timestamp (RFC3339 format)
+- `created_before` (optional): Filter deployments created before this timestamp (RFC3339 format)
+- `limit` (optional): Number of deployments to return (default: 50, max: 100)
+- `offset` (optional): Number of deployments to skip (default: 0)
+- `sort_by` (optional): Sort field (`name`, `created_at`, `status`)
+- `sort_order` (optional): Sort order (`asc` or `desc`, default: `asc`)
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "deployments": [
+      {
+        "id": "123",
+        "name": "web-application",
+        "owner": "0x123456789abcdef123456789abcdef123456789a",
+        "status": "running",
+        "type": "kubernetes",
+        "created_at": "2024-01-01T12:00:00Z",
+        "updated_at": "2024-01-01T12:00:00Z"
+      },
+      {
+        "id": "124",
+        "name": "api-service",
+        "owner": "0x123456789abcdef123456789abcdef123456789a",
+        "status": "stopped",
+        "type": "kubernetes",
+        "created_at": "2024-01-01T13:00:00Z",
+        "updated_at": "2024-01-01T13:00:00Z"
+      }
+    ],
+    "pagination": {
+      "total": 25,
+      "limit": 10,
+      "offset": 0,
+      "has_more": true
+    }
+  }
+}
+```
+
+**Status Codes:**
+- `200 OK`: Deployments retrieved successfully
+- `401 Unauthorized`: Missing or invalid authorization
+- `429 Too Many Requests`: Rate limit exceeded
+- `500 Internal Server Error`: Server error
+
+**Features:**
+- **Authorization**: Only returns deployments owned by the authenticated user
+- **Filtering**: Filter by status, name, type, and creation date range
+- **Pagination**: Limit and offset support with pagination metadata
+- **Sorting**: Sort by name, creation date, or status
+- **Rate Limiting**: 5 requests per minute per address
+
+---
+
+### 5. List Services
+
+#### GET `/deployments/{id}/services`
+Get all services in a deployment.
+
+**Request:**
+```http
+GET /deployments/123/services
+Authorization: {"signature":"...","address":"0x...","message":"123:read:1640995200","timestamp":1640995200}
 ```
 
 **Response:**
@@ -185,32 +351,93 @@ GET /deployments
   "success": true,
   "data": [
     {
-      "id": "123",
-      "name": "web-application",
-      "owner": "0x123456789abcdef123456789abcdef123456789a",
+      "name": "web",
+      "image": "nginx:latest",
       "status": "running",
-      "created_at": "2024-01-01T12:00:00Z",
+      "replicas": 2,
+      "ports": [
+        {
+          "host_port": 8080,
+          "container_port": 80,
+          "protocol": "tcp",
+          "host_ip": "0.0.0.0"
+        }
+      ],
+      "environment": [
+        {
+          "name": "NODE_ENV",
+          "value": "production"
+        }
+      ],
+      "resources": {
+        "cpu_usage": 25.5,
+        "memory_usage": 536870912,
+        "disk_usage": 104857600,
+        "network_usage": 1024000,
+        "timestamp": "2024-01-01T12:00:00Z"
+      },
+      "health": {
+        "status": "healthy",
+        "message": "All health checks passed",
+        "last_check": "2024-01-01T12:00:00Z",
+        "checks": []
+      },
+      "created_at": "2024-01-01T11:00:00Z",
       "updated_at": "2024-01-01T12:00:00Z"
     },
     {
-      "id": "124",
-      "name": "api-service",
-      "owner": "0xabcdef123456789abcdef123456789abcdef1234",
-      "status": "stopped",
-      "created_at": "2024-01-01T13:00:00Z",
-      "updated_at": "2024-01-01T13:00:00Z"
+      "name": "api",
+      "image": "node:18-alpine",
+      "status": "running",
+      "replicas": 1,
+      "ports": [
+        {
+          "host_port": 3000,
+          "container_port": 3000,
+          "protocol": "tcp",
+          "host_ip": "0.0.0.0"
+        }
+      ],
+      "environment": [
+        {
+          "name": "PORT",
+          "value": "3000"
+        },
+        {
+          "name": "DB_HOST",
+          "value": "postgres"
+        }
+      ],
+      "resources": {
+        "cpu_usage": 15.2,
+        "memory_usage": 268435456,
+        "disk_usage": 52428800,
+        "network_usage": 512000,
+        "timestamp": "2024-01-01T12:00:00Z"
+      },
+      "health": {
+        "status": "healthy",
+        "message": "API responding correctly",
+        "last_check": "2024-01-01T12:00:00Z",
+        "checks": []
+      },
+      "created_at": "2024-01-01T11:00:00Z",
+      "updated_at": "2024-01-01T12:00:00Z"
     }
   ]
 }
 ```
 
 **Status Codes:**
-- `200 OK`: Deployments retrieved successfully
+- `200 OK`: Services retrieved successfully
+- `401 Unauthorized`: Missing or invalid authorization
+- `403 Forbidden`: Not the deployment owner
+- `404 Not Found`: Deployment not found
 - `500 Internal Server Error`: Server error
 
 ---
 
-### 5. Get Deployment
+### 6. Get Deployment
 
 #### GET `/deployments/{id}`
 Get a specific deployment by ID.
@@ -262,7 +489,7 @@ Authorization: {"signature":"...","address":"0x...","message":"123:read:16409952
 
 ---
 
-### 6. Start Deployment
+### 7. Start Deployment
 
 #### POST `/deployments/{id}/start`
 Start a deployment.
@@ -289,7 +516,7 @@ Authorization: {"signature":"...","address":"0x...","message":"123:start:1640995
 
 ---
 
-### 7. Stop Deployment
+### 8. Stop Deployment
 
 #### POST `/deployments/{id}/stop`
 Stop a deployment.
@@ -316,7 +543,7 @@ Authorization: {"signature":"...","address":"0x...","message":"123:stop:16409952
 
 ---
 
-### 8. Restart Deployment
+### 9. Restart Deployment
 
 #### POST `/deployments/{id}/restart`
 Restart a deployment.
@@ -343,7 +570,7 @@ Authorization: {"signature":"...","address":"0x...","message":"123:restart:16409
 
 ---
 
-### 9. Delete Deployment
+### 10. Delete Deployment
 
 #### DELETE `/deployments/{id}`
 Delete a deployment.
@@ -370,7 +597,7 @@ Authorization: {"signature":"...","address":"0x...","message":"123:delete:164099
 
 ---
 
-### 10. Inspect Deployment
+### 11. Inspect Deployment
 
 #### GET `/deployments/{id}/inspect`
 Get detailed information about a deployment.
@@ -427,7 +654,7 @@ Authorization: {"signature":"...","address":"0x...","message":"123:inspect:16409
 
 ---
 
-### 11. Inspect Service
+### 12. Inspect Service
 
 #### GET `/deployments/{id}/services/{service}/inspect`
 Get detailed information about a specific service in a deployment.
@@ -483,7 +710,7 @@ Authorization: {"signature":"...","address":"0x...","message":"123:inspect:16409
 
 ---
 
-### 12. Get Deployment Metrics
+### 13. Get Deployment Metrics
 
 #### GET `/deployments/{id}/metrics`
 Get metrics for a deployment.
@@ -533,7 +760,7 @@ Authorization: {"signature":"...","address":"0x...","message":"123:metrics:16409
 
 ---
 
-### 13. Get Service Metrics
+### 14. Get Service Metrics
 
 #### GET `/deployments/{id}/services/{service}/metrics`
 Get metrics for a specific service.
@@ -569,7 +796,7 @@ Authorization: {"signature":"...","address":"0x...","message":"123:metrics:16409
 
 ---
 
-### 14. Get Deployment Logs
+### 15. Get Deployment Logs
 
 #### GET `/deployments/{id}/logs`
 Get logs for a deployment.
@@ -614,7 +841,7 @@ Authorization: {"signature":"...","address":"0x...","message":"123:logs:16409952
 
 ---
 
-### 15. Get Service Logs
+### 16. Get Service Logs
 
 #### GET `/deployments/{id}/services/{service}/logs`
 Get logs for a specific service.
@@ -649,7 +876,7 @@ Authorization: {"signature":"...","address":"0x...","message":"123:logs:16409952
 
 ---
 
-### 16. Stream Deployment Logs
+### 17. Stream Deployment Logs
 
 #### GET `/deployments/{id}/logs/stream`
 Stream logs for a deployment in real-time.
@@ -679,7 +906,7 @@ data: {"timestamp":"2024-01-01T12:00:01Z","service":"web","pod":"web-123-def456"
 
 ---
 
-### 17. Stream Service Logs
+### 18. Stream Service Logs
 
 #### GET `/deployments/{id}/services/{service}/logs/stream`
 Stream logs for a specific service in real-time.
@@ -704,7 +931,7 @@ data: {"timestamp":"2024-01-01T12:00:00Z","service":"web","pod":"web-123-abc123"
 
 ---
 
-### 18. Execute Console Command
+### 19. Execute Console Command
 
 #### POST `/deployments/{id}/services/{service}/exec`
 Execute a command in a deployment pod.
@@ -743,7 +970,7 @@ Authorization: {"signature":"...","address":"0x...","message":"123:exec:16409952
 
 ---
 
-### 19. WebSocket Console
+### 20. WebSocket Console
 
 #### GET `/deployments/{id}/services/{service}/exec/ws`
 Interactive console via WebSocket.
@@ -794,7 +1021,7 @@ Authorization: {"signature":"...","address":"0x...","message":"123:exec:16409952
 
 ---
 
-### 20. Get Deployment Events
+### 21. Get Deployment Events
 
 #### GET `/deployments/{id}/events`
 Get events for a deployment.
@@ -842,7 +1069,7 @@ Authorization: {"signature":"...","address":"0x...","message":"123:events:164099
 
 ---
 
-### 21. Stream Deployment Events
+### 22. Stream Deployment Events
 
 #### GET `/deployments/{id}/events/stream`
 Stream deployment events in real-time.
@@ -869,7 +1096,7 @@ data: {"id":"event-2","type":"deployment_started","timestamp":"2024-01-01T12:01:
 
 ---
 
-### 22. Update Deployment
+### 23. Update Deployment
 
 #### PUT `/deployments/{id}`
 Update a deployment.

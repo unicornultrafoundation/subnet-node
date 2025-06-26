@@ -355,8 +355,53 @@ func (s *Service) UpdateDeploymentImage(ctx context.Context, deploymentID string
 		return err
 	}
 
-	// Update image using the specific manager
+	// Update deployment image using the specific manager
 	return manager.UpdateDeploymentImage(ctx, deploymentID, serviceName, image)
+}
+
+// ListServices lists all services in a deployment
+func (s *Service) ListServices(ctx context.Context, deploymentID string) ([]*ServiceInfo, error) {
+	// Get deployment to determine its type
+	deployment, err := s.GetDeployment(ctx, deploymentID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get the appropriate deployment manager
+	manager, err := s.GetDeploymentManager(deployment.Type)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get deployment inspection which contains services info
+	inspection, err := manager.InspectDeployment(ctx, deploymentID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert map to slice
+	var services []*ServiceInfo
+	for _, service := range inspection.Services {
+		services = append(services, service)
+	}
+
+	return services, nil
+}
+
+// GetDeploymentEvents gets events for a deployment
+func (s *Service) GetDeploymentEvents(ctx context.Context, deploymentID string, limit int) ([]*DeploymentEvent, error) {
+	if s.eventManager == nil {
+		return []*DeploymentEvent{}, nil
+	}
+	return s.eventManager.GetEvents(ctx, deploymentID, limit)
+}
+
+// StreamDeploymentEvents streams deployment events in real-time
+func (s *Service) StreamDeploymentEvents(ctx context.Context, deploymentID string) (<-chan *DeploymentEvent, error) {
+	if s.eventManager == nil {
+		return nil, fmt.Errorf("event manager not configured")
+	}
+	return s.eventManager.SubscribeToEvents(ctx, deploymentID)
 }
 
 // GetSupportedDeploymentTypes returns the list of supported deployment types

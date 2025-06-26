@@ -238,6 +238,15 @@ type ServiceManager interface {
 
 	// UpdateDeploymentImage updates the image of a service in a deployment
 	UpdateDeploymentImage(ctx context.Context, deploymentID string, serviceName string, image string) error
+
+	// ListServices lists all services in a deployment
+	ListServices(ctx context.Context, deploymentID string) ([]*ServiceInfo, error)
+
+	// GetDeploymentEvents gets events for a deployment
+	GetDeploymentEvents(ctx context.Context, deploymentID string, limit int) ([]*DeploymentEvent, error)
+
+	// StreamDeploymentEvents streams deployment events in real-time
+	StreamDeploymentEvents(ctx context.Context, deploymentID string) (<-chan *DeploymentEvent, error)
 }
 
 // LogEntry represents a log entry
