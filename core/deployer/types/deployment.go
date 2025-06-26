@@ -1,0 +1,142 @@
+package types
+
+import (
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/unicornultrafoundation/subnet-node/core/deployer/manifest"
+)
+
+type DeploymentResponse struct {
+	ID        string
+	Requester common.Address
+	Status    *DeploymentStatus
+}
+
+type Deployment struct {
+	ID        string
+	Requester common.Address
+	Manifest  *manifest.Manifest
+	Status    *DeploymentStatus
+	TTL       int64 // in minutes
+}
+
+type DeploymentRequest struct {
+	OrderID   string       `json:"order_id"`
+	Manifest  manifest.SDL `json:"manifest"`
+	Signature string       `json:"signature"`
+	Requester string       `json:"requester"`
+	TTL       int64        `json:"ttl"` // in minutes
+}
+
+// DeploymentStatus represents the current status of a deployment
+type DeploymentStatus struct {
+	State      DeploymentState `json:"state"`
+	Services   []ServiceStatus `json:"services"`
+	Pods       []PodStatus     `json:"pods"`
+	Endpoints  []EndpointInfo  `json:"endpoints"`
+	CreatedAt  string          `json:"createdAt"`
+	UpdatedAt  string          `json:"updatedAt"`
+	DeployedAt string          `json:"deployedAt"`
+	TTL        int64           `json:"ttl"`      // in minutes
+	TimeLeft   int64           `json:"timeLeft"` // in minutes, -1 if not set
+}
+
+// DeploymentState represents the overall state of a deployment
+type DeploymentState string
+
+const (
+	DeploymentStateRunning  DeploymentState = "running"
+	DeploymentStateStopped  DeploymentState = "stopped"
+	DeploymentStateFailed   DeploymentState = "failed"
+	DeploymentStatePending  DeploymentState = "pending"
+	DeploymentStateNotFound DeploymentState = "notfound"
+)
+
+// ServiceStatus represents the status of a service within a deployment
+type ServiceStatus struct {
+	Name              string         `json:"name"`
+	Group             string         `json:"group"`
+	Image             string         `json:"image"`
+	State             ServiceState   `json:"state"`
+	Replicas          int32          `json:"replicas"`
+	ReadyReplicas     int32          `json:"readyReplicas"`
+	AvailableReplicas int32          `json:"availableReplicas"`
+	URIs              []string       `json:"uris"`
+	Ports             []ServicePort  `json:"ports"`
+	Resources         *ResourceUsage `json:"resources"`
+	LastUpdated       string         `json:"lastUpdated"`
+}
+
+// PodStatus represents the status of a pod within a deployment
+type PodStatus struct {
+	Name              string            `json:"name"`
+	ServiceName       string            `json:"serviceName"`
+	Group             string            `json:"group"`
+	Image             string            `json:"image"`
+	State             PodState          `json:"state"`
+	Phase             string            `json:"phase"`
+	Ready             bool              `json:"ready"`
+	RestartCount      int32             `json:"restartCount"`
+	IP                string            `json:"ip"`
+	HostIP            string            `json:"hostIP"`
+	Resources         *ResourceUsage    `json:"resources"`
+	CreatedAt         string            `json:"createdAt"`
+	StartedAt         string            `json:"startedAt"`
+	LastRestartTime   string            `json:"lastRestartTime"`
+	ContainerStatuses []ContainerStatus `json:"containerStatuses"`
+}
+
+// PodState represents the state of a pod
+type PodState string
+
+const (
+	PodStateRunning PodState = "running"
+	PodStateStopped PodState = "stopped"
+	PodStateFailed  PodState = "failed"
+	PodStatePending PodState = "pending"
+	PodStateUnknown PodState = "unknown"
+)
+
+// ContainerStatus represents the status of a container within a pod
+type ContainerStatus struct {
+	Name         string `json:"name"`
+	Image        string `json:"image"`
+	Ready        bool   `json:"ready"`
+	RestartCount int32  `json:"restartCount"`
+	State        string `json:"state"`
+	StartedAt    string `json:"startedAt"`
+}
+
+// ServiceState represents the state of a service
+type ServiceState string
+
+const (
+	ServiceStateRunning  ServiceState = "running"
+	ServiceStateStopped  ServiceState = "stopped"
+	ServiceStateFailed   ServiceState = "failed"
+	ServiceStatePending  ServiceState = "pending"
+	ServiceStateNotFound ServiceState = "notfound"
+)
+
+// ServicePort represents an exposed port of a service
+type ServicePort struct {
+	Port        int32  `json:"port"`
+	Protocol    string `json:"protocol"`
+	ServiceType string `json:"serviceType"`
+	URI         string `json:"uri"`
+}
+
+// EndpointInfo represents an endpoint configuration
+type EndpointInfo struct {
+	Name     string `json:"name"`
+	Host     string `json:"host"`
+	Path     string `json:"path"`
+	Protocol string `json:"protocol"`
+	URI      string `json:"uri"`
+}
+
+// ResourceUsage represents resource usage information
+type ResourceUsage struct {
+	CPU     string `json:"cpu"`
+	Memory  string `json:"memory"`
+	Storage string `json:"storage"`
+}

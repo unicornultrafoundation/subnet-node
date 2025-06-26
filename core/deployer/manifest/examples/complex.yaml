@@ -1,0 +1,222 @@
+version: "2.0"
+services:
+  web:
+    image: nginx:latest
+    command: ["nginx", "-g", "daemon off;"]
+    env:
+      - NGINX_HOST=example.com
+      - DB_HOST=db
+    expose:
+      - port: 80
+        as: 80
+        proto: TCP
+        to:
+          - global: true
+        http_options:
+          max_body_size: 10485760
+          next_cases: ["api"]
+      - port: 443
+        as: 443
+        proto: TCP
+        to:
+          - global: true
+    depends-on:
+      - db
+      - cache
+    params:
+      health:
+        readiness:
+          http:
+            path: /health
+            port: 80
+          initial_delay_seconds: 5
+          period_seconds: 10
+          timeout_seconds: 3
+          success_threshold: 1
+          failure_threshold: 3
+        liveness:
+          http:
+            path: /live
+            port: 80
+          initial_delay_seconds: 15
+          period_seconds: 20
+          timeout_seconds: 5
+          success_threshold: 1
+          failure_threshold: 3
+      storage:
+        shm:
+          mount: /dev/shm
+    count: 3
+    resources:
+      cpu:
+        units:
+          value: 500
+          unit: m
+      memory:
+        size:
+          value: 512
+          unit: Mi
+    credentials:
+      host: docker.io
+      username: user
+      password: pass
+    imagePullSecrets:
+      - name: docker-registry-secret
+
+  api:
+    image: api-service:1.0.0
+    command: ["./api-server"]
+    args: ["--config", "/etc/api/config.yaml"]
+    env:
+      - API_PORT=8080
+      - DB_HOST=db
+      - REDIS_HOST=cache
+    expose:
+      - port: 8080
+        as: 8080
+        proto: TCP
+        to:
+          - service: web
+    depends-on:
+      - db
+      - cache
+    count: 2
+    resources:
+      cpu:
+        units:
+          value: 1000
+          unit: m
+      memory:
+        size:
+          value: 1024
+          unit: Mi
+    scheduler_params:
+      runtime_class: gvisor
+
+  db:
+    image: postgres:14
+    env:
+      - POSTGRES_DB=mydb
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=pass
+    count: 1
+    resources:
+      cpu:
+        units:
+          value: 2000
+          unit: m
+      memory:
+        size:
+          value: 4096
+          unit: Mi
+      storage:
+        size:
+          value: 100
+          unit: Gi
+
+  cache:
+    image: redis:7
+    command: ["redis-server", "--appendonly", "yes"]
+    count: 2
+    resources:
+      cpu:
+        units:
+          value: 500
+          unit: m
+      memory:
+        size:
+          value: 1024
+          unit: Mi
+
+  ml-service:
+    image: tensorflow:2.12.0-gpu
+    command: ["./ml-server"]
+    count: 1
+    resources:
+      cpu:
+        units:
+          value: 4000
+          unit: m
+      memory:
+        size:
+          value: 8192
+          unit: Mi
+      gpu:
+        units: 1
+        attributes:
+          vendor:
+            nvidia:
+              - model: "A100"
+                ram: "40Gi"
+                interface: "PCIe"
+
+profiles:
+  compute:
+    default:
+      resources:
+        cpu:
+          request: "500m"
+          limit: "1000m"
+        memory:
+          request: "512Mi"
+          limit: "1Gi"
+        storage:
+          - name: data
+            size: "10Gi"
+            attributes:
+              persistent: true
+              class: standard
+    high-memory:
+      resources:
+        cpu:
+          request: "2000m"
+          limit: "4000m"
+        memory:
+          request: "4Gi"
+          limit: "8Gi"
+        storage:
+          - name: data
+            size: "100Gi"
+            attributes:
+              persistent: true
+              class: premium
+    gpu:
+      resources:
+        cpu:
+          request: "4000m"
+          limit: "8000m"
+        memory:
+          request: "8Gi"
+          limit: "16Gi"
+        gpu:
+          units: 1
+          attributes:
+            vendor:
+              nvidia:
+                - model: "A100"
+                  ram: "40Gi"
+                  interface: "PCIe"
+deployment:
+  web:
+    profile: default
+    count: 3
+  api:
+    profile: default
+    count: 2
+  db:
+    profile: high-memory
+    count: 1
+  cache:
+    profile: default
+    count: 2
+  ml:
+    profile: gpu
+    count: 1
+
+endpoints:
+  web:
+    kind: http
+  api:
+    kind: http
+  ml:
+    kind: http 
