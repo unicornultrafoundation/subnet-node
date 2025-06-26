@@ -14,20 +14,9 @@ const (
 	DeploymentTypeTerraform  DeploymentType = "terraform"
 )
 
-// Tenant represents a tenant in the system
-type Tenant struct {
-	ID          string            `json:"id" yaml:"id"`
-	Name        string            `json:"name" yaml:"name"`
-	Description string            `json:"description" yaml:"description"`
-	Labels      map[string]string `json:"labels" yaml:"labels"`
-	CreatedAt   time.Time         `json:"created_at" yaml:"created_at"`
-	UpdatedAt   time.Time         `json:"updated_at" yaml:"updated_at"`
-}
-
 // Deployment represents a deployment configuration
 type Deployment struct {
 	ID          string            `json:"id" yaml:"id"`
-	TenantID    string            `json:"tenant_id" yaml:"tenant_id"`
 	Name        string            `json:"name" yaml:"name"`
 	Description string            `json:"description" yaml:"description"`
 	Type        DeploymentType    `json:"type" yaml:"type"`
@@ -50,22 +39,10 @@ const (
 	DeploymentStatusUpdating DeploymentStatus = "updating"
 )
 
-// TenantResourceUsage represents resource usage for a tenant
-type TenantResourceUsage struct {
-	TenantID       string  `json:"tenant_id" yaml:"tenant_id"`
-	CPUUsage       float64 `json:"cpu_usage" yaml:"cpu_usage"`
-	MemoryUsage    int64   `json:"memory_usage" yaml:"memory_usage"`
-	DiskUsage      int64   `json:"disk_usage" yaml:"disk_usage"`
-	NetworkUsage   int64   `json:"network_usage" yaml:"network_usage"`
-	PortCount      int     `json:"port_count" yaml:"port_count"`
-	ContainerCount int     `json:"container_count" yaml:"container_count"`
-}
-
 // DeploymentEvent represents an event in the deployment lifecycle
 type DeploymentEvent struct {
 	ID           string                 `json:"id" yaml:"id"`
 	DeploymentID string                 `json:"deployment_id" yaml:"deployment_id"`
-	TenantID     string                 `json:"tenant_id" yaml:"tenant_id"`
 	Type         string                 `json:"type" yaml:"type"`
 	Message      string                 `json:"message" yaml:"message"`
 	Timestamp    time.Time              `json:"timestamp" yaml:"timestamp"`

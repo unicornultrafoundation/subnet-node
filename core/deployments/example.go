@@ -21,7 +21,7 @@ func Example() {
 	service := NewService(nil, logger)
 
 	// Set up managers (these would be actual implementations in production)
-	// service.SetManagers(tenantManager, eventManager, storageManager, resourceManager, factory)
+	// service.SetManagers(eventManager, storageManager, resourceManager, factory)
 
 	// Start the service
 	ctx := context.Background()
@@ -34,7 +34,6 @@ func Example() {
 	fmt.Println("=== Example 1: Creating a deployment ===")
 	deployment := &Deployment{
 		ID:        "example-deploy-123",
-		TenantID:  "tenant-456",
 		Name:      "web-application",
 		Type:      DeploymentTypeDocker,
 		Status:    string(DeploymentStatusPending),

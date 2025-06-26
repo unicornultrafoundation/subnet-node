@@ -154,10 +154,8 @@ func (s *Service) GetDeployment(ctx context.Context, deploymentID string) (*Depl
 	return manager.GetDeployment(ctx, deploymentID)
 }
 
-// ListDeployments lists deployments for a tenant
-func (s *Service) ListDeployments(ctx context.Context, tenantID string) ([]*Deployment, error) {
-	// For now, return all deployments from storage
-	// In the future, this could be optimized to filter by tenant
+// ListDeployments lists all deployments
+func (s *Service) ListDeployments(ctx context.Context) ([]*Deployment, error) {
 	return s.storageManager.ListDeployments(ctx)
 }
 

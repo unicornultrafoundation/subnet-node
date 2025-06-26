@@ -1,73 +1,53 @@
 # Deployments Module
 
-The Deployments module provides a unified interface for managing different types of deployments in the subnet-node project. It supports multiple deployment technologies including Docker, Kubernetes, Nomad, and Terraform.
+The Deployments module provides a unified interface for managing Kubernetes deployments in the subnet-node project. It supports Kubernetes-based deployments with comprehensive monitoring, logging, and management capabilities.
 
 ## Architecture
 
 ```
 core/deployments/
 ├── types.go              # Common types and interfaces
-├── interfaces.go          # Core interfaces for all deployment types
+├── interfaces.go          # Core interfaces for deployment management
 ├── service.go            # Main deployment service
 ├── factory.go            # Factory for creating deployment managers
 ├── api.go                # REST API endpoints
-├── docker/               # Docker deployment implementation
-│   ├── service.go        # Docker deployment service
-│   ├── types.go          # Docker-specific types
-│   ├── interfaces.go     # Docker-specific interfaces
-│   ├── managers/         # Docker managers (tenant, port, etc.)
-│   └── templates/        # Docker Compose templates
-├── kubernetes/           # Kubernetes deployment (planned)
-├── nomad/               # Nomad deployment (planned)
-└── terraform/           # Terraform deployment (planned)
+├── api_test.go           # API tests
+├── example.go            # Usage examples
+├── example_client.go     # Example client implementation
+├── AUTHORIZATION.md      # Authorization documentation
+└── README.md            # This documentation
 ```
 
 ## Supported Deployment Types
 
-### 1. Docker Deployment ✅
+### 1. Kubernetes Deployment ✅
 - **Status**: Fully implemented
-- **Features**: Docker Compose support, tenant isolation, port management, resource limits
-- **Location**: `core/deployments/docker/`
-
-### 2. Kubernetes Deployment 🚧
-- **Status**: Planned
-- **Features**: Pod management, service discovery, namespace isolation, resource quotas
-- **Location**: `core/deployments/kubernetes/`
-
-### 3. Nomad Deployment 🚧
-- **Status**: Planned
-- **Features**: Job scheduling, service discovery, multi-region deployment
-- **Location**: `core/deployments/nomad/`
-
-### 4. Terraform Deployment 🚧
-- **Status**: Planned
-- **Features**: Infrastructure as Code, multi-cloud support, state management
-- **Location**: `core/deployments/terraform/`
+- **Features**: Pod management, service discovery, namespace isolation, resource quotas, comprehensive monitoring
+- **Location**: `core/deployments/` (integrated into main service)
 
 ## Core Components
 
 ### Service
-The main `Service` struct provides a unified interface for managing deployments across different technologies:
+The main `Service` struct provides a unified interface for managing Kubernetes deployments:
 
 ```go
 service := deployments.NewService(cfg, logger)
-service.SetManagers(tenantManager, eventManager, storageManager, resourceManager, factory)
+service.SetManagers(eventManager, storageManager, resourceManager, factory)
 service.Start(ctx)
 ```
 
 ### Factory
-The `Factory` creates deployment managers for different types:
+The `Factory` creates deployment managers for Kubernetes deployments:
 
 ```go
 factory := deployments.NewFactory(logger)
-factory.RegisterManagerCreator(deployments.DeploymentTypeDocker, docker.CreateManager)
+factory.RegisterManagerCreator(deployments.DeploymentTypeKubernetes, kubernetes.CreateManager)
 ```
 
 ### Interfaces
-Common interfaces that all deployment types must implement:
+Common interfaces that the deployment system implements:
 
 - `DeploymentManager`: Core deployment operations
-- `TenantManager`: Tenant management
 - `ManifestManager`: Manifest processing
 - `PortManager`: Port allocation
 - `NetworkManager`: Network management
@@ -78,7 +58,7 @@ Common interfaces that all deployment types must implement:
 ## Features
 
 ### 1. Deployment Management
-- Create, update, delete deployments
+- Create, update, delete Kubernetes deployments
 - Start, stop, restart deployments
 - Scale deployments up/down
 - Update deployment images
@@ -97,40 +77,32 @@ Common interfaces that all deployment types must implement:
 - **Log Aggregation**: Aggregate logs across multiple services
 
 ### 4. Console Execution
-- **Command Execution**: Execute commands in deployment containers
-- **Interactive Console**: Interactive terminal access to containers
+- **Command Execution**: Execute commands in deployment pods
+- **Interactive Console**: Interactive terminal access to pods
 - **WebSocket Support**: Real-time interactive console via WebSocket
 - **Session Management**: Manage multiple execution sessions
 
 ### 5. Resource Management
-- **Tenant Isolation**: Complete isolation between tenants
-- **Resource Limits**: Set and enforce resource limits
+- **Resource Limits**: Set and enforce resource limits via Kubernetes resource quotas
 - **Port Management**: Automatic port allocation and management
-- **Network Isolation**: Separate networks per tenant
+- **Network Management**: Network configuration and management
 
 ## Usage Examples
 
-### Creating a Docker Deployment
+### Creating a Kubernetes Deployment
 
 ```go
 import (
     "github.com/unicornultrafoundation/subnet-node/core/deployments"
-    "github.com/unicornultrafoundation/subnet-node/core/deployments/docker"
 )
 
 // Create deployment
 deployment := &deployments.Deployment{
     ID:       "deploy-123",
-    TenantID: "tenant-456",
     Name:     "web-app",
-    Type:     deployments.DeploymentTypeDocker,
-    Manifest: &docker.ComposeManifest{
-        Services: map[string]docker.Service{
-            "web": {
-                Image: "nginx:latest",
-                Ports: []string{"8080:80"},
-            },
-        },
+    Type:     deployments.DeploymentTypeKubernetes,
+    Manifest: &kubernetes.Manifest{
+        // Kubernetes manifest configuration
     },
 }
 
@@ -168,7 +140,7 @@ for logEntry := range logChan {
 ### Executing Commands
 
 ```go
-// Execute a command in a container
+// Execute a command in a pod
 session, err := service.ExecConsole(ctx, "deploy-123", "web", []string{"ls", "-la"}, false)
 if err != nil {
     log.Fatal(err)
@@ -223,28 +195,16 @@ The deployment module can be configured in the main configuration file:
 deployments:
   enabled: true
   
-  # Docker configuration
-  docker:
-    enabled: true
-    compose_path: "/usr/local/bin/docker-compose"
-    port_pool:
-      start: 30000
-      end: 40000
-    
-  # Kubernetes configuration (future)
+  # Kubernetes configuration
   kubernetes:
-    enabled: false
+    enabled: true
     kubeconfig: "/path/to/kubeconfig"
-    
-  # Nomad configuration (future)
-  nomad:
-    enabled: false
-    address: "http://localhost:4646"
-    
-  # Terraform configuration (future)
-  terraform:
-    enabled: false
-    version: "1.5.0"
+    namespace_prefix: "subnet-"
+    resource_quotas:
+      enabled: true
+      default_cpu: "1000m"
+      default_memory: "1Gi"
+      default_storage: "10Gi"
 ```
 
 ## API Endpoints
@@ -281,14 +241,6 @@ The deployment service provides comprehensive REST API endpoints:
 - `POST /api/v1/deployments/{id}/services/{service}/scale` - Scale deployment
 - `PUT /api/v1/deployments/{id}/services/{service}/image` - Update image
 
-### Tenant Management
-- `POST /api/v1/tenants` - Create tenant
-- `GET /api/v1/tenants` - List tenants
-- `GET /api/v1/tenants/{id}` - Get tenant
-- `PUT /api/v1/tenants/{id}` - Update tenant
-- `DELETE /api/v1/tenants/{id}` - Delete tenant
-- `GET /api/v1/tenants/{id}/resources` - Get tenant resource usage
-
 ### Events
 - `GET /api/v1/deployments/{id}/events` - Get deployment events
 - `GET /api/v1/deployments/{id}/events/stream` - Stream deployment events
@@ -312,36 +264,32 @@ Events can be subscribed to for monitoring and integration with external systems
 
 ## Security
 
-- **Tenant Isolation**: Ensures deployments are completely separated
-- **Network Isolation**: Prevents cross-tenant communication
-- **Resource Limits**: Prevents resource exhaustion
+- **Network Isolation**: Prevents unauthorized communication via network policies
+- **Resource Limits**: Prevents resource exhaustion via Kubernetes resource quotas
 - **Audit Logging**: Logs all operations for security auditing
 - **Access Control**: Role-based access control for API endpoints
 - **Secure Execution**: Secure command execution with proper isolation
 
 ## Performance
 
-- **Efficient Resource Management**: Optimized resource allocation and monitoring
+- **Efficient Resource Management**: Optimized resource allocation and monitoring via Kubernetes APIs
 - **Real-time Streaming**: Efficient real-time log and event streaming
 - **Caching**: Intelligent caching for frequently accessed data
-- **Connection Pooling**: Efficient connection management for external services
+- **Connection Pooling**: Efficient connection management for Kubernetes API
 - **Metrics Collection**: Low-overhead metrics collection and aggregation
 
 ## Contributing
 
-To add a new deployment type:
+The deployment system is currently focused on Kubernetes deployments. To extend functionality:
 
-1. Create a new directory under `core/deployments/`
-2. Implement the required interfaces
-3. Register the manager creator with the factory
-4. Add configuration options
-5. Update this README
+1. Implement additional Kubernetes-specific features
+2. Add new monitoring and management capabilities
+3. Enhance the API with new endpoints
+4. Improve performance and scalability
+5. Update this README with new features
 
 ## Status
 
-- ✅ Docker deployment: Complete with full monitoring, logs, and exec support
-- 🚧 Kubernetes deployment: Planned
-- 🚧 Nomad deployment: Planned  
-- 🚧 Terraform deployment: Planned
+- ✅ Kubernetes deployment: Complete with full monitoring, logs, and exec support
 
-The Docker deployment module is fully functional and ready for production use with comprehensive monitoring, logging, and management capabilities. Other deployment types are planned for future releases. 
+The Kubernetes deployment module is fully functional and ready for production use with comprehensive monitoring, logging, and management capabilities. The system has been optimized for Kubernetes-native deployments with full integration to Kubernetes APIs and features. 
