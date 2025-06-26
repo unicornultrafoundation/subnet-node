@@ -19,7 +19,6 @@ type Service struct {
 	stopChan chan struct{}
 
 	// Managers
-	tenantManager   TenantManager
 	eventManager    EventManager
 	storageManager  StorageManager
 	resourceManager ResourceManager
@@ -43,13 +42,11 @@ func NewService(cfg *config.C, logger *logrus.Logger) *Service {
 
 // SetManagers sets the managers for the service
 func (s *Service) SetManagers(
-	tenantManager TenantManager,
 	eventManager EventManager,
 	storageManager StorageManager,
 	resourceManager ResourceManager,
 	factory DeploymentFactory,
 ) {
-	s.tenantManager = tenantManager
 	s.eventManager = eventManager
 	s.storageManager = storageManager
 	s.resourceManager = resourceManager
@@ -122,21 +119,17 @@ func (s *Service) Stop(ctx context.Context) error {
 	return nil
 }
 
-// CreateTenant creates a new tenant
-func (s *Service) CreateTenant(ctx context.Context, tenant *Tenant) error {
-	if s.tenantManager == nil {
-		return fmt.Errorf("tenant manager not initialized")
-	}
-
-	return s.tenantManager.CreateTenant(ctx, tenant)
-}
-
 // CreateDeployment creates a new deployment
 func (s *Service) CreateDeployment(ctx context.Context, deployment *Deployment) error {
+	s.logger.WithFields(logrus.Fields{
+		"deployment_id": deployment.ID,
+		"type":          deployment.Type,
+	}).Info("Creating deployment")
+
 	// Get the appropriate deployment manager
 	manager, err := s.GetDeploymentManager(deployment.Type)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get deployment manager: %w", err)
 	}
 
 	// Create deployment using the specific manager
@@ -206,29 +199,22 @@ func (s *Service) StopDeployment(ctx context.Context, deploymentID string) error
 
 // DeleteDeployment deletes a deployment
 func (s *Service) DeleteDeployment(ctx context.Context, deploymentID string) error {
+	s.logger.WithField("deployment_id", deploymentID).Info("Deleting deployment")
+
 	// Get deployment to determine its type
 	deployment, err := s.GetDeployment(ctx, deploymentID)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get deployment: %w", err)
 	}
 
 	// Get the appropriate deployment manager
 	manager, err := s.GetDeploymentManager(deployment.Type)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get deployment manager: %w", err)
 	}
 
 	// Delete deployment using the specific manager
 	return manager.DeleteDeployment(ctx, deploymentID)
-}
-
-// GetTenantResourceUsage gets resource usage for a tenant
-func (s *Service) GetTenantResourceUsage(ctx context.Context, tenantID string) (*TenantResourceUsage, error) {
-	if s.resourceManager == nil {
-		return nil, fmt.Errorf("resource manager not initialized")
-	}
-
-	return s.resourceManager.GetTenantResourceUsage(ctx, tenantID)
 }
 
 // GetDeploymentLogs gets logs for a deployment
@@ -355,24 +341,6 @@ func (s *Service) GetServiceMetrics(ctx context.Context, deploymentID string, se
 
 	// Get service metrics using the specific manager
 	return manager.GetServiceMetrics(ctx, deploymentID, serviceName, duration)
-}
-
-// ScaleDeployment scales a deployment
-func (s *Service) ScaleDeployment(ctx context.Context, deploymentID string, serviceName string, replicas int) error {
-	// Get deployment to determine its type
-	deployment, err := s.GetDeployment(ctx, deploymentID)
-	if err != nil {
-		return err
-	}
-
-	// Get the appropriate deployment manager
-	manager, err := s.GetDeploymentManager(deployment.Type)
-	if err != nil {
-		return err
-	}
-
-	// Scale deployment using the specific manager
-	return manager.ScaleDeployment(ctx, deploymentID, serviceName, replicas)
 }
 
 // UpdateDeploymentImage updates the image of a service in a deployment

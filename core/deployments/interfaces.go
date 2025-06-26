@@ -14,8 +14,8 @@ type DeploymentManager interface {
 	// GetDeployment retrieves a deployment by ID
 	GetDeployment(ctx context.Context, deploymentID string) (*Deployment, error)
 
-	// ListDeployments lists deployments for a tenant
-	ListDeployments(ctx context.Context, tenantID string) ([]*Deployment, error)
+	// ListDeployments lists all deployments
+	ListDeployments(ctx context.Context) ([]*Deployment, error)
 
 	// UpdateDeployment updates an existing deployment
 	UpdateDeployment(ctx context.Context, deployment *Deployment) error
@@ -56,35 +56,11 @@ type DeploymentManager interface {
 	// GetServiceMetrics gets metrics for a specific service
 	GetServiceMetrics(ctx context.Context, deploymentID string, serviceName string, duration time.Duration) (*ServiceMetrics, error)
 
-	// ScaleDeployment scales a deployment
-	ScaleDeployment(ctx context.Context, deploymentID string, serviceName string, replicas int) error
-
 	// UpdateDeploymentImage updates the image of a service in a deployment
 	UpdateDeploymentImage(ctx context.Context, deploymentID string, serviceName string, image string) error
 
 	// GetDeploymentType returns the type of deployment this manager handles
 	GetDeploymentType() DeploymentType
-}
-
-// TenantManager defines the interface for tenant management
-type TenantManager interface {
-	// CreateTenant creates a new tenant
-	CreateTenant(ctx context.Context, tenant *Tenant) error
-
-	// GetTenant retrieves a tenant by ID
-	GetTenant(ctx context.Context, tenantID string) (*Tenant, error)
-
-	// ListTenants lists all tenants
-	ListTenants(ctx context.Context) ([]*Tenant, error)
-
-	// UpdateTenant updates an existing tenant
-	UpdateTenant(ctx context.Context, tenant *Tenant) error
-
-	// DeleteTenant deletes a tenant and all its resources
-	DeleteTenant(ctx context.Context, tenantID string) error
-
-	// GetTenantResourceUsage gets resource usage for a tenant
-	GetTenantResourceUsage(ctx context.Context, tenantID string) (*TenantResourceUsage, error)
 }
 
 // ManifestManager defines the interface for manifest management
@@ -93,7 +69,7 @@ type ManifestManager interface {
 	ValidateManifest(ctx context.Context, manifest interface{}) error
 
 	// ProcessManifest processes and transforms a manifest for deployment
-	ProcessManifest(ctx context.Context, manifest interface{}, tenantID string) (interface{}, error)
+	ProcessManifest(ctx context.Context, manifest interface{}) (interface{}, error)
 
 	// GenerateManifest generates a manifest from a template
 	GenerateManifest(ctx context.Context, template string, params map[string]interface{}) (interface{}, error)
@@ -113,8 +89,8 @@ type ManifestManager interface {
 
 // PortManager defines the interface for port management
 type PortManager interface {
-	// AllocatePort allocates a port for a tenant
-	AllocatePort(ctx context.Context, tenantID string, preferredPort int) (int, error)
+	// AllocatePort allocates a port
+	AllocatePort(ctx context.Context, preferredPort int) (int, error)
 
 	// ReleasePort releases a port
 	ReleasePort(ctx context.Context, port int) error
@@ -122,56 +98,53 @@ type PortManager interface {
 	// GetPortPool gets the current port pool status
 	GetPortPool(ctx context.Context) interface{}
 
-	// ReservePortRange reserves a range of ports for a tenant
-	ReservePortRange(ctx context.Context, tenantID string, startPort, endPort int) error
+	// ReservePortRange reserves a range of ports
+	ReservePortRange(ctx context.Context, startPort, endPort int) error
 
 	// ReleasePortRange releases a range of ports
 	ReleasePortRange(ctx context.Context, startPort, endPort int) error
 
-	// GetTenantPorts gets all ports allocated to a tenant
-	GetTenantPorts(ctx context.Context, tenantID string) ([]int, error)
+	// GetPorts gets all allocated ports
+	GetPorts(ctx context.Context) ([]int, error)
 }
 
 // NetworkManager defines the interface for network management
 type NetworkManager interface {
-	// CreateNetwork creates a network for a tenant
-	CreateNetwork(ctx context.Context, tenantID string, config *NetworkConfig) error
+	// CreateNetwork creates a network
+	CreateNetwork(ctx context.Context, config *NetworkConfig) error
 
 	// GetNetwork gets a network by name
 	GetNetwork(ctx context.Context, networkName string) (*NetworkConfig, error)
 
-	// ListNetworks lists all networks for a tenant
-	ListNetworks(ctx context.Context, tenantID string) ([]*NetworkConfig, error)
+	// ListNetworks lists all networks
+	ListNetworks(ctx context.Context) ([]*NetworkConfig, error)
 
 	// DeleteNetwork deletes a network
 	DeleteNetwork(ctx context.Context, networkName string) error
 
-	// EnsureNetwork ensures a network exists for a tenant
-	EnsureNetwork(ctx context.Context, tenantID string) error
+	// EnsureNetwork ensures a network exists
+	EnsureNetwork(ctx context.Context) error
 }
 
 // ResourceManager defines the interface for resource management
 type ResourceManager interface {
 	// CheckResourceAvailability checks if resources are available for a deployment
-	CheckResourceAvailability(ctx context.Context, tenantID string, manifest interface{}) error
+	CheckResourceAvailability(ctx context.Context, manifest interface{}) error
 
 	// AllocateResources allocates resources for a deployment
-	AllocateResources(ctx context.Context, tenantID string, manifest interface{}) error
+	AllocateResources(ctx context.Context, manifest interface{}) error
 
 	// ReleaseResources releases resources for a deployment
-	ReleaseResources(ctx context.Context, tenantID string, manifest interface{}) error
+	ReleaseResources(ctx context.Context, manifest interface{}) error
 
 	// GetSystemResources gets the total system resources
-	GetSystemResources(ctx context.Context) (*TenantResourceUsage, error)
+	GetSystemResources(ctx context.Context) (*ResourceUsage, error)
 
 	// GetAvailableResources gets available resources
-	GetAvailableResources(ctx context.Context) (*TenantResourceUsage, error)
+	GetAvailableResources(ctx context.Context) (*ResourceUsage, error)
 
-	// GetTenantResourceUsage gets resource usage for a specific tenant
-	GetTenantResourceUsage(ctx context.Context, tenantID string) (*TenantResourceUsage, error)
-
-	// UpdateResourceUsage updates resource usage for a tenant
-	UpdateResourceUsage(ctx context.Context, tenantID string, usage *TenantResourceUsage) error
+	// UpdateResourceUsage updates resource usage
+	UpdateResourceUsage(ctx context.Context, usage *ResourceUsage) error
 }
 
 // EventManager defines the interface for event management
@@ -202,18 +175,6 @@ type StorageManager interface {
 
 	// ListDeployments lists all deployments
 	ListDeployments(ctx context.Context) ([]*Deployment, error)
-
-	// SaveTenant saves tenant data
-	SaveTenant(ctx context.Context, tenant *Tenant) error
-
-	// LoadTenant loads tenant data
-	LoadTenant(ctx context.Context, tenantID string) (*Tenant, error)
-
-	// DeleteTenant deletes tenant data
-	DeleteTenant(ctx context.Context, tenantID string) error
-
-	// ListTenants lists all tenants
-	ListTenants(ctx context.Context) ([]*Tenant, error)
 }
 
 // DeploymentFactory defines the interface for creating deployment managers
@@ -236,17 +197,14 @@ type ServiceManager interface {
 	// Stop stops the deployment service
 	Stop(ctx context.Context) error
 
-	// CreateTenant creates a new tenant
-	CreateTenant(ctx context.Context, tenant *Tenant) error
-
 	// CreateDeployment creates a new deployment
 	CreateDeployment(ctx context.Context, deployment *Deployment) error
 
 	// GetDeployment gets a deployment by ID
 	GetDeployment(ctx context.Context, deploymentID string) (*Deployment, error)
 
-	// ListDeployments lists deployments for a tenant
-	ListDeployments(ctx context.Context, tenantID string) ([]*Deployment, error)
+	// ListDeployments lists all deployments
+	ListDeployments(ctx context.Context) ([]*Deployment, error)
 
 	// StartDeployment starts a deployment
 	StartDeployment(ctx context.Context, deploymentID string) error
@@ -256,9 +214,6 @@ type ServiceManager interface {
 
 	// DeleteDeployment deletes a deployment
 	DeleteDeployment(ctx context.Context, deploymentID string) error
-
-	// GetTenantResourceUsage gets resource usage for a tenant
-	GetTenantResourceUsage(ctx context.Context, tenantID string) (*TenantResourceUsage, error)
 
 	// GetDeploymentLogs gets logs for a deployment
 	GetDeploymentLogs(ctx context.Context, deploymentID string, serviceName string, tail int) (io.ReadCloser, error)
@@ -280,9 +235,6 @@ type ServiceManager interface {
 
 	// GetServiceMetrics gets metrics for a specific service
 	GetServiceMetrics(ctx context.Context, deploymentID string, serviceName string, duration time.Duration) (*ServiceMetrics, error)
-
-	// ScaleDeployment scales a deployment
-	ScaleDeployment(ctx context.Context, deploymentID string, serviceName string, replicas int) error
 
 	// UpdateDeploymentImage updates the image of a service in a deployment
 	UpdateDeploymentImage(ctx context.Context, deploymentID string, serviceName string, image string) error
@@ -320,7 +272,6 @@ type ExecResult struct {
 // DeploymentInspection represents detailed deployment information
 type DeploymentInspection struct {
 	ID        string                  `json:"id"`
-	TenantID  string                  `json:"tenant_id"`
 	Name      string                  `json:"name"`
 	Status    DeploymentStatus        `json:"status"`
 	CreatedAt time.Time               `json:"created_at"`
@@ -438,7 +389,7 @@ type DeploymentMetrics struct {
 	Total        *ResourceUsage             `json:"total"`
 }
 
-// ServiceMetrics represents service metrics
+// ServiceMetrics represents metrics for a service
 type ServiceMetrics struct {
 	ServiceName string          `json:"service_name"`
 	Timestamp   time.Time       `json:"timestamp"`

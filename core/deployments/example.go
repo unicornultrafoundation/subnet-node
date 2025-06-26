@@ -207,37 +207,13 @@ func Example() {
 		}
 	}
 
-	// Example 9: Scale deployment
-	fmt.Println("\n=== Example 9: Scaling deployment ===")
-	err = service.ScaleDeployment(ctx, "example-deploy-123", "web", 3)
-	if err != nil {
-		fmt.Printf("Error scaling deployment: %v\n", err)
-	} else {
-		fmt.Println("Deployment scaled successfully to 3 replicas")
-	}
-
-	// Example 10: Update deployment image
-	fmt.Println("\n=== Example 10: Updating deployment image ===")
+	// Example 9: Update deployment image
+	fmt.Println("\n=== Example 9: Updating deployment image ===")
 	err = service.UpdateDeploymentImage(ctx, "example-deploy-123", "web", "nginx:1.21")
 	if err != nil {
 		fmt.Printf("Error updating image: %v\n", err)
 	} else {
 		fmt.Println("Deployment image updated successfully")
-	}
-
-	// Example 11: Get tenant resource usage
-	fmt.Println("\n=== Example 11: Getting tenant resource usage ===")
-	usage, err := service.GetTenantResourceUsage(ctx, "tenant-456")
-	if err != nil {
-		fmt.Printf("Error getting tenant resource usage: %v\n", err)
-	} else {
-		fmt.Printf("Tenant Resource Usage:\n")
-		fmt.Printf("  CPU Usage: %.2f%%\n", usage.CPUUsage)
-		fmt.Printf("  Memory Usage: %d MB\n", usage.MemoryUsage/1024/1024)
-		fmt.Printf("  Disk Usage: %d MB\n", usage.DiskUsage/1024/1024)
-		fmt.Printf("  Network Usage: %d MB\n", usage.NetworkUsage/1024/1024)
-		fmt.Printf("  Port Count: %d\n", usage.PortCount)
-		fmt.Printf("  Container Count: %d\n", usage.ContainerCount)
 	}
 
 	fmt.Println("\n=== Examples completed ===")

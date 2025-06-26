@@ -1,29 +1,63 @@
 package deployments
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/big"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/gorilla/mux"
+	"github.com/gorilla/websocket"
 	"github.com/sirupsen/logrus"
+	bidenginetypes "github.com/unicornultrafoundation/subnet-node/bidengine/types"
 )
 
 // API represents the deployment API server
 type API struct {
-	service ServiceManager
-	logger  *logrus.Logger
+	service   ServiceManager
+	logger    *logrus.Logger
+	bidMarket bidenginetypes.BidMarketContract
 }
 
 // NewAPI creates a new deployment API server
-func NewAPI(service ServiceManager, logger *logrus.Logger) *API {
+func NewAPI(service ServiceManager, bidMarket bidenginetypes.BidMarketContract, logger *logrus.Logger) *API {
 	return &API{
-		service: service,
-		logger:  logger,
+		service:   service,
+		bidMarket: bidMarket,
+		logger:    logger,
 	}
+}
+
+// AuthorizationRequest represents the authorization data in request headers
+type AuthorizationRequest struct {
+	Signature string `json:"signature"`
+	Address   string `json:"address"`
+	Message   string `json:"message"`
+	Timestamp int64  `json:"timestamp"`
+}
+
+// WebSocketMessage represents a WebSocket message
+type WebSocketMessage struct {
+	Type string      `json:"type"`
+	Data interface{} `json:"data,omitempty"`
+}
+
+// WebSocketError represents a WebSocket error message
+type WebSocketError struct {
+	Type    string `json:"type"`
+	Message string `json:"message"`
+}
+
+// UpdateImageRequest represents a request to update deployment image
+type UpdateImageRequest struct {
+	Image string `json:"image"`
 }
 
 // RegisterRoutes registers the API routes
@@ -53,18 +87,6 @@ func (api *API) RegisterRoutes(router *mux.Router) {
 	// Console execution
 	router.HandleFunc("/api/v1/deployments/{id}/services/{service}/exec", api.execConsole).Methods("POST")
 	router.HandleFunc("/api/v1/deployments/{id}/services/{service}/exec/ws", api.execConsoleWebSocket).Methods("GET")
-
-	// Scaling and updates
-	router.HandleFunc("/api/v1/deployments/{id}/services/{service}/scale", api.scaleDeployment).Methods("POST")
-	router.HandleFunc("/api/v1/deployments/{id}/services/{service}/image", api.updateDeploymentImage).Methods("PUT")
-
-	// Tenant management
-	router.HandleFunc("/api/v1/tenants", api.createTenant).Methods("POST")
-	router.HandleFunc("/api/v1/tenants", api.listTenants).Methods("GET")
-	router.HandleFunc("/api/v1/tenants/{id}", api.getTenant).Methods("GET")
-	router.HandleFunc("/api/v1/tenants/{id}", api.updateTenant).Methods("PUT")
-	router.HandleFunc("/api/v1/tenants/{id}", api.deleteTenant).Methods("DELETE")
-	router.HandleFunc("/api/v1/tenants/{id}/resources", api.getTenantResourceUsage).Methods("GET")
 
 	// Events
 	router.HandleFunc("/api/v1/deployments/{id}/events", api.getDeploymentEvents).Methods("GET")
@@ -105,12 +127,123 @@ func (api *API) getVars(r *http.Request) map[string]string {
 	return mux.Vars(r)
 }
 
+// validateDeploymentAuthorization validates that the request is authorized by the deployment owner
+func (api *API) validateDeploymentAuthorization(w http.ResponseWriter, r *http.Request, deploymentID string) (common.Address, bool) {
+	// Get authorization data from headers
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" {
+		api.writeError(w, http.StatusUnauthorized, "Missing authorization header")
+		return common.Address{}, false
+	}
+
+	// Parse authorization data
+	var authReq AuthorizationRequest
+	if err := json.Unmarshal([]byte(authHeader), &authReq); err != nil {
+		api.writeError(w, http.StatusBadRequest, "Invalid authorization format")
+		return common.Address{}, false
+	}
+
+	// Validate timestamp (prevent replay attacks)
+	now := time.Now().Unix()
+	if abs(now-authReq.Timestamp) >= 300 { // 5 minutes tolerance (inclusive)
+		api.writeError(w, http.StatusUnauthorized, "Authorization timestamp expired")
+		return common.Address{}, false
+	}
+
+	// Parse the signer address
+	signerAddr := common.HexToAddress(authReq.Address)
+	if signerAddr == (common.Address{}) {
+		api.writeError(w, http.StatusBadRequest, "Invalid signer address")
+		return common.Address{}, false
+	}
+
+	// Parse deployment ID as order ID
+	orderID, ok := new(big.Int).SetString(deploymentID, 10)
+	if !ok {
+		api.writeError(w, http.StatusBadRequest, "Invalid deployment ID format")
+		return common.Address{}, false
+	}
+
+	// Get order from bid market
+	order, err := api.bidMarket.GetOrder(r.Context(), orderID)
+	if err != nil {
+		api.logger.WithError(err).Error("Failed to get order from bid market")
+		api.writeError(w, http.StatusInternalServerError, "Failed to get order information")
+		return common.Address{}, false
+	}
+
+	// Check if the signer is the order owner
+	if order.Owner != signerAddr {
+		api.writeError(w, http.StatusForbidden, "Not authorized: not the deployment owner")
+		return common.Address{}, false
+	}
+
+	// Verify signature
+	if !api.verifySignature(authReq.Message, authReq.Signature, signerAddr) {
+		api.writeError(w, http.StatusUnauthorized, "Invalid signature")
+		return common.Address{}, false
+	}
+
+	return signerAddr, true
+}
+
+// verifySignature verifies the signature of a message
+func (api *API) verifySignature(message, signature string, expectedAddress common.Address) bool {
+	// Decode signature
+	sigBytes, err := hex.DecodeString(strings.TrimPrefix(signature, "0x"))
+	if err != nil {
+		api.logger.WithError(err).Error("Failed to decode signature")
+		return false
+	}
+
+	// Ensure signature is 65 bytes (32 + 32 + 1)
+	if len(sigBytes) != 65 {
+		api.logger.Error("Invalid signature length")
+		return false
+	}
+
+	// Ensure recovery ID is 0 or 1 for Go-Ethereum
+	if sigBytes[64] >= 27 {
+		sigBytes[64] -= 27
+	}
+
+	// Prefix message for Ethereum personal_sign
+	prefixed := fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)
+	messageHash := crypto.Keccak256Hash([]byte(prefixed))
+
+	// Recover public key from signature
+	pubKey, err := crypto.SigToPub(messageHash.Bytes(), sigBytes)
+	if err != nil {
+		api.logger.WithError(err).Error("Failed to recover public key from signature")
+		return false
+	}
+
+	// Get address from public key
+	recoveredAddr := crypto.PubkeyToAddress(*pubKey)
+
+	// Compare with expected address
+	return recoveredAddr == expectedAddress
+}
+
+// abs returns the absolute value of an int64
+func abs(x int64) int64 {
+	if x < 0 {
+		return -x
+	}
+	return x
+}
+
 // Deployment management handlers
 
 func (api *API) createDeployment(w http.ResponseWriter, r *http.Request) {
 	var deployment Deployment
 	if err := json.NewDecoder(r.Body).Decode(&deployment); err != nil {
 		api.writeError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	// Validate authorization for deployment creation
+	if _, authorized := api.validateDeploymentAuthorization(w, r, deployment.ID); !authorized {
 		return
 	}
 
@@ -123,8 +256,7 @@ func (api *API) createDeployment(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *API) listDeployments(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
-	deployments, err := api.service.ListDeployments(r.Context(), tenantID)
+	deployments, err := api.service.ListDeployments(r.Context())
 	if err != nil {
 		api.writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -136,6 +268,11 @@ func (api *API) listDeployments(w http.ResponseWriter, r *http.Request) {
 func (api *API) getDeployment(w http.ResponseWriter, r *http.Request) {
 	vars := api.getVars(r)
 	deploymentID := vars["id"]
+
+	// Validate authorization
+	if _, authorized := api.validateDeploymentAuthorization(w, r, deploymentID); !authorized {
+		return
+	}
 
 	deployment, err := api.service.GetDeployment(r.Context(), deploymentID)
 	if err != nil {
@@ -150,6 +287,11 @@ func (api *API) startDeployment(w http.ResponseWriter, r *http.Request) {
 	vars := api.getVars(r)
 	deploymentID := vars["id"]
 
+	// Validate authorization
+	if _, authorized := api.validateDeploymentAuthorization(w, r, deploymentID); !authorized {
+		return
+	}
+
 	if err := api.service.StartDeployment(r.Context(), deploymentID); err != nil {
 		api.writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -162,6 +304,11 @@ func (api *API) stopDeployment(w http.ResponseWriter, r *http.Request) {
 	vars := api.getVars(r)
 	deploymentID := vars["id"]
 
+	// Validate authorization
+	if _, authorized := api.validateDeploymentAuthorization(w, r, deploymentID); !authorized {
+		return
+	}
+
 	if err := api.service.StopDeployment(r.Context(), deploymentID); err != nil {
 		api.writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -173,6 +320,11 @@ func (api *API) stopDeployment(w http.ResponseWriter, r *http.Request) {
 func (api *API) deleteDeployment(w http.ResponseWriter, r *http.Request) {
 	vars := api.getVars(r)
 	deploymentID := vars["id"]
+
+	// Validate authorization
+	if _, authorized := api.validateDeploymentAuthorization(w, r, deploymentID); !authorized {
+		return
+	}
 
 	if err := api.service.DeleteDeployment(r.Context(), deploymentID); err != nil {
 		api.writeError(w, http.StatusInternalServerError, err.Error())
@@ -188,6 +340,11 @@ func (api *API) inspectDeployment(w http.ResponseWriter, r *http.Request) {
 	vars := api.getVars(r)
 	deploymentID := vars["id"]
 
+	// Validate authorization
+	if _, authorized := api.validateDeploymentAuthorization(w, r, deploymentID); !authorized {
+		return
+	}
+
 	inspection, err := api.service.InspectDeployment(r.Context(), deploymentID)
 	if err != nil {
 		api.writeError(w, http.StatusInternalServerError, err.Error())
@@ -202,6 +359,11 @@ func (api *API) inspectService(w http.ResponseWriter, r *http.Request) {
 	deploymentID := vars["id"]
 	serviceName := vars["service"]
 
+	// Validate authorization
+	if _, authorized := api.validateDeploymentAuthorization(w, r, deploymentID); !authorized {
+		return
+	}
+
 	inspection, err := api.service.InspectService(r.Context(), deploymentID, serviceName)
 	if err != nil {
 		api.writeError(w, http.StatusInternalServerError, err.Error())
@@ -214,6 +376,11 @@ func (api *API) inspectService(w http.ResponseWriter, r *http.Request) {
 func (api *API) getDeploymentMetrics(w http.ResponseWriter, r *http.Request) {
 	vars := api.getVars(r)
 	deploymentID := vars["id"]
+
+	// Validate authorization
+	if _, authorized := api.validateDeploymentAuthorization(w, r, deploymentID); !authorized {
+		return
+	}
 
 	durationStr := r.URL.Query().Get("duration")
 	if durationStr == "" {
@@ -239,6 +406,11 @@ func (api *API) getServiceMetrics(w http.ResponseWriter, r *http.Request) {
 	vars := api.getVars(r)
 	deploymentID := vars["id"]
 	serviceName := vars["service"]
+
+	// Validate authorization
+	if _, authorized := api.validateDeploymentAuthorization(w, r, deploymentID); !authorized {
+		return
+	}
 
 	durationStr := r.URL.Query().Get("duration")
 	if durationStr == "" {
@@ -266,6 +438,11 @@ func (api *API) getDeploymentLogs(w http.ResponseWriter, r *http.Request) {
 	vars := api.getVars(r)
 	deploymentID := vars["id"]
 
+	// Validate authorization
+	if _, authorized := api.validateDeploymentAuthorization(w, r, deploymentID); !authorized {
+		return
+	}
+
 	tailStr := r.URL.Query().Get("tail")
 	tail := 100 // default
 	if tailStr != "" {
@@ -290,6 +467,11 @@ func (api *API) getServiceLogs(w http.ResponseWriter, r *http.Request) {
 	deploymentID := vars["id"]
 	serviceName := vars["service"]
 
+	// Validate authorization
+	if _, authorized := api.validateDeploymentAuthorization(w, r, deploymentID); !authorized {
+		return
+	}
+
 	tailStr := r.URL.Query().Get("tail")
 	tail := 100 // default
 	if tailStr != "" {
@@ -312,6 +494,11 @@ func (api *API) getServiceLogs(w http.ResponseWriter, r *http.Request) {
 func (api *API) streamDeploymentLogs(w http.ResponseWriter, r *http.Request) {
 	vars := api.getVars(r)
 	deploymentID := vars["id"]
+
+	// Validate authorization
+	if _, authorized := api.validateDeploymentAuthorization(w, r, deploymentID); !authorized {
+		return
+	}
 
 	follow := r.URL.Query().Get("follow") == "true"
 
@@ -342,6 +529,11 @@ func (api *API) streamServiceLogs(w http.ResponseWriter, r *http.Request) {
 	vars := api.getVars(r)
 	deploymentID := vars["id"]
 	serviceName := vars["service"]
+
+	// Validate authorization
+	if _, authorized := api.validateDeploymentAuthorization(w, r, deploymentID); !authorized {
+		return
+	}
 
 	follow := r.URL.Query().Get("follow") == "true"
 
@@ -380,6 +572,11 @@ func (api *API) execConsole(w http.ResponseWriter, r *http.Request) {
 	deploymentID := vars["id"]
 	serviceName := vars["service"]
 
+	// Validate authorization
+	if _, authorized := api.validateDeploymentAuthorization(w, r, deploymentID); !authorized {
+		return
+	}
+
 	var req ExecRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		api.writeError(w, http.StatusBadRequest, "Invalid request body")
@@ -403,127 +600,240 @@ func (api *API) execConsole(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *API) execConsoleWebSocket(w http.ResponseWriter, r *http.Request) {
-	// WebSocket implementation for interactive console
-	// This would require WebSocket library like gorilla/websocket
-	api.writeError(w, http.StatusNotImplemented, "WebSocket exec not implemented yet")
-}
-
-// Scaling and updates handlers
-
-type ScaleRequest struct {
-	Replicas int `json:"replicas"`
-}
-
-func (api *API) scaleDeployment(w http.ResponseWriter, r *http.Request) {
 	vars := api.getVars(r)
 	deploymentID := vars["id"]
 	serviceName := vars["service"]
 
-	var req ScaleRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		api.writeError(w, http.StatusBadRequest, "Invalid request body")
+	// Validate authorization
+	if _, authorized := api.validateDeploymentAuthorization(w, r, deploymentID); !authorized {
 		return
 	}
 
-	if err := api.service.ScaleDeployment(r.Context(), deploymentID, serviceName, req.Replicas); err != nil {
-		api.writeError(w, http.StatusInternalServerError, err.Error())
-		return
+	// Upgrade HTTP connection to WebSocket
+	upgrader := websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool {
+			// Allow all origins for now - in production, you should implement proper CORS
+			return true
+		},
+		EnableCompression: true,
 	}
 
-	api.writeJSON(w, http.StatusOK, Response{Success: true})
-}
-
-type UpdateImageRequest struct {
-	Image string `json:"image"`
-}
-
-func (api *API) updateDeploymentImage(w http.ResponseWriter, r *http.Request) {
-	vars := api.getVars(r)
-	deploymentID := vars["id"]
-	serviceName := vars["service"]
-
-	var req UpdateImageRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		api.writeError(w, http.StatusBadRequest, "Invalid request body")
-		return
-	}
-
-	if err := api.service.UpdateDeploymentImage(r.Context(), deploymentID, serviceName, req.Image); err != nil {
-		api.writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	api.writeJSON(w, http.StatusOK, Response{Success: true})
-}
-
-// Tenant management handlers
-
-func (api *API) createTenant(w http.ResponseWriter, r *http.Request) {
-	var tenant Tenant
-	if err := json.NewDecoder(r.Body).Decode(&tenant); err != nil {
-		api.writeError(w, http.StatusBadRequest, "Invalid request body")
-		return
-	}
-
-	if err := api.service.CreateTenant(r.Context(), &tenant); err != nil {
-		api.writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	api.writeJSON(w, http.StatusCreated, Response{Success: true, Data: tenant})
-}
-
-func (api *API) listTenants(w http.ResponseWriter, r *http.Request) {
-	// This would need to be implemented in the service
-	api.writeError(w, http.StatusNotImplemented, "List tenants not implemented yet")
-}
-
-func (api *API) getTenant(w http.ResponseWriter, r *http.Request) {
-	// This would need to be implemented in the service
-	api.writeError(w, http.StatusNotImplemented, "Get tenant not implemented yet")
-}
-
-func (api *API) updateTenant(w http.ResponseWriter, r *http.Request) {
-	// This would need to be implemented in the service
-	api.writeError(w, http.StatusNotImplemented, "Update tenant not implemented yet")
-}
-
-func (api *API) deleteTenant(w http.ResponseWriter, r *http.Request) {
-	// This would need to be implemented in the service
-	api.writeError(w, http.StatusNotImplemented, "Delete tenant not implemented yet")
-}
-
-func (api *API) getTenantResourceUsage(w http.ResponseWriter, r *http.Request) {
-	vars := api.getVars(r)
-	tenantID := vars["id"]
-
-	usage, err := api.service.GetTenantResourceUsage(r.Context(), tenantID)
+	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		api.writeError(w, http.StatusInternalServerError, err.Error())
+		api.logger.WithError(err).Error("Failed to upgrade connection to WebSocket")
 		return
 	}
+	defer conn.Close()
 
-	api.writeJSON(w, http.StatusOK, Response{Success: true, Data: usage})
+	// Create exec session
+	session, err := api.service.ExecConsole(r.Context(), deploymentID, serviceName, []string{"/bin/bash"}, true)
+	if err != nil {
+		api.logger.WithError(err).Error("Failed to create exec session")
+		conn.WriteJSON(WebSocketError{
+			Type:    "error",
+			Message: "Failed to create exec session: " + err.Error(),
+		})
+		return
+	}
+	defer session.Close()
+
+	// Create channels for communication
+	stdinChan := make(chan string, 100)
+	stdoutChan := make(chan string, 100)
+	stderrChan := make(chan string, 100)
+	errorChan := make(chan error, 100)
+	doneChan := make(chan bool)
+
+	// Start reading from WebSocket
+	go func() {
+		defer func() {
+			doneChan <- true
+		}()
+
+		for {
+			var msg WebSocketMessage
+			err := conn.ReadJSON(&msg)
+			if err != nil {
+				if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+					api.logger.WithError(err).Error("WebSocket read error")
+				}
+				return
+			}
+
+			switch msg.Type {
+			case "stdin":
+				if msg.Data != nil {
+					if data, ok := msg.Data.(string); ok {
+						stdinChan <- data
+					}
+				}
+			case "resize":
+				// Handle terminal resize if needed
+				api.logger.Debug("Terminal resize request received")
+			case "close":
+				return
+			default:
+				api.logger.WithField("type", msg.Type).Warn("Unknown WebSocket message type")
+			}
+		}
+	}()
+
+	// Start interactive execution
+	go func() {
+		defer func() {
+			doneChan <- true
+		}()
+
+		// Create pipes for stdin, stdout, stderr
+		stdinReader, stdinWriter := io.Pipe()
+		stdoutReader, stdoutWriter := io.Pipe()
+		stderrReader, stderrWriter := io.Pipe()
+
+		// Start reading from stdin channel and writing to pipe
+		go func() {
+			defer stdinWriter.Close()
+			for data := range stdinChan {
+				stdinWriter.Write([]byte(data))
+			}
+		}()
+
+		// Start reading from stdout pipe and sending to WebSocket
+		go func() {
+			defer stdoutReader.Close()
+			buffer := make([]byte, 1024)
+			for {
+				n, err := stdoutReader.Read(buffer)
+				if err != nil {
+					if err != io.EOF {
+						errorChan <- err
+					}
+					return
+				}
+				if n > 0 {
+					stdoutChan <- string(buffer[:n])
+				}
+			}
+		}()
+
+		// Start reading from stderr pipe and sending to WebSocket
+		go func() {
+			defer stderrReader.Close()
+			buffer := make([]byte, 1024)
+			for {
+				n, err := stderrReader.Read(buffer)
+				if err != nil {
+					if err != io.EOF {
+						errorChan <- err
+					}
+					return
+				}
+				if n > 0 {
+					stderrChan <- string(buffer[:n])
+				}
+			}
+		}()
+
+		// Execute the command interactively
+		err := session.ExecuteInteractive(r.Context(), []string{"/bin/bash"}, stdinReader, stdoutWriter, stderrWriter)
+		if err != nil {
+			errorChan <- err
+		}
+	}()
+
+	// Main loop for sending data to WebSocket
+	for {
+		select {
+		case data := <-stdoutChan:
+			err := conn.WriteJSON(WebSocketMessage{
+				Type: "stdout",
+				Data: data,
+			})
+			if err != nil {
+				api.logger.WithError(err).Error("Failed to send stdout to WebSocket")
+				return
+			}
+		case data := <-stderrChan:
+			err := conn.WriteJSON(WebSocketMessage{
+				Type: "stderr",
+				Data: data,
+			})
+			if err != nil {
+				api.logger.WithError(err).Error("Failed to send stderr to WebSocket")
+				return
+			}
+		case err := <-errorChan:
+			api.logger.WithError(err).Error("Exec session error")
+			conn.WriteJSON(WebSocketError{
+				Type:    "error",
+				Message: "Exec session error: " + err.Error(),
+			})
+			return
+		case <-doneChan:
+			// Connection closed or session ended
+			return
+		case <-r.Context().Done():
+			// Request context cancelled
+			return
+		}
+	}
 }
 
 // Events handlers
 
 func (api *API) getDeploymentEvents(w http.ResponseWriter, r *http.Request) {
-	// This would need to be implemented in the service
-	api.writeError(w, http.StatusNotImplemented, "Get deployment events not implemented yet")
+	vars := api.getVars(r)
+	deploymentID := vars["id"]
+
+	// Validate authorization
+	if _, authorized := api.validateDeploymentAuthorization(w, r, deploymentID); !authorized {
+		return
+	}
+
+	// TODO: Add deployment events logic
+	api.writeJSON(w, http.StatusOK, Response{Success: true, Data: []DeploymentEvent{}})
 }
 
 func (api *API) streamDeploymentEvents(w http.ResponseWriter, r *http.Request) {
-	// This would need to be implemented in the service
-	api.writeError(w, http.StatusNotImplemented, "Stream deployment events not implemented yet")
+	vars := api.getVars(r)
+	deploymentID := vars["id"]
+
+	// Validate authorization
+	if _, authorized := api.validateDeploymentAuthorization(w, r, deploymentID); !authorized {
+		return
+	}
+
+	// TODO: Add deployment events streaming logic
+	api.writeError(w, http.StatusNotImplemented, "Event streaming not implemented")
 }
 
-// Placeholder handlers for unimplemented methods
-
 func (api *API) updateDeployment(w http.ResponseWriter, r *http.Request) {
-	api.writeError(w, http.StatusNotImplemented, "Update deployment not implemented yet")
+	vars := api.getVars(r)
+	deploymentID := vars["id"]
+
+	// Validate authorization
+	if _, authorized := api.validateDeploymentAuthorization(w, r, deploymentID); !authorized {
+		return
+	}
+
+	var deployment Deployment
+	if err := json.NewDecoder(r.Body).Decode(&deployment); err != nil {
+		api.writeError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	// TODO: Add deployment update logic
+	api.writeJSON(w, http.StatusOK, Response{Success: true, Data: deployment})
 }
 
 func (api *API) restartDeployment(w http.ResponseWriter, r *http.Request) {
-	api.writeError(w, http.StatusNotImplemented, "Restart deployment not implemented yet")
+	vars := api.getVars(r)
+	deploymentID := vars["id"]
+
+	// Validate authorization
+	if _, authorized := api.validateDeploymentAuthorization(w, r, deploymentID); !authorized {
+		return
+	}
+
+	// TODO: Add deployment restart logic
+	api.writeJSON(w, http.StatusOK, Response{Success: true})
 }

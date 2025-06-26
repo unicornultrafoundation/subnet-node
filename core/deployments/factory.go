@@ -86,30 +86,11 @@ func (f *Factory) ValidateConfig(ctx context.Context, deploymentType DeploymentT
 		return fmt.Errorf("deployment type %s is not supported", deploymentType)
 	}
 
-	// Additional validation could be added here based on deployment type
-	switch deploymentType {
-	case DeploymentTypeDocker:
-		return f.validateDockerConfig(config)
-	case DeploymentTypeKubernetes:
-		return f.validateKubernetesConfig(config)
-	case DeploymentTypeNomad:
-		return f.validateNomadConfig(config)
-	case DeploymentTypeTerraform:
-		return f.validateTerraformConfig(config)
-	default:
-		return fmt.Errorf("unknown deployment type: %s", deploymentType)
+	// Only support Kubernetes
+	if deploymentType != DeploymentTypeKubernetes {
+		return fmt.Errorf("only Kubernetes deployment type is supported")
 	}
-}
-
-// validateDockerConfig validates Docker deployment configuration
-func (f *Factory) validateDockerConfig(config *DeploymentConfig) error {
-	// Add Docker-specific validation here
-	if config.Config == nil {
-		return fmt.Errorf("Docker deployment config cannot be nil")
-	}
-
-	// Additional Docker validation logic
-	return nil
+	return f.validateKubernetesConfig(config)
 }
 
 // validateKubernetesConfig validates Kubernetes deployment configuration
@@ -120,27 +101,5 @@ func (f *Factory) validateKubernetesConfig(config *DeploymentConfig) error {
 	}
 
 	// Additional Kubernetes validation logic
-	return nil
-}
-
-// validateNomadConfig validates Nomad deployment configuration
-func (f *Factory) validateNomadConfig(config *DeploymentConfig) error {
-	// Add Nomad-specific validation here
-	if config.Config == nil {
-		return fmt.Errorf("Nomad deployment config cannot be nil")
-	}
-
-	// Additional Nomad validation logic
-	return nil
-}
-
-// validateTerraformConfig validates Terraform deployment configuration
-func (f *Factory) validateTerraformConfig(config *DeploymentConfig) error {
-	// Add Terraform-specific validation here
-	if config.Config == nil {
-		return fmt.Errorf("Terraform deployment config cannot be nil")
-	}
-
-	// Additional Terraform validation logic
 	return nil
 }
