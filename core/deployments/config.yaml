@@ -1,0 +1,63 @@
+# Deployment API Server Configuration
+
+# Deployment API server settings
+deployment:
+  api:
+    server:
+      host: "0.0.0.0"
+      port: 8080
+      read_timeout: "30s"
+      write_timeout: "30s"
+      idle_timeout: "120s"
+      
+      # TLS configuration
+      tls:
+        enabled: false
+        cert_file: "/path/to/cert.pem"
+        key_file: "/path/to/key.pem"
+      
+      # CORS configuration
+      cors:
+        enabled: true
+        allowed_origins:
+          - "*"
+          - "http://localhost:3000"
+          - "https://yourdomain.com"
+      
+      # Rate limiting
+      rate_limit:
+        enabled: true
+        requests_per_minute: 100
+
+# Kubernetes configuration
+kubernetes:
+  enabled: true
+  kubeconfig: "/path/to/kubeconfig"
+  namespace_prefix: "subnet-"
+  resource_quotas:
+    enabled: true
+    default_cpu: "1000m"
+    default_memory: "1Gi"
+    default_storage: "10Gi"
+
+# Resource limits
+resource_limits:
+  max_cpu_cores: 8
+  max_memory_gb: 16
+  max_disk_gb: 100
+  max_containers: 10
+  max_ports: 50
+
+# Network configuration
+network:
+  default_driver: "bridge"
+  subnet_pool:
+    start: "172.16.0.0/12"
+    end: "172.31.0.0/12"
+  enable_ipv6: false
+
+# Bid market configuration
+bid_market:
+  contract_address: "0x..."
+  rpc_url: "http://localhost:8545"
+  chain_id: 1 
