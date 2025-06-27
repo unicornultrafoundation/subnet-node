@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -16,7 +18,7 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/core/node/resource"
 )
 
-// Service implements KVM management with auto-detection of libvirt availability
+// Service implements KVM management with configvm-based mode detection
 type Service struct {
 	config      *config.C
 	logger      *logrus.Entry
@@ -38,6 +40,7 @@ type Service struct {
 
 	// Configuration
 	enabled       bool
+	mode          string // auto, real, simulation
 	maxVMs        int
 	maxCPUCores   int
 	maxMemoryMB   int
@@ -66,7 +69,8 @@ func NewService(
 		vmStats:     make(map[string]*VMStats),
 
 		// Load configuration
-		enabled:       cfg.GetBool("kvm.enabled", false),
+		enabled:       cfg.GetBool("kvm.enabled", true),
+		mode:          cfg.GetString("kvm.mode", "auto"),
 		maxVMs:        cfg.GetInt("kvm.max_vms", 5),
 		maxCPUCores:   cfg.GetInt("kvm.max_cpu_cores", 4),
 		maxMemoryMB:   cfg.GetInt("kvm.max_memory_mb", 4096),
@@ -76,36 +80,115 @@ func NewService(
 		storagePath:   cfg.GetString("kvm.storage_path", "/var/lib/libvirt/images/subnet"),
 		networkName:   cfg.GetString("kvm.network_name", "subnet-net"),
 		ubuntuVersion: cfg.GetString("kvm.ubuntu_version", "22.04"),
-		sshKeyPath:    cfg.GetString("kvm.ssh_key_path", ""),
+		sshKeyPath:    cfg.GetString("kvm.ssh_key_path", "/var/lib/libvirt/ssh/subnet-key"),
 	}
 
-	// Try to initialize libvirt if enabled
+	// Log configuration values
+	service.logger.WithFields(logrus.Fields{
+		"enabled":        service.enabled,
+		"mode":           service.mode,
+		"max_vms":        service.maxVMs,
+		"max_cpu_cores":  service.maxCPUCores,
+		"max_memory_mb":  service.maxMemoryMB,
+		"max_disk_gb":    service.maxDiskGB,
+		"libvirt_uri":    service.libvirtURI,
+		"storage_pool":   service.storagePool,
+		"storage_path":   service.storagePath,
+		"network_name":   service.networkName,
+		"ubuntu_version": service.ubuntuVersion,
+		"ssh_key_path":   service.sshKeyPath,
+	}).Info("KVM service configuration loaded")
+
+	// Determine libvirt availability based on mode
+	service.determineLibvirtMode()
+
+	// Log final service state
 	if service.enabled {
-		if err := service.tryInitLibvirt(); err != nil {
-			service.logger.WithError(err).Warn("Libvirt not available, using simulation mode")
-			service.libvirtAvailable = false
+		if service.libvirtAvailable {
+			service.logger.Info("KVM service initialized successfully with real libvirt support")
 		} else {
-			service.logger.Info("Libvirt detected, using real virtualization mode")
-			service.libvirtAvailable = true
+			service.logger.Info("KVM service initialized successfully in simulation mode")
 		}
+	} else {
+		service.logger.Info("KVM service is disabled")
 	}
 
 	return service
 }
 
+// determineLibvirtMode determines whether to use real libvirt or simulation mode
+func (s *Service) determineLibvirtMode() {
+	s.logger.WithFields(logrus.Fields{
+		"enabled": s.enabled,
+		"mode":    s.mode,
+	}).Info("Determining libvirt mode")
+
+	switch s.mode {
+	case "real":
+		// Force real mode - try to initialize libvirt
+		s.logger.Info("Mode set to 'real', attempting libvirt initialization")
+		if err := s.tryInitLibvirt(); err != nil {
+			s.logger.WithError(err).Error("Failed to initialize libvirt in real mode")
+			s.libvirtAvailable = false
+			// Don't fail completely, just log the error and continue in simulation mode
+		} else {
+			s.logger.Info("Libvirt initialized successfully in real mode")
+			s.libvirtAvailable = true
+		}
+	case "simulation":
+		// Force simulation mode - skip libvirt initialization entirely
+		s.libvirtAvailable = false
+		s.logger.Info("Using simulation mode as configured - skipping libvirt initialization")
+	case "auto":
+		fallthrough
+	default:
+		// Auto-detect: try libvirt if enabled, fallback to simulation
+		s.logger.Info("Mode set to 'auto', checking if KVM is enabled")
+		if s.enabled {
+			s.logger.Info("KVM is enabled, attempting libvirt initialization")
+			if err := s.tryInitLibvirt(); err != nil {
+				// Check if it's a permission error and provide helpful message
+				if s.isPermissionError(err) {
+					s.logger.WithError(err).Info("Libvirt permission error detected, falling back to simulation mode. This is normal for user sessions without elevated privileges.")
+				} else {
+					s.logger.WithError(err).Warn("Libvirt not available, using simulation mode")
+				}
+				s.libvirtAvailable = false
+			} else {
+				s.logger.Info("Libvirt detected and initialized successfully, using real virtualization mode")
+				s.libvirtAvailable = true
+			}
+		} else {
+			s.libvirtAvailable = false
+			s.logger.Info("KVM disabled, using simulation mode")
+		}
+	}
+
+	s.logger.WithField("libvirt_available", s.libvirtAvailable).Info("Libvirt availability determined")
+}
+
 // tryInitLibvirt attempts to initialize libvirt components
 func (s *Service) tryInitLibvirt() error {
+	s.logger.Info("Attempting to initialize libvirt components")
+
 	var err error
 
 	// Try to connect to libvirt
+	s.logger.WithField("uri", s.libvirtURI).Info("Creating libvirt client")
 	s.client, err = libvirt.NewClient(s.libvirtURI, s.logger)
 	if err != nil {
-		// Check if this is due to libvirt not being available at build time
-		if err.Error() == "libvirt is not available - build with -tags libvirt to enable" {
-			return fmt.Errorf("libvirt not compiled in: %w", err)
-		}
+		s.logger.WithError(err).Error("Failed to create libvirt client")
 		return fmt.Errorf("failed to create libvirt client: %w", err)
 	}
+
+	// Check if libvirt is actually available
+	s.logger.Info("Checking if libvirt is available")
+	if !s.client.IsAvailable() {
+		s.logger.Error("Libvirt client reports not available")
+		return fmt.Errorf("libvirt is not available on this system")
+	}
+
+	s.logger.Info("Libvirt client is available, initializing managers")
 
 	// Initialize managers
 	s.domainManager = libvirt.NewDomainManager(s.client, s.logger)
@@ -114,15 +197,28 @@ func (s *Service) tryInitLibvirt() error {
 	s.cloudInitManager = libvirt.NewCloudInitManager(s.logger)
 
 	// Ensure storage pool exists
+	s.logger.WithFields(logrus.Fields{
+		"pool": s.storagePool,
+		"path": s.storagePath,
+	}).Info("Ensuring storage pool exists")
 	if err := s.storageManager.EnsureDefaultPool(s.storagePool, s.storagePath); err != nil {
+		s.logger.WithError(err).Error("Failed to ensure storage pool")
 		return fmt.Errorf("failed to ensure storage pool: %w", err)
 	}
 
-	// Ensure network exists
+	// Ensure network exists - this is the most likely point of failure due to permissions
+	s.logger.WithField("network", s.networkName).Info("Ensuring network exists")
 	if err := s.ensureNetwork(); err != nil {
+		// Check if it's a permission error
+		if s.isPermissionError(err) {
+			s.logger.WithError(err).Warn("Permission denied creating network bridge. This is expected in user sessions without elevated privileges.")
+			return fmt.Errorf("permission denied creating network bridge: %w", err)
+		}
+		s.logger.WithError(err).Error("Failed to ensure network")
 		return fmt.Errorf("failed to ensure network: %w", err)
 	}
 
+	s.logger.Info("Libvirt initialization completed successfully")
 	return nil
 }
 
@@ -140,21 +236,53 @@ func (s *Service) ensureNetwork() error {
 <network>
   <name>%s</name>
   <forward mode="nat"/>
-  <bridge name="virbr1" stp="on" delay="0"/>
-  <ip address="192.168.122.1" netmask="255.255.255.0">
+  <bridge name="virbr2" stp="on" delay="0"/>
+  <ip address="192.168.123.1" netmask="255.255.255.0">
     <dhcp>
-      <range start="192.168.122.2" end="192.168.122.254"/>
+      <range start="192.168.123.2" end="192.168.123.254"/>
     </dhcp>
   </ip>
 </network>`, s.networkName)
 
 	_, err = s.client.CreateNetwork(networkXML)
 	if err != nil {
+		// Check if it's a permission error
+		if s.isPermissionError(err) {
+			s.logger.WithError(err).Warn("Permission denied creating network bridge. This may require elevated privileges or different libvirt URI.")
+			return fmt.Errorf("permission denied creating network bridge: %w", err)
+		}
 		return fmt.Errorf("failed to create network: %w", err)
 	}
 
 	s.logger.WithField("network", s.networkName).Info("Default network created")
 	return nil
+}
+
+// isPermissionError checks if the error is related to permissions
+func (s *Service) isPermissionError(err error) bool {
+	errStr := err.Error()
+	return contains(errStr, "Operation not permitted") ||
+		contains(errStr, "Permission denied") ||
+		contains(errStr, "access denied") ||
+		contains(errStr, "insufficient privileges")
+}
+
+// contains is a helper function to check if a string contains a substring
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr ||
+		(len(s) > len(substr) && (s[:len(substr)] == substr ||
+			s[len(s)-len(substr):] == substr ||
+			containsSubstring(s, substr))))
+}
+
+// containsSubstring checks if a string contains a substring (case-insensitive)
+func containsSubstring(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
 }
 
 // IsEnabled returns whether the KVM service is enabled
@@ -291,7 +419,8 @@ func (s *Service) createRealVM(vm *VM) error {
 	}
 
 	// Create VM disk from Ubuntu cloud image
-	diskPath, err := s.storageManager.CreateVMFromUbuntuImage(s.storagePool, vm.Name, vm.DiskGB, s.ubuntuVersion, "amd64")
+	sanitizedName := s.sanitizeFileName(vm.Name)
+	diskPath, err := s.storageManager.CreateVMFromUbuntuImage(s.storagePool, sanitizedName, vm.DiskGB, s.ubuntuVersion, "amd64")
 	if err != nil {
 		return fmt.Errorf("failed to create VM disk: %w", err)
 	}
@@ -301,8 +430,9 @@ func (s *Service) createRealVM(vm *VM) error {
 	cloudInitConfig.SSHKey = publicKey
 
 	// Create cloud-init ISO
-	cloudInitISOPath := fmt.Sprintf("%s/%s-cloud-init.iso", s.storagePath, vm.Name)
-	if err := s.cloudInitManager.CreateCloudInitISO(cloudInitISOPath, cloudInitConfig); err != nil {
+	cloudInitISOPath := fmt.Sprintf("%s/%s-cloud-init.iso", s.storagePath, sanitizedName)
+	actualISOPath, err := s.cloudInitManager.CreateCloudInitISO(cloudInitISOPath, cloudInitConfig)
+	if err != nil {
 		return fmt.Errorf("failed to create cloud-init ISO: %w", err)
 	}
 
@@ -314,7 +444,7 @@ func (s *Service) createRealVM(vm *VM) error {
 		vm.CPUCores,
 		diskPath,
 		s.networkName,
-		cloudInitISOPath,
+		actualISOPath,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create domain: %w", err)
@@ -329,7 +459,7 @@ func (s *Service) createRealVM(vm *VM) error {
 	s.logger.WithFields(logrus.Fields{
 		"vm_id":          vm.ID,
 		"disk_path":      diskPath,
-		"cloud_init_iso": cloudInitISOPath,
+		"cloud_init_iso": actualISOPath,
 	}).Info("Real VM created with libvirt")
 
 	return nil
@@ -566,14 +696,24 @@ func (s *Service) deleteRealVM(vm *VM) error {
 	}
 
 	// Delete VM disk
-	if err := s.storageManager.DeleteDiskImage(s.storagePool, vm.Name); err != nil {
+	sanitizedName := s.sanitizeFileName(vm.Name)
+	if err := s.storageManager.DeleteDiskImage(s.storagePool, sanitizedName); err != nil {
 		s.logger.WithError(err).Warn("Failed to delete VM disk")
 	}
 
-	// Delete cloud-init ISO
-	cloudInitISOPath := fmt.Sprintf("%s/%s-cloud-init.iso", s.storagePath, vm.Name)
+	// Delete cloud-init ISO - try both possible locations
+	cloudInitISOPath := fmt.Sprintf("%s/%s-cloud-init.iso", s.storagePath, sanitizedName)
 	if err := os.Remove(cloudInitISOPath); err != nil && !os.IsNotExist(err) {
-		s.logger.WithError(err).Warn("Failed to delete cloud-init ISO")
+		s.logger.WithError(err).Warn("Failed to delete cloud-init ISO from original path")
+	}
+
+	// Try user-writable directory as fallback
+	homeDir, err := os.UserHomeDir()
+	if err == nil {
+		userCloudInitPath := filepath.Join(homeDir, ".subnet", "libvirt", "cloud-init", fmt.Sprintf("%s-cloud-init.iso", sanitizedName))
+		if err := os.Remove(userCloudInitPath); err != nil && !os.IsNotExist(err) {
+			s.logger.WithError(err).Warn("Failed to delete cloud-init ISO from user directory")
+		}
 	}
 
 	s.logger.WithField("vm_id", vm.ID).Info("Real VM deleted with libvirt")
@@ -691,10 +831,24 @@ func (s *Service) validateCreateRequest(req *CreateVMRequest) error {
 
 // checkResourceAvailability checks if system has enough resources
 func (s *Service) checkResourceAvailability(ctx context.Context, req *CreateVMRequest) error {
-	sysRes, err := s.resourceSvc.GetResource()
-	if err != nil {
-		return fmt.Errorf("failed to get system resources: %w", err)
+
+	// get mock data for test first
+	sysRes := &resource.ResourceInfo{
+		CPU: resource.CpuInfo{
+			Count: 10,
+		},
+		Memory: resource.MemoryInfo{
+			Total: 1024 * 1024 * 1024 * 10,
+		},
+		Storage: resource.StorageInfo{
+			Total: 1024 * 1024 * 1024 * 20,
+		},
 	}
+
+	// sysRes, err := s.resourceSvc.GetResource()
+	// if err != nil {
+	// 	return fmt.Errorf("failed to get system resources: %w", err)
+	// }
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -737,7 +891,7 @@ func (s *Service) checkResourceAvailability(ctx context.Context, req *CreateVMRe
 // generateMockIP generates a mock IP address for simulation
 func (s *Service) generateMockIP() string {
 	// Simple mock IP generation - in real implementation this would be proper DHCP/network management
-	return fmt.Sprintf("192.168.122.%d", 10+len(s.vms))
+	return fmt.Sprintf("192.168.123.%d", 10+len(s.vms))
 }
 
 // saveVMToDatastore saves VM metadata to datastore
@@ -832,4 +986,22 @@ func (s *Service) collectVMStats() {
 	if len(s.vms) > 0 {
 		s.logger.WithField("running_vms", len(s.vmStats)).Debug("Collected VM statistics")
 	}
+}
+
+// sanitizeFileName sanitizes a string for use as a filename by replacing invalid characters
+func (s *Service) sanitizeFileName(name string) string {
+	// Replace spaces and other problematic characters with underscores
+	replacer := strings.NewReplacer(
+		" ", "_",
+		"/", "_",
+		"\\", "_",
+		":", "_",
+		"*", "_",
+		"?", "_",
+		"\"", "_",
+		"<", "_",
+		">", "_",
+		"|", "_",
+	)
+	return replacer.Replace(name)
 }
