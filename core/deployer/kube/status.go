@@ -94,14 +94,6 @@ func (c *KubeClient) getDeploymentStatusInternal(ctx context.Context, deployment
 		return nil, fmt.Errorf("failed to list pods: %w", err)
 	}
 
-	// Get all ingresses in the namespace
-	ingresses, err := c.Client.NetworkingV1().Ingresses(deploymentID).List(ctx, metav1.ListOptions{
-		LabelSelector: fmt.Sprintf("deploymentID=%s", deploymentID),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to list ingresses: %w", err)
-	}
-
 	// Get the namespace to read TTL and creation time
 	namespace, err := c.Client.CoreV1().Namespaces().Get(ctx, deploymentID, metav1.GetOptions{})
 	if err != nil {
@@ -275,7 +267,6 @@ func (c *KubeClient) getDeploymentStatusInternal(ctx context.Context, deployment
 
 		for _, svc := range services.Items {
 			if svc.Labels["service"] == serviceName && svc.Labels["app"] == groupName {
-				// Generate URIs for the service
 				for _, port := range svc.Spec.Ports {
 					servicePort := types.ServicePort{
 						Port:        port.Port,
@@ -296,39 +287,32 @@ func (c *KubeClient) getDeploymentStatusInternal(ctx context.Context, deployment
 								servicePort.URI = uri
 								serviceURIs = append(serviceURIs, uri)
 							} else {
-								// LoadBalancer is pending
 								uri := fmt.Sprintf("LoadBalancer pending for service %s", svc.Name)
 								servicePort.URI = uri
 								serviceURIs = append(serviceURIs, uri)
 							}
 						} else {
-							// LoadBalancer is still being provisioned
 							uri := fmt.Sprintf("LoadBalancer provisioning for service %s", svc.Name)
 							servicePort.URI = uri
 							serviceURIs = append(serviceURIs, uri)
 						}
 					} else if svc.Spec.Type == corev1.ServiceTypeNodePort {
-						// For NodePort, use localhost with the NodePort
 						if port.NodePort > 0 {
 							uri := fmt.Sprintf("http://localhost:%d", port.NodePort)
 							servicePort.URI = uri
 							serviceURIs = append(serviceURIs, uri)
 						} else {
-							// NodePort not assigned yet
 							uri := fmt.Sprintf("NodePort pending for service %s", svc.Name)
 							servicePort.URI = uri
 							serviceURIs = append(serviceURIs, uri)
 						}
 					} else if svc.Spec.Type == corev1.ServiceTypeClusterIP {
-						// For cluster IP, use internal service name
 						uri := fmt.Sprintf("http://%s.%s.svc.cluster.local:%d", svc.Name, deploymentID, port.Port)
 						servicePort.URI = uri
 						serviceURIs = append(serviceURIs, uri)
 					}
-
 					servicePorts = append(servicePorts, servicePort)
 				}
-				break
 			}
 		}
 
@@ -363,43 +347,23 @@ func (c *KubeClient) getDeploymentStatusInternal(ctx context.Context, deployment
 
 	// Build endpoint information
 	var endpointInfos []types.EndpointInfo
-	for _, ingress := range ingresses.Items {
-		for _, rule := range ingress.Spec.Rules {
-			for _, path := range rule.HTTP.Paths {
-				// Try to find a better URI for external access
-				var externalURI string
-
-				// Check if we have a LoadBalancer service that can provide external access
-				for _, svc := range services.Items {
-					if svc.Spec.Type == corev1.ServiceTypeLoadBalancer && len(svc.Status.LoadBalancer.Ingress) > 0 {
-						lb := svc.Status.LoadBalancer.Ingress[0]
-						if lb.IP != "" {
-							externalURI = fmt.Sprintf("http://%s:%d%s", lb.IP, svc.Spec.Ports[0].Port, path.Path)
-							break
-						} else if lb.Hostname != "" {
-							externalURI = fmt.Sprintf("http://%s:%d%s", lb.Hostname, svc.Spec.Ports[0].Port, path.Path)
-							break
+	for _, deployment := range deployments.Items {
+		serviceName := deployment.Labels["service"]
+		groupName := deployment.Labels["app"]
+		for _, svc := range services.Items {
+			if svc.Labels["service"] == serviceName && svc.Labels["app"] == groupName {
+				for _, port := range svc.Spec.Ports {
+					if svc.Spec.Type == corev1.ServiceTypeNodePort && port.NodePort > 0 {
+						endpointInfo := types.EndpointInfo{
+							Name:     svc.Name,
+							Host:     "localhost",
+							Path:     "/",
+							Protocol: "http",
+							URI:      fmt.Sprintf("http://localhost:%d/", port.NodePort),
 						}
-					} else if svc.Spec.Type == corev1.ServiceTypeNodePort && svc.Spec.Ports[0].NodePort > 0 {
-						// For NodePort services, use localhost
-						externalURI = fmt.Sprintf("http://localhost:%d%s", svc.Spec.Ports[0].NodePort, path.Path)
-						break
+						endpointInfos = append(endpointInfos, endpointInfo)
 					}
 				}
-
-				// If no external URI found, use the ingress host (might be accessible via ingress controller)
-				if externalURI == "" {
-					externalURI = fmt.Sprintf("http://%s%s", rule.Host, path.Path)
-				}
-
-				endpointInfo := types.EndpointInfo{
-					Name:     fmt.Sprintf("%s-%s", ingress.Labels["app"], ingress.Labels["endpoint"]),
-					Host:     rule.Host,
-					Path:     path.Path,
-					Protocol: "http",
-					URI:      externalURI,
-				}
-				endpointInfos = append(endpointInfos, endpointInfo)
 			}
 		}
 	}
