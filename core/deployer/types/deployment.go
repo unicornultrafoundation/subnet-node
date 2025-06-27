@@ -140,3 +140,13 @@ type ResourceUsage struct {
 	Memory  string `json:"memory"`
 	Storage string `json:"storage"`
 }
+
+type DeploymentStats struct {
+	UsedUploadBytes   uint64 `json:"usedUploadBytes"`
+	UsedDownloadBytes uint64 `json:"usedDownloadBytes"`
+	UsedGpu           uint64 `json:"usedGpu"`
+	UsedCpu           uint64 `json:"usedCpu"`
+	UsedMemory        uint64 `json:"usedMemory"`
+	UsedStorage       uint64 `json:"usedStorage"`
+	Duration          int64  `json:"duration"`
+}

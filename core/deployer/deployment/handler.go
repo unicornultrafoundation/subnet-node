@@ -96,3 +96,7 @@ func (s *Service) GetDeploymentLogs(ctx context.Context, orderID string) ([]*typ
 func (s *Service) Exec(ctx context.Context, orderID string, podName string, serviceName string, cmd []string, stdin io.Reader, stdout io.Writer, stderr io.Writer, tty bool, tsq remotecommand.TerminalSizeQueue) (types.ExecResult, error) {
 	return s.kubeClient.Exec(ctx, orderID, podName, serviceName, cmd, stdin, stdout, stderr, tty, tsq)
 }
+
+func (s *Service) GetDeploymentStats(ctx context.Context, orderID string) (*types.DeploymentStats, error) {
+	return s.kubeClient.GetDeploymentStats(ctx, orderID)
+}
