@@ -312,9 +312,13 @@ func (c *KubeClient) createStorageVolume(ctx context.Context, service manifest.S
 		}
 	}
 
+	mountPath := fmt.Sprintf("/data/%s", volumeName)
+	if service.Params != nil && service.Params.Storage != nil && service.Params.Storage.SHM != nil && service.Params.Storage.SHM.Mount != "" {
+		mountPath = service.Params.Storage.SHM.Mount
+	}
 	volumeMount := corev1.VolumeMount{
 		Name:      volumeName,
-		MountPath: fmt.Sprintf("/data/%s", volumeName),
+		MountPath: mountPath,
 	}
 
 	volume := corev1.Volume{
