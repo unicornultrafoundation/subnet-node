@@ -44,6 +44,10 @@ func (api *DeployerAPI) GetDeploymentStats(ctx context.Context, orderID string) 
 	return wrapResponse(api.deployerService.GetDeploymentStats(ctx, orderID))
 }
 
+func (api *DeployerAPI) InspectDeployment(ctx context.Context, orderID string) *DeployerResponse[*types.DetailedDeploymentStatus] {
+	return wrapResponse(api.deployerService.InspectDeployment(ctx, orderID))
+}
+
 func wrapResponse[T any](data T, err error) *DeployerResponse[T] {
 	if err != nil {
 		return &DeployerResponse[T]{Error: err.Error()}

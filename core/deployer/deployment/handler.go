@@ -100,3 +100,8 @@ func (s *Service) Exec(ctx context.Context, orderID string, podName string, serv
 func (s *Service) GetDeploymentStats(ctx context.Context, orderID string) (*types.DeploymentStats, error) {
 	return s.kubeClient.GetDeploymentStats(ctx, orderID)
 }
+
+// InspectDeployment retrieves detailed deployment information similar to kubectl describe
+func (s *Service) InspectDeployment(ctx context.Context, orderID string) (*types.DetailedDeploymentStatus, error) {
+	return s.kubeClient.InspectDeployment(ctx, orderID)
+}
