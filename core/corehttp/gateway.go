@@ -1,21 +1,35 @@
 package corehttp
 
 import (
+	"fmt"
 	"net"
 	"net/http"
 
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/unicornultrafoundation/subnet-node/bidengine/contracts"
+	"github.com/unicornultrafoundation/subnet-node/config"
 	"github.com/unicornultrafoundation/subnet-node/core"
 	"github.com/unicornultrafoundation/subnet-node/internal/api"
 )
 
 func GatewayOption() ServeOption {
 	return func(n *core.SubnetNode, _ net.Listener, mux *http.ServeMux) (*http.ServeMux, error) {
+		cfg := n.Repo.Config()
+		ethclient := n.Account.GetClient()
+		bmAddress := common.HexToAddress(cfg.GetString("contracts.bid_market", config.DefaultBidMarketAddr))
+		if bmAddress == (common.Address{}) {
+			return nil, fmt.Errorf("bid market address not found in config")
+		}
+
+		bidMarket, err := contracts.NewBidMarketContract(ethclient, bmAddress, nil)
+		if err != nil {
+			return nil, err
+		}
 
 		// Add deployment handler if deployer is enabled
-		cfg := n.Repo.Config()
 		if cfg.GetBool("provider.enable", false) && n.Deployer != nil {
-			deploymentHandler := api.NewDeploymentHandler(n.Deployer)
-			mux.Handle("/api/v1/", deploymentHandler.Router())
+			deploymentHandler := api.NewDeploymentHandler(n.Deployer, cfg, bidMarket)
+			mux.Handle("/api/v1/deployments", deploymentHandler.Router())
 		}
 
 		return mux, nil
