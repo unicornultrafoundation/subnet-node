@@ -1,0 +1,79 @@
+{
+  "version": "2.0",
+  "services": {
+    "gpu-test-working": {
+      "image": "python:3.11-slim",
+      "command": ["python3", "-c", "import time; print('GPU Test Working'); [print(f'Heartbeat {i}') or time.sleep(30) for i in range(1000)]"],
+      "count": 1,
+      "resources": {
+        "cpu": {
+          "units": {
+            "value": 1000,
+            "unit": "m"
+          }
+        },
+        "memory": {
+          "size": {
+            "value": 1024,
+            "unit": "Mi"
+          }
+        },
+        "gpu": {
+          "units": 1,
+          "attributes": {
+            "vendor": {
+              "nvidia": [
+                {
+                  "model": "Virtual GPU",
+                  "ram": "8Gi",
+                  "interface": "Virtual"
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  },
+  "profiles": {
+    "compute": {
+      "gpu": {
+        "resources": {
+          "cpu": {
+            "request": "1000m",
+            "limit": "2000m"
+          },
+          "memory": {
+            "request": "1Gi",
+            "limit": "2Gi"
+          },
+          "gpu": {
+            "units": 1,
+            "attributes": {
+              "vendor": {
+                "nvidia": [
+                  {
+                    "model": "Virtual GPU",
+                    "ram": "8Gi",
+                    "interface": "Virtual"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "deployment": {
+    "gpu-test-working": {
+      "profile": "gpu",
+      "count": 1
+    }
+  },
+  "endpoints": {
+    "gpu-test-working": {
+      "kind": "http"
+    }
+  }
+} 

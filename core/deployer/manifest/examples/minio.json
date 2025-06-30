@@ -1,0 +1,100 @@
+{
+  "version": "2.0",
+  "services": {
+    "minio": {
+      "image": "minio/minio:latest",
+      "command": ["minio", "server", "/data"],
+      "env": [
+        "MINIO_ROOT_USER=minioadmin",
+        "MINIO_ROOT_PASSWORD=minioadmin123",
+        "MINIO_CONSOLE_ADDRESS=:9090"
+      ],
+      "expose": [
+        {
+          "port": 9000,
+          "as": 9000,
+          "proto": "TCP",
+          "to": [
+            { "global": true }
+          ]
+        },
+        {
+          "port": 9090,
+          "as": 9090,
+          "proto": "TCP",
+          "to": [
+            { "global": true }
+          ]
+        }
+      ],
+      "params": {
+        "storage": {
+          "shm": {
+            "mount": "/data"
+          }
+        },
+        "health": {
+          "readiness": {
+            "http": {
+              "path": "/minio/health/ready",
+              "port": 9000
+            },
+            "initial_delay_seconds": 5,
+            "period_seconds": 10,
+            "timeout_seconds": 3,
+            "success_threshold": 1,
+            "failure_threshold": 3
+          }
+        }
+      },
+      "count": 1,
+      "resources": {
+        "cpu": {
+          "units": { "value": 500, "unit": "m" }
+        },
+        "memory": {
+          "size": { "value": 512, "unit": "Mi" }
+        },
+        "storage": {
+          "size": { "value": 10, "unit": "Gi" }
+        }
+      }
+    }
+  },
+  "profiles": {
+    "compute": {
+      "default": {
+        "resources": {
+          "cpu": {
+            "request": "500m",
+            "limit": "1000m"
+          },
+          "memory": {
+            "request": "512Mi",
+            "limit": "1Gi"
+          },
+          "storage": [
+            {
+              "name": "data",
+              "size": "10Gi",
+              "attributes": {
+                "persistent": true
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  "deployment": {
+    "minio": {
+      "profile": "default",
+      "count": 1
+    }
+  },
+  "endpoints": {
+    "minio": {
+      "kind": "http"
+    }
+  }
+} 

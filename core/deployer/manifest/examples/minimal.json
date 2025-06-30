@@ -1,0 +1,31 @@
+{
+  "version": "2.0",
+  "services": {
+    "minimal": {
+      "image": "busybox:latest",
+      "count": 1
+    }
+  },
+  "profiles": {
+    "compute": {
+      "default": {
+        "resources": {
+          "cpu": {
+            "request": "100m",
+            "limit": "200m"
+          },
+          "memory": {
+            "request": "128Mi",
+            "limit": "256Mi"
+          }
+        }
+      }
+    }
+  },
+  "deployment": {
+    "default": {
+      "profile": "default",
+      "count": 1
+    }
+  }
+} 
