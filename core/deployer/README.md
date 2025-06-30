@@ -12,6 +12,12 @@ The deployer package is designed to manage application deployments in Kubernetes
 - **Monitoring & Health Checks**: Continuous monitoring of deployment health and status
 - **TTL Management**: Automatic cleanup of expired deployments
 - **Multi-tenant Support**: Support for multiple requesters with isolated deployments
+- **GPU Resource Management (WIP)**: GPU support for NVIDIA, AMD, Intel, and Apple Silicon GPUs
+- **Advanced Resource Monitoring**: Real-time CPU, memory, storage, network, and GPU usage tracking
+- **Enhanced Error Handling**: Improved validation, rollback, and error recovery mechanisms
+- **Dependency Management**: Intelligent service dependency resolution and deployment ordering
+- **JSON-RPC API**: Full JSON-RPC 2.0 API for deployment operations
+- **WebSocket Support**: Real-time log streaming and command execution
 
 ## Architecture
 
@@ -78,6 +84,8 @@ Handles the core deployment lifecycle operations:
 - Manages deployment requests and responses
 - Maintains deployment cache for monitoring
 - Coordinates with Kubernetes client and storage
+- Thread-safe deployment cache with mutex protection
+- Enhanced deployment list management for monitoring
 
 #### Handler (`deployment/handler.go`)
 - Processes deployment requests
@@ -90,6 +98,8 @@ Handles the core deployment lifecycle operations:
 - Checks TTL expiration
 - Triggers automatic cleanup for expired deployments
 - Reports deployment stability status
+- Enhanced stability monitoring with detailed logging
+- Improved TTL enforcement and cleanup tracking
 
 #### Cache (`deployment/cache.go`)
 - Thread-safe deployment ID cache
@@ -97,21 +107,42 @@ Handles the core deployment lifecycle operations:
 
 ### 4. Kubernetes Integration (`kube/`)
 
-Provides Kubernetes cluster operations:
+Provides Kubernetes cluster operations with enhanced capabilities:
 
 #### Client (`kube/client.go`)
 - Kubernetes client initialization
 - Connection management
+- Metrics client integration for resource monitoring
+- Enhanced configuration options for service types
 
 #### Deploy (`kube/deploy.go`)
 - Deployment creation and management
 - Service and ingress configuration
 - Resource allocation and scheduling
+- GPU resource support with automatic limit setting
+- Enhanced dependency resolution for service deployment
+- Improved resource validation and compute profile handling
+- Automatic rollback on deployment failures
+- Enhanced namespace and resource cleanup
+- Better error handling with detailed validation messages
 
 #### Status (`kube/status.go`)
 - Deployment status retrieval
 - Service endpoint information
 - Resource usage monitoring
+- Enhanced pod and container status tracking
+- Detailed resource usage reporting
+- Improved service status aggregation
+- Better error handling for missing deployments
+
+#### Stats (`kube/stats.go`)
+- Resource usage monitoring
+- GPU usage tracking for multiple GPU types
+- Network statistics collection
+- Storage usage monitoring
+- Optimized metrics collection with fallback mechanisms
+- Support for Apple Silicon GPU monitoring
+- Enhanced error handling and logging
 
 #### Cleanup (`kube/cleanup.go`)
 - Resource cleanup operations
@@ -188,6 +219,65 @@ type DeploymentStatus struct {
 }
 ```
 
+#### DeploymentStats
+```go
+type DeploymentStats struct {
+    UsedCpu           uint64 `json:"usedCpu"`           // millicores
+    UsedMemory        uint64 `json:"usedMemory"`        // bytes
+    UsedStorage       uint64 `json:"usedStorage"`       // bytes
+    UsedUploadBytes   uint64 `json:"usedUploadBytes"`   // bytes
+    UsedDownloadBytes uint64 `json:"usedDownloadBytes"` // bytes
+    UsedGpu           uint64 `json:"usedGpu"`           // GPU count
+    Duration          int64  `json:"duration"`          // seconds
+}
+```
+
+## API Documentation
+
+The deployer package exposes a comprehensive JSON-RPC 2.0 API for deployment operations, along with WebSocket endpoints for real-time functionality.
+
+For complete API documentation including all methods, examples, and WebSocket message formats, see [API.md](API.md).
+
+## New Features and Improvements
+
+### GPU Resource Support
+
+The deployer now provides comprehensive GPU support:
+
+- **Multiple GPU Types**: Support for NVIDIA, AMD, Intel, and Apple Silicon GPUs
+- **Automatic Limit Setting**: GPU limits are automatically set equal to requests for non-overcommitable resources
+- **GPU Usage Monitoring**: Real-time GPU utilization tracking
+- **Apple Silicon Support**: Native support for Apple Silicon GPU monitoring
+- **Fallback Mechanisms**: Graceful handling when GPU monitoring tools are unavailable
+
+### Enhanced Resource Monitoring
+
+- **Real-time Metrics**: Integration with Kubernetes Metrics API for live resource usage
+- **Network Statistics**: Advanced network usage tracking with multiple collection methods
+- **Storage Monitoring**: Comprehensive storage usage tracking including persistent volumes
+- **Optimized Collection**: Reduced timeouts and improved performance for metrics collection
+
+### Improved Error Handling
+
+- **Validation Enhancements**: More detailed validation with specific error messages
+- **Rollback Support**: Automatic cleanup of resources on deployment failures
+- **Resource Tracking**: Comprehensive tracking of created resources for cleanup
+- **Dependency Resolution**: Intelligent handling of service dependencies with circular dependency detection
+
+### Enhanced Deployment Management
+
+- **Thread-safe Operations**: Mutex-protected deployment cache for concurrent access
+- **Stability Monitoring**: Improved deployment stability tracking and reporting
+- **TTL Enforcement**: Enhanced TTL management with automatic cleanup
+- **Service Dependencies**: Intelligent deployment ordering based on service dependencies
+
+### Better Kubernetes Integration
+
+- **Metrics Client**: Integration with Kubernetes Metrics API for resource monitoring
+- **Enhanced Validation**: Comprehensive validation of compute profiles and resources
+- **Improved Resource Management**: Better handling of CPU, memory, and storage resources
+- **Service Type Configuration**: Flexible service type configuration with localhost support
+
 ## Usage
 
 ### Initialization
@@ -237,6 +327,17 @@ if err != nil {
 }
 ```
 
+#### Get Deployment Statistics
+```go
+stats, err := deployerService.GetDeploymentStats(ctx, "order-123")
+if err != nil {
+    log.Error("Failed to get deployment stats:", err)
+} else {
+    log.Printf("CPU: %d mCPU, Memory: %d bytes, GPU: %d", 
+        stats.UsedCpu, stats.UsedMemory, stats.UsedGpu)
+}
+```
+
 #### List Deployments
 ```go
 deployments, err := deployerService.GetDeployments(ctx, "0x123...")
@@ -273,22 +374,25 @@ The deployer service provides comprehensive monitoring capabilities:
 - **Health Monitoring**: Continuous monitoring of deployment health
 - **TTL Management**: Automatic cleanup of expired deployments
 - **Status Tracking**: Real-time deployment status updates
-- **Resource Monitoring**: CPU, memory, and storage usage tracking
+- **Resource Monitoring**: CPU, memory, storage, network, and GPU usage tracking
 - **Stability Reporting**: Deployment stability status reporting
+- **Performance Metrics**: Real-time performance metrics collection
 
 ## Error Handling
 
 The package includes comprehensive error handling:
 
-- **Validation Errors**: SDL manifest validation failures
-- **Kubernetes Errors**: Cluster operation failures
+- **Validation Errors**: SDL manifest validation failures with detailed messages
+- **Kubernetes Errors**: Cluster operation failures with rollback support
 - **Storage Errors**: Datastore operation failures
 - **Timeout Errors**: Deployment readiness timeout
-- **Resource Errors**: Resource allocation failures
+- **Resource Errors**: Resource allocation failures with cleanup
+- **GPU Errors**: GPU resource errors with fallback mechanisms
 
 ## Dependencies
 
 - **Kubernetes Client**: `k8s.io/client-go`
+- **Kubernetes Metrics**: `k8s.io/metrics/pkg/client/clientset/versioned`
 - **IPFS Datastore**: `github.com/ipfs/go-datastore`
 - **Logging**: `github.com/sirupsen/logrus`
 - **Ethereum**: `github.com/ethereum/go-ethereum/common`
@@ -300,6 +404,7 @@ The package includes comprehensive test coverage:
 - **Unit Tests**: Individual component testing
 - **Integration Tests**: End-to-end deployment testing
 - **Mock Testing**: Mocked dependencies for isolated testing
+- **GPU Testing**: GPU resource testing with various configurations
 
 Run tests with:
 ```bash
@@ -310,9 +415,10 @@ go test ./core/deployer/...
 
 - **Authentication**: Requester signature validation
 - **Isolation**: Multi-tenant deployment isolation
-- **Resource Limits**: Kubernetes resource constraints
+- **Resource Limits**: Kubernetes resource constraints with GPU limits
 - **TTL Enforcement**: Automatic cleanup to prevent resource exhaustion
 - **Network Security**: Service exposure controls
+- **Resource Validation**: Comprehensive resource validation and sanitization
 
 ## Performance
 
@@ -320,6 +426,8 @@ go test ./core/deployer/...
 - **Async Operations**: Non-blocking deployment operations
 - **Resource Optimization**: Efficient Kubernetes resource management
 - **Monitoring Efficiency**: Configurable monitoring intervals
+- **Metrics Optimization**: Optimized metrics collection with reduced timeouts
+- **GPU Optimization**: Efficient GPU resource management and monitoring
 
 ## Contributing
 
@@ -330,4 +438,7 @@ When contributing to the deployer package:
 3. Update documentation for API changes
 4. Ensure proper error handling and logging
 5. Validate SDL manifest compatibility
-6. Test with different Kubernetes configurations 
+6. Test with different Kubernetes configurations
+7. Test GPU functionality with various GPU types
+8. Validate resource monitoring accuracy
+9. Ensure thread safety for concurrent operations 
