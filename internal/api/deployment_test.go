@@ -297,10 +297,11 @@ func TestDeploymentHandler_CreateDeploymentHandler(t *testing.T) {
 
 	// Mock bid market to return order information
 	mockOrder := &bidenginetypes.Order{
-		ID:                big.NewInt(123),
-		Owner:             common.HexToAddress(ownerAddress),
-		AcceptedMachineId: big.NewInt(1), // This should match the machine_id from config
-		Status:            bidenginetypes.OrderStatusAccepted,
+		ID:                 big.NewInt(123),
+		Owner:              common.HexToAddress(ownerAddress),
+		AcceptedProviderId: big.NewInt(1),
+		AcceptedMachineId:  big.NewInt(1), // This should match the machine_id from config
+		Status:             bidenginetypes.OrderStatusAccepted,
 	}
 	mockBidMarket.On("GetOrder", mock.Anything, big.NewInt(123)).Return(mockOrder, nil)
 
@@ -408,10 +409,11 @@ func TestDeploymentHandler_CleanupDeploymentHandler(t *testing.T) {
 
 	// Mock bid market to return order information
 	mockOrder := &bidenginetypes.Order{
-		ID:                big.NewInt(123),
-		Owner:             common.HexToAddress(ownerAddress),
-		AcceptedMachineId: big.NewInt(1), // This should match the machine_id from config
-		Status:            bidenginetypes.OrderStatusAccepted,
+		ID:                 big.NewInt(123),
+		Owner:              common.HexToAddress(ownerAddress),
+		AcceptedProviderId: big.NewInt(1),
+		AcceptedMachineId:  big.NewInt(1), // This should match the machine_id from config
+		Status:             bidenginetypes.OrderStatusAccepted,
 	}
 	mockBidMarket.On("GetOrder", mock.Anything, big.NewInt(123)).Return(mockOrder, nil)
 
@@ -479,7 +481,7 @@ func TestDeploymentHandler_CreateDeploymentHandler_OrderIDMismatch(t *testing.T)
 	var response map[string]interface{}
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
-	assert.Contains(t, response["error"], "Invalid final authority")
+	assert.Contains(t, response["error"], "Unauthorized: invalid authchain")
 
 	mockConfig.AssertExpectations(t)
 	mockBidMarket.AssertExpectations(t)

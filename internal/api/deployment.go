@@ -298,13 +298,19 @@ func (a *AuthMiddleware) Middleware() func(http.Handler) http.Handler {
 				}
 			}
 
+			if orderID == "" {
+				a.sendErrorResponse(w, "Unauthorized: orderID is required", http.StatusUnauthorized)
+				return
+			}
+
 			// Get order from cache if orderID exists
 			var order *bidenginetypes.Order
 			if orderID != "" {
 				if cachedOrder, err := a.ordersCache.GetOrder(r.Context(), orderID); err == nil {
 					order = cachedOrder
 				} else {
-					a.logger.WithError(err).Warn("Failed to get order from cache")
+					a.sendErrorResponse(w, "Unauthorized: orderID is required", http.StatusUnauthorized)
+					return
 				}
 			}
 
@@ -322,51 +328,25 @@ func (a *AuthMiddleware) Middleware() func(http.Handler) http.Handler {
 			}
 
 			// For endpoints with orderID, validate order ownership and machine assignment
-			if orderID != "" {
-				if order != nil && (order.AcceptedMachineId.String() != providerID || order.AcceptedMachineId.String() != machineID) {
-					a.sendErrorResponse(w, "Unauthorized: order does not belong to authenticated user", http.StatusForbidden)
-					return
-				}
 
-				if order != nil && order.Owner.Hex() != userAddress {
-					a.sendErrorResponse(w, "Unauthorized: order does not belong to authenticated user", http.StatusForbidden)
-					return
-				}
-
-				// Create entityID according to schema: "subnet_deployment:{providerId}:{machineId}:{order_id}"
-				entityID := fmt.Sprintf("subnet_deployment:%s:%s:%s", providerID, machineID, orderID)
-				fmt.Println("entityID", entityID)
-				// Validate authchain for the entityID with default 60s expiry
-				result, err := authchain.ValidateAuthChainWithDefaultExpiry(authChain, entityID)
-				if err != nil || result == nil || !result.OK {
-					// If validation fails, try to extract entityID from authchain and compare
-					if extractedEntityID, extractErr := authchain.GetEntityID(authChain); extractErr == nil {
-						if extractedEntityID == entityID {
-							// EntityID matches, consider it valid
-							result = &authchain.ValidationResult{OK: true}
-						} else {
-							errMsg := fmt.Sprintf("EntityID mismatch. Expected: %s, Got: %s", entityID, extractedEntityID)
-							a.sendErrorResponse(w, errMsg, http.StatusUnauthorized)
-							return
-						}
-					} else {
-						errMsg := "Invalid authchain"
-						if err != nil {
-							errMsg = err.Error()
-						} else if result != nil && result.Message != "" {
-							errMsg = result.Message
-						}
-						a.sendErrorResponse(w, errMsg, http.StatusUnauthorized)
-						return
-					}
-				}
-			} else {
-				a.sendErrorResponse(w, "Unauthorized: orderID is required", http.StatusUnauthorized)
+			if order.AcceptedProviderId.String() != providerID || order.AcceptedMachineId.String() != machineID {
+				a.sendErrorResponse(w, "Unauthorized: order does not belong to authenticated user", http.StatusForbidden)
 				return
 			}
 
-			// Create entityID for context (even if empty for list endpoints)
+			if order.Owner.Hex() != userAddress {
+				a.sendErrorResponse(w, "Unauthorized: order does not belong to authenticated user", http.StatusForbidden)
+				return
+			}
+
+			// Create entityID according to schema: "subnet_deployment:{providerId}:{machineId}:{order_id}"
 			entityID := fmt.Sprintf("subnet_deployment:%s:%s:%s", providerID, machineID, orderID)
+			// Validate authchain for the entityID with default 60s expiry
+			result, err := authchain.ValidateAuthChainWithDefaultExpiry(authChain, entityID)
+			if err != nil || result == nil || !result.OK {
+				a.sendErrorResponse(w, "Unauthorized: invalid authchain", http.StatusUnauthorized)
+				return
+			}
 
 			// Add user info to request context
 			ctx := context.WithValue(r.Context(), userAddressKey, userAddress)
