@@ -1,0 +1,95 @@
+{
+  "version": "2.0",
+  "services": {
+    "gpu-test-apple-small": {
+      "image": "python:3.11-slim",
+      "command": [
+        "python3", 
+        "-c", 
+        "import time; import os; print('Apple Silicon GPU Test (Small)'); print('Container:', os.environ.get('HOSTNAME', 'Unknown')); print('Architecture:', os.uname().machine); print('Starting GPU workload simulation...'); print('Note: In Colima/QEMU, real GPU access is limited'); print('This test simulates GPU workload detection'); start_time = time.time(); [i**2 for i in range(1000000)]; end_time = time.time(); print(f'Computation completed in {end_time - start_time:.2f} seconds'); print('GPU test simulation completed successfully'); [print(f'Heartbeat {i}') or time.sleep(30) for i in range(1000)]"
+      ],
+      "count": 1,
+      "resources": {
+        "cpu": {
+          "units": {
+            "value": 1000,
+            "unit": "m"
+          }
+        },
+        "memory": {
+          "size": {
+            "value": 1024,
+            "unit": "Mi"
+          }
+        },
+        "gpu": {
+          "units": 1,
+          "attributes": {
+            "vendor": {
+              "apple": [
+                {
+                  "model": "Apple Silicon GPU",
+                  "ram": "2Gi",
+                  "interface": "Metal"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "expose": [
+        {
+          "port": 8080,
+          "as": 8080,
+          "proto": "TCP",
+          "to": [
+            {
+              "global": true
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "profiles": {
+    "compute": {
+      "apple-gpu-small": {
+        "resources": {
+          "cpu": {
+            "request": "1000m",
+            "limit": "2000m"
+          },
+          "memory": {
+            "request": "1Gi",
+            "limit": "2Gi"
+          },
+          "gpu": {
+            "units": 1,
+            "attributes": {
+              "vendor": {
+                "apple": [
+                  {
+                    "model": "Apple Silicon GPU",
+                    "ram": "2Gi",
+                    "interface": "Metal"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "deployment": {
+    "gpu-test-apple-small": {
+      "profile": "apple-gpu-small",
+      "count": 1
+    }
+  },
+  "endpoints": {
+    "gpu-test-apple-small": {
+      "kind": "http"
+    }
+  }
+} 

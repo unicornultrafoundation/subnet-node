@@ -312,9 +312,13 @@ func (c *KubeClient) createStorageVolume(ctx context.Context, service manifest.S
 		}
 	}
 
+	mountPath := fmt.Sprintf("/data/%s", volumeName)
+	if service.Params != nil && service.Params.Storage != nil && service.Params.Storage.SHM != nil && service.Params.Storage.SHM.Mount != "" {
+		mountPath = service.Params.Storage.SHM.Mount
+	}
 	volumeMount := corev1.VolumeMount{
 		Name:      volumeName,
-		MountPath: fmt.Sprintf("/data/%s", volumeName),
+		MountPath: mountPath,
 	}
 
 	volume := corev1.Volume{
@@ -525,6 +529,10 @@ func (c *KubeClient) createDeployment(ctx context.Context, service manifest.Serv
 		k8sDeployment.Spec.Template.Spec.ImagePullSecrets = secretRefs
 	}
 
+	// Handle GPU limits - Kubernetes requires limits for non-overcommitable resources
+	// Set GPU limits equal to GPU requests when GPU resources are present
+	c.setGPULimits(&resources)
+
 	_, err = c.Client.AppsV1().Deployments(namespace).Create(ctx, k8sDeployment, metav1.CreateOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to create deployment for service %s: %w", service.Image, err)
@@ -584,6 +592,10 @@ func (c *KubeClient) createResourceRequirements(service manifest.Service, comput
 				resources.Limits[corev1.ResourceMemory] = memLimit
 			}
 		}
+
+		// Handle GPU limits - Kubernetes requires limits for non-overcommitable resources
+		// Set GPU limits equal to GPU requests when GPU resources are present
+		c.setGPULimits(&resources)
 	}
 	return resources, nil
 }
@@ -950,4 +962,24 @@ func getServiceName(service manifest.Service) string {
 	}
 
 	return sanitizeK8sName(imageName)
+}
+
+// setGPULimits sets GPU limits equal to GPU requests for non-overcommitable resources
+func (c *KubeClient) setGPULimits(resources *corev1.ResourceRequirements) {
+	gpuResourceTypes := []string{
+		"nvidia.com/gpu", // NVIDIA GPUs
+		"amd.com/gpu",    // AMD GPUs
+		"intel.com/gpu",  // Intel GPUs
+		"apple.com/gpu",  // Apple Silicon GPUs
+		"gpu",            // Generic GPU resource
+	}
+
+	for _, gpuType := range gpuResourceTypes {
+		if gpuReq, ok := resources.Requests[corev1.ResourceName(gpuType)]; ok {
+			if resources.Limits == nil {
+				resources.Limits = make(corev1.ResourceList)
+			}
+			resources.Limits[corev1.ResourceName(gpuType)] = gpuReq
+		}
+	}
 }
