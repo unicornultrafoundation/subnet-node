@@ -21,6 +21,11 @@ func (m *mockBidMarket) GetOrder(ctx context.Context, orderID *big.Int) (*types.
 		CreatedAt: big.NewInt(time.Now().Unix()),
 	}, nil
 }
+
+func (m *mockBidMarket) GetOrderCount(ctx context.Context) (*big.Int, error) {
+	return big.NewInt(10), nil // Return a mock order count
+}
+
 func (m *mockBidMarket) WatchOrderCreated(ctx context.Context, sink chan<- *types.OrderEvent) error {
 	return nil
 }
@@ -33,7 +38,9 @@ func (m *mockStorage) DeleteOrder(ctx context.Context, orderID string) error   {
 func (m *mockStorage) ListOrders(ctx context.Context) ([]*types.Order, error) {
 	return []*types.Order{}, nil
 }
-func (m *mockStorage) UpdateOrder(ctx context.Context, order *types.Order) error { return nil }
+func (m *mockStorage) UpdateOrder(ctx context.Context, order *types.Order) error   { return nil }
+func (m *mockStorage) SaveLastOrderID(ctx context.Context, orderID *big.Int) error { return nil }
+func (m *mockStorage) GetLastOrderID(ctx context.Context) (*big.Int, error)        { return nil, nil }
 
 // Minimal mock metrics
 type mockMetrics struct{ types.Metrics }

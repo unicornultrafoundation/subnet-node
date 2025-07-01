@@ -80,9 +80,11 @@ func (rm *Manager) Start(ctx context.Context) error {
 	}
 
 	// Initial sync with contract
-	if err := rm.syncMachinesFromContract(ctx); err != nil {
-		rm.logger.Warn("Failed to sync machines from contract", "error", err)
-	}
+	go func() {
+		if err := rm.syncMachinesFromContract(ctx); err != nil {
+			rm.logger.Warn("Failed to sync machines from contract", "error", err)
+		}
+	}()
 
 	// Start sync loop
 	go rm.syncLoop(ctx)
@@ -197,10 +199,11 @@ func (rm *Manager) syncMachinesFromContract(ctx context.Context) error {
 	}
 
 	rm.lastSyncTime = time.Now()
-	rm.logger.Info("Machine sync completed",
-		"totalMachines", len(rm.machines),
-		"contractMachines", len(machines),
-		"activeMachines", len(activeMachineIDs))
+	rm.logger.WithFields(logrus.Fields{
+		"totalMachines":    len(rm.machines),
+		"contractMachines": len(machines),
+		"activeMachines":   len(activeMachineIDs),
+	}).Info("Machine sync completed")
 
 	return nil
 }
