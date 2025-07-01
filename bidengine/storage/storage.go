@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"strconv"
 	"time"
 
@@ -34,6 +35,7 @@ const (
 	machinePrefix    = "/bidengine/machines/"
 	marketPrefix     = "/bidengine/market/"
 	allocationPrefix = "/bidengine/allocations/"
+	lastOrderIDKey   = "/bidengine/last_order_id"
 )
 
 // OrderStorage represents stored order data
@@ -518,6 +520,50 @@ func (s *Storage) ListResourceAllocations(ctx context.Context) ([]*ResourceAlloc
 	}
 
 	return allocations, nil
+}
+
+// SaveLastOrderID saves the last processed order ID to storage
+func (s *Storage) SaveLastOrderID(ctx context.Context, orderID *big.Int) error {
+	key := ds.NewKey(lastOrderIDKey)
+
+	data, err := json.Marshal(orderID.String())
+	if err != nil {
+		return fmt.Errorf("failed to marshal last order ID: %w", err)
+	}
+
+	err = s.ds.Put(ctx, key, data)
+	if err != nil {
+		return fmt.Errorf("failed to save last order ID: %w", err)
+	}
+
+	s.logger.Debug("Saved last order ID to storage", "orderID", orderID.String())
+	return nil
+}
+
+// GetLastOrderID retrieves the last processed order ID from storage
+func (s *Storage) GetLastOrderID(ctx context.Context) (*big.Int, error) {
+	key := ds.NewKey(lastOrderIDKey)
+
+	data, err := s.ds.Get(ctx, key)
+	if err != nil {
+		if err == ds.ErrNotFound {
+			return nil, nil // Return nil if no last order ID exists
+		}
+		return nil, fmt.Errorf("failed to get last order ID: %w", err)
+	}
+
+	var orderIDStr string
+	err = json.Unmarshal(data, &orderIDStr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal last order ID: %w", err)
+	}
+
+	orderID, ok := new(big.Int).SetString(orderIDStr, 10)
+	if !ok {
+		return nil, fmt.Errorf("failed to parse last order ID: %s", orderIDStr)
+	}
+
+	return orderID, nil
 }
 
 // Type aliases to make storage compatible with types package

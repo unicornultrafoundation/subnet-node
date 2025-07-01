@@ -194,6 +194,14 @@ func (m *mockStorage) ListResourceAllocations(ctx context.Context) ([]*types.Res
 	return []*types.ResourceAllocation{}, nil
 }
 
+func (m *mockStorage) SaveLastOrderID(ctx context.Context, orderID *big.Int) error {
+	return nil
+}
+
+func (m *mockStorage) GetLastOrderID(ctx context.Context) (*big.Int, error) {
+	return nil, nil
+}
+
 type mockMetrics struct{ types.Metrics }
 
 func (m *mockMetrics) IncrementBidsSubmitted() {}
