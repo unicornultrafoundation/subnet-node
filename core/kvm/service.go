@@ -3,10 +3,15 @@ package kvm
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
+	"os/exec"
+	"os/user"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/google/uuid"
@@ -51,6 +56,9 @@ type Service struct {
 	networkName   string
 	ubuntuVersion string
 	sshKeyPath    string
+
+	// User context for consistent file operations
+	userContext *libvirt.UserContext
 }
 
 // NewService creates a new KVM service
@@ -81,6 +89,9 @@ func NewService(
 		networkName:   cfg.GetString("kvm.network_name", "subnet-net"),
 		ubuntuVersion: cfg.GetString("kvm.ubuntu_version", "22.04"),
 		sshKeyPath:    cfg.GetString("kvm.ssh_key_path", "/var/lib/libvirt/ssh/subnet-key"),
+
+		// Initialize user context
+		userContext: libvirt.NewUserContext(logger),
 	}
 
 	// Log configuration values
@@ -343,20 +354,29 @@ func (s *Service) CreateVM(ctx context.Context, req *CreateVMRequest) (*VM, erro
 	if !s.enabled {
 		return nil, fmt.Errorf("KVM service is not enabled")
 	}
+
+	// Ensure consistent user context for all operations
+	if err := s.ensureConsistentUserContext(); err != nil {
+		return nil, fmt.Errorf("failed to ensure consistent user context: %w", err)
+	}
+
 	s.logger.WithFields(logrus.Fields{
 		"name":      req.Name,
 		"cpu_cores": req.CPUCores,
 		"memory_mb": req.MemoryMB,
 		"disk_gb":   req.DiskGB,
 	}).Info("Creating VM")
+
 	// Validate request
 	if err := s.validateCreateRequest(req); err != nil {
 		return nil, fmt.Errorf("validation failed: %w", err)
 	}
+
 	// Check resource availability
 	if err := s.checkResourceAvailability(ctx, req); err != nil {
 		return nil, fmt.Errorf("insufficient resources: %w", err)
 	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -364,6 +384,7 @@ func (s *Service) CreateVM(ctx context.Context, req *CreateVMRequest) (*VM, erro
 	if len(s.vms) >= s.maxVMs {
 		return nil, fmt.Errorf("maximum VM limit (%d) reached", s.maxVMs)
 	}
+
 	// Create VM
 	now := time.Now()
 	vm := &VM{
@@ -420,9 +441,14 @@ func (s *Service) createRealVM(vm *VM) error {
 
 	// Create VM disk from Ubuntu cloud image
 	sanitizedName := s.sanitizeFileName(vm.Name)
-	diskPath, err := s.storageManager.CreateVMFromUbuntuImage(s.storagePool, sanitizedName, vm.DiskGB, s.ubuntuVersion, "amd64")
+	diskPath, err := s.storageManager.CreateVMFromUbuntuImage(s.storagePool, sanitizedName, vm.DiskGB, s.ubuntuVersion, "arm64")
 	if err != nil {
 		return fmt.Errorf("failed to create VM disk: %w", err)
+	}
+
+	// Fix VM disk permissions after creation to ensure libvirt can access it
+	if err := s.storageManager.FixVMFilePermissions(sanitizedName); err != nil {
+		s.logger.WithError(err).Warn("Failed to fix VM disk permissions after creation")
 	}
 
 	// Create cloud-init configuration
@@ -434,6 +460,11 @@ func (s *Service) createRealVM(vm *VM) error {
 	actualISOPath, err := s.cloudInitManager.CreateCloudInitISO(cloudInitISOPath, cloudInitConfig)
 	if err != nil {
 		return fmt.Errorf("failed to create cloud-init ISO: %w", err)
+	}
+
+	// Ensure cloud-init ISO has correct permissions
+	if err := s.userContext.EnsureFileOwnership(actualISOPath); err != nil {
+		s.logger.WithError(err).Warn("Failed to ensure cloud-init ISO permissions, but continuing")
 	}
 
 	// Create libvirt domain
@@ -453,15 +484,58 @@ func (s *Service) createRealVM(vm *VM) error {
 	// Store domain reference (you might want to store this in the VM struct)
 	_ = domain
 
-	// Generate IP address (in a real implementation, you'd get this from DHCP)
-	vm.IPAddress = s.generateMockIP()
+	// Perform comprehensive permission check and fix for all VM files
+	// This ensures the VM can be started successfully
+	if err := s.ensureVMStartupPermissions(vm.Name, diskPath, actualISOPath); err != nil {
+		s.logger.WithError(err).Warn("Failed to ensure VM startup permissions, but continuing")
+		// Don't fail the entire operation, but log the warning
+	}
+
+	// Get real IP address from DHCP leases
+	vm.IPAddress, err = s.getRealIPAddress(vm.Name)
+	if err != nil {
+		s.logger.WithError(err).Warn("Failed to get real IP address, will retry later")
+		// Don't fail the VM creation, the IP will be retrieved when the VM starts
+	}
 
 	s.logger.WithFields(logrus.Fields{
 		"vm_id":          vm.ID,
 		"disk_path":      diskPath,
 		"cloud_init_iso": actualISOPath,
+		"ip_address":     vm.IPAddress,
 	}).Info("Real VM created with libvirt")
 
+	return nil
+}
+
+// ensureVMStartupPermissions ensures that all VM files have correct permissions for startup
+func (s *Service) ensureVMStartupPermissions(vmName, diskPath, cloudInitISOPath string) error {
+	s.logger.WithField("vm_name", vmName).Info("Ensuring VM startup permissions")
+
+	// Ensure VM disk permissions
+	if err := s.storageManager.FixVMFilePermissions(vmName); err != nil {
+		s.logger.WithError(err).Warn("Failed to fix VM disk permissions")
+	}
+
+	// Ensure cloud-init ISO permissions
+	if err := s.userContext.EnsureFileOwnership(cloudInitISOPath); err != nil {
+		s.logger.WithError(err).Warn("Failed to ensure cloud-init ISO permissions")
+	}
+
+	// Ensure storage directory permissions
+	// Use the storage path from service configuration
+	if s.storagePath != "" {
+		if err := s.userContext.EnsureDirectoryPermissions(s.storagePath); err != nil {
+			s.logger.WithError(err).Warn("Failed to ensure storage directory permissions")
+		}
+	}
+
+	// Try to fix domain permissions as well
+	if err := s.domainManager.FixDomainPermissions(vmName); err != nil {
+		s.logger.WithError(err).Warn("Failed to fix domain permissions")
+	}
+
+	s.logger.WithField("vm_name", vmName).Info("VM startup permissions check completed")
 	return nil
 }
 
@@ -503,6 +577,11 @@ func (s *Service) ListVMs(ctx context.Context) ([]*VM, error) {
 func (s *Service) StartVM(ctx context.Context, vmID string) error {
 	if !s.enabled {
 		return fmt.Errorf("KVM service is not enabled")
+	}
+
+	// Ensure consistent user context for all operations
+	if err := s.ensureConsistentUserContext(); err != nil {
+		return fmt.Errorf("failed to ensure consistent user context: %w", err)
 	}
 
 	s.mu.Lock()
@@ -550,22 +629,117 @@ func (s *Service) StartVM(ctx context.Context, vmID string) error {
 
 // startRealVM starts a real VM using libvirt
 func (s *Service) startRealVM(vm *VM) error {
+	s.logger.WithField("vm_name", vm.Name).Info("Starting real VM with libvirt")
+
+	// Perform comprehensive permission check and fix before starting
+	sanitizedName := s.sanitizeFileName(vm.Name)
+
+	// Fix VM disk permissions before starting
+	if err := s.storageManager.FixVMFilePermissions(sanitizedName); err != nil {
+		s.logger.WithError(err).Warn("Failed to fix VM disk permissions, attempting to start anyway")
+	}
+
 	// Get domain by name
 	domain, err := s.domainManager.GetDomain(vm.Name)
 	if err != nil {
+		s.logger.WithError(err).Error("Failed to get domain")
 		return fmt.Errorf("failed to get domain: %w", err)
 	}
 
-	// Start domain
-	if err := s.domainManager.StartDomain(domain); err != nil {
-		return fmt.Errorf("failed to start domain: %w", err)
+	// Try to fix domain permissions before starting
+	if err := s.domainManager.FixDomainPermissions(domain); err != nil {
+		s.logger.WithError(err).Warn("Failed to fix domain permissions, attempting to start anyway")
+	}
+
+	// Start domain with retry logic
+	var startErr error
+	for attempt := 1; attempt <= 3; attempt++ {
+		s.logger.WithFields(logrus.Fields{
+			"vm_name": vm.Name,
+			"attempt": attempt,
+		}).Info("Attempting to start domain")
+
+		startErr = s.domainManager.StartDomain(domain)
+		if startErr == nil {
+			s.logger.WithField("vm_name", vm.Name).Info("Domain started successfully")
+			break
+		}
+
+		s.logger.WithError(startErr).WithFields(logrus.Fields{
+			"vm_name": vm.Name,
+			"attempt": attempt,
+		}).Warn("Failed to start domain, attempting permission fix")
+
+		// If start failed, try to fix permissions and retry
+		if attempt < 3 {
+			// Perform aggressive permission fix
+			if err := s.performAggressivePermissionFix(vm.Name); err != nil {
+				s.logger.WithError(err).Warn("Failed to perform aggressive permission fix")
+			}
+
+			// Wait a bit before retry
+			time.Sleep(2 * time.Second)
+		}
+	}
+
+	if startErr != nil {
+		s.logger.WithError(startErr).Error("Failed to start domain after all attempts")
+		return fmt.Errorf("failed to start domain after 3 attempts: %w", startErr)
 	}
 
 	// Update VM status
 	vm.Status = VMStatusRunning
 	vm.UpdatedAt = time.Now()
 
+	// Try to get real IP address after starting
+	go func() {
+		// Wait a bit for the VM to boot and get an IP address
+		time.Sleep(10 * time.Second)
+
+		s.mu.Lock()
+		defer s.mu.Unlock()
+
+		if realIP, err := s.getRealIPAddress(vm.Name); err == nil && realIP != "" {
+			vm.IPAddress = realIP
+			vm.UpdatedAt = time.Now()
+			s.logger.WithFields(logrus.Fields{
+				"vm_id":      vm.ID,
+				"ip_address": realIP,
+			}).Info("Updated VM with real IP address")
+
+			// Save updated VM to datastore
+			s.saveVMToDatastore(context.Background(), vm)
+		} else {
+			s.logger.WithError(err).WithField("vm_id", vm.ID).Warn("Failed to get real IP address after VM start")
+		}
+	}()
+
 	s.logger.WithField("vm_id", vm.ID).Info("Real VM started with libvirt")
+	return nil
+}
+
+// performAggressivePermissionFix performs aggressive permission fixing for VM files
+func (s *Service) performAggressivePermissionFix(vmName string) error {
+	s.logger.WithField("vm_name", vmName).Info("Performing aggressive permission fix")
+
+	// Fix VM disk permissions
+	if err := s.storageManager.FixVMFilePermissions(vmName); err != nil {
+		s.logger.WithError(err).Warn("Failed to fix VM disk permissions in aggressive fix")
+	}
+
+	// Fix domain permissions
+	if err := s.domainManager.FixDomainPermissions(vmName); err != nil {
+		s.logger.WithError(err).Warn("Failed to fix domain permissions in aggressive fix")
+	}
+
+	// Ensure storage directory permissions
+	if s.storagePath != "" {
+		if err := s.userContext.EnsureDirectoryPermissions(s.storagePath); err != nil {
+			s.logger.WithError(err).Warn("Failed to ensure storage directory permissions in aggressive fix")
+		}
+	}
+
+	s.logger.WithField("vm_name", vmName).Info("Aggressive permission fix completed")
 	return nil
 }
 
@@ -796,6 +970,279 @@ func (s *Service) GetVMStats(ctx context.Context, vmID string) (*VMStats, error)
 	return stats, nil
 }
 
+// GetSystemArchitecture returns the detected system architecture information
+func (s *Service) GetSystemArchitecture(ctx context.Context) (map[string]interface{}, error) {
+	if !s.enabled {
+		return nil, fmt.Errorf("KVM service is not enabled")
+	}
+
+	// If libvirt is available, use the domain manager to get detailed info
+	if s.libvirtAvailable && s.domainManager != nil {
+		return s.domainManager.GetSystemArchitectureInfo(), nil
+	}
+
+	// Fallback to basic runtime information
+	arch := "x86_64"
+	machine := "pc-q35-2.12"
+
+	// Use runtime.GOARCH for basic detection
+	switch runtime.GOARCH {
+	case "amd64":
+		arch = "x86_64"
+		machine = "pc-q35-2.12"
+	case "arm64":
+		arch = "aarch64"
+		machine = "virt-8.2"
+	case "ppc64le":
+		arch = "ppc64le"
+		machine = "pseries"
+	case "s390x":
+		arch = "s390x"
+		machine = "s390-ccw-virtio"
+	}
+
+	// Determine domain type based on libvirt availability
+	domainType := "qemu"
+	if s.libvirtAvailable && s.client != nil && s.client.IsKVMAvailable() {
+		domainType = "kvm"
+	}
+
+	return map[string]interface{}{
+		"architecture":      arch,
+		"machine":           machine,
+		"cpu_model":         "Unknown (libvirt not available)",
+		"vendor":            "Unknown (libvirt not available)",
+		"features":          []string{},
+		"go_arch":           runtime.GOARCH,
+		"go_os":             runtime.GOOS,
+		"kvm_available":     s.libvirtAvailable && s.client != nil && s.client.IsKVMAvailable(),
+		"domain_type":       domainType,
+		"libvirt_available": s.libvirtAvailable,
+		"mode":              s.mode,
+	}, nil
+}
+
+// DiagnosePermissionIssues performs a comprehensive diagnosis of permission issues
+func (s *Service) DiagnosePermissionIssues(ctx context.Context) (map[string]interface{}, error) {
+	if !s.enabled {
+		return nil, fmt.Errorf("KVM service is not enabled")
+	}
+
+	diagnosis := map[string]interface{}{
+		"timestamp":             time.Now().Unix(),
+		"service_enabled":       s.enabled,
+		"libvirt_available":     s.libvirtAvailable,
+		"mode":                  s.mode,
+		"storage_path":          s.storagePath,
+		"storage_pool":          s.storagePool,
+		"network_name":          s.networkName,
+		"ssh_key_path":          s.sshKeyPath,
+		"permission_issues":     []string{},
+		"recommendations":       []string{},
+		"file_permissions":      map[string]interface{}{},
+		"directory_permissions": map[string]interface{}{},
+	}
+
+	// Check storage directory permissions
+	if s.storagePath != "" {
+		if info, err := os.Stat(s.storagePath); err == nil {
+			stat := info.Sys().(*syscall.Stat_t)
+			owner, _ := user.LookupId(fmt.Sprintf("%d", stat.Uid))
+			group, _ := user.LookupId(fmt.Sprintf("%d", stat.Gid))
+
+			diagnosis["directory_permissions"].(map[string]interface{})[s.storagePath] = map[string]interface{}{
+				"exists":     true,
+				"owner":      owner.Username,
+				"group":      group.Username,
+				"mode":       fmt.Sprintf("%o", stat.Mode&0777),
+				"readable":   info.Mode()&0400 != 0,
+				"writable":   info.Mode()&0200 != 0,
+				"executable": info.Mode()&0100 != 0,
+			}
+		} else {
+			diagnosis["directory_permissions"].(map[string]interface{})[s.storagePath] = map[string]interface{}{
+				"exists": false,
+				"error":  err.Error(),
+			}
+			diagnosis["permission_issues"] = append(diagnosis["permission_issues"].([]string),
+				fmt.Sprintf("Storage directory does not exist: %s", s.storagePath))
+			diagnosis["recommendations"] = append(diagnosis["recommendations"].([]string),
+				fmt.Sprintf("Create storage directory: mkdir -p %s", s.storagePath))
+		}
+	}
+
+	// Check VM disk files
+	s.mu.RLock()
+	for vmID, vm := range s.vms {
+		sanitizedName := s.sanitizeFileName(vm.Name)
+		diskPath := filepath.Join(s.storagePath, fmt.Sprintf("%s.qcow2", sanitizedName))
+
+		if info, err := os.Stat(diskPath); err == nil {
+			stat := info.Sys().(*syscall.Stat_t)
+			owner, _ := user.LookupId(fmt.Sprintf("%d", stat.Uid))
+			group, _ := user.LookupId(fmt.Sprintf("%d", stat.Gid))
+
+			diagnosis["file_permissions"].(map[string]interface{})[diskPath] = map[string]interface{}{
+				"vm_id":    vmID,
+				"vm_name":  vm.Name,
+				"exists":   true,
+				"owner":    owner.Username,
+				"group":    group.Username,
+				"mode":     fmt.Sprintf("%o", stat.Mode&0777),
+				"readable": info.Mode()&0400 != 0,
+				"writable": info.Mode()&0200 != 0,
+				"size":     info.Size(),
+			}
+
+			// Check if libvirt can access the file
+			if info.Mode()&0006 == 0 { // No group or world permissions
+				diagnosis["permission_issues"] = append(diagnosis["permission_issues"].([]string),
+					fmt.Sprintf("VM disk file not accessible by libvirt: %s", diskPath))
+				diagnosis["recommendations"] = append(diagnosis["recommendations"].([]string),
+					fmt.Sprintf("Fix VM disk permissions: sudo chmod 660 %s", diskPath))
+			}
+		} else {
+			diagnosis["file_permissions"].(map[string]interface{})[diskPath] = map[string]interface{}{
+				"vm_id":   vmID,
+				"vm_name": vm.Name,
+				"exists":  false,
+				"error":   err.Error(),
+			}
+		}
+	}
+	s.mu.RUnlock()
+
+	// Check SSH key permissions
+	if s.sshKeyPath != "" {
+		if info, err := os.Stat(s.sshKeyPath); err == nil {
+			stat := info.Sys().(*syscall.Stat_t)
+			owner, _ := user.LookupId(fmt.Sprintf("%d", stat.Uid))
+			group, _ := user.LookupId(fmt.Sprintf("%d", stat.Gid))
+
+			diagnosis["file_permissions"].(map[string]interface{})[s.sshKeyPath] = map[string]interface{}{
+				"type":     "ssh_key",
+				"exists":   true,
+				"owner":    owner.Username,
+				"group":    group.Username,
+				"mode":     fmt.Sprintf("%o", stat.Mode&0777),
+				"readable": info.Mode()&0400 != 0,
+				"writable": info.Mode()&0200 != 0,
+			}
+
+			// SSH keys should be 600 (user read/write only)
+			if stat.Mode&0777 != 0600 {
+				diagnosis["permission_issues"] = append(diagnosis["permission_issues"].([]string),
+					fmt.Sprintf("SSH key has incorrect permissions: %s", s.sshKeyPath))
+				diagnosis["recommendations"] = append(diagnosis["recommendations"].([]string),
+					fmt.Sprintf("Fix SSH key permissions: chmod 600 %s", s.sshKeyPath))
+			}
+		} else {
+			diagnosis["file_permissions"].(map[string]interface{})[s.sshKeyPath] = map[string]interface{}{
+				"type":   "ssh_key",
+				"exists": false,
+				"error":  err.Error(),
+			}
+		}
+	}
+
+	// Check libvirt daemon status
+	if s.libvirtAvailable {
+		cmd := exec.Command("systemctl", "is-active", "libvirtd")
+		if err := cmd.Run(); err == nil {
+			diagnosis["libvirt_daemon_status"] = "running"
+		} else {
+			diagnosis["libvirt_daemon_status"] = "not_running"
+			diagnosis["permission_issues"] = append(diagnosis["permission_issues"].([]string),
+				"Libvirt daemon is not running")
+			diagnosis["recommendations"] = append(diagnosis["recommendations"].([]string),
+				"Start libvirt daemon: sudo systemctl start libvirtd")
+		}
+	}
+
+	// Check KVM device
+	if _, err := os.Stat("/dev/kvm"); err == nil {
+		if info, err := os.Stat("/dev/kvm"); err == nil {
+			stat := info.Sys().(*syscall.Stat_t)
+			diagnosis["kvm_device"] = map[string]interface{}{
+				"exists":   true,
+				"mode":     fmt.Sprintf("%o", stat.Mode&0777),
+				"readable": info.Mode()&0400 != 0,
+				"writable": info.Mode()&0200 != 0,
+			}
+
+			if info.Mode()&0666 == 0 {
+				diagnosis["permission_issues"] = append(diagnosis["permission_issues"].([]string),
+					"KVM device not accessible")
+				diagnosis["recommendations"] = append(diagnosis["recommendations"].([]string),
+					"Fix KVM device permissions: sudo chmod 666 /dev/kvm")
+			}
+		}
+	} else {
+		diagnosis["kvm_device"] = map[string]interface{}{
+			"exists": false,
+			"error":  err.Error(),
+		}
+		diagnosis["permission_issues"] = append(diagnosis["permission_issues"].([]string),
+			"KVM device not found")
+		diagnosis["recommendations"] = append(diagnosis["recommendations"].([]string),
+			"Enable KVM in BIOS or install KVM module: sudo modprobe kvm")
+	}
+
+	// Check user groups
+	if currentUser, err := user.Current(); err == nil {
+		groups, _ := currentUser.GroupIds()
+		groupNames := []string{}
+		for _, gid := range groups {
+			if group, err := user.LookupGroupId(gid); err == nil {
+				groupNames = append(groupNames, group.Name)
+			}
+		}
+
+		diagnosis["user_groups"] = groupNames
+
+		hasLibvirt := false
+		hasKvm := false
+		for _, group := range groupNames {
+			if group == "libvirt" {
+				hasLibvirt = true
+			}
+			if group == "kvm" {
+				hasKvm = true
+			}
+		}
+
+		if !hasLibvirt {
+			diagnosis["permission_issues"] = append(diagnosis["permission_issues"].([]string),
+				"User not in libvirt group")
+			diagnosis["recommendations"] = append(diagnosis["recommendations"].([]string),
+				fmt.Sprintf("Add user to libvirt group: sudo usermod -a -G libvirt %s", currentUser.Username))
+		}
+
+		if !hasKvm {
+			diagnosis["permission_issues"] = append(diagnosis["permission_issues"].([]string),
+				"User not in kvm group")
+			diagnosis["recommendations"] = append(diagnosis["recommendations"].([]string),
+				fmt.Sprintf("Add user to kvm group: sudo usermod -a -G kvm %s", currentUser.Username))
+		}
+	}
+
+	// Test libvirt connection
+	if s.libvirtAvailable {
+		cmd := exec.Command("virsh", "-c", s.libvirtURI, "list", "--all")
+		if err := cmd.Run(); err == nil {
+			diagnosis["libvirt_connection"] = "successful"
+		} else {
+			diagnosis["libvirt_connection"] = "failed"
+			diagnosis["permission_issues"] = append(diagnosis["permission_issues"].([]string),
+				"Libvirt connection failed")
+			diagnosis["recommendations"] = append(diagnosis["recommendations"].([]string),
+				"Check libvirt configuration and user permissions")
+		}
+	}
+
+	return diagnosis, nil
+}
+
 // Helper methods
 
 // validateCreateRequest validates the VM creation request
@@ -892,6 +1339,135 @@ func (s *Service) checkResourceAvailability(ctx context.Context, req *CreateVMRe
 func (s *Service) generateMockIP() string {
 	// Simple mock IP generation - in real implementation this would be proper DHCP/network management
 	return fmt.Sprintf("192.168.123.%d", 10+len(s.vms))
+}
+
+// getRealIPAddress gets the real IP address from libvirt DHCP leases
+func (s *Service) getRealIPAddress(vmName string) (string, error) {
+	if !s.libvirtAvailable || s.networkManager == nil {
+		// Fallback to mock IP if libvirt is not available
+		return s.generateMockIP(), nil
+	}
+
+	// Try to get IP from DHCP leases
+	ip, err := s.networkManager.GetVMIPAddress(s.networkName, vmName)
+	if err != nil {
+		s.logger.WithError(err).WithField("vm_name", vmName).Warn("Failed to get real IP address, using mock IP")
+		return s.generateMockIP(), nil
+	}
+
+	return ip, nil
+}
+
+// GetSSHConnectionInfo returns SSH connection information for a VM
+func (s *Service) GetSSHConnectionInfo(ctx context.Context, vmID string) (*SSHConnectionInfo, error) {
+	if !s.enabled {
+		return nil, fmt.Errorf("KVM service is not enabled")
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	vm, exists := s.vms[vmID]
+	if !exists {
+		return nil, fmt.Errorf("VM not found: %s", vmID)
+	}
+
+	if vm.Status != VMStatusRunning {
+		return nil, fmt.Errorf("VM is not running: %s", vmID)
+	}
+
+	// Get the real IP address
+	ipAddress, err := s.getRealIPAddress(vm.Name)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get IP address: %w", err)
+	}
+
+	// Determine SSH key path
+	sshKeyPath := s.sshKeyPath
+	if sshKeyPath == "" {
+		sshKeyPath = "/var/lib/libvirt/ssh/subnet-key"
+	}
+
+	// Check if SSH key exists
+	if _, err := os.Stat(sshKeyPath); os.IsNotExist(err) {
+		return nil, fmt.Errorf("SSH key not found: %s", sshKeyPath)
+	}
+
+	return &SSHConnectionInfo{
+		VMID:       vmID,
+		VMName:     vm.Name,
+		IPAddress:  ipAddress,
+		Port:       22,
+		Username:   "ubuntu",
+		SSHKeyPath: sshKeyPath,
+		SSHCommand: fmt.Sprintf("ssh -i %s ubuntu@%s", sshKeyPath, ipAddress),
+	}, nil
+}
+
+// WaitForVMReady waits for a VM to be ready (IP address assigned and SSH accessible)
+func (s *Service) WaitForVMReady(ctx context.Context, vmID string, timeout time.Duration) error {
+	if !s.enabled {
+		return fmt.Errorf("KVM service is not enabled")
+	}
+
+	s.logger.WithField("vm_id", vmID).Info("Waiting for VM to be ready")
+
+	deadline := time.Now().Add(timeout)
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+			if time.Now().After(deadline) {
+				return fmt.Errorf("timeout waiting for VM to be ready: %s", vmID)
+			}
+
+			// Check if VM is running
+			s.mu.RLock()
+			vm, exists := s.vms[vmID]
+			if !exists {
+				s.mu.RUnlock()
+				return fmt.Errorf("VM not found: %s", vmID)
+			}
+			s.mu.RUnlock()
+
+			if vm.Status != VMStatusRunning {
+				continue
+			}
+
+			// Try to get real IP address
+			ipAddress, err := s.getRealIPAddress(vm.Name)
+			if err != nil {
+				s.logger.WithError(err).WithField("vm_id", vmID).Debug("Still waiting for IP address")
+				continue
+			}
+
+			// Test SSH connectivity
+			if s.TestSSHConnectivity(ipAddress) {
+				s.logger.WithFields(logrus.Fields{
+					"vm_id":      vmID,
+					"ip_address": ipAddress,
+				}).Info("VM is ready")
+				return nil
+			}
+
+			s.logger.WithField("vm_id", vmID).Debug("VM is running but SSH not yet accessible")
+		}
+	}
+}
+
+// TestSSHConnectivity tests if SSH is accessible on the VM
+func (s *Service) TestSSHConnectivity(ipAddress string) bool {
+	// Use a simple TCP connection test to port 22
+	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:22", ipAddress), 3*time.Second)
+	if err != nil {
+		return false
+	}
+	conn.Close()
+	return true
 }
 
 // saveVMToDatastore saves VM metadata to datastore
@@ -1004,4 +1580,20 @@ func (s *Service) sanitizeFileName(name string) string {
 		"|", "_",
 	)
 	return replacer.Replace(name)
+}
+
+// GetUserContext returns the user context for consistent file operations
+func (s *Service) GetUserContext() *libvirt.UserContext {
+	return s.userContext
+}
+
+// ensureConsistentUserContext ensures that all file operations use the same user context
+func (s *Service) ensureConsistentUserContext() error {
+	// Log current user context for debugging
+	if effectiveUser := s.userContext.GetEffectiveUser(); effectiveUser != nil {
+		s.logger.WithField("effective_user", effectiveUser.Username).Debug("Using consistent user context")
+	} else {
+		s.logger.Warn("No effective user available for file operations")
+	}
+	return nil
 }

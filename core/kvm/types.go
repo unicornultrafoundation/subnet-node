@@ -60,3 +60,14 @@ type SystemResources struct {
 	RunningVMs        int `json:"running_vms"`
 	MaxVMs            int `json:"max_vms"`
 }
+
+// SSHConnectionInfo represents SSH connection information for a VM
+type SSHConnectionInfo struct {
+	VMID       string `json:"vm_id"`
+	VMName     string `json:"vm_name"`
+	IPAddress  string `json:"ip_address"`
+	Port       int    `json:"port"`
+	Username   string `json:"username"`
+	SSHKeyPath string `json:"ssh_key_path"`
+	SSHCommand string `json:"ssh_command"`
+}

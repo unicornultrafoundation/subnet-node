@@ -89,6 +89,14 @@ func (api *KVMRPCAPI) GetVMStats(ctx context.Context, vmID string) (*kvm.VMStats
 	return api.kvmService.GetVMStats(ctx, vmID)
 }
 
+// GetSystemArchitecture returns system architecture information
+func (api *KVMRPCAPI) GetSystemArchitecture(ctx context.Context) (map[string]interface{}, error) {
+	if !api.kvmService.IsEnabled() {
+		return nil, &APIError{Code: ServiceUnavailable, Message: "KVM service is disabled"}
+	}
+	return api.kvmService.GetSystemArchitecture(ctx)
+}
+
 // Status returns KVM service status
 func (api *KVMRPCAPI) Status(ctx context.Context) (map[string]interface{}, error) {
 	status := map[string]interface{}{
@@ -107,6 +115,11 @@ func (api *KVMRPCAPI) Status(ctx context.Context) (map[string]interface{}, error
 				}
 			}
 			status["running_vms"] = running
+		}
+
+		// Add architecture information to status
+		if archInfo, err := api.kvmService.GetSystemArchitecture(ctx); err == nil {
+			status["architecture"] = archInfo
 		}
 	}
 

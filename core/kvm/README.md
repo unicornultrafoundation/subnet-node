@@ -1,20 +1,19 @@
 # KVM Service
 
-The KVM service provides virtual machine management capabilities with support for both real libvirt virtualization and simulation mode.
+The KVM service provides virtual machine management capabilities for the Subnet Node, supporting both real KVM virtualization and simulation mode.
 
 ## Features
 
-- **Configurable Modes**: Choose between auto-detection, real libvirt, or simulation mode
-- **Resource Management**: Manage CPU, memory, and disk resources
-- **VM Lifecycle**: Create, start, stop, and delete virtual machines
-- **Cloud-init Support**: Automated VM provisioning with cloud-init
-- **Ubuntu Cloud Images**: Automatic download and management of Ubuntu cloud images
+- **Real KVM Support**: Full virtualization using libvirt and KVM/QEMU
+- **Simulation Mode**: Fallback mode when libvirt is not available
+- **Cloud-init Integration**: Automated VM provisioning with SSH key injection
+- **Resource Management**: CPU, memory, and disk allocation
+- **Network Management**: Automatic network configuration
+- **Permission Management**: Comprehensive file ownership and permission handling
 
 ## Configuration
 
-The KVM service is configured through the main configuration system. Key configuration options:
-
-### Basic Configuration
+The KVM service can be configured through the main configuration file:
 
 ```yaml
 kvm:
@@ -24,17 +23,11 @@ kvm:
   max_cpu_cores: 4 # Maximum CPU cores per VM
   max_memory_mb: 4096 # Maximum memory per VM (MB)
   max_disk_gb: 50 # Maximum disk size per VM (GB)
-```
-
-### Libvirt Configuration (Real Mode)
-
-```yaml
-kvm:
   libvirt_uri: "qemu:///system" # Libvirt connection URI
   storage_pool: "subnet-vms" # Storage pool name
   storage_path: "/var/lib/libvirt/images/subnet" # Storage path
   network_name: "subnet-net" # Network name
-  ubuntu_version: "22.04" # Ubuntu version for cloud images
+  ubuntu_version: "22.04" # Ubuntu version for VMs
   ssh_key_path: "/var/lib/libvirt/ssh/subnet-key" # SSH key path
 ```
 
@@ -42,128 +35,195 @@ kvm:
 
 ### Auto Mode (Default)
 
-- Automatically detects if libvirt is available
-- Falls back to simulation mode if libvirt is not available
-- Best for development and flexible deployment
+The service automatically detects if libvirt is available and falls back to simulation mode if needed.
 
 ### Real Mode
 
-- Forces real libvirt virtualization
-- Requires libvirt to be installed and running
-- Best for production environments
+Forces the use of real KVM virtualization. Will fail if libvirt is not available.
 
 ### Simulation Mode
 
-- Uses simulation without real virtualization
-- No external dependencies
-- Best for testing and development
+Uses simulation mode regardless of libvirt availability. Useful for testing and development.
 
-## Usage
+## Common Permission Issues
 
-### Starting the Service
+The most common issue with the KVM service is permission problems with VM disk files. This happens because:
 
-The KVM service is automatically started when the node starts if enabled in configuration.
+1. **File Ownership**: VM disk files need to be accessible by the libvirt daemon
+2. **Group Permissions**: The user needs to be in the `libvirt` and `kvm` groups
+3. **Directory Permissions**: Storage directories need proper permissions
+4. **KVM Device Access**: The `/dev/kvm` device needs proper permissions
 
-### API Usage
+### Symptoms
 
-```go
-// Create a VM
-vm, err := kvmService.CreateVM(ctx, &kvm.CreateVMRequest{
-    Name:     "test-vm",
-    CPUCores: 2,
-    MemoryMB: 2048,
-    DiskGB:   20,
-})
+- `Permission denied` errors when starting VMs
+- `Failed to start domain` errors
+- VM disk files owned by `libvirt-qemu` user
+- Cannot access VM disk files
 
-// Start a VM
-err = kvmService.StartVM(ctx, vm.ID)
+### Solutions
 
-// Stop a VM
-err = kvmService.StopVM(ctx, vm.ID)
+#### 1. Run the Permission Fix Script
 
-// Delete a VM
-err = kvmService.DeleteVM(ctx, vm.ID)
-
-// List VMs
-vms, err := kvmService.ListVMs(ctx)
-
-// Get system resources
-resources, err := kvmService.GetSystemResources(ctx)
-```
-
-## Requirements
-
-### Real Mode Requirements
-
-- libvirt installed and running
-- qemu-kvm installed
-- virsh command available
-- Appropriate permissions for libvirt operations
-
-### Simulation Mode Requirements
-
-- No external dependencies
-- Works on any system
-
-## Migration from Build Tags
-
-Previously, the KVM service used build tags (`-tags libvirt`) to determine whether to include real libvirt support. This has been replaced with configuration-based detection:
-
-**Old approach:**
+The easiest solution is to run the provided permission fix script:
 
 ```bash
-go build -tags libvirt ./cmd/subnet
+chmod +x scripts/fix_libvirt_permissions.sh
+./scripts/fix_libvirt_permissions.sh
 ```
 
-**New approach:**
+This script will:
 
-```yaml
-kvm:
-  mode: "auto" # or "real" or "simulation"
+- Add your user to the `libvirt` and `kvm` groups
+- Fix permissions on VM disk files
+- Fix directory permissions
+- Check and start the libvirt daemon
+- Test libvirt connectivity
+
+#### 2. Manual Permission Fixes
+
+If the script doesn't work, you can manually fix permissions:
+
+```bash
+# Add user to required groups
+sudo usermod -a -G libvirt,kvm $USER
+
+# Fix VM disk file permissions
+sudo chown $USER:libvirt /path/to/vm-disk.qcow2
+sudo chmod 660 /path/to/vm-disk.qcow2
+
+# Fix directory permissions
+sudo chown -R $USER:libvirt /path/to/storage/directory
+sudo chmod -R 770 /path/to/storage/directory
+
+# Fix KVM device permissions
+sudo chmod 666 /dev/kvm
+
+# Restart libvirt daemon
+sudo systemctl restart libvirtd
 ```
 
-## Benefits of Configuration-Based Approach
+#### 3. Log Out and Back In
 
-1. **No Build Tags**: Single binary works in all environments
-2. **Runtime Detection**: Automatically adapts to available resources
-3. **Flexible Deployment**: Same binary can be used in development and production
-4. **Easy Configuration**: Simple YAML configuration
-5. **Graceful Degradation**: Falls back to simulation when libvirt unavailable
+After adding yourself to groups, you need to log out and back in for the changes to take effect:
+
+```bash
+# Check current groups
+groups
+
+# If libvirt and kvm are not listed, log out and back in
+exit
+# Then log back in and check again
+groups
+```
 
 ## Troubleshooting
 
-### Libvirt Not Available
+### Diagnostic Function
 
-If you see "Libvirt not available" messages:
+The KVM service includes a diagnostic function to help identify permission issues:
 
-1. Check if libvirt is installed: `which virsh`
-2. Check if libvirt daemon is running: `systemctl status libvirtd`
-3. Check permissions: ensure user is in libvirt group
-4. Use simulation mode for testing: `mode: "simulation"`
+```go
+diagnosis, err := kvmService.DiagnosePermissionIssues(ctx)
+if err != nil {
+    log.Fatal(err)
+}
 
-### Permission Issues
+// Print diagnosis as JSON
+diagnosisJSON, _ := json.MarshalIndent(diagnosis, "", "  ")
+fmt.Println(string(diagnosisJSON))
+```
 
-- Add user to libvirt group: `usermod -a -G libvirt $USER`
-- Restart libvirt daemon: `systemctl restart libvirtd`
-- Check SELinux/AppArmor policies if applicable
+This will provide detailed information about:
 
-### Storage Issues
+- File and directory permissions
+- User group membership
+- Libvirt daemon status
+- KVM device accessibility
+- Specific permission issues and recommendations
 
-- Ensure storage path exists and is writable
-- Check disk space availability
-- Verify storage pool configuration
+### Common Error Messages
+
+#### "Permission denied"
+
+- **Cause**: VM disk files not accessible by libvirt
+- **Solution**: Fix file permissions and ensure user is in libvirt group
+
+#### "No such file or directory"
+
+- **Cause**: VM disk files don't exist or wrong path
+- **Solution**: Check storage path configuration and file existence
+
+#### "Domain already exists"
+
+- **Cause**: VM with same name already exists
+- **Solution**: Delete existing VM or use different name
+
+#### "Libvirt not available"
+
+- **Cause**: Libvirt daemon not running or not accessible
+- **Solution**: Start libvirt daemon and check user permissions
+
+### Log Analysis
+
+Enable debug logging to get detailed information:
+
+```yaml
+logging:
+  level: debug
+  kvm: debug
+```
+
+Look for these log messages:
+
+- `"Creating VM disk file with correct ownership"`
+- `"Fixing permissions for disk file"`
+- `"Permission denied detected, attempting comprehensive permission fix"`
+
+## File Structure
+
+```
+~/.subnet/libvirt/
+├── images/                    # VM disk files (.qcow2)
+├── cloud-init/               # Cloud-init ISO files
+└── ssh/                      # SSH keys
+```
+
+## Security Considerations
+
+- VM disk files should have permissions 660 (user and group read/write)
+- SSH keys should have permissions 600 (user read/write only)
+- Storage directories should have permissions 770 (user and group read/write/execute)
+- The user should be in the `libvirt` and `kvm` groups
+- Avoid using world-readable permissions (666, 777) for security
 
 ## Development
 
-### Adding New Features
-
-1. Extend the configuration in `config/default_config.go`
-2. Update the service in `core/kvm/service.go`
-3. Add stub implementations in `core/kvm/libvirt/libvirt.go`
-4. Update tests and documentation
-
 ### Testing
 
-- Use simulation mode for unit tests
-- Use real mode for integration tests
-- Test both modes in CI/CD pipeline
+To test the KVM service without real virtualization:
+
+```yaml
+kvm:
+  enabled: true
+  mode: "simulation"
+```
+
+### Adding New Features
+
+When adding new features that create files:
+
+1. Use the `UserContext` system for proper file ownership
+2. Call `EnsureFileOwnership()` after file creation
+3. Add appropriate error handling for permission issues
+4. Update the diagnostic function to check new file types
+
+## Support
+
+If you encounter issues:
+
+1. Run the diagnostic function: `kvmService.DiagnosePermissionIssues(ctx)`
+2. Check the logs for detailed error messages
+3. Run the permission fix script: `./scripts/fix_libvirt_permissions.sh`
+4. Verify libvirt installation and configuration
+5. Check BIOS settings for KVM virtualization support
