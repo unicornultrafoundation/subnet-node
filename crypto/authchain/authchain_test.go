@@ -3,7 +3,6 @@ package authchain
 import (
 	"crypto/ecdsa"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/hex"
 	"strings"
 	"testing"
@@ -99,7 +98,7 @@ func TestCreateAuthChain(t *testing.T) {
 	assert.NotEmpty(t, authChain[1].Signature)
 
 	assert.Equal(t, AuthLinkTypeECDSA_PERSONAL_SIGNED_ENTITY, authChain[2].Type)
-	assert.Equal(t, ephemeralIdentity.Address, authChain[2].Payload)
+	assert.Equal(t, entityID, authChain[2].Payload)
 	assert.NotEmpty(t, authChain[2].Signature)
 }
 
@@ -211,7 +210,7 @@ func TestGetEphemeralMessage(t *testing.T) {
 
 	message := GetEphemeralMessage(ephemeralAddress, expiration)
 
-	expected := "Memetaverse Login\nEphemeral address: 0x1234567890123456789012345678901234567890\nExpiration: 2023-12-25T10:30:00Z"
+	expected := "Subnet Login\nEphemeral address: 0x1234567890123456789012345678901234567890\nExpiration: 2023-12-25T10:30:00Z"
 	assert.Equal(t, expected, message)
 }
 
@@ -236,12 +235,12 @@ func TestGetSignedIdentitySignatureType(t *testing.T) {
 }
 
 func TestParseEphemeralPayload(t *testing.T) {
-	payload := "Memetaverse Login\nEphemeral address: 0x1234567890123456789012345678901234567890\nExpiration: 2023-12-25T10:30:00Z"
+	payload := "Subnet Login\nEphemeral address: 0x1234567890123456789012345678901234567890\nExpiration: 2023-12-25T10:30:00Z"
 
 	result, err := ParseEphemeralPayload(payload)
 	require.NoError(t, err)
 
-	assert.Equal(t, "Memetaverse Login\nEphemeral address: 0x1234567890123456789012345678901234567890\nExpiration: 2023-12-25T10:30:00Z", result.Message)
+	assert.Equal(t, "Subnet Login\nEphemeral address: 0x1234567890123456789012345678901234567890\nExpiration: 2023-12-25T10:30:00Z", result.Message)
 	assert.Equal(t, "0x1234567890123456789012345678901234567890", result.EphemeralAddress)
 	// Instead of hardcoding, check that expiration parses to the correct time
 	exp, _ := time.Parse(time.RFC3339, "2023-12-25T10:30:00Z")
@@ -255,7 +254,7 @@ func TestParseEphemeralPayloadInvalid(t *testing.T) {
 	assert.Error(t, err)
 
 	// Invalid expiration format
-	invalidExpirationPayload := "Memetaverse Login\nEphemeral address: 0x1234567890123456789012345678901234567890\nExpiration: invalid-date"
+	invalidExpirationPayload := "Subnet Login\nEphemeral address: 0x1234567890123456789012345678901234567890\nExpiration: invalid-date"
 	_, err = ParseEphemeralPayload(invalidExpirationPayload)
 	assert.Error(t, err)
 }
@@ -268,10 +267,14 @@ func TestRecoverAddressFromEthSignature(t *testing.T) {
 	address := crypto.PubkeyToAddress(privateKey.PublicKey)
 	message := "test message"
 
-	// Create signature
-	hash := sha256.Sum256([]byte(message))
-	signature, err := crypto.Sign(hash[:], privateKey)
+	// Create signature using Ethereum personal sign format
+	messageHash := createEthereumMessageHash(message)
+	signature, err := crypto.Sign(messageHash, privateKey)
 	require.NoError(t, err)
+
+	// pubKey, err := crypto.SigToPub(messageHash, signature)
+	// require.NoError(t, err)
+	// recoveredAddress := crypto.PubkeyToAddress(*pubKey)
 
 	signatureHex := hex.EncodeToString(signature)
 
@@ -342,18 +345,14 @@ func TestValidateAuthChain(t *testing.T) {
 	entityID := "test-entity-123"
 	authChain := CreateAuthChain(ownerIdentity, ephemeralIdentity, 60, entityID)
 
-	// Get ephemeral address from authChain for expectedFinalAuthority
-	ephemeralAddr, err := GetEphemeralAddress(authChain)
-	require.NoError(t, err)
-
 	// Test valid validation
-	result, err := service.ValidateAuthChain(ephemeralAddr.Hex(), authChain, nil, time.Now().UnixMilli())
+	result, err := service.ValidateAuthChain(entityID, authChain, nil, time.Now().UnixMilli())
 	require.NoError(t, err)
 	assert.True(t, result.OK)
 	assert.Empty(t, result.Message)
 
 	// Test invalid final authority
-	result, err = service.ValidateAuthChain("0x0000000000000000000000000000000000000000", authChain, nil, time.Now().UnixMilli())
+	result, err = service.ValidateAuthChain("1", authChain, nil, time.Now().UnixMilli())
 	require.NoError(t, err)
 	assert.False(t, result.OK)
 	assert.Contains(t, result.Message, "Invalid final authority")

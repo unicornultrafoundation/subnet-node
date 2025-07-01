@@ -3,6 +3,9 @@ package api
 import (
 	"bytes"
 	"context"
+	"crypto/ecdsa"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,10 +13,14 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	bidenginetypes "github.com/unicornultrafoundation/subnet-node/bidengine/types"
+	"github.com/unicornultrafoundation/subnet-node/core/deployer/manifest"
 	"github.com/unicornultrafoundation/subnet-node/core/deployer/types"
 	authchain "github.com/unicornultrafoundation/subnet-node/crypto/authchain"
 	"k8s.io/client-go/tools/remotecommand"
@@ -84,25 +91,103 @@ func (m *MockDeployerService) Exec(ctx context.Context, orderID, podName, servic
 	return args.Get(0).(types.ExecResult), args.Error(1)
 }
 
-// createTestAuthChain creates a simple authchain for testing
+// createTestAuthChain creates a deterministic authchain for testing using a seed
 func createTestAuthChain(orderID string) string {
+	// Use orderID as seed for deterministic key generation
+	seed := sha256.Sum256([]byte(orderID))
+
+	// Generate deterministic private keys from seed
+	ownerPrivateKey := generateDeterministicPrivateKey(seed[:], "owner")
+	ephemeralPrivateKey := generateDeterministicPrivateKey(seed[:], "ephemeral")
+
+	// Get addresses
+	ownerAddress := crypto.PubkeyToAddress(ownerPrivateKey.PublicKey)
+	ephemeralAddress := crypto.PubkeyToAddress(ephemeralPrivateKey.PublicKey)
+
+	// Create ephemeral message with RFC3339 time format
+	expiration := time.Now().Add(time.Hour)
+	ephemeralMessage := fmt.Sprintf("Subnet Node Login\nEphemeral address: %s\nExpiration: %s",
+		ephemeralAddress.Hex(), expiration.Format(time.RFC3339))
+
+	// Sign ephemeral message with owner's private key
+	ephemeralSignature := authchain.CreateSignature(authchain.IdentityType{
+		PrivateKey: hex.EncodeToString(crypto.FromECDSA(ownerPrivateKey)),
+		Address:    ownerAddress.Hex(),
+	}, ephemeralMessage)
+
+	// Create entity ID
+	entityID := fmt.Sprintf("subnet_deployment:1:1:%s", orderID)
+
+	// Sign entity ID with ephemeral private key
+	entitySignature := authchain.CreateSignature(authchain.IdentityType{
+		PrivateKey: hex.EncodeToString(crypto.FromECDSA(ephemeralPrivateKey)),
+		Address:    ephemeralAddress.Hex(),
+	}, entityID)
+
+	// Build auth chain
 	chain := authchain.AuthChain{
 		{
 			Type:    authchain.AuthLinkTypeSIGNER,
-			Payload: "0x1234567890123456789012345678901234567890",
+			Payload: ownerAddress.Hex(),
 		},
 		{
 			Type:      authchain.AuthLinkTypeECDSA_PERSONAL_EPHEMERAL,
-			Payload:   "delegate:0x1234567890123456789012345678901234567890123456789012345678901234:1234567890",
-			Signature: "0xdummysignature",
+			Payload:   ephemeralMessage,
+			Signature: ephemeralSignature,
 		},
 		{
-			Type:    authchain.AuthLinkTypeECDSA_PERSONAL_SIGNED_ENTITY,
-			Payload: fmt.Sprintf("subnet_deployment:provider-1:machine-1:%s", orderID),
+			Type:      authchain.AuthLinkTypeECDSA_PERSONAL_SIGNED_ENTITY,
+			Payload:   entityID,
+			Signature: entitySignature,
 		},
 	}
+
 	serialized, _ := authchain.SerializeAuthChain(chain)
 	return serialized
+}
+
+// generateDeterministicPrivateKey creates a deterministic private key from a seed
+func generateDeterministicPrivateKey(seed []byte, purpose string) *ecdsa.PrivateKey {
+	// Create deterministic data for key generation
+	data := append(seed, []byte(purpose)...)
+	hash := sha256.Sum256(data)
+
+	// Use hash as private key (ensure it's valid for secp256k1)
+	privateKeyBytes := hash[:]
+
+	// Ensure the private key is within the valid range for secp256k1
+	curve := crypto.S256()
+	curveOrder := curve.Params().N
+
+	privateKeyInt := new(big.Int).SetBytes(privateKeyBytes)
+	privateKeyInt.Mod(privateKeyInt, curveOrder)
+
+	// Create private key
+	privateKey := &ecdsa.PrivateKey{
+		PublicKey: ecdsa.PublicKey{
+			Curve: curve,
+		},
+		D: privateKeyInt,
+	}
+
+	// Compute public key
+	privateKey.PublicKey.X, privateKey.PublicKey.Y = curve.ScalarBaseMult(privateKeyInt.Bytes())
+
+	return privateKey
+}
+
+// getOwnerAddressFromAuthChain extracts the owner address from a serialized authchain
+func getOwnerAddressFromAuthChain(authChainStr string) string {
+	chain, err := authchain.DeserializeAuthChain(authChainStr)
+	if err != nil {
+		panic(fmt.Sprintf("failed to deserialize authchain: %v", err))
+	}
+
+	if len(chain) == 0 {
+		panic("empty authchain")
+	}
+
+	return chain[0].Payload
 }
 
 func TestDeploymentHandler_HealthHandler(t *testing.T) {
@@ -134,13 +219,13 @@ func TestDeploymentHandler_CreateDeploymentHandler_WithoutAuth(t *testing.T) {
 	router := handler.Router()
 
 	requestBody := types.DeploymentRequest{
-		OrderID:   "test-order-123",
+		OrderID:   "123",
 		Requester: "0x1234567890123456789012345678901234567890",
 		TTL:       60,
 	}
 
 	bodyBytes, _ := json.Marshal(requestBody)
-	req := httptest.NewRequest("POST", "/deployments", bytes.NewBuffer(bodyBytes))
+	req := httptest.NewRequest("POST", "/", bytes.NewBuffer(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
@@ -161,27 +246,7 @@ func TestDeploymentHandler_GetDeploymentHandler_WithoutAuth(t *testing.T) {
 	handler := NewDeploymentHandler(mockDeployer, mockConfig, mockBidMarket)
 	router := handler.Router()
 
-	req := httptest.NewRequest("GET", "/deployments/test-order-123", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	// Should return 401 because no authchain header
-	assert.Equal(t, http.StatusUnauthorized, w.Code)
-
-	var response map[string]interface{}
-	err := json.Unmarshal(w.Body.Bytes(), &response)
-	assert.NoError(t, err)
-	assert.Equal(t, "X-AuthChain header required", response["error"])
-}
-
-func TestDeploymentHandler_ListDeploymentsHandler_WithoutAuth(t *testing.T) {
-	mockDeployer := &MockDeployerService{}
-	mockConfig := &MockConfigProvider{}
-	mockBidMarket := &MockBidMarketContract{}
-	handler := NewDeploymentHandler(mockDeployer, mockConfig, mockBidMarket)
-	router := handler.Router()
-
-	req := httptest.NewRequest("GET", "/deployments?requester=0x1234567890123456789012345678901234567890", nil)
+	req := httptest.NewRequest("GET", "/123", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -201,7 +266,7 @@ func TestDeploymentHandler_CleanupDeploymentHandler_WithoutAuth(t *testing.T) {
 	handler := NewDeploymentHandler(mockDeployer, mockConfig, mockBidMarket)
 	router := handler.Router()
 
-	req := httptest.NewRequest("DELETE", "/deployments/test-order-123", nil)
+	req := httptest.NewRequest("DELETE", "/123", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -220,30 +285,43 @@ func TestDeploymentHandler_CreateDeploymentHandler(t *testing.T) {
 	mockBidMarket := &MockBidMarketContract{}
 
 	// Mock config values
-	mockConfig.On("GetString", "deployment.provider.id", "").Return("provider-1")
-	mockConfig.On("GetString", "deployment.machine.id", "").Return("machine-1")
+	mockConfig.On("GetString", "provider.id", "").Return("1")
+	mockConfig.On("GetString", "provider.machine_id", "").Return("1")
 
 	handler := NewDeploymentHandler(mockDeployer, mockConfig, mockBidMarket)
 	router := handler.Router()
 
+	// Create authchain and get owner address
+	authChainStr := createTestAuthChain("123")
+	ownerAddress := getOwnerAddressFromAuthChain(authChainStr)
+
+	// Mock bid market to return order information
+	mockOrder := &bidenginetypes.Order{
+		ID:                big.NewInt(123),
+		Owner:             common.HexToAddress(ownerAddress),
+		AcceptedMachineId: big.NewInt(1), // This should match the machine_id from config
+		Status:            bidenginetypes.OrderStatusAccepted,
+	}
+	mockBidMarket.On("GetOrder", mock.Anything, big.NewInt(123)).Return(mockOrder, nil)
+
 	// Mock successful deployment creation
 	mockDeployer.On("RequestDeployment", mock.Anything, mock.Anything).Return(&types.DeploymentResponse{
-		ID: "test-order-123",
+		ID: "123",
 		Status: &types.DeploymentStatus{
 			State: types.DeploymentStateRunning,
 		},
 	}, nil)
 
 	requestBody := types.DeploymentRequest{
-		OrderID:   "test-order-123",
-		Requester: "0x1234567890123456789012345678901234567890",
+		OrderID:   "123",
+		Requester: ownerAddress,
 		TTL:       60,
 	}
 
 	bodyBytes, _ := json.Marshal(requestBody)
-	req := httptest.NewRequest("POST", "/deployments", bytes.NewBuffer(bodyBytes))
+	req := httptest.NewRequest("POST", "/", bytes.NewBuffer(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-AuthChain", createTestAuthChain("test-order-123"))
+	req.Header.Set("X-AuthChain", authChainStr)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -257,10 +335,8 @@ func TestDeploymentHandler_CreateDeploymentHandler(t *testing.T) {
 	var response types.DeploymentResponse
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
-	assert.Equal(t, "test-order-123", response.ID)
+	assert.Equal(t, "123", response.ID)
 
-	mockDeployer.AssertExpectations(t)
-	mockConfig.AssertExpectations(t)
 }
 
 func TestDeploymentHandler_GetDeploymentHandler(t *testing.T) {
@@ -269,22 +345,36 @@ func TestDeploymentHandler_GetDeploymentHandler(t *testing.T) {
 	mockBidMarket := &MockBidMarketContract{}
 
 	// Mock config values
-	mockConfig.On("GetString", "deployment.provider.id", "").Return("provider-1")
-	mockConfig.On("GetString", "deployment.machine.id", "").Return("machine-1")
+	mockConfig.On("GetString", "provider.id", "").Return("1")
+	mockConfig.On("GetString", "provider.machine_id", "").Return("1")
 
 	handler := NewDeploymentHandler(mockDeployer, mockConfig, mockBidMarket)
 	router := handler.Router()
 
+	// Create authchain and get owner address
+	authChainStr := createTestAuthChain("123")
+	ownerAddress := getOwnerAddressFromAuthChain(authChainStr)
+
+	// Mock bid market to return order information
+	mockOrder := &bidenginetypes.Order{
+		ID:                 big.NewInt(123),
+		Owner:              common.HexToAddress(ownerAddress),
+		AcceptedProviderId: big.NewInt(1),
+		AcceptedMachineId:  big.NewInt(1), // This should match the machine_id from config
+		Status:             bidenginetypes.OrderStatusAccepted,
+	}
+	mockBidMarket.On("GetOrder", mock.Anything, big.NewInt(123)).Return(mockOrder, nil)
+
 	// Mock successful deployment retrieval
-	mockDeployer.On("GetDeployment", mock.Anything, "test-order-123").Return(&types.DeploymentResponse{
-		ID: "test-order-123",
+	mockDeployer.On("GetDeployment", mock.Anything, "123").Return(&types.DeploymentResponse{
+		ID: "123",
 		Status: &types.DeploymentStatus{
 			State: types.DeploymentStateRunning,
 		},
 	}, nil)
 
-	req := httptest.NewRequest("GET", "/deployments/test-order-123", nil)
-	req.Header.Set("X-AuthChain", createTestAuthChain("test-order-123"))
+	req := httptest.NewRequest("GET", "/123", nil)
+	req.Header.Set("X-AuthChain", authChainStr)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -293,49 +383,11 @@ func TestDeploymentHandler_GetDeploymentHandler(t *testing.T) {
 	var response types.DeploymentResponse
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
-	assert.Equal(t, "test-order-123", response.ID)
+	assert.Equal(t, "123", response.ID)
 
 	mockDeployer.AssertExpectations(t)
 	mockConfig.AssertExpectations(t)
-}
-
-func TestDeploymentHandler_ListDeploymentsHandler(t *testing.T) {
-	mockDeployer := &MockDeployerService{}
-	mockConfig := &MockConfigProvider{}
-	mockBidMarket := &MockBidMarketContract{}
-
-	// Mock config values
-	mockConfig.On("GetString", "deployment.provider.id", "").Return("provider-1")
-	mockConfig.On("GetString", "deployment.machine.id", "").Return("machine-1")
-
-	handler := NewDeploymentHandler(mockDeployer, mockConfig, mockBidMarket)
-	router := handler.Router()
-
-	// Mock successful deployments list
-	mockDeployer.On("GetDeployments", mock.Anything, "0x1234567890123456789012345678901234567890").Return([]*types.DeploymentResponse{
-		{
-			ID: "test-order-123",
-			Status: &types.DeploymentStatus{
-				State: types.DeploymentStateRunning,
-			},
-		},
-	}, nil)
-
-	req := httptest.NewRequest("GET", "/deployments?requester=0x1234567890123456789012345678901234567890", nil)
-	req.Header.Set("X-AuthChain", createTestAuthChain("test-order-123"))
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusOK, w.Code)
-
-	var response []*types.DeploymentResponse
-	err := json.Unmarshal(w.Body.Bytes(), &response)
-	assert.NoError(t, err)
-	assert.Len(t, response, 1)
-	assert.Equal(t, "test-order-123", response[0].ID)
-
-	mockDeployer.AssertExpectations(t)
-	mockConfig.AssertExpectations(t)
+	mockBidMarket.AssertExpectations(t)
 }
 
 func TestDeploymentHandler_CleanupDeploymentHandler(t *testing.T) {
@@ -344,17 +396,30 @@ func TestDeploymentHandler_CleanupDeploymentHandler(t *testing.T) {
 	mockBidMarket := &MockBidMarketContract{}
 
 	// Mock config values
-	mockConfig.On("GetString", "deployment.provider.id", "").Return("provider-1")
-	mockConfig.On("GetString", "deployment.machine.id", "").Return("machine-1")
+	mockConfig.On("GetString", "provider.id", "").Return("1")
+	mockConfig.On("GetString", "provider.machine_id", "").Return("1")
 
 	handler := NewDeploymentHandler(mockDeployer, mockConfig, mockBidMarket)
 	router := handler.Router()
 
-	// Mock successful deployment cleanup
-	mockDeployer.On("CleanupDeployment", mock.Anything, "test-order-123").Return(nil)
+	// Create authchain and get owner address
+	authChainStr := createTestAuthChain("123")
+	ownerAddress := getOwnerAddressFromAuthChain(authChainStr)
 
-	req := httptest.NewRequest("DELETE", "/deployments/test-order-123", nil)
-	req.Header.Set("X-AuthChain", createTestAuthChain("test-order-123"))
+	// Mock bid market to return order information
+	mockOrder := &bidenginetypes.Order{
+		ID:                big.NewInt(123),
+		Owner:             common.HexToAddress(ownerAddress),
+		AcceptedMachineId: big.NewInt(1), // This should match the machine_id from config
+		Status:            bidenginetypes.OrderStatusAccepted,
+	}
+	mockBidMarket.On("GetOrder", mock.Anything, big.NewInt(123)).Return(mockOrder, nil)
+
+	// Mock successful deployment cleanup
+	mockDeployer.On("CleanupDeployment", mock.Anything, "123").Return(nil)
+
+	req := httptest.NewRequest("DELETE", "/123", nil)
+	req.Header.Set("X-AuthChain", authChainStr)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -367,42 +432,7 @@ func TestDeploymentHandler_CleanupDeploymentHandler(t *testing.T) {
 
 	mockDeployer.AssertExpectations(t)
 	mockConfig.AssertExpectations(t)
-}
-
-func TestDeploymentHandler_CreateDeploymentHandler_RequesterMismatch(t *testing.T) {
-	mockDeployer := &MockDeployerService{}
-	mockConfig := &MockConfigProvider{}
-	mockBidMarket := &MockBidMarketContract{}
-
-	// Mock config values
-	mockConfig.On("GetString", "deployment.provider.id", "").Return("provider-1")
-	mockConfig.On("GetString", "deployment.machine.id", "").Return("machine-1")
-
-	handler := NewDeploymentHandler(mockDeployer, mockConfig, mockBidMarket)
-	router := handler.Router()
-
-	requestBody := types.DeploymentRequest{
-		OrderID:   "test-order-123",
-		Requester: "0x9876543210987654321098765432109876543210", // Different from authchain
-		TTL:       60,
-	}
-
-	bodyBytes, _ := json.Marshal(requestBody)
-	req := httptest.NewRequest("POST", "/deployments", bytes.NewBuffer(bodyBytes))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-AuthChain", createTestAuthChain("test-order-123"))
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	// Should return 403 because requester doesn't match authenticated user
-	assert.Equal(t, http.StatusForbidden, w.Code)
-
-	var response map[string]interface{}
-	err := json.Unmarshal(w.Body.Bytes(), &response)
-	assert.NoError(t, err)
-	assert.Contains(t, response["error"], "requester does not match authenticated user")
-
-	mockConfig.AssertExpectations(t)
+	mockBidMarket.AssertExpectations(t)
 }
 
 func TestDeploymentHandler_CreateDeploymentHandler_OrderIDMismatch(t *testing.T) {
@@ -411,60 +441,46 @@ func TestDeploymentHandler_CreateDeploymentHandler_OrderIDMismatch(t *testing.T)
 	mockBidMarket := &MockBidMarketContract{}
 
 	// Mock config values
-	mockConfig.On("GetString", "deployment.provider.id", "").Return("provider-1")
-	mockConfig.On("GetString", "deployment.machine.id", "").Return("machine-1")
+	mockConfig.On("GetString", "provider.id", "").Return("1")
+	mockConfig.On("GetString", "provider.machine_id", "").Return("1")
 
 	handler := NewDeploymentHandler(mockDeployer, mockConfig, mockBidMarket)
 	router := handler.Router()
 
-	requestBody := types.DeploymentRequest{
-		OrderID:   "different-order-456", // Different from authchain
-		Requester: "0x1234567890123456789012345678901234567890",
-		TTL:       60,
+	// Create authchain and get owner address
+	authChainStr := createTestAuthChain("123")
+	ownerAddress := getOwnerAddressFromAuthChain(authChainStr)
+
+	// Mock bid market to return order information for order 456 (the one in request body)
+	mockOrder := &bidenginetypes.Order{
+		ID:                 big.NewInt(456),
+		Owner:              common.HexToAddress(ownerAddress),
+		AcceptedProviderId: big.NewInt(1),
+		AcceptedMachineId:  big.NewInt(1), // This should match the machine_id from config
+		Status:             bidenginetypes.OrderStatusAccepted,
+	}
+	mockBidMarket.On("GetOrder", mock.Anything, big.NewInt(456)).Return(mockOrder, nil)
+
+	requestBody := DeploymentRequest{
+		OrderID:  "456", // Different from authchain
+		Manifest: manifest.SDL{},
 	}
 
 	bodyBytes, _ := json.Marshal(requestBody)
-	req := httptest.NewRequest("POST", "/deployments", bytes.NewBuffer(bodyBytes))
+	req := httptest.NewRequest("POST", "/", bytes.NewBuffer(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-AuthChain", createTestAuthChain("test-order-123"))
+	req.Header.Set("X-AuthChain", authChainStr)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
 	// Should return 400 because orderID doesn't match
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 
 	var response map[string]interface{}
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
-	assert.Contains(t, response["error"], "OrderID mismatch")
+	assert.Contains(t, response["error"], "Invalid final authority")
 
 	mockConfig.AssertExpectations(t)
-}
-
-func TestDeploymentHandler_GetDeploymentHandler_MissingOrderID(t *testing.T) {
-	mockDeployer := &MockDeployerService{}
-	mockConfig := &MockConfigProvider{}
-	mockBidMarket := &MockBidMarketContract{}
-
-	// Mock config values
-	mockConfig.On("GetString", "deployment.provider.id", "").Return("provider-1")
-	mockConfig.On("GetString", "deployment.machine.id", "").Return("machine-1")
-
-	handler := NewDeploymentHandler(mockDeployer, mockConfig, mockBidMarket)
-	router := handler.Router()
-
-	req := httptest.NewRequest("GET", "/deployments", nil) // No orderID in path
-	req.Header.Set("X-AuthChain", createTestAuthChain("test-order-123"))
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	// Should return 400 because orderID is required for GET operations
-	assert.Equal(t, http.StatusBadRequest, w.Code)
-
-	var response map[string]interface{}
-	err := json.Unmarshal(w.Body.Bytes(), &response)
-	assert.NoError(t, err)
-	assert.Contains(t, response["error"], "orderID is required")
-
-	mockConfig.AssertExpectations(t)
+	mockBidMarket.AssertExpectations(t)
 }

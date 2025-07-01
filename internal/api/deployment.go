@@ -10,7 +10,6 @@ import (
 	"math/big"
 	"net/http"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -22,6 +21,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/sirupsen/logrus"
 	bidenginetypes "github.com/unicornultrafoundation/subnet-node/bidengine/types"
+	"github.com/unicornultrafoundation/subnet-node/core/deployer/manifest"
 	"github.com/unicornultrafoundation/subnet-node/core/deployer/types"
 	authchain "github.com/unicornultrafoundation/subnet-node/crypto/authchain"
 	"github.com/unicornultrafoundation/subnet-node/internal/api/ws"
@@ -212,21 +212,24 @@ func (h *DeploymentHandler) Router() *chi.Mux {
 
 	// Create auth middleware
 	authMiddleware := NewAuthMiddleware(h.cfg, h.ordersCache)
-	r.Use(authMiddleware.Middleware())
 
-	// Deployment management routes
-	r.Post("/", h.createDeploymentHandler)
-	r.Get("/", h.listDeploymentsHandler)
-	r.Get("/{orderID}", h.getDeploymentHandler)
-	r.Delete("/{orderID}", h.cleanupDeploymentHandler)
+	// Group for authenticated routes
+	r.Group(func(r chi.Router) {
+		r.Use(authMiddleware.Middleware())
 
-	// Service and pod management routes
-	r.Get("/{orderID}/services/{serviceName}/status", h.getServiceStatusHandler)
-	r.Get("/{orderID}/logs", h.getDeploymentLogsHandler)
+		// WebSocket routes for exec and logs
+		r.Get("/{orderID}/ws/exec", h.execWebSocketHandler)
+		r.Get("/{orderID}/ws/logs", h.logsWebSocketHandler)
 
-	// WebSocket routes for exec and logs
-	r.Get("/{orderID}/ws/exec", h.execWebSocketHandler)
-	r.Get("/{orderID}/ws/logs", h.logsWebSocketHandler)
+		// Deployment management routes
+		r.Post("/", h.createDeploymentHandler)
+		r.Get("/{orderID}", h.getDeploymentHandler)
+		r.Delete("/{orderID}", h.cleanupDeploymentHandler)
+
+		// Service and pod management routes
+		r.Get("/{orderID}/services/{serviceName}/status", h.getServiceStatusHandler)
+		r.Get("/{orderID}/logs", h.getDeploymentLogsHandler)
+	})
 
 	return r
 }
@@ -280,7 +283,7 @@ func (a *AuthMiddleware) Middleware() func(http.Handler) http.Handler {
 			}
 
 			// For POST /deployments, extract orderID from request body
-			if orderID == "" && r.Method == "POST" && strings.HasSuffix(r.URL.Path, "/deployments") {
+			if r.Method == "POST" {
 				// Read body to extract orderID
 				bodyBytes, err := io.ReadAll(r.Body)
 				if err == nil {
@@ -306,41 +309,8 @@ func (a *AuthMiddleware) Middleware() func(http.Handler) http.Handler {
 			}
 
 			// Extract provider and machine IDs from config
-			providerID := a.cfg.GetString("deployment.provider.id", "")
-			machineID := a.cfg.GetString("deployment.machine.id", "")
-
-			if order != nil && (order.AcceptedMachineId.String() != providerID || order.AcceptedMachineId.String() != machineID) {
-				a.sendErrorResponse(w, "Unauthorized: order does not belong to authenticated user", http.StatusForbidden)
-				return
-			}
-
-			// Create entityID according to schema: "subnet_deployment:{providerId}:{machineId}:{order_id}"
-			entityID := fmt.Sprintf("subnet_deployment:%s:%s:%s", providerID, machineID, orderID)
-
-			// Validate authchain for the entityID with default 60s expiry
-			result, err := authchain.ValidateAuthChainWithDefaultExpiry(authChain, entityID)
-			if err != nil || result == nil || !result.OK {
-				// If validation fails, try to extract entityID from authchain and compare
-				if extractedEntityID, extractErr := authchain.GetEntityID(authChain); extractErr == nil {
-					if extractedEntityID == entityID {
-						// EntityID matches, consider it valid
-						result = &authchain.ValidationResult{OK: true}
-					} else {
-						errMsg := fmt.Sprintf("EntityID mismatch. Expected: %s, Got: %s", entityID, extractedEntityID)
-						a.sendErrorResponse(w, errMsg, http.StatusUnauthorized)
-						return
-					}
-				} else {
-					errMsg := "Invalid authchain"
-					if err != nil {
-						errMsg = err.Error()
-					} else if result != nil && result.Message != "" {
-						errMsg = result.Message
-					}
-					a.sendErrorResponse(w, errMsg, http.StatusUnauthorized)
-					return
-				}
-			}
+			providerID := a.cfg.GetString("provider.id", "")
+			machineID := a.cfg.GetString("provider.machine_id", "")
 
 			// Extract user address from authchain
 			userAddress := ""
@@ -351,10 +321,52 @@ func (a *AuthMiddleware) Middleware() func(http.Handler) http.Handler {
 				}
 			}
 
-			if order != nil && order.Owner.Hex() != userAddress {
-				a.sendErrorResponse(w, "Unauthorized: order does not belong to authenticated user", http.StatusForbidden)
+			// For endpoints with orderID, validate order ownership and machine assignment
+			if orderID != "" {
+				if order != nil && (order.AcceptedMachineId.String() != providerID || order.AcceptedMachineId.String() != machineID) {
+					a.sendErrorResponse(w, "Unauthorized: order does not belong to authenticated user", http.StatusForbidden)
+					return
+				}
+
+				if order != nil && order.Owner.Hex() != userAddress {
+					a.sendErrorResponse(w, "Unauthorized: order does not belong to authenticated user", http.StatusForbidden)
+					return
+				}
+
+				// Create entityID according to schema: "subnet_deployment:{providerId}:{machineId}:{order_id}"
+				entityID := fmt.Sprintf("subnet_deployment:%s:%s:%s", providerID, machineID, orderID)
+				fmt.Println("entityID", entityID)
+				// Validate authchain for the entityID with default 60s expiry
+				result, err := authchain.ValidateAuthChainWithDefaultExpiry(authChain, entityID)
+				if err != nil || result == nil || !result.OK {
+					// If validation fails, try to extract entityID from authchain and compare
+					if extractedEntityID, extractErr := authchain.GetEntityID(authChain); extractErr == nil {
+						if extractedEntityID == entityID {
+							// EntityID matches, consider it valid
+							result = &authchain.ValidationResult{OK: true}
+						} else {
+							errMsg := fmt.Sprintf("EntityID mismatch. Expected: %s, Got: %s", entityID, extractedEntityID)
+							a.sendErrorResponse(w, errMsg, http.StatusUnauthorized)
+							return
+						}
+					} else {
+						errMsg := "Invalid authchain"
+						if err != nil {
+							errMsg = err.Error()
+						} else if result != nil && result.Message != "" {
+							errMsg = result.Message
+						}
+						a.sendErrorResponse(w, errMsg, http.StatusUnauthorized)
+						return
+					}
+				}
+			} else {
+				a.sendErrorResponse(w, "Unauthorized: orderID is required", http.StatusUnauthorized)
 				return
 			}
+
+			// Create entityID for context (even if empty for list endpoints)
+			entityID := fmt.Sprintf("subnet_deployment:%s:%s:%s", providerID, machineID, orderID)
 
 			// Add user info to request context
 			ctx := context.WithValue(r.Context(), userAddressKey, userAddress)
@@ -412,22 +424,28 @@ func (h *DeploymentHandler) getUserAddress(ctx context.Context) string {
 	return ""
 }
 
+type DeploymentRequest struct {
+	OrderID  string       `json:"order_id"`
+	Manifest manifest.SDL `json:"manifest"`
+}
+
 // createDeploymentHandler handles deployment creation requests
 func (h *DeploymentHandler) createDeploymentHandler(w http.ResponseWriter, r *http.Request) {
-	var req types.DeploymentRequest
+	var req DeploymentRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.sendErrorResponse(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
-	// Set requester from authenticated user
 	ctx := r.Context()
 	userAddress := h.getUserAddress(ctx)
-	if userAddress != "" {
-		req.Requester = userAddress
-	}
 
-	response, err := h.deployer.RequestDeployment(ctx, &req)
+	response, err := h.deployer.RequestDeployment(ctx, &types.DeploymentRequest{
+		OrderID:   req.OrderID,
+		Manifest:  req.Manifest,
+		Requester: userAddress,
+		TTL:       120,
+	})
 	if err != nil {
 		h.sendErrorResponse(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -436,34 +454,6 @@ func (h *DeploymentHandler) createDeploymentHandler(w http.ResponseWriter, r *ht
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(response)
-}
-
-// listDeploymentsHandler handles deployment list requests
-func (h *DeploymentHandler) listDeploymentsHandler(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	userAddress := h.getUserAddress(ctx)
-
-	// Use authenticated user as requester
-	requester := r.URL.Query().Get("requester")
-	if requester == "" {
-		requester = userAddress
-	}
-
-	// Validate that user can only see their own deployments
-	if requester != userAddress {
-		h.sendErrorResponse(w, "Unauthorized: can only list own deployments", http.StatusForbidden)
-		return
-	}
-
-	deployments, err := h.deployer.GetDeployments(ctx, requester)
-	if err != nil {
-		h.sendErrorResponse(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(deployments)
 }
 
 // getDeploymentHandler handles deployment retrieval requests

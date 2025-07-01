@@ -118,7 +118,7 @@ func GetEphemeralAddress(authChain AuthChain) (common.Address, error) {
 		}
 		return crypto.PubkeyToAddress(*pubKey), nil
 	} else {
-		// New format: "Memetaverse Login\nEphemeral address: ...\nExpiration: ..."
+		// New format: "Subnet Login\nEphemeral address: ...\nExpiration: ..."
 		parsed, err := ParseEphemeralPayload(payload)
 		if err != nil {
 			return common.Address{}, err

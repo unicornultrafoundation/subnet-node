@@ -2,7 +2,6 @@ package authchain
 
 import (
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"strings"
@@ -105,8 +104,6 @@ func NewService() *Service {
 	service.RegisterValidator(AuthLinkTypeSIGNER, SignerValidator)
 	service.RegisterValidator(AuthLinkTypeECDSA_PERSONAL_EPHEMERAL, ECDSAPersonalEphemeralValidator)
 	service.RegisterValidator(AuthLinkTypeECDSA_PERSONAL_SIGNED_ENTITY, ECDSASignedEntityValidator)
-	service.RegisterValidator(AuthLinkTypeECDSA_EIP_1654_EPHEMERAL, ECDSAEIP1654EphemeralValidator)
-	service.RegisterValidator(AuthLinkTypeECDSA_EIP_1654_SIGNED_ENTITY, EIP1654SignedEntityValidator)
 
 	return service
 }
@@ -222,7 +219,7 @@ func CreateAuthChain(
 
 	ephemeralMessage := GetEphemeralMessage(ephemeralIdentity.Address, expiration)
 	firstSignature := CreateSignature(ownerIdentity, ephemeralMessage)
-	secondSignature := CreateSignature(ephemeralIdentity, ephemeralIdentity.Address)
+	secondSignature := CreateSignature(ephemeralIdentity, entityID)
 
 	return AuthChain{
 		{
@@ -237,7 +234,7 @@ func CreateAuthChain(
 		},
 		{
 			Type:      AuthLinkTypeECDSA_PERSONAL_SIGNED_ENTITY,
-			Payload:   ephemeralIdentity.Address,
+			Payload:   entityID,
 			Signature: secondSignature,
 		},
 	}
@@ -294,21 +291,18 @@ func SignPayload(authIdentity *AuthIdentity, entityID string) AuthChain {
 	return result
 }
 
-// CreateSignature creates a signature for a message
+// CreateSignature creates a signature for a message using Ethereum personal sign format
 func CreateSignature(identity IdentityType, message interface{}) string {
-	var messageBytes []byte
+	var messageStr string
 
 	switch msg := message.(type) {
 	case string:
-		messageBytes = []byte(msg)
+		messageStr = msg
 	case []byte:
-		messageBytes = msg
+		messageStr = string(msg)
 	default:
 		return ""
 	}
-
-	// Hash the message
-	hash := sha256.Sum256(messageBytes)
 
 	// Convert private key from hex
 	privateKeyBytes, err := hex.DecodeString(strings.TrimPrefix(identity.PrivateKey, "0x"))
@@ -321,13 +315,26 @@ func CreateSignature(identity IdentityType, message interface{}) string {
 		return ""
 	}
 
+	// Create Ethereum personal sign message hash
+	messageHash := createEthereumMessageHash(messageStr)
+
 	// Sign the hash
-	signature, err := crypto.Sign(hash[:], privateKey)
+	signature, err := crypto.Sign(messageHash, privateKey)
 	if err != nil {
 		return ""
 	}
 
 	return hex.EncodeToString(signature)
+}
+
+// createEthereumMessageHash creates the Ethereum personal sign message hash
+func createEthereumMessageHash(message string) []byte {
+	// Create the Ethereum personal sign message format
+	personalMessage := fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)
+
+	// Hash the message using Keccak256 (same as sha3 in Ethereum)
+	hash := crypto.Keccak256Hash([]byte(personalMessage))
+	return hash.Bytes()
 }
 
 // OwnerAddress extracts the owner address from an auth chain
@@ -342,7 +349,7 @@ func OwnerAddress(authChain AuthChain) string {
 
 // GetEphemeralMessage creates an ephemeral message
 func GetEphemeralMessage(ephemeralAddress string, expiration time.Time) string {
-	return fmt.Sprintf("Subnet Node Login\nEphemeral address: %s\nExpiration: %s",
+	return fmt.Sprintf("Subnet Login\nEphemeral address: %s\nExpiration: %s",
 		ephemeralAddress, expiration.Format(time.RFC3339))
 }
 
@@ -506,7 +513,7 @@ func ECDSAEIP1654EphemeralValidator(authority string, authLink AuthLink, options
 
 		if expectedSignedAddress == actualSignedAddress {
 			return &ValidationStepResult{
-				NextAuthority: payload.EphemeralAddress,
+				NextAuthority: payload.Message,
 			}, nil
 		}
 
@@ -553,9 +560,6 @@ func EIP1654SignedEntityValidator(authority string, authLink AuthLink, options *
 
 // RecoverAddressFromEthSignature recovers the address from an Ethereum signature
 func RecoverAddressFromEthSignature(signature string, message string) (string, error) {
-	// Hash the message
-	hash := sha256.Sum256([]byte(message))
-
 	// Decode the signature from hex
 	sigBytes, err := hex.DecodeString(signature)
 	if err != nil {
@@ -567,8 +571,11 @@ func RecoverAddressFromEthSignature(signature string, message string) (string, e
 		return "", fmt.Errorf("invalid signature length, expected 65 bytes")
 	}
 
+	// Create Ethereum personal sign message hash
+	messageHash := createEthereumMessageHash(message)
+
 	// Recover the public key from signature
-	pubKey, err := crypto.SigToPub(hash[:], sigBytes)
+	pubKey, err := crypto.SigToPub(messageHash, sigBytes)
 	if err != nil {
 		return "", fmt.Errorf("failed to recover public key: %w", err)
 	}
