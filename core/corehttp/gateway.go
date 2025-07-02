@@ -27,7 +27,7 @@ func GatewayOption() ServeOption {
 		}
 
 		// Add deployment handler if deployer is enabled
-		if cfg.GetBool("provider.enable", false) && n.Deployer != nil {
+		if cfg.GetBool("deployer.enable", false) && n.Deployer != nil {
 			deploymentHandler := api.NewDeploymentHandler(n.Deployer, cfg, bidMarket)
 			mux.Handle("/api/v1/deployments", deploymentHandler.Router())
 		}

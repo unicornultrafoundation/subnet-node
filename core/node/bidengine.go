@@ -11,6 +11,10 @@ import (
 )
 
 func BidengineService(lc fx.Lifecycle, cfg *config.C, acc *account.AccountService, dataStore datastore.Datastore) (*bidengine.BidEngine, error) {
+	if !cfg.GetBool("bidengine.enable", false) {
+		return nil, nil
+	}
+
 	transactOpts, err := acc.NewKeyedTransactor()
 	if err != nil {
 		return nil, err
