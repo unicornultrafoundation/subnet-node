@@ -225,7 +225,7 @@ func TestDeploymentHandler_CreateDeploymentHandler_WithoutAuth(t *testing.T) {
 	}
 
 	bodyBytes, _ := json.Marshal(requestBody)
-	req := httptest.NewRequest("POST", "/", bytes.NewBuffer(bodyBytes))
+	req := httptest.NewRequest("POST", "/api/v1/deployments", bytes.NewBuffer(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
@@ -246,7 +246,7 @@ func TestDeploymentHandler_GetDeploymentHandler_WithoutAuth(t *testing.T) {
 	handler := NewDeploymentHandler(mockDeployer, mockConfig, mockBidMarket)
 	router := handler.Router()
 
-	req := httptest.NewRequest("GET", "/123", nil)
+	req := httptest.NewRequest("GET", "/api/v1/deployments/123", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -266,7 +266,7 @@ func TestDeploymentHandler_CleanupDeploymentHandler_WithoutAuth(t *testing.T) {
 	handler := NewDeploymentHandler(mockDeployer, mockConfig, mockBidMarket)
 	router := handler.Router()
 
-	req := httptest.NewRequest("DELETE", "/123", nil)
+	req := httptest.NewRequest("DELETE", "/api/v1/deployments/123", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -320,7 +320,7 @@ func TestDeploymentHandler_CreateDeploymentHandler(t *testing.T) {
 	}
 
 	bodyBytes, _ := json.Marshal(requestBody)
-	req := httptest.NewRequest("POST", "/", bytes.NewBuffer(bodyBytes))
+	req := httptest.NewRequest("POST", "/api/v1/deployments", bytes.NewBuffer(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-AuthChain", authChainStr)
 	w := httptest.NewRecorder()
@@ -374,7 +374,7 @@ func TestDeploymentHandler_GetDeploymentHandler(t *testing.T) {
 		},
 	}, nil)
 
-	req := httptest.NewRequest("GET", "/123", nil)
+	req := httptest.NewRequest("GET", "/api/v1/deployments/123", nil)
 	req.Header.Set("X-AuthChain", authChainStr)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
@@ -420,7 +420,7 @@ func TestDeploymentHandler_CleanupDeploymentHandler(t *testing.T) {
 	// Mock successful deployment cleanup
 	mockDeployer.On("CleanupDeployment", mock.Anything, "123").Return(nil)
 
-	req := httptest.NewRequest("DELETE", "/123", nil)
+	req := httptest.NewRequest("DELETE", "/api/v1/deployments/123", nil)
 	req.Header.Set("X-AuthChain", authChainStr)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
@@ -469,7 +469,7 @@ func TestDeploymentHandler_CreateDeploymentHandler_OrderIDMismatch(t *testing.T)
 	}
 
 	bodyBytes, _ := json.Marshal(requestBody)
-	req := httptest.NewRequest("POST", "/", bytes.NewBuffer(bodyBytes))
+	req := httptest.NewRequest("POST", "/api/v1/deployments", bytes.NewBuffer(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-AuthChain", authChainStr)
 	w := httptest.NewRecorder()

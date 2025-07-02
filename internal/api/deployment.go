@@ -213,22 +213,19 @@ func (h *DeploymentHandler) Router() *chi.Mux {
 	// Create auth middleware
 	authMiddleware := NewAuthMiddleware(h.cfg, h.ordersCache)
 
-	// Group for authenticated routes
+	//Group for authenticated routes
 	r.Group(func(r chi.Router) {
 		r.Use(authMiddleware.Middleware())
 
 		// WebSocket routes for exec and logs
-		r.Get("/{orderID}/ws/exec", h.execWebSocketHandler)
-		r.Get("/{orderID}/ws/logs", h.logsWebSocketHandler)
+		r.Get("/api/v1/deployments/{orderID}/ws/exec", h.execWebSocketHandler)
+		r.Get("/api/v1/deployments/{orderID}/ws/logs", h.logsWebSocketHandler)
 
 		// Deployment management routes
-		r.Post("/", h.createDeploymentHandler)
-		r.Get("/{orderID}", h.getDeploymentHandler)
-		r.Delete("/{orderID}", h.cleanupDeploymentHandler)
+		r.Post("/api/v1/deployments", h.createDeploymentHandler)
+		r.Get("/api/v1/deployments/{orderID}", h.getDeploymentHandler)
+		r.Delete("/api/v1/deployments/{orderID}", h.cleanupDeploymentHandler)
 
-		// Service and pod management routes
-		r.Get("/{orderID}/services/{serviceName}/status", h.getServiceStatusHandler)
-		r.Get("/{orderID}/logs", h.getDeploymentLogsHandler)
 	})
 
 	return r

@@ -1,6 +1,8 @@
 package deployer
 
 import (
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/unicornultrafoundation/subnet-node/config"
@@ -25,8 +27,18 @@ type ServiceConfig struct {
 func NewServiceConfigFromConfig(cfg *config.C) (*ServiceConfig, error) {
 	serviceConfig := DefaultServiceConfig()
 
+	// Get user's home directory for default kubeconfig path
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		homeDir = "" // Fallback to empty string if home directory cannot be determined
+	}
+	defaultKubeConfigPath := ""
+	if homeDir != "" {
+		defaultKubeConfigPath = filepath.Join(homeDir, ".kube", "config")
+	}
+
 	// Kubernetes configuration
-	serviceConfig.KubeConfigPath = cfg.GetString("deployer.kubeconfig_path", "")
+	serviceConfig.KubeConfigPath = cfg.GetString("deployer.kubeconfig_path", defaultKubeConfigPath)
 
 	// Monitor interval
 	serviceConfig.MonitorInterval = cfg.GetDuration("deployer.monitor_interval", 30*time.Second)
@@ -47,7 +59,15 @@ func NewServiceConfigFromConfig(cfg *config.C) (*ServiceConfig, error) {
 
 // DefaultServiceConfig returns a default service configuration
 func DefaultServiceConfig() *ServiceConfig {
+	// Get user's home directory for default kubeconfig path
+	homeDir, err := os.UserHomeDir()
+	defaultKubeConfigPath := ""
+	if err == nil && homeDir != "" {
+		defaultKubeConfigPath = filepath.Join(homeDir, ".kube", "config")
+	}
+
 	return &ServiceConfig{
+		KubeConfigPath:        defaultKubeConfigPath,
 		MonitorInterval:       30 * time.Second,
 		DefaultServiceType:    "NodePort",
 		LocalhostEnabled:      true,

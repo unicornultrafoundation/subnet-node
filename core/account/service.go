@@ -8,7 +8,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -50,26 +49,6 @@ func NewAccountService(cfg *config.C) (*AccountService, error) {
 		return nil, err
 	}
 
-	subnetAppStoreAddr := cfg.GetString("apps.subnet_app_store", config.DefaultSubnetAppStoreAddr)
-	subnetAppStore, err := contracts.NewSubnetAppStore(
-		common.HexToAddress(subnetAppStoreAddr),
-		client,
-	)
-
-	if err != nil {
-		return nil, err
-	}
-
-	subnetProviderAddr := cfg.GetString("apps.subnet_provider", config.DefaultSubnetProviderAddr)
-	subnetRegistry, err := contracts.NewSubnetProvider(
-		common.HexToAddress(subnetProviderAddr),
-		client,
-	)
-
-	if err != nil {
-		return nil, err
-	}
-
 	subnetIPRegistryAddr := cfg.GetString("apps.subnet_ip_registry", config.DefaultSubnetVerifier)
 	subnetIPRegistry, err := contracts.NewSubnetIPRegistry(
 		common.HexToAddress(subnetIPRegistryAddr),
@@ -86,10 +65,6 @@ func NewAccountService(cfg *config.C) (*AccountService, error) {
 		privateKey:           privateKey,
 		client:               client,
 		chainID:              chainID,
-		subnetProvider:       subnetRegistry,
-		subnetProviderAddr:   subnetProviderAddr,
-		subnetAppStore:       subnetAppStore,
-		subnetAppStoreAddr:   subnetAppStoreAddr,
 		subnetIPRegistry:     ipRegistry,
 		subnetIPRegistryAddr: subnetIPRegistryAddr,
 	}
@@ -117,10 +92,7 @@ func (s *AccountService) registerReloadCallback(cfg *config.C) {
 }
 
 func (s *AccountService) updateProviderID(cfg *config.C) {
-	providerIdHex := cfg.GetString("provider.id", "")
-	if providerIdHex != "" {
-		s.providerID = int64(hexutil.MustDecodeUint64(providerIdHex))
-	}
+
 }
 
 // GetClient retrieves the ethclient instance
