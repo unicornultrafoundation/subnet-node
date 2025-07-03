@@ -31,9 +31,8 @@ func Main(repoPath string, configPath *string) {
 
 func run(repoPath string, configPath *string) error {
 	// let the user know we're going.
-	log.Printf("Initializing Subnet Node...\n")
-
 	if !snrepo.IsInitialized(repoPath) {
+		log.Printf("Initializing Subnet Node...\n")
 		_, err := ninit.Init(repoPath, os.Stdout)
 		if err != nil {
 			return err
@@ -65,6 +64,8 @@ func run(repoPath string, configPath *string) error {
 
 	defer node.Close()
 
+	log.Printf("Peer ID: %s", node.Identity.String())
+	log.Printf("Provider Address: %s", node.Account.GetAddress())
 	printLibp2pPorts(node)
 
 	// construct api endpoint - every time
@@ -241,7 +242,7 @@ func serveHTTPGateway(cfg *config.C, node *core.SubnetNode) (<-chan error, error
 
 	// we might have listened to /tcp/0 - let's see what we are listing on
 	for _, listener := range listeners {
-		fmt.Printf("Gateway server listening on %s\n", listener.Multiaddr())
+		log.Printf("Gateway server listening on %s\n", listener.Multiaddr())
 	}
 
 	opts := []corehttp.ServeOption{
