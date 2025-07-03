@@ -100,15 +100,14 @@ func (om *Monitor) emitEvent(event *types.OrderEvent) {
 
 // Start starts the order monitor
 func (om *Monitor) Start(ctx context.Context) error {
-	om.mu.Lock()
-	defer om.mu.Unlock()
-
 	if om.isRunning {
 		return nil
 	}
 
 	om.logger.Info("Starting OrderMonitor")
+	om.mu.Lock()
 	om.isRunning = true
+	om.mu.Unlock()
 
 	// Load persisted orders from storage
 	if err := om.loadPersistedOrders(ctx); err != nil {

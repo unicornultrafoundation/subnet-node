@@ -59,15 +59,14 @@ func NewManager(
 
 // Start starts the resource manager
 func (rm *Manager) Start(ctx context.Context) error {
-	rm.mu.Lock()
-	defer rm.mu.Unlock()
-
 	if rm.isRunning {
 		return nil
 	}
 
 	rm.logger.Info("Starting ResourceManager")
+	rm.mu.Lock()
 	rm.isRunning = true
+	rm.mu.Unlock()
 
 	// Load persisted machines from storage
 	if err := rm.loadPersistedMachines(ctx); err != nil {
