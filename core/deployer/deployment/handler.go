@@ -2,6 +2,7 @@ package deployment
 
 import (
 	"context"
+	"fmt"
 	"io"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -10,6 +11,14 @@ import (
 )
 
 func (s *Service) RequestDeployment(ctx context.Context, deploymentRequest *types.DeploymentRequest) (*types.DeploymentResponse, error) {
+	if deploymentRequest.OrderID == "" {
+		return nil, fmt.Errorf("orderID is required")
+	}
+
+	if s.HasDeploymentExpiryListCache(deploymentRequest.OrderID) {
+		return nil, fmt.Errorf("the order is expired, please extend the order before requesting a new deployment")
+	}
+
 	if err := deploymentRequest.Manifest.Validate(); err != nil {
 		s.logger.Error("Invalid deployment request", err)
 		return nil, err
@@ -27,7 +36,6 @@ func (s *Service) RequestDeployment(ctx context.Context, deploymentRequest *type
 		ID:        deploymentRequest.OrderID,
 		Manifest:  manifest,
 		Requester: requester,
-		TTL:       deploymentRequest.TTL,
 	}
 
 	// Deploy the deployment request
@@ -54,6 +62,18 @@ func (s *Service) RequestDeployment(ctx context.Context, deploymentRequest *type
 	s.logger.WithField("order_id", deploymentRequest.OrderID).Info("Deployment request deployed")
 
 	return s.kubeClient.GetDeployment(ctx, deploymentRequest.OrderID)
+}
+
+// GetDeployments returns a list of deployment IDs for a specific requester
+func (s *Service) GetDeployments(ctx context.Context, requester string) ([]*types.DeploymentResponse, error) {
+	// Get deployment IDs for the specific requester from Kubernetes
+	deployments, err := s.kubeClient.GetDeployments(ctx, requester)
+	if err != nil {
+		s.logger.WithField("requester", requester).Error("Failed to get deployments by requester", err)
+		return nil, err
+	}
+
+	return deployments, nil
 }
 
 func (s *Service) GetDeployment(ctx context.Context, orderID string) (*types.DeploymentResponse, error) {
@@ -83,6 +103,10 @@ func (s *Service) CleanupDeployment(ctx context.Context, orderID string) error {
 		return err
 	}
 	s.DeleteDeploymentListCache(orderID)
+	if err := s.DeleteDeploymentExpiryListCache(ctx, orderID); err != nil {
+		s.logger.WithField("orderID", orderID).Error("Failed to delete deployment expiry list from datastore", err)
+		return err
+	}
 
 	s.logger.WithField("orderID", orderID).Info("Deployment request deleted")
 

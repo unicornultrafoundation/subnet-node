@@ -519,7 +519,7 @@ func TestCreateNamespace(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := client.createNamespace(context.Background(), tt.namespace, tt.version, tt.deploymentID, "test-requester", 60)
+			err := client.createNamespace(context.Background(), tt.namespace, tt.version, tt.deploymentID, "test-requester")
 			if tt.wantErr {
 				assert.Error(t, err)
 			} else {
@@ -938,7 +938,7 @@ func TestCreateService(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := client.createService(context.Background(), tt.service, tt.group, tt.expose, tt.namespace, tt.versionStr, tt.deploymentID, "test-requester", 60)
+			err := client.createService(context.Background(), tt.service, tt.group, tt.expose, tt.namespace, tt.versionStr, tt.deploymentID, "test-requester")
 			if tt.wantErr {
 				assert.Error(t, err)
 			} else {
@@ -1009,7 +1009,7 @@ func TestCreateIngress(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := client.createIngress(context.Background(), tt.service, tt.group, tt.endpoint, tt.endpointName, tt.namespace, tt.deploymentID, "test-requester", 60)
+			err := client.createIngress(context.Background(), tt.service, tt.group, tt.endpoint, tt.endpointName, tt.namespace, tt.deploymentID, "test-requester")
 			if tt.wantErr {
 				assert.Error(t, err)
 			} else {

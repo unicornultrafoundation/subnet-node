@@ -3,7 +3,6 @@ package kube
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -94,28 +93,10 @@ func (c *KubeClient) getDeploymentStatusInternal(ctx context.Context, deployment
 		return nil, fmt.Errorf("failed to list pods: %w", err)
 	}
 
-	// Get the namespace to read TTL and creation time
+	// Get the namespace to read creation time
 	namespace, err := c.Client.CoreV1().Namespaces().Get(ctx, deploymentID, metav1.GetOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get namespace: %w", err)
-	}
-
-	var ttlMinutes int64 = 0
-	var timeLeft int64 = -1
-	if ttlStr, ok := namespace.Annotations["ttl"]; ok {
-		ttlParsed, err := parseTTL(ttlStr)
-		if err == nil {
-			ttlMinutes = ttlParsed
-			if namespace.CreationTimestamp.Time != (time.Time{}) {
-				expiry := namespace.CreationTimestamp.Time.Add(time.Duration(ttlMinutes) * time.Minute)
-				secondsLeft := int64(expiry.Sub(time.Now()).Seconds())
-				if secondsLeft < 0 {
-					timeLeft = 0
-				} else {
-					timeLeft = (secondsLeft + 59) / 60 // round up to next minute
-				}
-			}
-		}
 	}
 
 	// Build service statuses
@@ -364,8 +345,6 @@ func (c *KubeClient) getDeploymentStatusInternal(ctx context.Context, deployment
 		CreatedAt:  time.Now().Format(time.RFC3339), // This should come from deployment metadata
 		UpdatedAt:  time.Now().Format(time.RFC3339),
 		DeployedAt: namespace.CreationTimestamp.Time.Format(time.RFC3339),
-		TTL:        ttlMinutes,
-		TimeLeft:   timeLeft,
 	}
 
 	return deploymentStatus, nil
@@ -407,10 +386,6 @@ func (c *KubeClient) GetPodStatus(ctx context.Context, deploymentID string, podN
 		Name:  podName,
 		State: types.PodStateUnknown,
 	}, nil
-}
-
-func parseTTL(ttlStr string) (int64, error) {
-	return strconv.ParseInt(ttlStr, 10, 64)
 }
 
 // inspectDeploymentStatusInternal provides kubectl describe-like detailed information
@@ -487,7 +462,7 @@ func (c *KubeClient) inspectDeploymentStatusInternal(ctx context.Context, deploy
 		persistentVolumes = pvs.Items
 	}
 
-	// Get the namespace to read TTL and creation time
+	// Get the namespace to read creation time
 	namespace, err := c.Client.CoreV1().Namespaces().Get(ctx, deploymentID, metav1.GetOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get namespace: %w", err)

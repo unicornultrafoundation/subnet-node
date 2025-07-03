@@ -192,7 +192,6 @@ type DeploymentRequest struct {
     Manifest  manifest.SDL `json:"manifest"`
     Signature string       `json:"signature"`
     Requester string       `json:"requester"`
-    TTL       int64        `json:"ttl"` // in minutes
 }
 ```
 
@@ -214,7 +213,6 @@ type DeploymentStatus struct {
     CreatedAt  string          `json:"createdAt"`
     UpdatedAt  string          `json:"updatedAt"`
     DeployedAt string          `json:"deployedAt"`
-    TTL        int64           `json:"ttl"`
     TimeLeft   int64           `json:"timeLeft"`
 }
 ```
@@ -310,7 +308,6 @@ deploymentRequest := &types.DeploymentRequest{
     Manifest:  sdlManifest,
     Signature: "signature",
     Requester: "0x123...",
-    TTL:       60, // 60 minutes
 }
 
 response, err := deployerService.RequestDeployment(ctx, deploymentRequest)

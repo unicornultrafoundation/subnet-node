@@ -3,8 +3,10 @@ package deployer
 import (
 	"context"
 
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ipfs/go-datastore"
 	"github.com/sirupsen/logrus"
+	"github.com/unicornultrafoundation/subnet-node/bidengine"
 	"github.com/unicornultrafoundation/subnet-node/config"
 	"github.com/unicornultrafoundation/subnet-node/core/deployer/deployment"
 	"github.com/unicornultrafoundation/subnet-node/core/deployer/kube"
@@ -17,9 +19,11 @@ type Service struct {
 	deploymentService *deployment.Service
 	storeService      *store.Service
 	logger            *logrus.Logger
+	bidengine         *bidengine.BidEngine
+	ethClient         *ethclient.Client
 }
 
-func NewService(config *config.C, ds datastore.Datastore) (*Service, error) {
+func NewService(config *config.C, ds datastore.Datastore, bidengine *bidengine.BidEngine, ethClient *ethclient.Client) (*Service, error) {
 	serviceConfig, err := NewServiceConfigFromConfig(config)
 	if err != nil {
 		return nil, err
@@ -33,6 +37,8 @@ func NewService(config *config.C, ds datastore.Datastore) (*Service, error) {
 		config:       serviceConfig,
 		storeService: storeService,
 		logger:       logger,
+		bidengine:    bidengine,
+		ethClient:    ethClient,
 	}, nil
 }
 
@@ -53,7 +59,7 @@ func (s *Service) Start(ctx context.Context) error {
 		DeploymentWaitTimeout: s.config.DeploymentWaitTimeout,
 	}
 
-	s.deploymentService = deployment.NewService(kubeClient, s.storeService, s.logger, deploymentConfig)
+	s.deploymentService = deployment.NewService(kubeClient, s.storeService, s.logger, deploymentConfig, s.bidengine.GetBidMarket(), s.ethClient)
 	if err := s.deploymentService.Start(ctx); err != nil {
 		return err
 	}
