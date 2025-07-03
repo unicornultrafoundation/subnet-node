@@ -1,6 +1,10 @@
 package firewall
 
-import "net/netip"
+import (
+	"net/netip"
+
+	"github.com/unicornultrafoundation/subnet-node/config"
+)
 
 type addRuleCall struct {
 	incoming  bool
@@ -38,5 +42,9 @@ func (mf *MockFirewall) AddNetwork(network netip.Prefix) error {
 }
 
 func (mf *MockFirewall) Drop(fp Packet, incoming bool, localCache ConntrackCache) error {
+	return nil
+}
+
+func (mf *MockFirewall) ReloadRules(cfg *config.C) error {
 	return nil
 }

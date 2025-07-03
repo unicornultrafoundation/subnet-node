@@ -23,6 +23,7 @@ type FirewallInterface interface {
 	AddRule(incoming bool, proto uint8, startPort int32, endPort int32, groups []string, addr, localAddr netip.Prefix) error
 	AddNetwork(network netip.Prefix) error
 	Drop(fp Packet, incoming bool, localCache ConntrackCache) error
+	ReloadRules(cfg *config.C) error
 }
 
 type conn struct {
@@ -210,7 +211,7 @@ func NewFirewallFromConfig(l *logrus.Logger, c *config.C, networks []netip.Prefi
 	case "drop":
 		fw.OutSendReject = false
 	default:
-		l.WithField("action", inboundAction).Warn("invalid firewall.outbound_action, defaulting to `drop`")
+		l.WithField("action", outboundAction).Warn("invalid firewall.outbound_action, defaulting to `drop`")
 		fw.OutSendReject = false
 	}
 
@@ -456,6 +457,62 @@ func (f *Firewall) Start() error {
 // firewall object is created
 func (f *Firewall) Destroy() error {
 	//TODO: clean references if/when needed
+	return nil
+}
+
+// ReloadRules reloads firewall rules from the provided configuration
+func (f *Firewall) ReloadRules(cfg *config.C) error {
+	f.l.Info("Reloading firewall rules from configuration")
+
+	// Increment rules version to invalidate existing conntrack entries
+	f.rulesVersion++
+
+	// Clear existing rules
+	f.rules = ""
+	f.InRules = newFirewallTable()
+	f.OutRules = newFirewallTable()
+
+	// Update firewall settings from config
+	f.defaultLocalCIDRAny = cfg.GetBool("firewall.default_local_cidr_any", false)
+
+	inboundAction := cfg.GetString("firewall.inbound_action", "drop")
+	switch inboundAction {
+	case "reject":
+		f.InSendReject = true
+	case "drop":
+		f.InSendReject = false
+	default:
+		f.l.WithField("action", inboundAction).Warn("invalid firewall.inbound_action, defaulting to `drop`")
+		f.InSendReject = false
+	}
+
+	outboundAction := cfg.GetString("firewall.outbound_action", "drop")
+	switch outboundAction {
+	case "reject":
+		f.OutSendReject = true
+	case "drop":
+		f.OutSendReject = false
+	default:
+		f.l.WithField("action", outboundAction).Warn("invalid firewall.outbound_action, defaulting to `drop`")
+		f.OutSendReject = false
+	}
+
+	// Reload rules from config
+	err := AddFirewallRulesFromConfig(f.l, false, cfg, f)
+	if err != nil {
+		return fmt.Errorf("failed to reload outbound rules: %w", err)
+	}
+
+	err = AddFirewallRulesFromConfig(f.l, true, cfg, f)
+	if err != nil {
+		return fmt.Errorf("failed to reload inbound rules: %w", err)
+	}
+
+	f.l.WithFields(logrus.Fields{
+		"rulesVersion": f.rulesVersion,
+		"ruleHash":     f.GetRuleHashes(),
+	}).Info("Firewall rules reloaded successfully")
+
 	return nil
 }
 

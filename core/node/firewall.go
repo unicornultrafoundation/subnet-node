@@ -17,6 +17,18 @@ func FirewallService(lc fx.Lifecycle, cfg *config.C) (firewall.FirewallInterface
 		return nil, err
 	}
 
+	// Register reload callback for firewall rules
+	cfg.RegisterReloadCallback(func(c *config.C) {
+		// Check if firewall configuration has changed
+		if c.HasChanged("firewall") {
+			l.Info("Firewall configuration changed, reloading rules")
+			err := srv.ReloadRules(c)
+			if err != nil {
+				l.WithError(err).Error("Failed to reload firewall rules")
+			}
+		}
+	})
+
 	lc.Append(fx.Hook{
 		OnStop: func(_ context.Context) error {
 			return srv.Destroy()
