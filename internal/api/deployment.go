@@ -421,7 +421,7 @@ func (h *DeploymentHandler) createDeploymentHandler(w http.ResponseWriter, r *ht
 		OrderID:   req.OrderID,
 		Manifest:  req.Manifest,
 		Requester: userAddress,
-		TTL:       120,
+		TTL:       2592000,
 	})
 	if err != nil {
 		h.sendErrorResponse(w, err.Error(), http.StatusInternalServerError)
@@ -470,48 +470,6 @@ func (h *DeploymentHandler) cleanupDeploymentHandler(w http.ResponseWriter, r *h
 
 	response := map[string]string{
 		"message": "Deployment cleaned up successfully",
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(response)
-}
-
-// getServiceStatusHandler handles service status requests
-func (h *DeploymentHandler) getServiceStatusHandler(w http.ResponseWriter, r *http.Request) {
-	orderID := chi.URLParam(r, "orderID")
-	serviceName := chi.URLParam(r, "serviceName")
-
-	if orderID == "" || serviceName == "" {
-		h.sendErrorResponse(w, "orderID and serviceName are required", http.StatusBadRequest)
-		return
-	}
-
-	ctx := r.Context()
-	response, err := h.deployer.GetServiceStatus(ctx, orderID, serviceName)
-	if err != nil {
-		h.sendErrorResponse(w, err.Error(), http.StatusNotFound)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(response)
-}
-
-// getDeploymentLogsHandler handles deployment logs requests
-func (h *DeploymentHandler) getDeploymentLogsHandler(w http.ResponseWriter, r *http.Request) {
-	orderID := chi.URLParam(r, "orderID")
-	if orderID == "" {
-		h.sendErrorResponse(w, "orderID is required", http.StatusBadRequest)
-		return
-	}
-
-	ctx := r.Context()
-	response, err := h.deployer.GetDeploymentLogs(ctx, orderID)
-	if err != nil {
-		h.sendErrorResponse(w, err.Error(), http.StatusInternalServerError)
-		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
