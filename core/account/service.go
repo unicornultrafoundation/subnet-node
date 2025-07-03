@@ -49,7 +49,7 @@ func NewAccountService(cfg *config.C) (*AccountService, error) {
 		return nil, err
 	}
 
-	subnetIPRegistryAddr := cfg.GetString("apps.subnet_ip_registry", config.DefaultSubnetVerifier)
+	subnetIPRegistryAddr := cfg.GetString("apps.subnet_ip_registry", config.DefaultSubnetIP)
 	subnetIPRegistry, err := contracts.NewSubnetIPRegistry(
 		common.HexToAddress(subnetIPRegistryAddr),
 		client,
