@@ -33,6 +33,9 @@ type Monitor struct {
 
 	// Event watching
 	contractEventSink chan *types.OrderEvent
+
+	// Last order ID tracking for polling
+	lastOrderID *big.Int
 }
 
 // NewMonitor creates a new Monitor instance
@@ -57,6 +60,7 @@ func NewMonitor(
 		orderEvents:       make(chan *types.OrderEvent, 100),
 		eventHandlers:     make(map[types.OrderEventType][]func(*types.OrderEvent)),
 		contractEventSink: make(chan *types.OrderEvent, 50),
+		lastOrderID:       nil,
 	}
 
 	return om
@@ -83,7 +87,11 @@ func (om *Monitor) emitEvent(event *types.OrderEvent) {
 		go func(h func(*types.OrderEvent)) {
 			defer func() {
 				if r := recover(); r != nil {
-					om.logger.Error("Event handler panicked", "eventType", event.Type, "orderID", event.OrderID, "panic", r)
+					om.logger.WithFields(logrus.Fields{
+						"eventType": event.Type,
+						"orderID":   event.OrderID.String(),
+						"panic":     r,
+					}).Error("Event handler panicked")
 				}
 			}()
 			h(event)
@@ -94,7 +102,10 @@ func (om *Monitor) emitEvent(event *types.OrderEvent) {
 	select {
 	case om.orderEvents <- event:
 	default:
-		om.logger.Warn("Order event channel is full, dropping event", "eventType", event.Type, "orderID", event.OrderID)
+		om.logger.WithFields(logrus.Fields{
+			"eventType": event.Type,
+			"orderID":   event.OrderID.String(),
+		}).Warn("Order event channel is full, dropping event")
 	}
 }
 
@@ -111,7 +122,16 @@ func (om *Monitor) Start(ctx context.Context) error {
 
 	// Load persisted orders from storage
 	if err := om.loadPersistedOrders(ctx); err != nil {
-		om.logger.Warn("Failed to load persisted orders", "error", err)
+		om.logger.WithFields(logrus.Fields{
+			"error": err,
+		}).Warn("Failed to load persisted orders")
+	}
+
+	// Load last order ID from storage
+	if err := om.loadLastOrderID(ctx); err != nil {
+		om.logger.WithFields(logrus.Fields{
+			"error": err,
+		}).Warn("Failed to load last order ID")
 	}
 
 	// Start monitoring goroutines
@@ -134,18 +154,113 @@ func (om *Monitor) startEventWatching(ctx context.Context) {
 	go om.processContractEvents(ctx)
 }
 
-// watchOrderCreatedEvents watches for new order creation events
+// watchOrderCreatedEvents polls for new order creation events
 func (om *Monitor) watchOrderCreatedEvents(ctx context.Context) {
-	om.logger.Info("Starting to watch OrderCreated events")
+	om.logger.Info("Starting to poll for new orders")
 
-	err := om.bidMarket.WatchOrderCreated(ctx, om.contractEventSink)
+	// Poll every 30 seconds
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			om.logger.Info("Order polling stopped")
+			return
+		case <-ticker.C:
+			if err := om.pollForNewOrders(ctx); err != nil {
+				om.logger.WithFields(logrus.Fields{
+					"error": err,
+				}).Warn("Failed to poll for new orders")
+			}
+		}
+	}
+}
+
+// pollForNewOrders polls for new orders since the last known order ID
+func (om *Monitor) pollForNewOrders(ctx context.Context) error {
+	om.mu.RLock()
+	lastOrderID := om.lastOrderID
+	om.mu.RUnlock()
+
+	// Get current order count from blockchain
+	orderCount, err := om.bidMarket.GetOrderCount(ctx)
 	if err != nil {
-		om.logger.Error("Failed to watch OrderCreated events", "error", err)
-		// Fallback to polling only
-		return
+		return fmt.Errorf("failed to get order count: %w", err)
 	}
 
-	om.logger.Info("OrderCreated event watching started successfully")
+	// If no last order ID, start from the latest order
+	if lastOrderID == nil {
+		if orderCount.Cmp(big.NewInt(0)) > 0 {
+			// Start from the latest order (orderCount - 1)
+			lastOrderID = new(big.Int).Sub(orderCount, big.NewInt(1))
+			om.logger.WithFields(logrus.Fields{
+				"lastOrderID": lastOrderID.String(),
+			}).Info("No last order ID found, starting from latest order")
+		} else {
+			om.logger.Debug("No orders exist yet")
+			return nil
+		}
+	}
+
+	// Check for new orders
+	currentOrderID := new(big.Int).Add(lastOrderID, big.NewInt(1))
+
+	for currentOrderID.Cmp(orderCount) < 0 {
+		om.logger.WithFields(logrus.Fields{
+			"orderID": currentOrderID.String(),
+		}).Info("Found new order")
+
+		// Get order details
+		order, err := om.bidMarket.GetOrder(ctx, currentOrderID)
+		if err != nil {
+			om.logger.WithFields(logrus.Fields{
+				"orderID": currentOrderID.String(),
+				"error":   err,
+			}).Warn("Failed to get order details")
+			currentOrderID.Add(currentOrderID, big.NewInt(1))
+			continue
+		}
+
+		// Only track open orders
+		if order.Status == types.OrderStatusOpen {
+			// Check if we're already tracking this order
+			om.mu.RLock()
+			_, alreadyTracked := om.trackedOrders[currentOrderID.String()]
+			om.mu.RUnlock()
+
+			if !alreadyTracked {
+				om.logger.WithFields(logrus.Fields{
+					"orderID": currentOrderID.String(),
+				}).Info("New order found via polling")
+
+				// Track the new order
+				if err := om.TrackOrder(ctx, currentOrderID); err != nil {
+					om.logger.WithFields(logrus.Fields{
+						"orderID": currentOrderID.String(),
+						"error":   err,
+					}).Warn("Failed to track new order from polling")
+				}
+			}
+		}
+
+		// Update last order ID
+		om.mu.Lock()
+		om.lastOrderID = currentOrderID
+		om.mu.Unlock()
+
+		// Save to storage
+		if err := om.storage.SaveLastOrderID(ctx, currentOrderID); err != nil {
+			om.logger.WithFields(logrus.Fields{
+				"orderID": currentOrderID.String(),
+				"error":   err,
+			}).Warn("Failed to save last order ID")
+		}
+
+		currentOrderID.Add(currentOrderID, big.NewInt(1))
+	}
+
+	return nil
 }
 
 // processContractEvents processes events from the contract
@@ -165,27 +280,34 @@ func (om *Monitor) processContractEvents(ctx context.Context) {
 
 // handleContractEvent handles events from the smart contract
 func (om *Monitor) handleContractEvent(ctx context.Context, event *types.OrderEvent) {
-	om.logger.Info("Received contract event",
-		"type", event.Type,
-		"orderID", event.OrderID.String())
+	om.logger.WithFields(logrus.Fields{
+		"type":    event.Type,
+		"orderID": event.OrderID.String(),
+	}).Info("Received contract event")
 
 	switch event.Type {
 	case "OrderCreated":
 		om.handleOrderCreatedEvent(ctx, event)
 	default:
-		om.logger.Debug("Ignoring contract event type", "type", event.Type)
+		om.logger.WithFields(logrus.Fields{
+			"type": event.Type,
+		}).Debug("Ignoring contract event type")
 	}
 }
 
 // handleOrderCreatedEvent handles OrderCreated events from contract
 func (om *Monitor) handleOrderCreatedEvent(ctx context.Context, event *types.OrderEvent) {
-	om.logger.Info("Handling OrderCreated event", "orderID", event.OrderID.String())
+	om.logger.WithFields(logrus.Fields{
+		"orderID": event.OrderID.String(),
+	}).Info("Handling OrderCreated event")
 
 	// Get the full order details from contract
 	order, err := om.bidMarket.GetOrder(ctx, event.OrderID)
 	if err != nil {
-		om.logger.Warn("Failed to get order details for created event",
-			"orderID", event.OrderID, "error", err)
+		om.logger.WithFields(logrus.Fields{
+			"orderID": event.OrderID.String(),
+			"error":   err,
+		}).Warn("Failed to get order details for created event")
 		return
 	}
 
@@ -197,12 +319,16 @@ func (om *Monitor) handleOrderCreatedEvent(ctx context.Context, event *types.Ord
 		om.mu.RUnlock()
 
 		if !alreadyTracked {
-			om.logger.Info("New order created via event", "orderID", event.OrderID.String())
+			om.logger.WithFields(logrus.Fields{
+				"orderID": event.OrderID.String(),
+			}).Info("New order created via event")
 
 			// Track the new order
 			if err := om.TrackOrder(ctx, event.OrderID); err != nil {
-				om.logger.Warn("Failed to track new order from event",
-					"orderID", event.OrderID, "error", err)
+				om.logger.WithFields(logrus.Fields{
+					"orderID": event.OrderID.String(),
+					"error":   err,
+				}).Warn("Failed to track new order from event")
 			}
 		}
 	}
@@ -250,10 +376,14 @@ func (om *Monitor) TrackOrder(ctx context.Context, orderID *big.Int) error {
 
 	// Save order to storage
 	if err := om.storage.SaveOrder(ctx, order); err != nil {
-		om.logger.Warn("Failed to save order to storage", "error", err)
+		om.logger.WithFields(logrus.Fields{
+			"error": err,
+		}).Warn("Failed to save order to storage")
 	}
 
-	om.logger.Info("Started tracking order", "orderID", orderID)
+	om.logger.WithFields(logrus.Fields{
+		"orderID": orderID.String(),
+	}).Info("Started tracking order")
 	om.metrics.IncrementOrdersTracked()
 
 	// Create event before unlocking
@@ -289,11 +419,16 @@ func (om *Monitor) UntrackOrder(ctx context.Context, orderID *big.Int) error {
 
 	// Delete order from storage
 	if err := om.storage.DeleteOrder(ctx, orderIDStr); err != nil {
-		om.logger.Warn("Failed to delete order from storage", "orderID", orderID, "error", err)
+		om.logger.WithFields(logrus.Fields{
+			"orderID": orderID.String(),
+			"error":   err,
+		}).Warn("Failed to delete order from storage")
 	}
 
 	delete(om.trackedOrders, orderIDStr)
-	om.logger.Info("Stopped tracking order", "orderID", orderID)
+	om.logger.WithFields(logrus.Fields{
+		"orderID": orderID.String(),
+	}).Info("Stopped tracking order")
 	return nil
 }
 
@@ -340,7 +475,9 @@ func (om *Monitor) MonitorOrderStatus(ctx context.Context, orderID *big.Int) err
 
 	// Update order in storage
 	if err := om.storage.UpdateOrder(ctx, newOrder); err != nil {
-		om.logger.Warn("Failed to update order in storage", "error", err)
+		om.logger.WithFields(logrus.Fields{
+			"error": err,
+		}).Warn("Failed to update order in storage")
 	}
 
 	// Emit updated event
@@ -360,10 +497,11 @@ func (om *Monitor) MonitorOrderStatus(ctx context.Context, orderID *big.Int) err
 
 // handleOrderStatusChange handles order status changes and emits appropriate events
 func (om *Monitor) handleOrderStatusChange(orderID *big.Int, oldOrder, newOrder *types.Order) {
-	om.logger.Info("Order status changed",
-		"orderID", orderID.String(),
-		"oldStatus", oldOrder.Status,
-		"newStatus", newOrder.Status)
+	om.logger.WithFields(logrus.Fields{
+		"orderID":   orderID.String(),
+		"oldStatus": oldOrder.Status,
+		"newStatus": newOrder.Status,
+	}).Info("Order status changed")
 
 	switch newOrder.Status {
 	case types.OrderStatusClosed:
@@ -376,7 +514,10 @@ func (om *Monitor) handleOrderStatusChange(orderID *big.Int, oldOrder, newOrder 
 		// Stop tracking closed orders
 		go func() {
 			if err := om.UntrackOrder(om.ctx, orderID); err != nil {
-				om.logger.Error("Failed to untrack closed order", "orderID", orderID.String(), "error", err)
+				om.logger.WithFields(logrus.Fields{
+					"orderID": orderID.String(),
+					"error":   err,
+				}).Error("Failed to untrack closed order")
 			}
 		}()
 
@@ -390,7 +531,10 @@ func (om *Monitor) handleOrderStatusChange(orderID *big.Int, oldOrder, newOrder 
 		// Stop tracking expired orders
 		go func() {
 			if err := om.UntrackOrder(om.ctx, orderID); err != nil {
-				om.logger.Error("Failed to untrack expired order", "orderID", orderID.String(), "error", err)
+				om.logger.WithFields(logrus.Fields{
+					"orderID": orderID.String(),
+					"error":   err,
+				}).Error("Failed to untrack expired order")
 			}
 		}()
 
@@ -407,7 +551,10 @@ func (om *Monitor) handleOrderStatusChange(orderID *big.Int, oldOrder, newOrder 
 		// Stop tracking cancelled orders
 		go func() {
 			if err := om.UntrackOrder(om.ctx, orderID); err != nil {
-				om.logger.Error("Failed to untrack cancelled order", "orderID", orderID.String(), "error", err)
+				om.logger.WithFields(logrus.Fields{
+					"orderID": orderID.String(),
+					"error":   err,
+				}).Error("Failed to untrack cancelled order")
 			}
 		}()
 	case types.OrderStatusAccepted:
@@ -439,19 +586,22 @@ func (om *Monitor) CheckOrderExpiry(ctx context.Context, orderID *big.Int) error
 		timeSinceCreation := now - order.CreatedAt.Int64()
 
 		if timeSinceCreation > biddingTimeLimit {
-			om.logger.Info("Order has exceeded bidding time limit, treating as cancelled",
-				"orderID", orderID,
-				"createdAt", order.CreatedAt.Int64(),
-				"currentTime", now,
-				"timeSinceCreation", timeSinceCreation,
-				"biddingTimeLimit", biddingTimeLimit)
+			om.logger.WithFields(logrus.Fields{
+				"orderID":           orderID.String(),
+				"createdAt":         order.CreatedAt.Int64(),
+				"currentTime":       now,
+				"timeSinceCreation": timeSinceCreation,
+				"biddingTimeLimit":  biddingTimeLimit,
+			}).Info("Order has exceeded bidding time limit, treating as cancelled")
 
 			// Update order status to cancelled
 			order.Status = types.OrderStatusCancelled
 
 			// Update in storage
 			if err := om.storage.UpdateOrder(ctx, order); err != nil {
-				om.logger.Warn("Failed to update cancelled order in storage", "error", err)
+				om.logger.WithFields(logrus.Fields{
+					"error": err,
+				}).Warn("Failed to update cancelled order in storage")
 			}
 
 			// Emit cancelled event
@@ -468,7 +618,10 @@ func (om *Monitor) CheckOrderExpiry(ctx context.Context, orderID *big.Int) error
 			// Stop tracking cancelled order
 			go func() {
 				if err := om.UntrackOrder(om.ctx, orderID); err != nil {
-					om.logger.Error("Failed to untrack cancelled order", "orderID", orderID.String(), "error", err)
+					om.logger.WithFields(logrus.Fields{
+						"orderID": orderID.String(),
+						"error":   err,
+					}).Error("Failed to untrack cancelled order")
 				}
 			}()
 
@@ -478,17 +631,20 @@ func (om *Monitor) CheckOrderExpiry(ctx context.Context, orderID *big.Int) error
 
 	// Check if order has expired and grace period passed
 	if types.IsOrderReadyToClose(order, now) {
-		om.logger.Info("Order has expired and grace period passed",
-			"orderID", orderID,
-			"expiredAt", order.ExpiredAt,
-			"currentTime", now)
+		om.logger.WithFields(logrus.Fields{
+			"orderID":     orderID.String(),
+			"expiredAt":   order.ExpiredAt,
+			"currentTime": now,
+		}).Info("Order has expired and grace period passed")
 
 		// Update order status
 		order.Status = types.OrderStatusExpired
 
 		// Update in storage
 		if err := om.storage.UpdateOrder(ctx, order); err != nil {
-			om.logger.Warn("Failed to update expired order in storage", "error", err)
+			om.logger.WithFields(logrus.Fields{
+				"error": err,
+			}).Warn("Failed to update expired order in storage")
 		}
 
 		// Emit expired event
@@ -502,14 +658,18 @@ func (om *Monitor) CheckOrderExpiry(ctx context.Context, orderID *big.Int) error
 		// Stop tracking expired order
 		go func() {
 			if err := om.UntrackOrder(om.ctx, orderID); err != nil {
-				om.logger.Error("Failed to untrack expired order", "orderID", orderID.String(), "error", err)
+				om.logger.WithFields(logrus.Fields{
+					"orderID": orderID.String(),
+					"error":   err,
+				}).Error("Failed to untrack expired order")
 			}
 		}()
 	} else {
-		om.logger.Debug("Order has expired but grace period not passed yet",
-			"orderID", orderID,
-			"expiredAt", order.ExpiredAt,
-			"currentTime", now)
+		om.logger.WithFields(logrus.Fields{
+			"orderID":     orderID.String(),
+			"expiredAt":   order.ExpiredAt,
+			"currentTime": now,
+		}).Debug("Order has expired but grace period not passed yet")
 	}
 
 	return nil
@@ -546,7 +706,10 @@ func (om *Monitor) syncTrackedOrders(ctx context.Context) {
 
 	for _, orderID := range orderIDs {
 		if err := om.MonitorOrderStatus(ctx, orderID); err != nil {
-			om.logger.Warn("Failed to sync order status", "orderID", orderID, "error", err)
+			om.logger.WithFields(logrus.Fields{
+				"orderID": orderID.String(),
+				"error":   err,
+			}).Warn("Failed to sync order status")
 		}
 	}
 }
@@ -563,7 +726,10 @@ func (om *Monitor) checkOrderExpiries(ctx context.Context) {
 
 	for _, orderID := range orderIDs {
 		if err := om.CheckOrderExpiry(ctx, orderID); err != nil {
-			om.logger.Warn("Failed to check order expiry", "orderID", orderID, "error", err)
+			om.logger.WithFields(logrus.Fields{
+				"orderID": orderID.String(),
+				"error":   err,
+			}).Warn("Failed to check order expiry")
 		}
 	}
 }
@@ -575,9 +741,10 @@ func (om *Monitor) eventProcessingLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case event := <-om.orderEvents:
-			om.logger.Debug("Processing order event",
-				"type", event.Type,
-				"orderID", event.OrderID.String())
+			om.logger.WithFields(logrus.Fields{
+				"type":    event.Type,
+				"orderID": event.OrderID.String(),
+			}).Debug("Processing order event")
 		}
 	}
 }
@@ -597,7 +764,33 @@ func (om *Monitor) loadPersistedOrders(ctx context.Context) error {
 	}
 	om.mu.Unlock()
 
-	om.logger.Info("Loaded persisted orders", "trackedOrders", len(om.trackedOrders))
+	om.logger.WithFields(logrus.Fields{
+		"trackedOrders": len(om.trackedOrders),
+	}).Info("Loaded persisted orders")
+	return nil
+}
+
+// loadLastOrderID loads the last processed order ID from storage
+func (om *Monitor) loadLastOrderID(ctx context.Context) error {
+	om.logger.Info("Loading last order ID from storage")
+
+	lastOrderID, err := om.storage.GetLastOrderID(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to load last order ID: %w", err)
+	}
+
+	om.mu.Lock()
+	om.lastOrderID = lastOrderID
+	om.mu.Unlock()
+
+	if lastOrderID != nil {
+		om.logger.WithFields(logrus.Fields{
+			"lastOrderID": lastOrderID.String(),
+		}).Info("Loaded last order ID from storage")
+	} else {
+		om.logger.Info("No last order ID found in storage, will start from latest")
+	}
+
 	return nil
 }
 

@@ -31,9 +31,8 @@ func Main(repoPath string, configPath *string) {
 
 func run(repoPath string, configPath *string) error {
 	// let the user know we're going.
-	log.Printf("Initializing Subnet Node...\n")
-
 	if !snrepo.IsInitialized(repoPath) {
+		log.Printf("Initializing Subnet Node...\n")
 		_, err := ninit.Init(repoPath, os.Stdout)
 		if err != nil {
 			return err
@@ -65,6 +64,8 @@ func run(repoPath string, configPath *string) error {
 
 	defer node.Close()
 
+	log.Printf("Peer ID: %s", node.Identity.String())
+	log.Printf("Provider Address: %s", node.Account.GetAddress())
 	printLibp2pPorts(node)
 
 	// construct api endpoint - every time
@@ -73,13 +74,15 @@ func run(repoPath string, configPath *string) error {
 		return err
 	}
 
-	// node.Repo.Config().RegisterReloadCallback(func(c *config.C) {
-	// 	node.Close()
-	// })
+	// construct http gateway
+	gwErrc, err := serveHTTPGateway(r.Config(), node)
+	if err != nil {
+		return err
+	}
 
 	// collect long-running errors and block for shutdown
 	var errs error
-	for err := range merge(apiErrc) {
+	for err := range merge(apiErrc, gwErrc) {
 		if err != nil {
 			errs = multierror.Append(errs, err)
 		}
@@ -194,6 +197,66 @@ func serveHTTPApi(cfg *config.C, node *core.SubnetNode) (<-chan error, error) {
 			defer wg.Done()
 			errc <- corehttp.Serve(node, manet.NetListener(lis), opts...)
 		}(apiLis)
+	}
+
+	go func() {
+		wg.Wait()
+		close(errc)
+	}()
+
+	return errc, nil
+}
+
+// serveHTTPGateway creates a listener for the gateway and starts serving requests.
+func serveHTTPGateway(cfg *config.C, node *core.SubnetNode) (<-chan error, error) {
+
+	listeners, err := sockets.TakeListeners("io.subnet.gateway")
+	if err != nil {
+		return nil, fmt.Errorf("serveHTTPGateway: socket activation failed: %s", err)
+	}
+
+	listenerAddrs := make(map[string]bool, len(listeners))
+	for _, listener := range listeners {
+		listenerAddrs[string(listener.Multiaddr().Bytes())] = true
+	}
+
+	gatewayAddrs := cfg.GetStringSlice("addresses.gateway", []string{})
+
+	for _, addr := range gatewayAddrs {
+		gatewayMaddr, err := ma.NewMultiaddr(addr)
+		if err != nil {
+			return nil, fmt.Errorf("serveHTTPGateway: invalid gateway address: %q (err: %s)", addr, err)
+		}
+
+		if listenerAddrs[string(gatewayMaddr.Bytes())] {
+			continue
+		}
+
+		gwLis, err := manet.Listen(gatewayMaddr)
+		if err != nil {
+			return nil, fmt.Errorf("serveHTTPGateway: manet.Listen(%s) failed: %s", gatewayMaddr, err)
+		}
+		listenerAddrs[string(gatewayMaddr.Bytes())] = true
+		listeners = append(listeners, gwLis)
+	}
+
+	// we might have listened to /tcp/0 - let's see what we are listing on
+	for _, listener := range listeners {
+		log.Printf("Gateway server listening on %s\n", listener.Multiaddr())
+	}
+
+	opts := []corehttp.ServeOption{
+		corehttp.GatewayOption(),
+	}
+
+	errc := make(chan error)
+	var wg sync.WaitGroup
+	for _, lis := range listeners {
+		wg.Add(1)
+		go func(lis manet.Listener) {
+			defer wg.Done()
+			errc <- corehttp.Serve(node, manet.NetListener(lis), opts...)
+		}(lis)
 	}
 
 	go func() {

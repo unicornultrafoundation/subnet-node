@@ -154,6 +154,10 @@ type Storage interface {
 	// Resource allocation operations
 	SaveResourceAllocation(ctx context.Context, allocation *ResourceAllocation) error
 	ListResourceAllocations(ctx context.Context) ([]*ResourceAllocation, error)
+
+	// Last order ID tracking
+	SaveLastOrderID(ctx context.Context, orderID *big.Int) error
+	GetLastOrderID(ctx context.Context) (*big.Int, error)
 }
 
 // Logger defines the interface for logging

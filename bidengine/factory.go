@@ -166,8 +166,8 @@ func ParseBidEngineConfigFromC(cfg *config.C) (*types.BidEngineConfig, error) {
 	bcfg.ProviderAddress = common.HexToAddress(cfg.GetString("contracts.provider", config.DefaultSubnetProviderAddr))
 
 	// Parse provider_id if present
-	if cfg.IsSet("bidengine.provider_id") {
-		if v := cfg.Get("bidengine.provider_id"); v != nil {
+	if cfg.IsSet("provider.id") {
+		if v := cfg.Get("provider.id"); v != nil {
 			switch val := v.(type) {
 			case int:
 				bcfg.ProviderID = big.NewInt(int64(val))
