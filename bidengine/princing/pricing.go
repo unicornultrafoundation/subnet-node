@@ -50,13 +50,14 @@ func (p *Engine) CalculateBidPrice(ctx context.Context, order *types.Order, mach
 	// Ensure price is within order constraints
 	finalPrice = p.constrainPriceToOrderLimits(finalPrice, order)
 
-	p.logger.Info("Calculated bid price",
-		"orderID", order.ID,
-		"basePrice", basePrice,
-		"marketAdjustedPrice", marketAdjustedPrice,
-		"finalPrice", finalPrice,
-		"minBidPrice", order.MinBidPrice,
-		"maxBidPrice", order.MaxBidPrice)
+	p.logger.WithFields(logrus.Fields{
+		"orderID":             order.ID.String(),
+		"basePrice":           basePrice.String(),
+		"marketAdjustedPrice": marketAdjustedPrice.String(),
+		"finalPrice":          finalPrice.String(),
+		"minBidPrice":         order.MinBidPrice.String(),
+		"maxBidPrice":         order.MaxBidPrice.String(),
+	}).Info("Calculated bid price")
 
 	return finalPrice, nil
 }
@@ -175,11 +176,12 @@ func (p *Engine) AdjustPriceForStrategy(ctx context.Context, basePrice *big.Int,
 
 	adjustedPriceFloat, _ := finalPriceFloat.Int(nil)
 
-	p.logger.Debug("Price strategy adjustment",
-		"basePrice", basePrice,
-		"profitMargin", profitMargin,
-		"competitiveAdjustment", competitiveAdjustment,
-		"adjustedPrice", adjustedPriceFloat)
+	p.logger.WithFields(logrus.Fields{
+		"basePrice":             basePrice.String(),
+		"profitMargin":          profitMargin,
+		"competitiveAdjustment": competitiveAdjustment,
+		"adjustedPrice":         adjustedPriceFloat.String(),
+	}).Debug("Price strategy adjustment")
 
 	return adjustedPriceFloat, nil
 }
