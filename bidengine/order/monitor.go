@@ -176,6 +176,14 @@ func (om *Monitor) watchOrderCreatedEvents(ctx context.Context) {
 	}
 }
 
+// isOrderWithinBiddingTime checks if an order is still within the bidding time limit (5 minutes from creation)
+func (om *Monitor) isOrderWithinBiddingTime(order *types.Order) bool {
+	now := time.Now().Unix()
+	const biddingTimeLimit = int64(300) // 5 minutes in seconds
+	timeSinceCreation := now - order.CreatedAt.Int64()
+	return timeSinceCreation <= biddingTimeLimit
+}
+
 // pollForNewOrders polls for new orders since the last known order ID
 func (om *Monitor) pollForNewOrders(ctx context.Context) error {
 	om.mu.RLock()
@@ -204,8 +212,7 @@ func (om *Monitor) pollForNewOrders(ctx context.Context) error {
 
 	// Check for new orders
 	currentOrderID := new(big.Int).Add(lastOrderID, big.NewInt(1))
-
-	for currentOrderID.Cmp(orderCount) < 0 {
+	for currentOrderID.Cmp(orderCount) < 1 {
 		om.logger.WithFields(logrus.Fields{
 			"orderID": currentOrderID.String(),
 		}).Info("Found new order")
@@ -216,30 +223,37 @@ func (om *Monitor) pollForNewOrders(ctx context.Context) error {
 			om.logger.WithFields(logrus.Fields{
 				"orderID": currentOrderID.String(),
 				"error":   err,
-			}).Warn("Failed to get order details")
+			}).Error("Failed to get order details")
 			currentOrderID.Add(currentOrderID, big.NewInt(1))
 			continue
 		}
 
-		// Only track open orders
+		// Only track open orders that are still within bidding time (5 minutes from creation)
 		if order.Status == types.OrderStatusOpen {
-			// Check if we're already tracking this order
-			om.mu.RLock()
-			_, alreadyTracked := om.trackedOrders[currentOrderID.String()]
-			om.mu.RUnlock()
+			// Check if order is still within bidding time
+			if om.isOrderWithinBiddingTime(order) {
+				// Check if we're already tracking this order
+				om.mu.RLock()
+				_, alreadyTracked := om.trackedOrders[currentOrderID.String()]
+				om.mu.RUnlock()
 
-			if !alreadyTracked {
-				om.logger.WithFields(logrus.Fields{
-					"orderID": currentOrderID.String(),
-				}).Info("New order found via polling")
-
-				// Track the new order
-				if err := om.TrackOrder(ctx, currentOrderID); err != nil {
+				if !alreadyTracked {
 					om.logger.WithFields(logrus.Fields{
 						"orderID": currentOrderID.String(),
-						"error":   err,
-					}).Warn("Failed to track new order from polling")
+					}).Info("New order found via polling and still within bidding time")
+
+					// Track the new order
+					if err := om.TrackOrder(ctx, currentOrderID); err != nil {
+						om.logger.WithFields(logrus.Fields{
+							"orderID": currentOrderID.String(),
+							"error":   err,
+						}).Warn("Failed to track new order from polling")
+					}
 				}
+			} else {
+				om.logger.WithFields(logrus.Fields{
+					"orderID": currentOrderID.String(),
+				}).Debug("Order found but bidding time has expired, skipping")
 			}
 		}
 
@@ -310,25 +324,32 @@ func (om *Monitor) handleOrderCreatedEvent(ctx context.Context, event *types.Ord
 		return
 	}
 
-	// Only track open orders
+	// Only track open orders that are still within bidding time (5 minutes from creation)
 	if order.Status == types.OrderStatusOpen {
-		// Check if we're already tracking this order
-		om.mu.RLock()
-		_, alreadyTracked := om.trackedOrders[event.OrderID.String()]
-		om.mu.RUnlock()
+		// Check if order is still within bidding time
+		if om.isOrderWithinBiddingTime(order) {
+			// Check if we're already tracking this order
+			om.mu.RLock()
+			_, alreadyTracked := om.trackedOrders[event.OrderID.String()]
+			om.mu.RUnlock()
 
-		if !alreadyTracked {
-			om.logger.WithFields(logrus.Fields{
-				"orderID": event.OrderID.String(),
-			}).Info("New order created via event")
-
-			// Track the new order
-			if err := om.TrackOrder(ctx, event.OrderID); err != nil {
+			if !alreadyTracked {
 				om.logger.WithFields(logrus.Fields{
 					"orderID": event.OrderID.String(),
-					"error":   err,
-				}).Warn("Failed to track new order from event")
+				}).Info("New order created via event and still within bidding time")
+
+				// Track the new order
+				if err := om.TrackOrder(ctx, event.OrderID); err != nil {
+					om.logger.WithFields(logrus.Fields{
+						"orderID": event.OrderID.String(),
+						"error":   err,
+					}).Warn("Failed to track new order from event")
+				}
 			}
+		} else {
+			om.logger.WithFields(logrus.Fields{
+				"orderID": event.OrderID.String(),
+			}).Debug("Order created via event but bidding time has expired, skipping")
 		}
 	}
 }
