@@ -117,11 +117,6 @@ type BidManager interface {
 	// Bid tracking
 	TrackBid(ctx context.Context, orderID *big.Int, bidIndex *big.Int) error
 	UntrackBid(ctx context.Context, orderID *big.Int, bidIndex *big.Int) error
-	GetTrackedBids(ctx context.Context) (map[*big.Int][]*big.Int, error)
-
-	// Bid lifecycle
-	SubmitBid(ctx context.Context, orderID *big.Int, pricePerSecond *big.Int, machineID *big.Int) (*BidResult, error)
-	CancelBid(ctx context.Context, orderID *big.Int, bidIndex *big.Int) error
 }
 
 // Storage defines the interface for persistent storage operations

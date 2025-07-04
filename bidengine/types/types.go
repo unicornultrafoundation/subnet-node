@@ -187,11 +187,10 @@ type OrderEvent struct {
 
 // ResourceUsage represents current resource usage
 type ResourceUsage struct {
-	CPUUsed     *big.Int
-	GPUUsed     *big.Int
-	MemoryUsed  *big.Int
-	DiskUsed    *big.Int
-	NetworkUsed *big.Int
+	CPUUsed    *big.Int
+	GPUUsed    *big.Int
+	MemoryUsed *big.Int
+	DiskUsed   *big.Int
 }
 
 // MarketData represents market information for pricing
@@ -237,4 +236,15 @@ func (order *Order) IsOrderWithinBiddingTime() bool {
 	const biddingTimeLimit = int64(300) // 5 minutes in seconds
 	timeSinceCreation := now - order.CreatedAt.Int64()
 	return timeSinceCreation <= biddingTimeLimit
+}
+
+func (order *Order) IsMatched(bid *Bid) bool {
+	// Check if any of the required fields are nil
+	if order.AcceptedMachineId == nil || order.AcceptedProviderId == nil ||
+		bid.MachineId == nil || bid.ProviderId == nil {
+		return false
+	}
+
+	return order.AcceptedMachineId.Cmp(bid.MachineId) == 0 &&
+		order.AcceptedProviderId.Cmp(bid.ProviderId) == 0
 }

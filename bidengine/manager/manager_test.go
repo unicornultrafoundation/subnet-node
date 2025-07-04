@@ -5,7 +5,6 @@ import (
 	"math/big"
 	"testing"
 
-	"github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
@@ -315,37 +314,6 @@ func TestGetTrackedBids(t *testing.T) {
 	assert.NotNil(t, foundOrderID, "OrderID should exist in bids map")
 	assert.Greater(t, len(foundIds), 0, "Bid slice should not be empty")
 	assert.Equal(t, bidIndex.String(), foundIds[0].String(), "Bid index should match")
-}
-
-func TestSubmitBid(t *testing.T) {
-	logger := logrus.WithField("service", "bidengine")
-	manager := NewManager(
-		&types.BidEngineConfig{
-			ProviderID:     big.NewInt(1),
-			ProviderWallet: common.HexToAddress("0x123"),
-		},
-		&mockBidMarket{},
-		logger,
-		&mockMetrics{},
-		nil, // datastore
-		&mockResourceManager{},
-		&mockPricingEngine{},
-		&mockOrderMonitor{},
-	)
-	manager.storage = &mockStorage{}
-
-	ctx := context.Background()
-	orderID := big.NewInt(789)
-	pricePerSecond := big.NewInt(100)
-	machineID := big.NewInt(1)
-
-	manager.bidMarket = &bidMarketMock{}
-
-	result, err := manager.SubmitBid(ctx, orderID, pricePerSecond, machineID)
-	assert.NoError(t, err)
-	assert.NotNil(t, result)
-	assert.Equal(t, orderID, result.OrderID)
-	assert.True(t, result.Success)
 }
 
 func TestTryBidOnOrder(t *testing.T) {

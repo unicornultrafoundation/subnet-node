@@ -222,9 +222,7 @@ func (m *MetricsService) updateResourceStats(stats *ResourceUsageStats, usage *t
 	if usage.DiskUsed != nil {
 		m.updateIndividualResourceStats(stats.Disk, usage.DiskUsed)
 	}
-	if usage.NetworkUsed != nil {
-		m.updateIndividualResourceStats(stats.Network, usage.NetworkUsed)
-	}
+
 }
 
 // updateIndividualResourceStats updates individual resource statistics

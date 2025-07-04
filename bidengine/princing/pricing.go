@@ -28,11 +28,10 @@ func NewEngine(config *types.BidEngineConfig, logger *logrus.Entry) *Engine {
 func (p *Engine) CalculateBidPrice(ctx context.Context, order *types.Order, machine *types.Machine, marketData *types.MarketData) (*big.Int, error) {
 	// Calculate base resource price
 	basePrice, err := p.CalculateResourcePrice(ctx, machine, &types.ResourceUsage{
-		CPUUsed:     order.CpuCores,
-		GPUUsed:     order.GpuCores,
-		MemoryUsed:  order.MemoryMB,
-		DiskUsed:    order.DiskGB,
-		NetworkUsed: order.UploadMbps,
+		CPUUsed:    order.CpuCores,
+		GPUUsed:    order.GpuCores,
+		MemoryUsed: order.MemoryMB,
+		DiskUsed:   order.DiskGB,
 	})
 	if err != nil {
 		return nil, err
@@ -141,14 +140,6 @@ func (p *Engine) CalculateResourcePrice(ctx context.Context, machine *types.Mach
 		var diskCost big.Int
 		diskCost.Mul(usage.DiskUsed, machine.DiskPricePerSecond)
 		totalPrice.Add(&totalPrice, &diskCost)
-	}
-
-	// Add network cost (using upload speed as proxy)
-	if usage.NetworkUsed != nil {
-		// Assume network cost is 10% of total resource cost
-		var networkCost big.Int
-		networkCost.Div(&totalPrice, big.NewInt(10))
-		totalPrice.Add(&totalPrice, &networkCost)
 	}
 
 	return &totalPrice, nil

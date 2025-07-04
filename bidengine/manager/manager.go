@@ -152,27 +152,27 @@ func (bm *Manager) handleOrderCreate(event *types.OrderEvent) {
 }
 
 // SubmitBid submits a bid to the blockchain
-func (bm *Manager) SubmitBid(ctx context.Context, orderID *big.Int, pricePerSecond *big.Int, machineID *big.Int) (*types.BidResult, error) {
+func (bm *Manager) SubmitBid(ctx context.Context, orderID *big.Int, pricePerSecond *big.Int, machineID *big.Int) error {
 	bm.mu.Lock()
 	defer bm.mu.Unlock()
 
 	// Validate inputs
 	if orderID == nil {
-		return nil, fmt.Errorf("order ID cannot be nil")
+		return fmt.Errorf("order ID cannot be nil")
 	}
 
 	if machineID == nil {
-		return nil, fmt.Errorf("machine ID cannot be nil")
+		return fmt.Errorf("machine ID cannot be nil")
 	}
 
 	if pricePerSecond == nil || pricePerSecond.Cmp(big.NewInt(0)) <= 0 {
-		return nil, fmt.Errorf("price must be greater than zero")
+		return fmt.Errorf("price must be greater than zero")
 	}
 
 	// Use provider ID from configuration
 	providerID := bm.config.ProviderID
 	if providerID == nil {
-		return nil, fmt.Errorf("provider ID not configured")
+		return fmt.Errorf("provider ID not configured")
 	}
 
 	// Submit bid to blockchain
@@ -185,13 +185,13 @@ func (bm *Manager) SubmitBid(ctx context.Context, orderID *big.Int, pricePerSeco
 			"machineID":      machineID.String(),
 			"error":          err,
 		}).Error("Failed to submit bid to blockchain")
-		return nil, fmt.Errorf("failed to submit bid: %w", err)
+		return fmt.Errorf("failed to submit bid: %w", err)
 	}
 
 	// Wait for transaction confirmation and get bid index
 	bidIndex, err := bm.bidMarket.GetBidIndexFromTransaction(ctx, tx, orderID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get bid index from transaction: %w", err)
+		return fmt.Errorf("failed to get bid index from transaction: %w", err)
 	}
 
 	// Allocate resources immediately after successful bid submission
@@ -219,7 +219,7 @@ func (bm *Manager) SubmitBid(ctx context.Context, orderID *big.Int, pricePerSeco
 	}).Info("Bid submitted successfully")
 
 	bm.metrics.IncrementBidsSubmitted()
-	return nil, nil
+	return nil
 }
 
 // CancelBid cancels a pending bid
@@ -528,9 +528,24 @@ func (bm *Manager) handleOrderAccepted(event *types.OrderEvent) {
 	bm.mu.Lock()
 	bidKey := order.ID.String()
 	if bid, exists := bm.pendingBids[bidKey]; exists {
+		bm.logger.WithFields(logrus.Fields{
+			"orderID":            order.ID.String(),
+			"acceptedProviderID": order.AcceptedProviderId,
+			"ourProviderID":      bid.Bid.ProviderId,
+			"acceptedMachineID":  order.AcceptedMachineId,
+			"ourMachineID":       bid.Bid.MachineId,
+			"orderStatus":        order.Status,
+			"bidStatus":          bid.Bid.Status,
+		}).Debug("Checking if our bid was accepted")
+
 		// Check if our bid was accepted by comparing provider IDs
-		if order.AcceptedProviderId != nil && bid.Bid.ProviderId != nil &&
-			order.AcceptedProviderId.Cmp(bid.Bid.ProviderId) == 0 {
+		isMatched := order.IsMatched(bid.Bid)
+		bm.logger.WithFields(logrus.Fields{
+			"orderID":   order.ID.String(),
+			"isMatched": isMatched,
+		}).Debug("Bid matching result")
+
+		if isMatched {
 			// Our bid was accepted
 			oldBidStatus := bid.Bid.Status
 			bid.Bid.Status = types.BidStatusAccepted
@@ -681,11 +696,10 @@ func (bm *Manager) allocateResourcesForBid(ctx context.Context, orderID *big.Int
 
 	// Create resource usage based on order requirements
 	resourceUsage := &types.ResourceUsage{
-		CPUUsed:     order.CpuCores,
-		GPUUsed:     order.GpuCores,
-		MemoryUsed:  order.MemoryMB,
-		DiskUsed:    order.DiskGB,
-		NetworkUsed: order.UploadMbps, // Using upload speed as network usage
+		CPUUsed:    order.CpuCores,
+		GPUUsed:    order.GpuCores,
+		MemoryUsed: order.MemoryMB,
+		DiskUsed:   order.DiskGB,
 	}
 
 	// Allocate resources
@@ -766,18 +780,7 @@ func (bm *Manager) TryBidOnOrder(ctx context.Context, order *types.Order) error 
 		"machineID":      machine.ID.String(),
 	}).Info("Attempting to bid on order")
 
-	result, err := bm.SubmitBid(ctx, order.ID, pricePerSecond, machine.ID)
-	if err != nil {
-		return fmt.Errorf("failed to submit bid: %w", err)
-	}
-
-	bm.logger.WithFields(logrus.Fields{
-		"orderID":  order.ID.String(),
-		"bidIndex": result.BidIndex.String(),
-		"txHash":   result.TxHash.String(),
-	}).Info("Successfully submitted bid")
-
-	return nil
+	return bm.SubmitBid(ctx, order.ID, pricePerSecond, machine.ID)
 }
 
 // findSuitableMachine finds a machine that can fulfill the order requirements

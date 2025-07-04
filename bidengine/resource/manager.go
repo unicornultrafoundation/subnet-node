@@ -446,9 +446,6 @@ func (rm *Manager) GetCurrentUsage(ctx context.Context, machine *types.Machine) 
 		if totalUsage.DiskUsed == nil {
 			totalUsage.DiskUsed = big.NewInt(0)
 		}
-		if totalUsage.NetworkUsed == nil {
-			totalUsage.NetworkUsed = big.NewInt(0)
-		}
 
 		if usage.CPUUsed != nil {
 			totalUsage.CPUUsed.Add(totalUsage.CPUUsed, usage.CPUUsed)
@@ -461,9 +458,6 @@ func (rm *Manager) GetCurrentUsage(ctx context.Context, machine *types.Machine) 
 		}
 		if usage.DiskUsed != nil {
 			totalUsage.DiskUsed.Add(totalUsage.DiskUsed, usage.DiskUsed)
-		}
-		if usage.NetworkUsed != nil {
-			totalUsage.NetworkUsed.Add(totalUsage.NetworkUsed, usage.NetworkUsed)
 		}
 	}
 
@@ -504,12 +498,6 @@ func (rm *Manager) GetAvailableResources(ctx context.Context, machine *types.Mac
 		available.DiskUsed = machine.DiskGB
 	}
 
-	if machine.UploadSpeed != nil && currentUsage.NetworkUsed != nil {
-		available.NetworkUsed = new(big.Int).Sub(machine.UploadSpeed, currentUsage.NetworkUsed)
-	} else if machine.UploadSpeed != nil {
-		available.NetworkUsed = machine.UploadSpeed
-	}
-
 	return available, nil
 }
 
@@ -534,10 +522,6 @@ func (rm *Manager) CanAllocateResources(ctx context.Context, machine *types.Mach
 	}
 
 	if required.DiskUsed != nil && (available.DiskUsed == nil || available.DiskUsed.Cmp(required.DiskUsed) < 0) {
-		return false, nil
-	}
-
-	if required.NetworkUsed != nil && (available.NetworkUsed == nil || available.NetworkUsed.Cmp(required.NetworkUsed) < 0) {
 		return false, nil
 	}
 

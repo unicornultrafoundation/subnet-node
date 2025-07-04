@@ -689,5 +689,5 @@ func (p *ProviderContractImpl) ValidateMachineRequirements(ctx context.Context, 
 
 	return p.contract.ValidateMachineRequirements(callOpts, machineType, providerID, machineID,
 		requirements.CPUUsed, requirements.MemoryUsed, requirements.DiskUsed,
-		requirements.GPUUsed, requirements.NetworkUsed, requirements.NetworkUsed)
+		requirements.GPUUsed, big.NewInt(0), big.NewInt(0))
 }
