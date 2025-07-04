@@ -1,0 +1,24 @@
+# VM Configuration
+vm_name = "subnet-vm-example"
+os_type = "Linux_64"
+memory_mb = 4096
+cpus = 4
+disk_size_gb = 50
+
+# Network Configuration
+network_type = "bridged"
+bridge_name = "en0"  # macOS example, use appropriate interface for your OS
+
+# Base Image
+base_image_path = "/path/to/your/base-image.ova"
+
+# Advanced Settings
+enable_audio = false
+enable_usb = false
+enable_vrde = true
+
+# Custom Settings (optional)
+custom_settings = {
+  "pae" = "on"
+  "nested-hw-virt" = "on"
+} 

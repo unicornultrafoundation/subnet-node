@@ -17,9 +17,9 @@ import (
 	"github.com/gogo/protobuf/proto"
 	ddht "github.com/libp2p/go-libp2p-kad-dht/dual"
 	"github.com/patrickmn/go-cache"
-	"github.com/shirou/gopsutil/cpu"
-	"github.com/shirou/gopsutil/disk"
-	"github.com/shirou/gopsutil/mem"
+	"github.com/shirou/gopsutil/v4/cpu"
+	"github.com/shirou/gopsutil/v4/disk"
+	"github.com/shirou/gopsutil/v4/mem"
 
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ipfs/go-datastore"

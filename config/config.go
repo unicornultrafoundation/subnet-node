@@ -451,3 +451,54 @@ func (c *C) GetAddrsInfo(k string) ([]peer.AddrInfo, error) {
 	}
 	return peer.AddrInfosFromP2pAddrs(maddrs...)
 }
+
+// GetVirtualBoxDefaultConfig returns the VirtualBox default configuration from the config
+func (c *C) GetVirtualBoxDefaultConfig() map[string]interface{} {
+	defaultConfig := c.GetMap("virtualbox.default_config", map[string]interface{}{})
+
+	// Ensure all required fields have defaults
+	if defaultConfig["memory_mb"] == nil {
+		defaultConfig["memory_mb"] = DefaultVMMemoryMB
+	}
+	if defaultConfig["cpus"] == nil {
+		defaultConfig["cpus"] = DefaultVMCPUs
+	}
+	if defaultConfig["disk_size_gb"] == nil {
+		defaultConfig["disk_size_gb"] = DefaultVMDiskSizeGB
+	}
+	if defaultConfig["os_type"] == nil {
+		defaultConfig["os_type"] = DefaultVMOSType
+	}
+	if defaultConfig["network_type"] == nil {
+		defaultConfig["network_type"] = DefaultVMNetworkType
+	}
+	if defaultConfig["storage_controller"] == nil {
+		defaultConfig["storage_controller"] = DefaultVMStorageController
+	}
+	if defaultConfig["storage_type"] == nil {
+		defaultConfig["storage_type"] = DefaultVMStorageType
+	}
+	if defaultConfig["enable_audio"] == nil {
+		defaultConfig["enable_audio"] = DefaultVMEnableAudio
+	}
+	if defaultConfig["enable_usb"] == nil {
+		defaultConfig["enable_usb"] = DefaultVMEnableUSB
+	}
+	if defaultConfig["enable_vrde"] == nil {
+		defaultConfig["enable_vrde"] = DefaultVMEnableVRDE
+	}
+	if defaultConfig["vrde_port"] == nil {
+		defaultConfig["vrde_port"] = DefaultVMVRDEPort
+	}
+	if defaultConfig["enable_pae"] == nil {
+		defaultConfig["enable_pae"] = DefaultVMEnablePAE
+	}
+	if defaultConfig["enable_nested_paging"] == nil {
+		defaultConfig["enable_nested_paging"] = DefaultVMEnableNestedPaging
+	}
+	if defaultConfig["custom_settings"] == nil {
+		defaultConfig["custom_settings"] = map[string]interface{}{}
+	}
+
+	return defaultConfig
+}
