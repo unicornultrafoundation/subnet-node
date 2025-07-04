@@ -115,8 +115,8 @@ type OrderMonitor interface {
 // BidManager defines the interface for managing bids
 type BidManager interface {
 	// Bid tracking
-	TrackBid(ctx context.Context, orderID *big.Int, bidIndex *big.Int) error
-	UntrackBid(ctx context.Context, orderID *big.Int, bidIndex *big.Int) error
+	TrackBid(ctx context.Context, orderID *big.Int, bid *Bid) error
+	UntrackBid(ctx context.Context, orderID *big.Int, bid *Bid) error
 }
 
 // Storage defines the interface for persistent storage operations

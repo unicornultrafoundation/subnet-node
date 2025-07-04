@@ -203,8 +203,17 @@ func (bm *Manager) SubmitBid(ctx context.Context, orderID *big.Int, pricePerSeco
 		// Don't fail the bid submission if resource allocation fails
 	}
 
+	bid := &types.Bid{
+		Id:             bidIndex,
+		ProviderId:     providerID,
+		MachineId:      machineID,
+		PricePerSecond: pricePerSecond,
+		Status:         types.BidStatusActive,
+		CreatedAt:      big.NewInt(1),
+	}
+
 	// Track the bid for monitoring
-	if err := bm.trackBidInternal(ctx, orderID, bidIndex); err != nil {
+	if err := bm.trackBidInternal(ctx, orderID, bid); err != nil {
 		bm.logger.WithFields(logrus.Fields{
 			"error": err,
 		}).Warn("Failed to track bid")
@@ -268,26 +277,23 @@ func (bm *Manager) CancelBid(ctx context.Context, orderID *big.Int, bidIndex *bi
 }
 
 // TrackBid tracks a bid
-func (bm *Manager) TrackBid(ctx context.Context, orderID *big.Int, bidIndex *big.Int) error {
+func (bm *Manager) TrackBid(ctx context.Context, orderID *big.Int, bid *types.Bid) error {
 	bm.mu.Lock()
 	defer bm.mu.Unlock()
 
-	return bm.trackBidInternal(ctx, orderID, bidIndex)
+	return bm.trackBidInternal(ctx, orderID, bid)
 }
 
 // trackBidInternal is an internal method for tracking a bid
-func (bm *Manager) trackBidInternal(ctx context.Context, orderID *big.Int, bidIndex *big.Int) error {
+func (bm *Manager) trackBidInternal(ctx context.Context, orderID *big.Int, bid *types.Bid) error {
 	// Track bid using orderID only
 	bidKey := orderID.String()
 	if _, exists := bm.pendingBids[bidKey]; exists {
 		return fmt.Errorf("bid already tracked for order %s", orderID.String())
 	}
 
-	// Create extended bid for tracking
 	extendedBid := &ExtendedBid{
-		Bid: &types.Bid{
-			Id: bidIndex,
-		},
+		Bid:         bid,
 		OrderID:     orderID.String(),
 		SubmittedAt: time.Now(),
 	}
@@ -295,11 +301,11 @@ func (bm *Manager) trackBidInternal(ctx context.Context, orderID *big.Int, bidIn
 	bm.pendingBids[bidKey] = extendedBid
 	bm.logger.WithFields(logrus.Fields{
 		"orderID":  orderID.String(),
-		"bidIndex": bidIndex.String(),
+		"bidIndex": bid.Id.String(),
 	}).Info("Bid tracked")
 
 	// Save bid to storage with actual bidIndex
-	if err := bm.storage.SaveBid(ctx, extendedBid.Bid, orderID.String(), int(bidIndex.Int64())); err != nil {
+	if err := bm.storage.SaveBid(ctx, extendedBid.Bid, orderID.String(), int(bid.Id.Int64())); err != nil {
 		bm.logger.WithFields(logrus.Fields{
 			"error": err,
 		}).Warn("Failed to save bid to storage")
@@ -309,15 +315,15 @@ func (bm *Manager) trackBidInternal(ctx context.Context, orderID *big.Int, bidIn
 }
 
 // UntrackBid untracks a bid
-func (bm *Manager) UntrackBid(ctx context.Context, orderID *big.Int, bidIndex *big.Int) error {
+func (bm *Manager) UntrackBid(ctx context.Context, orderID *big.Int, bid *types.Bid) error {
 	bm.mu.Lock()
 	defer bm.mu.Unlock()
 
-	return bm.untrackBidInternal(ctx, orderID, bidIndex)
+	return bm.untrackBidInternal(ctx, orderID, bid)
 }
 
 // untrackBidInternal is an internal method for untracking a bid
-func (bm *Manager) untrackBidInternal(_ context.Context, orderID *big.Int, bidIndex *big.Int) error {
+func (bm *Manager) untrackBidInternal(_ context.Context, orderID *big.Int, bid *types.Bid) error {
 	// Untrack bid using orderID only
 	bidKey := orderID.String()
 	if _, exists := bm.pendingBids[bidKey]; !exists {
@@ -327,7 +333,7 @@ func (bm *Manager) untrackBidInternal(_ context.Context, orderID *big.Int, bidIn
 	delete(bm.pendingBids, bidKey)
 	bm.logger.WithFields(logrus.Fields{
 		"orderID":  orderID.String(),
-		"bidIndex": bidIndex.String(),
+		"bidIndex": bid.Id.String(),
 	}).Info("Bid untracked")
 
 	return nil

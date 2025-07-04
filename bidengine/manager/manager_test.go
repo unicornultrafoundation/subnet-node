@@ -250,19 +250,24 @@ func TestTrackAndUntrackBid(t *testing.T) {
 	orderID := big.NewInt(123)
 	bidIndex := big.NewInt(0)
 
-	err := manager.TrackBid(ctx, orderID, bidIndex)
+	bid := &types.Bid{
+		Id:         bidIndex,
+		ProviderId: big.NewInt(1),
+		Status:     types.BidStatusActive,
+	}
+	err := manager.TrackBid(ctx, orderID, bid)
 	assert.NoError(t, err)
 
 	// Track lại bid đã tồn tại
-	err = manager.TrackBid(ctx, orderID, bidIndex)
+	err = manager.TrackBid(ctx, orderID, bid)
 	assert.Error(t, err)
 
 	// Untrack bid
-	err = manager.UntrackBid(ctx, orderID, bidIndex)
+	err = manager.UntrackBid(ctx, orderID, bid)
 	assert.NoError(t, err)
 
 	// Untrack bid không tồn tại
-	err = manager.UntrackBid(ctx, orderID, bidIndex)
+	err = manager.UntrackBid(ctx, orderID, bid)
 	assert.Error(t, err)
 }
 
@@ -285,7 +290,12 @@ func TestGetTrackedBids(t *testing.T) {
 	bidIndex := big.NewInt(0)
 
 	// Track the bid
-	err := manager.TrackBid(ctx, orderID, bidIndex)
+	bid := &types.Bid{
+		Id:         bidIndex,
+		ProviderId: big.NewInt(1),
+		Status:     types.BidStatusActive,
+	}
+	err := manager.TrackBid(ctx, orderID, bid)
 	assert.NoError(t, err)
 
 	// Debug: check if bid was actually tracked
