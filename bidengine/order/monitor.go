@@ -212,10 +212,17 @@ func (om *Monitor) pollForNewOrders(ctx context.Context) error {
 
 	// Check for new orders
 	currentOrderID := new(big.Int).Add(lastOrderID, big.NewInt(1))
-	for currentOrderID.Cmp(orderCount) < 1 {
+
+	om.logger.WithFields(logrus.Fields{
+		"currentOrderID": currentOrderID.String(),
+		"orderCount":     orderCount.String(),
+	}).Debug("Checking for new orders")
+
+	// Process orders from currentOrderID to orderCount-1
+	for currentOrderID.Cmp(orderCount) < 0 {
 		om.logger.WithFields(logrus.Fields{
 			"orderID": currentOrderID.String(),
-		}).Info("Found new order")
+		}).Debug("Processing order")
 
 		// Get order details
 		order, err := om.bidMarket.GetOrder(ctx, currentOrderID)
@@ -257,20 +264,28 @@ func (om *Monitor) pollForNewOrders(ctx context.Context) error {
 			}
 		}
 
-		// Update last order ID
+		currentOrderID.Add(currentOrderID, big.NewInt(1))
+	}
+
+	// Update last order ID to the last processed order (orderCount - 1)
+	if orderCount.Cmp(big.NewInt(0)) > 0 {
+		lastProcessedOrderID := new(big.Int).Sub(orderCount, big.NewInt(1))
+
 		om.mu.Lock()
-		om.lastOrderID = currentOrderID
+		om.lastOrderID = lastProcessedOrderID
 		om.mu.Unlock()
 
 		// Save to storage
-		if err := om.storage.SaveLastOrderID(ctx, currentOrderID); err != nil {
+		if err := om.storage.SaveLastOrderID(ctx, lastProcessedOrderID); err != nil {
 			om.logger.WithFields(logrus.Fields{
-				"orderID": currentOrderID.String(),
-				"error":   err,
+				"lastOrderID": lastProcessedOrderID.String(),
+				"error":       err,
 			}).Warn("Failed to save last order ID")
 		}
 
-		currentOrderID.Add(currentOrderID, big.NewInt(1))
+		om.logger.WithFields(logrus.Fields{
+			"lastOrderID": lastProcessedOrderID.String(),
+		}).Debug("Updated last order ID")
 	}
 
 	return nil
