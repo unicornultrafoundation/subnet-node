@@ -216,7 +216,7 @@ func (om *Monitor) pollForNewOrders(ctx context.Context) error {
 	om.logger.WithFields(logrus.Fields{
 		"currentOrderID": currentOrderID.String(),
 		"orderCount":     orderCount.String(),
-	}).Debug("Checking for new orders")
+	}).Info("Checking for new orders")
 
 	// Process orders from currentOrderID to orderCount-1
 	for currentOrderID.Cmp(orderCount) < 0 {
