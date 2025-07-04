@@ -71,18 +71,24 @@ func (rm *Manager) Start(ctx context.Context) error {
 
 	// Load persisted machines from storage
 	if err := rm.loadPersistedMachines(ctx); err != nil {
-		rm.logger.Warn("Failed to load persisted machines", "error", err)
+		rm.logger.WithFields(logrus.Fields{
+			"error": err,
+		}).Warn("Failed to load persisted machines")
 	}
 
 	// Load persisted allocations from storage
 	if err := rm.loadPersistedAllocations(ctx); err != nil {
-		rm.logger.Warn("Failed to load persisted allocations", "error", err)
+		rm.logger.WithFields(logrus.Fields{
+			"error": err,
+		}).Warn("Failed to load persisted allocations")
 	}
 
 	// Initial sync with contract
 	go func() {
 		if err := rm.syncMachinesFromContract(ctx); err != nil {
-			rm.logger.Warn("Failed to sync machines from contract", "error", err)
+			rm.logger.WithFields(logrus.Fields{
+				"error": err,
+			}).Warn("Failed to sync machines from contract")
 		}
 	}()
 
@@ -122,7 +128,9 @@ func (rm *Manager) syncLoop(ctx context.Context) {
 			return
 		case <-ticker.C:
 			if err := rm.syncMachinesFromContract(ctx); err != nil {
-				rm.logger.Warn("Failed to sync machines from contract", "error", err)
+				rm.logger.WithFields(logrus.Fields{
+					"error": err,
+				}).Warn("Failed to sync machines from contract")
 			}
 		}
 	}
@@ -170,21 +178,31 @@ func (rm *Manager) syncMachinesFromContract(ctx context.Context) error {
 		if !exists {
 			// New machine from contract
 			rm.machines[machineIDStr] = machine
-			rm.logger.Info("Added new machine from contract", "machineID", machineIDStr)
+			rm.logger.WithFields(logrus.Fields{
+				"machineID": machineIDStr,
+			}).Info("Added new machine from contract")
 
 			// Save to storage
 			if err := rm.storage.SaveMachine(ctx, machine); err != nil {
-				rm.logger.Warn("Failed to save machine to storage", "machineID", machineIDStr, "error", err)
+				rm.logger.WithFields(logrus.Fields{
+					"machineID": machineIDStr,
+					"error":     err,
+				}).Warn("Failed to save machine to storage")
 			}
 		} else {
 			// Update existing machine if needed
 			if rm.machineNeedsUpdate(existingMachine, machine) {
 				rm.machines[machineIDStr] = machine
-				rm.logger.Info("Updated machine from contract", "machineID", machineIDStr)
+				rm.logger.WithFields(logrus.Fields{
+					"machineID": machineIDStr,
+				}).Info("Updated machine from contract")
 
 				// Update in storage
 				if err := rm.storage.SaveMachine(ctx, machine); err != nil {
-					rm.logger.Warn("Failed to update machine in storage", "machineID", machineIDStr, "error", err)
+					rm.logger.WithFields(logrus.Fields{
+						"machineID": machineIDStr,
+						"error":     err,
+					}).Warn("Failed to update machine in storage")
 				}
 			}
 		}
@@ -194,7 +212,9 @@ func (rm *Manager) syncMachinesFromContract(ctx context.Context) error {
 	for machineID := range rm.machines {
 		if !activeMachineIDs[machineID] {
 			delete(rm.machines, machineID)
-			rm.logger.Info("Removed inactive machine from contract", "machineID", machineID)
+			rm.logger.WithFields(logrus.Fields{
+				"machineID": machineID,
+			}).Info("Removed inactive machine from contract")
 		}
 	}
 
@@ -254,10 +274,14 @@ func (rm *Manager) RegisterMachine(ctx context.Context, machine *types.Machine) 
 
 	// Save machine to storage
 	if err := rm.storage.SaveMachine(ctx, machine); err != nil {
-		rm.logger.Warn("Failed to save machine to storage", "error", err)
+		rm.logger.WithFields(logrus.Fields{
+			"error": err,
+		}).Warn("Failed to save machine to storage")
 	}
 
-	rm.logger.Info("Machine registered successfully", "machineID", machineID)
+	rm.logger.WithFields(logrus.Fields{
+		"machineID": machineID,
+	}).Info("Machine registered successfully")
 	return nil
 }
 
@@ -273,7 +297,9 @@ func (rm *Manager) UnregisterMachine(ctx context.Context, machineID *big.Int) er
 	}
 
 	delete(rm.machines, machineIDStr)
-	rm.logger.Info("Machine unregistered", "machineID", machineID)
+	rm.logger.WithFields(logrus.Fields{
+		"machineID": machineID.String(),
+	}).Info("Machine unregistered")
 	return nil
 }
 
@@ -352,10 +378,11 @@ func (rm *Manager) AllocateResources(ctx context.Context, orderID *big.Int, mach
 		return fmt.Errorf("failed to persist resource allocation: %w", err)
 	}
 
-	rm.logger.Info("Resources allocated successfully",
-		"orderID", orderID,
-		"machineID", machine.ID,
-		"usage", usage)
+	rm.logger.WithFields(logrus.Fields{
+		"orderID":   orderID.String(),
+		"machineID": machine.ID.String(),
+		"usage":     usage,
+	}).Info("Resources allocated successfully")
 
 	rm.metrics.RecordResourceAllocation(usage)
 	return nil
@@ -386,10 +413,15 @@ func (rm *Manager) DeallocateResources(ctx context.Context, orderID *big.Int) er
 	allocation.UpdatedAt = time.Now()
 
 	if err := rm.storage.SaveResourceAllocation(ctx, allocation); err != nil {
-		rm.logger.Warn("Failed to update deallocation in storage", "orderID", orderIDStr, "error", err)
+		rm.logger.WithFields(logrus.Fields{
+			"orderID": orderIDStr,
+			"error":   err,
+		}).Warn("Failed to update deallocation in storage")
 	}
 
-	rm.logger.Info("Resources deallocated", "orderID", orderID)
+	rm.logger.WithFields(logrus.Fields{
+		"orderID": orderID.String(),
+	}).Info("Resources deallocated")
 	return nil
 }
 
@@ -514,13 +546,18 @@ func (rm *Manager) CanAllocateResources(ctx context.Context, machine *types.Mach
 
 // StartResource starts resource allocation for an order
 func (rm *Manager) StartResource(ctx context.Context, orderID *big.Int, machine *types.Machine) error {
-	rm.logger.Info("Starting resource allocation", "orderID", orderID, "machineID", machine.ID)
+	rm.logger.WithFields(logrus.Fields{
+		"orderID":   orderID.String(),
+		"machineID": machine.ID.String(),
+	}).Info("Starting resource allocation")
 	return nil
 }
 
 // StopResource stops resource allocation for an order
 func (rm *Manager) StopResource(ctx context.Context, orderID *big.Int) error {
-	rm.logger.Info("Stopping resource allocation", "orderID", orderID)
+	rm.logger.WithFields(logrus.Fields{
+		"orderID": orderID.String(),
+	}).Info("Stopping resource allocation")
 	return rm.DeallocateResources(ctx, orderID)
 }
 
@@ -536,10 +573,14 @@ func (rm *Manager) loadPersistedMachines(ctx context.Context) error {
 	for _, machine := range machines {
 		machineID := machine.ID.String()
 		rm.machines[machineID] = machine
-		rm.logger.Debug("Loaded machine from storage", "machineID", machineID)
+		rm.logger.WithFields(logrus.Fields{
+			"machineID": machineID,
+		}).Debug("Loaded machine from storage")
 	}
 
-	rm.logger.Info("Loaded persisted machines", "count", len(machines))
+	rm.logger.WithFields(logrus.Fields{
+		"count": len(machines),
+	}).Info("Loaded persisted machines")
 	return nil
 }
 
@@ -557,11 +598,15 @@ func (rm *Manager) loadPersistedAllocations(ctx context.Context) error {
 		if allocation.Usage != nil {
 			orderIDStr := allocation.OrderID.String()
 			rm.allocatedResources[orderIDStr] = allocation.Usage
-			rm.logger.Debug("Loaded resource allocation from storage", "orderID", orderIDStr)
+			rm.logger.WithFields(logrus.Fields{
+				"orderID": orderIDStr,
+			}).Debug("Loaded resource allocation from storage")
 		}
 	}
 
-	rm.logger.Info("Loaded persisted resource allocations", "count", len(allocations))
+	rm.logger.WithFields(logrus.Fields{
+		"count": len(allocations),
+	}).Info("Loaded persisted resource allocations")
 	return nil
 }
 
