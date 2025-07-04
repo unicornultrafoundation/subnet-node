@@ -225,9 +225,16 @@ var (
 
 // IsOrderReadyToClose kiểm tra order đã hết hạn + 1 ngày chưa
 func IsOrderReadyToClose(order *Order, now int64) bool {
-	if order == nil || order.ExpiredAt == nil {
+	if order == nil || order.ExpiredAt.Int64() == 0 {
 		return false
 	}
-	const oneDay = int64(86400)
+	const oneDay = int64(86402)
 	return now > order.ExpiredAt.Int64()+oneDay
+}
+
+func (order *Order) IsOrderWithinBiddingTime() bool {
+	now := time.Now().Unix()
+	const biddingTimeLimit = int64(300) // 5 minutes in seconds
+	timeSinceCreation := now - order.CreatedAt.Int64()
+	return timeSinceCreation <= biddingTimeLimit
 }

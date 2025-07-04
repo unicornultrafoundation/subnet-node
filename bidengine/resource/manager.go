@@ -544,23 +544,6 @@ func (rm *Manager) CanAllocateResources(ctx context.Context, machine *types.Mach
 	return true, nil
 }
 
-// StartResource starts resource allocation for an order
-func (rm *Manager) StartResource(ctx context.Context, orderID *big.Int, machine *types.Machine) error {
-	rm.logger.WithFields(logrus.Fields{
-		"orderID":   orderID.String(),
-		"machineID": machine.ID.String(),
-	}).Info("Starting resource allocation")
-	return nil
-}
-
-// StopResource stops resource allocation for an order
-func (rm *Manager) StopResource(ctx context.Context, orderID *big.Int) error {
-	rm.logger.WithFields(logrus.Fields{
-		"orderID": orderID.String(),
-	}).Info("Stopping resource allocation")
-	return rm.DeallocateResources(ctx, orderID)
-}
-
 // loadPersistedMachines loads machines from storage on startup
 func (rm *Manager) loadPersistedMachines(ctx context.Context) error {
 	rm.logger.Info("Loading persisted machines from storage")

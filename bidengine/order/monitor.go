@@ -178,10 +178,7 @@ func (om *Monitor) watchOrderCreatedEvents(ctx context.Context) {
 
 // isOrderWithinBiddingTime checks if an order is still within the bidding time limit (5 minutes from creation)
 func (om *Monitor) isOrderWithinBiddingTime(order *types.Order) bool {
-	now := time.Now().Unix()
-	const biddingTimeLimit = int64(300) // 5 minutes in seconds
-	timeSinceCreation := now - order.CreatedAt.Int64()
-	return timeSinceCreation <= biddingTimeLimit
+	return order.IsOrderWithinBiddingTime()
 }
 
 // pollForNewOrders polls for new orders since the last known order ID
@@ -225,7 +222,7 @@ func (om *Monitor) pollForNewOrders(ctx context.Context) error {
 	}
 
 	// Process orders from currentOrderID to orderCount-1
-	for currentOrderID.Cmp(orderCount) < 0 {
+	for currentOrderID.Cmp(orderCount) <= 0 {
 		om.logger.WithFields(logrus.Fields{
 			"orderID": currentOrderID.String(),
 		}).Debug("Processing order")
@@ -503,9 +500,14 @@ func (om *Monitor) MonitorOrderStatus(ctx context.Context, orderID *big.Int) err
 		return fmt.Errorf("failed to get order status: %w", err)
 	}
 
-	// Check if order status has changed
-	if oldOrder.Status != newOrder.Status {
-		om.handleOrderStatusChange(orderID, oldOrder, newOrder)
+	// Check if order is still within bidding time
+	if newOrder.Status == types.OrderStatusOpen && !om.isOrderWithinBiddingTime(newOrder) {
+		newOrder.Status = types.OrderStatusClosed
+	} else if newOrder.Status == types.OrderStatusAccepted {
+		// Check if order is ready to close
+		if types.IsOrderReadyToClose(newOrder, time.Now().Unix()) {
+			newOrder.Status = types.OrderStatusExpired
+		}
 	}
 
 	// Update tracked order
@@ -519,19 +521,10 @@ func (om *Monitor) MonitorOrderStatus(ctx context.Context, orderID *big.Int) err
 			"error": err,
 		}).Warn("Failed to update order in storage")
 	}
-
-	// Emit updated event
-	om.emitEvent(&types.OrderEvent{
-		Type:      types.OrderEventUpdated,
-		OrderID:   orderID,
-		Order:     newOrder,
-		Timestamp: time.Now(),
-		Data: map[string]interface{}{
-			"oldStatus": oldOrder.Status,
-			"newStatus": newOrder.Status,
-		},
-	})
-
+	// Check if order status has changed
+	if oldOrder.Status != newOrder.Status {
+		om.handleOrderStatusChange(orderID, oldOrder, newOrder)
+	}
 	return nil
 }
 
@@ -552,14 +545,12 @@ func (om *Monitor) handleOrderStatusChange(orderID *big.Int, oldOrder, newOrder 
 			Timestamp: time.Now(),
 		})
 		// Stop tracking closed orders
-		go func() {
-			if err := om.UntrackOrder(om.ctx, orderID); err != nil {
-				om.logger.WithFields(logrus.Fields{
-					"orderID": orderID.String(),
-					"error":   err,
-				}).Error("Failed to untrack closed order")
-			}
-		}()
+		if err := om.UntrackOrder(om.ctx, orderID); err != nil {
+			om.logger.WithFields(logrus.Fields{
+				"orderID": orderID.String(),
+				"error":   err,
+			}).Error("Failed to untrack closed order")
+		}
 
 	case types.OrderStatusExpired:
 		om.emitEvent(&types.OrderEvent{
@@ -569,14 +560,12 @@ func (om *Monitor) handleOrderStatusChange(orderID *big.Int, oldOrder, newOrder 
 			Timestamp: time.Now(),
 		})
 		// Stop tracking expired orders
-		go func() {
-			if err := om.UntrackOrder(om.ctx, orderID); err != nil {
-				om.logger.WithFields(logrus.Fields{
-					"orderID": orderID.String(),
-					"error":   err,
-				}).Error("Failed to untrack expired order")
-			}
-		}()
+		if err := om.UntrackOrder(om.ctx, orderID); err != nil {
+			om.logger.WithFields(logrus.Fields{
+				"orderID": orderID.String(),
+				"error":   err,
+			}).Error("Failed to untrack expired order")
+		}
 
 	case types.OrderStatusCancelled:
 		om.emitEvent(&types.OrderEvent{
@@ -589,14 +578,12 @@ func (om *Monitor) handleOrderStatusChange(orderID *big.Int, oldOrder, newOrder 
 			},
 		})
 		// Stop tracking cancelled orders
-		go func() {
-			if err := om.UntrackOrder(om.ctx, orderID); err != nil {
-				om.logger.WithFields(logrus.Fields{
-					"orderID": orderID.String(),
-					"error":   err,
-				}).Error("Failed to untrack cancelled order")
-			}
-		}()
+		if err := om.UntrackOrder(om.ctx, orderID); err != nil {
+			om.logger.WithFields(logrus.Fields{
+				"orderID": orderID.String(),
+				"error":   err,
+			}).Error("Failed to untrack cancelled order")
+		}
 	case types.OrderStatusAccepted:
 		om.emitEvent(&types.OrderEvent{
 			Type:      types.OrderEventAccepted,
@@ -605,114 +592,6 @@ func (om *Monitor) handleOrderStatusChange(orderID *big.Int, oldOrder, newOrder 
 			Timestamp: time.Now(),
 		})
 	}
-}
-
-// CheckOrderExpiry checks if an order has expired
-func (om *Monitor) CheckOrderExpiry(ctx context.Context, orderID *big.Int) error {
-	om.mu.RLock()
-	orderIDStr := orderID.String()
-	order, exists := om.trackedOrders[orderIDStr]
-	om.mu.RUnlock()
-
-	if !exists {
-		return fmt.Errorf("order %s is not being tracked", orderIDStr)
-	}
-
-	now := time.Now().Unix()
-
-	// Check if order is still open but has exceeded bidding time (5 minutes)
-	if order.Status == types.OrderStatusOpen {
-		const biddingTimeLimit = int64(300) // 5 minutes in seconds
-		timeSinceCreation := now - order.CreatedAt.Int64()
-
-		if timeSinceCreation > biddingTimeLimit {
-			om.logger.WithFields(logrus.Fields{
-				"orderID":           orderID.String(),
-				"createdAt":         order.CreatedAt.Int64(),
-				"currentTime":       now,
-				"timeSinceCreation": timeSinceCreation,
-				"biddingTimeLimit":  biddingTimeLimit,
-			}).Info("Order has exceeded bidding time limit, treating as cancelled")
-
-			// Update order status to cancelled
-			order.Status = types.OrderStatusCancelled
-
-			// Update in storage
-			if err := om.storage.UpdateOrder(ctx, order); err != nil {
-				om.logger.WithFields(logrus.Fields{
-					"error": err,
-				}).Warn("Failed to update cancelled order in storage")
-			}
-
-			// Emit cancelled event
-			om.emitEvent(&types.OrderEvent{
-				Type:      types.OrderEventClosed,
-				OrderID:   orderID,
-				Order:     order,
-				Timestamp: time.Now(),
-				Data: map[string]interface{}{
-					"reason": "bidding_time_expired",
-				},
-			})
-
-			// Stop tracking cancelled order
-			go func() {
-				if err := om.UntrackOrder(om.ctx, orderID); err != nil {
-					om.logger.WithFields(logrus.Fields{
-						"orderID": orderID.String(),
-						"error":   err,
-					}).Error("Failed to untrack cancelled order")
-				}
-			}()
-
-			return nil
-		}
-	}
-
-	// Check if order has expired and grace period passed
-	if types.IsOrderReadyToClose(order, now) {
-		om.logger.WithFields(logrus.Fields{
-			"orderID":     orderID.String(),
-			"expiredAt":   order.ExpiredAt,
-			"currentTime": now,
-		}).Info("Order has expired and grace period passed")
-
-		// Update order status
-		order.Status = types.OrderStatusExpired
-
-		// Update in storage
-		if err := om.storage.UpdateOrder(ctx, order); err != nil {
-			om.logger.WithFields(logrus.Fields{
-				"error": err,
-			}).Warn("Failed to update expired order in storage")
-		}
-
-		// Emit expired event
-		om.emitEvent(&types.OrderEvent{
-			Type:      types.OrderEventExpired,
-			OrderID:   orderID,
-			Order:     order,
-			Timestamp: time.Now(),
-		})
-
-		// Stop tracking expired order
-		go func() {
-			if err := om.UntrackOrder(om.ctx, orderID); err != nil {
-				om.logger.WithFields(logrus.Fields{
-					"orderID": orderID.String(),
-					"error":   err,
-				}).Error("Failed to untrack expired order")
-			}
-		}()
-	} else {
-		om.logger.WithFields(logrus.Fields{
-			"orderID":     orderID.String(),
-			"expiredAt":   order.ExpiredAt,
-			"currentTime": now,
-		}).Debug("Order has expired but grace period not passed yet")
-	}
-
-	return nil
 }
 
 // orderStatusSyncLoop syncs status of tracked orders and checks for expiry
@@ -729,7 +608,6 @@ func (om *Monitor) orderStatusSyncLoop(ctx context.Context) {
 			return
 		case <-ticker.C:
 			om.syncTrackedOrders(ctx)
-			om.checkOrderExpiries(ctx)
 		}
 	}
 }
@@ -750,26 +628,6 @@ func (om *Monitor) syncTrackedOrders(ctx context.Context) {
 				"orderID": orderID.String(),
 				"error":   err,
 			}).Warn("Failed to sync order status")
-		}
-	}
-}
-
-// checkOrderExpiries checks all tracked orders for expiry
-func (om *Monitor) checkOrderExpiries(ctx context.Context) {
-	om.mu.RLock()
-	orderIDs := make([]*big.Int, 0, len(om.trackedOrders))
-	for orderIDStr := range om.trackedOrders {
-		orderID, _ := new(big.Int).SetString(orderIDStr, 10)
-		orderIDs = append(orderIDs, orderID)
-	}
-	om.mu.RUnlock()
-
-	for _, orderID := range orderIDs {
-		if err := om.CheckOrderExpiry(ctx, orderID); err != nil {
-			om.logger.WithFields(logrus.Fields{
-				"orderID": orderID.String(),
-				"error":   err,
-			}).Warn("Failed to check order expiry")
 		}
 	}
 }

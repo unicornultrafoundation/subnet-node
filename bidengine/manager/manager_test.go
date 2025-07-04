@@ -142,6 +142,10 @@ func (m *mockStorage) UpdateBid(ctx context.Context, bid *types.Bid, orderID str
 	return nil
 }
 
+func (m *mockStorage) DeleteBid(ctx context.Context, orderID string, bidIndex int) error {
+	return nil
+}
+
 func (m *mockStorage) ListOrders(ctx context.Context) ([]*types.Order, error) {
 	return []*types.Order{}, nil
 }

@@ -203,45 +203,6 @@ func (bm *Manager) SubmitBid(ctx context.Context, orderID *big.Int, pricePerSeco
 		// Don't fail the bid submission if resource allocation fails
 	}
 
-	// Create extended bid
-	extendedBid := &ExtendedBid{
-		Bid: &types.Bid{
-			Id:             bidIndex,
-			Provider:       bm.config.ProviderWallet,
-			PricePerSecond: pricePerSecond,
-			Status:         types.BidStatusActive,
-			CreatedAt:      big.NewInt(time.Now().Unix()),
-			ProviderId:     providerID,
-			MachineId:      machineID,
-		},
-		OrderID:         orderID.String(),
-		TransactionHash: tx.Hash().String(),
-		SubmittedAt:     time.Now(),
-	}
-
-	// Track bid using orderID only (one bid per provider per order)
-	bidKey := orderID.String()
-	bm.pendingBids[bidKey] = extendedBid
-
-	// Save bid to storage with actual bidIndex
-	if err := bm.storage.SaveBid(ctx, extendedBid.Bid, orderID.String(), int(bidIndex.Int64())); err != nil {
-		bm.logger.WithFields(logrus.Fields{
-			"error": err,
-		}).Warn("Failed to save bid to storage")
-	}
-
-	// Create bid result
-	bidResult := &types.BidResult{
-		OrderID:   orderID,
-		BidIndex:  bidIndex,
-		Success:   true,
-		TxHash:    tx.Hash(),
-		Timestamp: time.Now(),
-	}
-
-	// Store bid result
-	bm.bidResults[orderID.String()] = bidResult
-
 	// Track the bid for monitoring
 	if err := bm.trackBidInternal(ctx, orderID, bidIndex); err != nil {
 		bm.logger.WithFields(logrus.Fields{
@@ -258,7 +219,7 @@ func (bm *Manager) SubmitBid(ctx context.Context, orderID *big.Int, pricePerSeco
 	}).Info("Bid submitted successfully")
 
 	bm.metrics.IncrementBidsSubmitted()
-	return bidResult, nil
+	return nil, nil
 }
 
 // CancelBid cancels a pending bid
@@ -337,6 +298,13 @@ func (bm *Manager) trackBidInternal(ctx context.Context, orderID *big.Int, bidIn
 		"bidIndex": bidIndex.String(),
 	}).Info("Bid tracked")
 
+	// Save bid to storage with actual bidIndex
+	if err := bm.storage.SaveBid(ctx, extendedBid.Bid, orderID.String(), int(bidIndex.Int64())); err != nil {
+		bm.logger.WithFields(logrus.Fields{
+			"error": err,
+		}).Warn("Failed to save bid to storage")
+	}
+
 	return nil
 }
 
@@ -349,7 +317,7 @@ func (bm *Manager) UntrackBid(ctx context.Context, orderID *big.Int, bidIndex *b
 }
 
 // untrackBidInternal is an internal method for untracking a bid
-func (bm *Manager) untrackBidInternal(ctx context.Context, orderID *big.Int, bidIndex *big.Int) error {
+func (bm *Manager) untrackBidInternal(_ context.Context, orderID *big.Int, bidIndex *big.Int) error {
 	// Untrack bid using orderID only
 	bidKey := orderID.String()
 	if _, exists := bm.pendingBids[bidKey]; !exists {
@@ -464,13 +432,12 @@ func (bm *Manager) cleanupBid(orderID *big.Int, reason string) {
 		}).Error("Failed to deallocate resources during bid cleanup")
 	}
 
-	// Update bid status in storage
-	bid.Bid.Status = types.BidStatusCancelled
-	if err := bm.storage.UpdateBid(bm.ctx, bid.Bid, bid.OrderID, int(bid.Bid.Id.Int64())); err != nil {
+	// Delete bid from storage
+	if err := bm.storage.DeleteBid(bm.ctx, bid.OrderID, int(bid.Bid.Id.Int64())); err != nil {
 		bm.logger.WithFields(logrus.Fields{
 			"orderID": orderID.String(),
 			"error":   err,
-		}).Warn("Failed to update bid status in storage during cleanup")
+		}).Warn("Failed to delete bid from storage during cleanup")
 	}
 
 	// Record metrics for rejected bid
@@ -523,6 +490,19 @@ func (bm *Manager) handleOrderExpired(event *types.OrderEvent) {
 
 	// Cleanup bid if exists
 	bm.cleanupBid(order.ID, "order_expired")
+
+	tx, err := bm.bidMarket.CloseOrder(bm.ctx, order.ID, "order_expired")
+	if err != nil {
+		bm.logger.WithFields(logrus.Fields{
+			"orderID": order.ID.String(),
+			"error":   err,
+		}).Error("Failed to close order")
+	} else {
+		bm.logger.WithFields(logrus.Fields{
+			"orderID": order.ID.String(),
+			"txHash":  tx.Hash().String(),
+		}).Info("Order closed successfully")
+	}
 }
 
 // handleOrderAccepted handles order accepted events
@@ -615,14 +595,6 @@ func (bm *Manager) handleOrderAccepted(event *types.OrderEvent) {
 
 // deallocateResourcesForBid deallocates resources for a bid
 func (bm *Manager) deallocateResourcesForBid(ctx context.Context, orderID *big.Int) error {
-	// Stop the resource first
-	if err := bm.resourceManager.StopResource(ctx, orderID); err != nil {
-		bm.logger.WithFields(logrus.Fields{
-			"orderID": orderID.String(),
-			"error":   err,
-		}).Warn("Failed to stop resource")
-	}
-
 	// Deallocate resources
 	if err := bm.resourceManager.DeallocateResources(ctx, orderID); err != nil {
 		return fmt.Errorf("failed to deallocate resources: %w", err)
@@ -721,11 +693,6 @@ func (bm *Manager) allocateResourcesForBid(ctx context.Context, orderID *big.Int
 		return fmt.Errorf("failed to allocate resources: %w", err)
 	}
 
-	// Start the resource
-	if err := bm.resourceManager.StartResource(ctx, orderID, machine); err != nil {
-		return fmt.Errorf("failed to start resource: %w", err)
-	}
-
 	bm.logger.WithFields(logrus.Fields{
 		"orderID":       orderID.String(),
 		"machineID":     machineID.String(),
@@ -746,12 +713,7 @@ func (bm *Manager) TryBidOnOrder(ctx context.Context, order *types.Order) error 
 		return nil
 	}
 
-	// Check if bidding is still open
-	isOpen, err := bm.bidMarket.IsBiddingOpen(ctx, order.ID)
-	if err != nil {
-		return fmt.Errorf("failed to check if bidding is open: %w", err)
-	}
-	if !isOpen {
+	if !order.IsOrderWithinBiddingTime() {
 		bm.logger.WithFields(logrus.Fields{
 			"orderID": order.ID.String(),
 		}).Debug("Bidding is closed for order")

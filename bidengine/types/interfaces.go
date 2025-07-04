@@ -99,10 +99,6 @@ type ResourceManager interface {
 	GetCurrentUsage(ctx context.Context, machine *Machine) (*ResourceUsage, error)
 	GetAvailableResources(ctx context.Context, machine *Machine) (*ResourceUsage, error)
 	CanAllocateResources(ctx context.Context, machine *Machine, required *ResourceUsage) (bool, error)
-
-	// Resource lifecycle
-	StartResource(ctx context.Context, orderID *big.Int, machine *Machine) error
-	StopResource(ctx context.Context, orderID *big.Int) error
 }
 
 // OrderMonitor defines the interface for monitoring orders
@@ -141,6 +137,7 @@ type Storage interface {
 	SaveBid(ctx context.Context, bid *Bid, orderID string, bidIndex int) error
 	GetBids(ctx context.Context, orderID string) ([]*Bid, error)
 	UpdateBid(ctx context.Context, bid *Bid, orderID string, bidIndex int) error
+	DeleteBid(ctx context.Context, orderID string, bidIndex int) error
 
 	// Machine operations
 	SaveMachine(ctx context.Context, machine *Machine) error
