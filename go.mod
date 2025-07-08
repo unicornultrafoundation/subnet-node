@@ -236,6 +236,7 @@ require (
 	github.com/Khan/genqlient v0.8.0
 	github.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be
 	github.com/armon/go-radix v1.0.0
+	github.com/blang/semver v3.5.1+incompatible
 	github.com/caddyserver/certmagic v0.21.4
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/deckarep/golang-set/v2 v2.6.0
