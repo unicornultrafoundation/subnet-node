@@ -31,7 +31,7 @@ func NewClient(cfg *config.ServiceConfig, logger *logrus.Logger) *Client {
 // CreateVM creates a VM using Terraform
 func (c *Client) CreateVM(ctx context.Context, vmID string, tfConfig *types.TerraformConfig) (*types.TerraformOutput, error) {
 	// Create work directory for this VM
-	workDir := filepath.Join(c.config.TerraformWorkDir, vmID)
+	workDir := filepath.Join(c.config.GetTerraformWorkDir(), vmID)
 	if err := os.MkdirAll(workDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create work directory: %w", err)
 	}
@@ -63,7 +63,7 @@ func (c *Client) CreateVM(ctx context.Context, vmID string, tfConfig *types.Terr
 
 // DestroyVM destroys a VM using Terraform
 func (c *Client) DestroyVM(ctx context.Context, vmID string) error {
-	workDir := filepath.Join(c.config.TerraformWorkDir, vmID)
+	workDir := filepath.Join(c.config.GetTerraformWorkDir(), vmID)
 
 	if _, err := os.Stat(workDir); os.IsNotExist(err) {
 		c.logger.WithField("vmID", vmID).Warn("Terraform work directory does not exist")
@@ -276,7 +276,7 @@ base_image_path = "%s"`,
 
 // terraformInit initializes Terraform
 func (c *Client) terraformInit(ctx context.Context, workDir string) error {
-	cmd := exec.CommandContext(ctx, c.config.TerraformPath, "init")
+	cmd := exec.CommandContext(ctx, c.config.GetTerraformPath(), "init")
 	cmd.Dir = workDir
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -291,7 +291,7 @@ func (c *Client) terraformApply(ctx context.Context, workDir string, tfConfig *t
 	timeoutCtx, cancel := context.WithTimeout(ctx, c.config.TerraformTimeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(timeoutCtx, c.config.TerraformPath, "apply", "-auto-approve")
+	cmd := exec.CommandContext(timeoutCtx, c.config.GetTerraformPath(), "apply", "-auto-approve")
 	cmd.Dir = workDir
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -313,7 +313,7 @@ func (c *Client) terraformDestroy(ctx context.Context, workDir string) error {
 	timeoutCtx, cancel := context.WithTimeout(ctx, c.config.TerraformTimeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(timeoutCtx, c.config.TerraformPath, "destroy", "-auto-approve")
+	cmd := exec.CommandContext(timeoutCtx, c.config.GetTerraformPath(), "destroy", "-auto-approve")
 	cmd.Dir = workDir
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -324,7 +324,7 @@ func (c *Client) terraformDestroy(ctx context.Context, workDir string) error {
 
 // terraformOutput gets Terraform output
 func (c *Client) terraformOutput(ctx context.Context, workDir string) (*types.TerraformOutput, error) {
-	cmd := exec.CommandContext(ctx, c.config.TerraformPath, "output", "-json")
+	cmd := exec.CommandContext(ctx, c.config.GetTerraformPath(), "output", "-json")
 	cmd.Dir = workDir
 
 	output, err := cmd.Output()
@@ -394,7 +394,7 @@ func (c *Client) terraformOutput(ctx context.Context, workDir string) (*types.Te
 
 // ValidateTerraform validates that Terraform is available and working
 func (c *Client) ValidateTerraform(ctx context.Context) error {
-	cmd := exec.CommandContext(ctx, c.config.TerraformPath, "version")
+	cmd := exec.CommandContext(ctx, c.config.GetTerraformPath(), "version")
 	output, err := cmd.Output()
 	if err != nil {
 		return fmt.Errorf("Terraform is not available: %w", err)

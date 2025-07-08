@@ -1,12 +1,14 @@
 package config
 
 import (
-	"os"
-	"path/filepath"
+	"fmt"
 	"time"
+
+	"os/exec"
 
 	"github.com/unicornultrafoundation/subnet-node/config"
 	"github.com/unicornultrafoundation/subnet-node/core/virtualbox/types"
+	"github.com/unicornultrafoundation/subnet-node/core/virtualbox/utils"
 )
 
 // VirtualBox default configuration constants
@@ -29,11 +31,9 @@ const (
 // ServiceConfig represents VirtualBox service configuration
 type ServiceConfig struct {
 	// VirtualBox configuration
-	VBoxManagePath string
-	VBoxHeadless   bool
+	VBoxHeadless bool
 
 	// VM configuration
-	DefaultVMPath     string
 	DefaultMemoryMB   int
 	DefaultCPUs       int
 	DefaultDiskSizeGB int
@@ -52,36 +52,21 @@ type ServiceConfig struct {
 	VMShutdownTimeout time.Duration
 
 	// Terraform configuration
-	TerraformPath     string
-	TerraformWorkDir  string
 	TerraformTimeout  time.Duration
 	TerraformParallel int
 
-	// Storage configuration
-	BaseImagePath string
-	SnapshotPath  string
+	// Path detector for dynamic path resolution
+	pathDetector *utils.PathDetector
 }
 
 // NewServiceConfigFromConfig creates a service config from the main config
 func NewServiceConfigFromConfig(cfg *config.C) (*ServiceConfig, error) {
 	serviceConfig := DefaultServiceConfig()
 
-	// Get user's home directory for default paths
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		homeDir = "" // Fallback to empty string if home directory cannot be determined
-	}
-
 	// VirtualBox configuration
-	serviceConfig.VBoxManagePath = cfg.GetString("virtualbox.vboxmanage_path", "VBoxManage")
 	serviceConfig.VBoxHeadless = cfg.GetBool("virtualbox.headless", true)
 
 	// VM configuration
-	defaultVMPath := ""
-	if homeDir != "" {
-		defaultVMPath = filepath.Join(homeDir, "VirtualBox VMs")
-	}
-	serviceConfig.DefaultVMPath = cfg.GetString("virtualbox.default_vm_path", defaultVMPath)
 	serviceConfig.DefaultMemoryMB = cfg.GetInt("virtualbox.default_memory_mb", DefaultVMMemoryMB)
 	serviceConfig.DefaultCPUs = cfg.GetInt("virtualbox.default_cpus", DefaultVMCPUs)
 	serviceConfig.DefaultDiskSizeGB = cfg.GetInt("virtualbox.default_disk_size_gb", DefaultVMDiskSizeGB)
@@ -100,26 +85,8 @@ func NewServiceConfigFromConfig(cfg *config.C) (*ServiceConfig, error) {
 	serviceConfig.VMShutdownTimeout = cfg.GetDuration("virtualbox.vm_shutdown_timeout", 30*time.Second)
 
 	// Terraform configuration
-	serviceConfig.TerraformPath = cfg.GetString("virtualbox.terraform_path", "terraform")
-	defaultTerraformWorkDir := ""
-	if homeDir != "" {
-		defaultTerraformWorkDir = filepath.Join(homeDir, ".subnet-node", "terraform")
-	}
-	serviceConfig.TerraformWorkDir = cfg.GetString("virtualbox.terraform_work_dir", defaultTerraformWorkDir)
 	serviceConfig.TerraformTimeout = cfg.GetDuration("virtualbox.terraform_timeout", 300*time.Second)
 	serviceConfig.TerraformParallel = cfg.GetInt("virtualbox.terraform_parallel", 4)
-
-	// Storage configuration
-	defaultBaseImagePath := ""
-	if homeDir != "" {
-		defaultBaseImagePath = filepath.Join(homeDir, ".subnet-node", "images")
-	}
-	serviceConfig.BaseImagePath = cfg.GetString("virtualbox.base_image_path", defaultBaseImagePath)
-	defaultSnapshotPath := ""
-	if homeDir != "" {
-		defaultSnapshotPath = filepath.Join(homeDir, ".subnet-node", "snapshots")
-	}
-	serviceConfig.SnapshotPath = cfg.GetString("virtualbox.snapshot_path", defaultSnapshotPath)
 
 	if err := serviceConfig.Validate(); err != nil {
 		return nil, err
@@ -130,23 +97,8 @@ func NewServiceConfigFromConfig(cfg *config.C) (*ServiceConfig, error) {
 
 // DefaultServiceConfig returns a default service configuration
 func DefaultServiceConfig() *ServiceConfig {
-	// Get user's home directory for default paths
-	homeDir, err := os.UserHomeDir()
-	defaultVMPath := ""
-	defaultTerraformWorkDir := ""
-	defaultBaseImagePath := ""
-	defaultSnapshotPath := ""
-	if err == nil && homeDir != "" {
-		defaultVMPath = filepath.Join(homeDir, "VirtualBox VMs")
-		defaultTerraformWorkDir = filepath.Join(homeDir, ".subnet-node", "terraform")
-		defaultBaseImagePath = filepath.Join(homeDir, ".subnet-node", "images")
-		defaultSnapshotPath = filepath.Join(homeDir, ".subnet-node", "snapshots")
-	}
-
 	return &ServiceConfig{
-		VBoxManagePath:     "VBoxManage",
 		VBoxHeadless:       true,
-		DefaultVMPath:      defaultVMPath,
 		DefaultMemoryMB:    DefaultVMMemoryMB,
 		DefaultCPUs:        DefaultVMCPUs,
 		DefaultDiskSizeGB:  DefaultVMDiskSizeGB,
@@ -157,34 +109,61 @@ func DefaultServiceConfig() *ServiceConfig {
 		VMStopTimeout:      30 * time.Second,
 		VMDeleteTimeout:    60 * time.Second,
 		VMShutdownTimeout:  30 * time.Second,
-		TerraformPath:      "terraform",
-		TerraformWorkDir:   defaultTerraformWorkDir,
 		TerraformTimeout:   300 * time.Second,
 		TerraformParallel:  4,
-		BaseImagePath:      defaultBaseImagePath,
-		SnapshotPath:       defaultSnapshotPath,
+		pathDetector:       utils.NewPathDetector(),
 	}
 }
 
 // Validate validates the service configuration
 func (c *ServiceConfig) Validate() error {
-	// Ensure required directories exist
-	dirs := []string{
-		c.DefaultVMPath,
-		c.TerraformWorkDir,
-		c.BaseImagePath,
-		c.SnapshotPath,
-	}
-
-	for _, dir := range dirs {
-		if dir != "" {
-			if err := os.MkdirAll(dir, 0755); err != nil {
-				return err
-			}
-		}
+	// Validate that VBoxManage is available
+	if !c.IsVBoxManageAvailable() {
+		return fmt.Errorf("VBoxManage is not available. Please install VirtualBox")
 	}
 
 	return nil
+}
+
+// GetVBoxManagePath returns the detected VBoxManage path
+func (c *ServiceConfig) GetVBoxManagePath() string {
+	return c.pathDetector.DetectVBoxManagePath()
+}
+
+// GetDefaultVMPath returns the detected default VM path
+func (c *ServiceConfig) GetDefaultVMPath() string {
+	return c.pathDetector.DetectDefaultVMPath()
+}
+
+// GetTerraformPath returns the detected terraform path
+func (c *ServiceConfig) GetTerraformPath() string {
+	return c.pathDetector.DetectTerraformPath()
+}
+
+// GetTerraformWorkDir returns the detected terraform working directory
+func (c *ServiceConfig) GetTerraformWorkDir() string {
+	return c.pathDetector.DetectTerraformWorkDir()
+}
+
+// GetBaseImagePath returns the detected base image path
+func (c *ServiceConfig) GetBaseImagePath() string {
+	return c.pathDetector.DetectBaseImagePath()
+}
+
+// GetSnapshotPath returns the detected snapshot path
+func (c *ServiceConfig) GetSnapshotPath() string {
+	return c.pathDetector.DetectSnapshotPath()
+}
+
+// IsVBoxManageAvailable checks if VBoxManage is available
+func (c *ServiceConfig) IsVBoxManageAvailable() bool {
+	path := c.GetVBoxManagePath()
+	if path == "VBoxManage" {
+		// If we fallback to just "VBoxManage", test if it's available
+		cmd := exec.Command("VBoxManage", "--version")
+		return cmd.Run() == nil
+	}
+	return true
 }
 
 // ApplyDefaults applies default configuration values to a VM request

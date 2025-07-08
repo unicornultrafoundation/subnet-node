@@ -63,7 +63,7 @@ func (c *Client) createVM(ctx context.Context, vmName string, vmConfig *types.VM
 		"--register",
 	}
 
-	cmd := exec.CommandContext(ctx, c.config.VBoxManagePath, args...)
+	cmd := exec.CommandContext(ctx, c.config.GetVBoxManagePath(), args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to create VM: %s, %w", string(output), err)
@@ -110,7 +110,7 @@ func (c *Client) setMemory(ctx context.Context, vmName string, memoryMB int) err
 		"--memory", strconv.Itoa(memoryMB),
 	}
 
-	cmd := exec.CommandContext(ctx, c.config.VBoxManagePath, args...)
+	cmd := exec.CommandContext(ctx, c.config.GetVBoxManagePath(), args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to set memory: %s, %w", string(output), err)
@@ -127,7 +127,7 @@ func (c *Client) setCPUs(ctx context.Context, vmName string, cpus int) error {
 		"--cpus", strconv.Itoa(cpus),
 	}
 
-	cmd := exec.CommandContext(ctx, c.config.VBoxManagePath, args...)
+	cmd := exec.CommandContext(ctx, c.config.GetVBoxManagePath(), args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to set CPUs: %s, %w", string(output), err)
@@ -148,21 +148,21 @@ func (c *Client) configureStorage(ctx context.Context, vmName string, vmConfig *
 		"--controller", "IntelAhci",
 	}
 
-	cmd := exec.CommandContext(ctx, c.config.VBoxManagePath, args...)
+	cmd := exec.CommandContext(ctx, c.config.GetVBoxManagePath(), args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to create storage controller: %s, %w", string(output), err)
 	}
 
 	// Create virtual disk
-	diskPath := fmt.Sprintf("%s/%s.vdi", c.config.DefaultVMPath, vmName)
+	diskPath := fmt.Sprintf("%s/%s.vdi", c.config.GetDefaultVMPath(), vmName)
 	args = []string{
 		"createhd",
 		"--filename", diskPath,
 		"--size", strconv.Itoa(vmConfig.DiskSizeGB * 1024), // Convert GB to MB
 	}
 
-	cmd = exec.CommandContext(ctx, c.config.VBoxManagePath, args...)
+	cmd = exec.CommandContext(ctx, c.config.GetVBoxManagePath(), args...)
 	output, err = cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to create virtual disk: %s, %w", string(output), err)
@@ -179,7 +179,7 @@ func (c *Client) configureStorage(ctx context.Context, vmName string, vmConfig *
 		"--medium", diskPath,
 	}
 
-	cmd = exec.CommandContext(ctx, c.config.VBoxManagePath, args...)
+	cmd = exec.CommandContext(ctx, c.config.GetVBoxManagePath(), args...)
 	output, err = cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to attach disk: %s, %w", string(output), err)
@@ -197,7 +197,7 @@ func (c *Client) configureStorage(ctx context.Context, vmName string, vmConfig *
 			"--medium", vmConfig.BaseImage,
 		}
 
-		cmd = exec.CommandContext(ctx, c.config.VBoxManagePath, args...)
+		cmd = exec.CommandContext(ctx, c.config.GetVBoxManagePath(), args...)
 		output, err = cmd.CombinedOutput()
 		if err != nil {
 			return fmt.Errorf("failed to attach base image: %s, %w", string(output), err)
@@ -228,7 +228,7 @@ func (c *Client) configureNetwork(ctx context.Context, vmName string, vmConfig *
 		args = append(args, "--macaddress1", vmConfig.MACAddress)
 	}
 
-	cmd := exec.CommandContext(ctx, c.config.VBoxManagePath, args...)
+	cmd := exec.CommandContext(ctx, c.config.GetVBoxManagePath(), args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to configure network: %s, %w", string(output), err)
@@ -276,7 +276,7 @@ func (c *Client) configureAdvancedSettings(ctx context.Context, vmName string, v
 		args = append(args, fmt.Sprintf("--%s", key), value)
 	}
 
-	cmd := exec.CommandContext(ctx, c.config.VBoxManagePath, args...)
+	cmd := exec.CommandContext(ctx, c.config.GetVBoxManagePath(), args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to configure advanced settings: %s, %w", string(output), err)
@@ -292,7 +292,7 @@ func (c *Client) StartVM(ctx context.Context, vmName string) error {
 		args = append(args, "--type", "headless")
 	}
 
-	cmd := exec.CommandContext(ctx, c.config.VBoxManagePath, args...)
+	cmd := exec.CommandContext(ctx, c.config.GetVBoxManagePath(), args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to start VM: %s, %w", string(output), err)
@@ -306,7 +306,7 @@ func (c *Client) StartVM(ctx context.Context, vmName string) error {
 func (c *Client) StopVM(ctx context.Context, vmName string) error {
 	args := []string{"controlvm", vmName, "poweroff"}
 
-	cmd := exec.CommandContext(ctx, c.config.VBoxManagePath, args...)
+	cmd := exec.CommandContext(ctx, c.config.GetVBoxManagePath(), args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to stop VM: %s, %w", string(output), err)
@@ -320,7 +320,7 @@ func (c *Client) StopVM(ctx context.Context, vmName string) error {
 func (c *Client) ShutdownVM(ctx context.Context, vmName string) error {
 	args := []string{"controlvm", vmName, "acpipowerbutton"}
 
-	cmd := exec.CommandContext(ctx, c.config.VBoxManagePath, args...)
+	cmd := exec.CommandContext(ctx, c.config.GetVBoxManagePath(), args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to shutdown VM: %s, %w", string(output), err)
@@ -343,7 +343,7 @@ func (c *Client) DeleteVM(ctx context.Context, vmName string) error {
 	// Delete the VM
 	args := []string{"unregistervm", vmName, "--delete"}
 
-	cmd := exec.CommandContext(ctx, c.config.VBoxManagePath, args...)
+	cmd := exec.CommandContext(ctx, c.config.GetVBoxManagePath(), args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to delete VM: %s, %w", string(output), err)
@@ -357,7 +357,7 @@ func (c *Client) DeleteVM(ctx context.Context, vmName string) error {
 func (c *Client) GetVMState(ctx context.Context, vmName string) (types.VMState, error) {
 	args := []string{"showvminfo", vmName, "--machinereadable"}
 
-	cmd := exec.CommandContext(ctx, c.config.VBoxManagePath, args...)
+	cmd := exec.CommandContext(ctx, c.config.GetVBoxManagePath(), args...)
 	output, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("failed to get VM state: %w", err)
@@ -379,7 +379,7 @@ func (c *Client) GetVMState(ctx context.Context, vmName string) (types.VMState, 
 func (c *Client) GetVMInfo(ctx context.Context, vmName string) (*types.VMInfo, error) {
 	args := []string{"showvminfo", vmName, "--machinereadable"}
 
-	cmd := exec.CommandContext(ctx, c.config.VBoxManagePath, args...)
+	cmd := exec.CommandContext(ctx, c.config.GetVBoxManagePath(), args...)
 	output, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get VM info: %w", err)
@@ -425,7 +425,7 @@ func (c *Client) GetVMInfo(ctx context.Context, vmName string) (*types.VMInfo, e
 func (c *Client) ListVMs(ctx context.Context) ([]string, error) {
 	args := []string{"list", "vms"}
 
-	cmd := exec.CommandContext(ctx, c.config.VBoxManagePath, args...)
+	cmd := exec.CommandContext(ctx, c.config.GetVBoxManagePath(), args...)
 	output, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list VMs: %w", err)
@@ -451,7 +451,7 @@ func (c *Client) ListVMs(ctx context.Context) ([]string, error) {
 
 // ValidateVirtualBox validates that VirtualBox is available and working
 func (c *Client) ValidateVirtualBox(ctx context.Context) error {
-	cmd := exec.CommandContext(ctx, c.config.VBoxManagePath, "version")
+	cmd := exec.CommandContext(ctx, c.config.GetVBoxManagePath(), "--version")
 	output, err := cmd.Output()
 	if err != nil {
 		return fmt.Errorf("VirtualBox is not available: %w", err)
@@ -465,7 +465,7 @@ func (c *Client) ValidateVirtualBox(ctx context.Context) error {
 func (c *Client) GetVMStats(ctx context.Context, vmName string) (*types.VMStatus, error) {
 	args := []string{"metrics", "collect", vmName}
 
-	cmd := exec.CommandContext(ctx, c.config.VBoxManagePath, args...)
+	cmd := exec.CommandContext(ctx, c.config.GetVBoxManagePath(), args...)
 	output, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get VM stats: %w", err)
