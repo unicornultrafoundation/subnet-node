@@ -106,12 +106,14 @@ env:
   - NGINX_HOST=0.0.0.0
 volumes:
   - name: config
-    mount_path: /etc/nginx
-    size: 1Gi
+    mount: /etc/nginx
 resources:
-  cpu: 0.5
-  memory: 512Mi
-  gpu: {}
+  cpu:
+    units: 0.5
+  memory:
+    size: 512Mi
+  gpu:
+    units: 1
 expose:
   - port: 80
     as: 80
@@ -127,17 +129,17 @@ credentials:
 				Command: []string{"nginx", "-g", "daemon off;"},
 				Args:    []string{"--config", "/etc/nginx/nginx.conf"},
 				Env:     []string{"NGINX_PORT=80", "NGINX_HOST=0.0.0.0"},
-				Volumes: v1Volumes{
+				Volumes: v1ServiceVolumes{
 					{
-						Name:      "config",
-						MountPath: "/etc/nginx",
-						Size:      byteQuantity(1024 * 1024 * 1024), // 1Gi
+						Name:     "config",
+						Mount:    "/etc/nginx",
+						ReadOnly: false,
 					},
 				},
 				Resources: v1Resources{
-					CPU:    cpuQuantity(500),                  // 0.5 * 1000
-					Memory: memoryQuantity(512 * 1024 * 1024), // 512Mi
-					GPU:    gpuVendor{},
+					CPU:    v1Cpu{Units: cpuQuantity(500)},                    // 0.5 * 1000
+					Memory: v1Memory{Size: memoryQuantity(512 * 1024 * 1024)}, // 512Mi
+					GPU:    v1GPU{Units: gpuQuantity(1)},
 				},
 				Expose: v1Exposes{
 					{
@@ -348,9 +350,6 @@ storage_class: fast-ssd
 `,
 			want: v1Volume{
 				Name:         "data",
-				MountPath:    "/app/data",
-				SubPath:      "logs",
-				ReadOnly:     false,
 				Size:         byteQuantity(10 * 1024 * 1024 * 1024), // 10Gi
 				Persistent:   true,
 				StorageClass: "fast-ssd",
@@ -368,8 +367,6 @@ persistent: false
 `,
 			want: v1Volume{
 				Name:       "config",
-				MountPath:  "/etc/app",
-				ReadOnly:   true,
 				Size:       byteQuantity(100 * 1024 * 1024), // 100Mi
 				Persistent: false,
 			},
@@ -403,28 +400,34 @@ func TestV1Resources(t *testing.T) {
 		{
 			name: "complete resources definition",
 			yaml: `
-cpu: 2.5
-memory: 4Gi
-gpu: {}
+cpu:
+  units: 2.5
+memory:
+  size: 4Gi
+gpu:
+  units: 1
 `,
 			want: v1Resources{
-				CPU:    cpuQuantity(2500),                      // 2.5 * 1000
-				Memory: memoryQuantity(4 * 1024 * 1024 * 1024), // 4Gi
-				GPU:    gpuVendor{},
+				CPU:    v1Cpu{Units: cpuQuantity(2500)},                        // 2.5 * 1000
+				Memory: v1Memory{Size: memoryQuantity(4 * 1024 * 1024 * 1024)}, // 4Gi
+				GPU:    v1GPU{Units: gpuQuantity(1)},
 			},
 			wantErr: false,
 		},
 		{
 			name: "minimal resources",
 			yaml: `
-cpu: 0.1
-memory: 128Mi
-gpu: {}
+cpu:
+  units: 0.1
+memory:
+  size: 128Mi
+gpu:
+  units: 1
 `,
 			want: v1Resources{
-				CPU:    cpuQuantity(100),                  // 0.1 * 1000
-				Memory: memoryQuantity(128 * 1024 * 1024), // 128Mi
-				GPU:    gpuVendor{},
+				CPU:    v1Cpu{Units: cpuQuantity(100)},                    // 0.1 * 1000
+				Memory: v1Memory{Size: memoryQuantity(128 * 1024 * 1024)}, // 128Mi
+				GPU:    v1GPU{Units: gpuQuantity(1)},
 			},
 			wantErr: false,
 		},
@@ -433,55 +436,6 @@ gpu: {}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var got v1Resources
-			err := yaml.Unmarshal([]byte(tt.yaml), &got)
-
-			if tt.wantErr {
-				assert.Error(t, err)
-				return
-			}
-
-			assert.NoError(t, err)
-			assert.Equal(t, tt.want, got)
-		})
-	}
-}
-
-func TestV1Ingress(t *testing.T) {
-	tests := []struct {
-		name    string
-		yaml    string
-		want    v1Ingress
-		wantErr bool
-	}{
-		{
-			name: "valid ingress",
-			yaml: `
-host: example.com
-port: 443
-`,
-			want: v1Ingress{
-				Host: "example.com",
-				Port: 443,
-			},
-			wantErr: false,
-		},
-		{
-			name: "ingress with subdomain",
-			yaml: `
-host: api.example.com
-port: 80
-`,
-			want: v1Ingress{
-				Host: "api.example.com",
-				Port: 80,
-			},
-			wantErr: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var got v1Ingress
 			err := yaml.Unmarshal([]byte(tt.yaml), &got)
 
 			if tt.wantErr {
@@ -512,7 +466,6 @@ password: mypass
 `,
 			want: v1ServiceCredentials{
 				Host:     "registry.example.com",
-				Email:    "user@example.com",
 				Username: "myuser",
 				Password: "mypass",
 			},
@@ -583,6 +536,101 @@ func TestGPUQuantity(t *testing.T) {
 		}
 
 		assert.Equal(t, gpuQuantity(test.value), obj.Val, "idx:%v text:`%v`", idx, test.text)
+	}
+}
+
+func TestV1GPU(t *testing.T) {
+	tests := []struct {
+		name    string
+		yaml    string
+		want    v1GPU
+		wantErr bool
+	}{
+		{
+			name: "GPU with units only",
+			yaml: `
+units: 2
+`,
+			want: v1GPU{
+				Units: gpuQuantity(2),
+			},
+			wantErr: false,
+		},
+		{
+			name: "GPU with units and vendor",
+			yaml: `
+units: 1
+vendor:
+  nvidia:
+    - model: RTX 4090
+      ram: 24Gi
+      interface: pcie
+`,
+			want: func() v1GPU {
+				ram := memoryQuantity(24 * 1024 * 1024 * 1024) // 24Gi
+				iface := gpuInterface("pcie")
+				return v1GPU{
+					Units: gpuQuantity(1),
+					Vendor: gpuVendor{
+						Nvidia: v1GPUsNvidia{
+							{
+								Model:     "RTX 4090",
+								RAM:       &ram,
+								Interface: &iface,
+							},
+						},
+					},
+				}
+			}(),
+			wantErr: false,
+		},
+		{
+			name: "GPU with multiple vendor cards",
+			yaml: `
+units: 4
+vendor:
+  nvidia:
+    - model: RTX 3080
+      ram: 10Gi
+    - model: RTX 3090
+      ram: 24Gi
+`,
+			want: func() v1GPU {
+				ram1 := memoryQuantity(10 * 1024 * 1024 * 1024) // 10Gi
+				ram2 := memoryQuantity(24 * 1024 * 1024 * 1024) // 24Gi
+				return v1GPU{
+					Units: gpuQuantity(4),
+					Vendor: gpuVendor{
+						Nvidia: v1GPUsNvidia{
+							{
+								Model: "RTX 3080",
+								RAM:   &ram1,
+							},
+							{
+								Model: "RTX 3090",
+								RAM:   &ram2,
+							},
+						},
+					},
+				}
+			}(),
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var got v1GPU
+			err := yaml.Unmarshal([]byte(tt.yaml), &got)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+
+			assert.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
 	}
 }
 
@@ -658,9 +706,12 @@ services:
     command: ["nginx", "-g", "daemon off;"]
     count: 2
     resources:
-      cpu: 0.5
-      memory: 512Mi
-      gpu: {}
+      cpu:
+        units: 0.5
+      memory:
+        size: 512Mi
+      gpu:
+        units: 1
     expose:
       - port: 80
         as: 80
@@ -671,9 +722,12 @@ services:
     command: ["node", "app.js"]
     count: 1
     resources:
-      cpu: 1.0
-      memory: 1Gi
-      gpu: {}
+      cpu:
+        units: 1.0
+      memory:
+        size: 1Gi
+      gpu:
+        units: 1
 `
 
 	var sdl v1SDL
@@ -689,9 +743,9 @@ services:
 	assert.Equal(t, "nginx:latest", web.Image)
 	assert.Equal(t, []string{"nginx", "-g", "daemon off;"}, web.Command)
 	assert.Equal(t, 2, web.Count)
-	assert.Equal(t, cpuQuantity(500), web.Resources.CPU)
-	assert.Equal(t, memoryQuantity(512*1024*1024), web.Resources.Memory)
-	assert.Equal(t, gpuVendor{}, web.Resources.GPU)
+	assert.Equal(t, v1Cpu{Units: cpuQuantity(500)}, web.Resources.CPU)
+	assert.Equal(t, v1Memory{Size: memoryQuantity(512 * 1024 * 1024)}, web.Resources.Memory)
+	assert.Equal(t, v1GPU{Units: gpuQuantity(1)}, web.Resources.GPU)
 	assert.Len(t, web.Expose, 1)
 	assert.Equal(t, uint32(80), web.Expose[0].Port)
 	assert.Equal(t, uint32(80), web.Expose[0].As)
@@ -705,9 +759,9 @@ services:
 	assert.Equal(t, "node:16-alpine", api.Image)
 	assert.Equal(t, []string{"node", "app.js"}, api.Command)
 	assert.Equal(t, 1, api.Count)
-	assert.Equal(t, cpuQuantity(1000), api.Resources.CPU)
-	assert.Equal(t, memoryQuantity(1024*1024*1024), api.Resources.Memory)
-	assert.Equal(t, gpuVendor{}, api.Resources.GPU)
+	assert.Equal(t, v1Cpu{Units: cpuQuantity(1000)}, api.Resources.CPU)
+	assert.Equal(t, v1Memory{Size: memoryQuantity(1024 * 1024 * 1024)}, api.Resources.Memory)
+	assert.Equal(t, v1GPU{Units: gpuQuantity(1)}, api.Resources.GPU)
 }
 
 func TestSDLRead(t *testing.T) {
@@ -829,4 +883,116 @@ services:
 	// Test reading non-existent file
 	_, err = ReadFile("/non/existent/file.yaml")
 	assert.Error(t, err)
+}
+
+func TestGetTotalResources(t *testing.T) {
+	sdl := &v1SDL{
+		Services: map[string]v1Service{
+			"web": {
+				Count: 2,
+				Resources: v1Resources{
+					CPU:    v1Cpu{Units: cpuQuantity(500)},                    // 0.5 CPU
+					Memory: v1Memory{Size: memoryQuantity(512 * 1024 * 1024)}, // 512Mi
+					GPU:    v1GPU{Units: gpuQuantity(1)},
+				},
+				Volumes: v1ServiceVolumes{
+					{
+						Name:     "data",
+						Mount:    "/app/data",
+						ReadOnly: false,
+					},
+					{
+						Name:     "logs",
+						Mount:    "/app/logs",
+						ReadOnly: false,
+					},
+				},
+			},
+			"api": {
+				Count: 3,
+				Resources: v1Resources{
+					CPU:    v1Cpu{Units: cpuQuantity(1000)},                    // 1.0 CPU
+					Memory: v1Memory{Size: memoryQuantity(1024 * 1024 * 1024)}, // 1Gi
+					GPU:    v1GPU{Units: gpuQuantity(1)},
+				},
+				Volumes: v1ServiceVolumes{
+					{
+						Name:     "database",
+						Mount:    "/var/lib/postgresql/data",
+						ReadOnly: false,
+					},
+				},
+			},
+		},
+		Volumes: map[string]v1Volume{
+			"data": {
+				Name:       "data",
+				Size:       byteQuantity(10 * 1024 * 1024 * 1024), // 10Gi
+				Persistent: true,
+			},
+			"logs": {
+				Name:       "logs",
+				Size:       byteQuantity(1 * 1024 * 1024 * 1024), // 1Gi
+				Persistent: false,
+			},
+			"database": {
+				Name:       "database",
+				Size:       byteQuantity(50 * 1024 * 1024 * 1024), // 50Gi
+				Persistent: true,
+			},
+		},
+	}
+
+	total := sdl.GetTotalResources()
+
+	// Expected: web (2 instances) + api (3 instances)
+	// CPU: (0.5 * 2) + (1.0 * 3) = 1.0 + 3.0 = 4.0 CPU
+	// Memory: (512Mi * 2) + (1Gi * 3) = 1Gi + 3Gi = 4Gi
+	// Storage: (10Gi * 2) + (50Gi * 3) = 20Gi + 150Gi = 170Gi
+	expectedCPU := cpuQuantity(4000)                          // 4.0 * 1000
+	expectedMemory := memoryQuantity(4 * 1024 * 1024 * 1024)  // 4Gi
+	expectedStorage := byteQuantity(170 * 1024 * 1024 * 1024) // 170Gi
+
+	assert.Equal(t, expectedCPU, total.CPU)
+	assert.Equal(t, expectedMemory, total.Memory)
+	assert.Equal(t, expectedStorage, total.Storage)
+	assert.Equal(t, gpuQuantity(5), total.GPU)
+}
+
+func TestGetServiceResources(t *testing.T) {
+	sdl := &v1SDL{
+		Services: map[string]v1Service{
+			"web": {
+				Resources: v1Resources{
+					CPU:    v1Cpu{Units: cpuQuantity(500)},
+					Memory: v1Memory{Size: memoryQuantity(512 * 1024 * 1024)},
+					GPU:    v1GPU{Units: gpuQuantity(1)},
+				},
+			},
+		},
+	}
+
+	// Test existing service
+	resources, exists := sdl.GetServiceResources("web")
+	assert.True(t, exists)
+	assert.Equal(t, v1Cpu{Units: cpuQuantity(500)}, resources.CPU)
+	assert.Equal(t, v1Memory{Size: memoryQuantity(512 * 1024 * 1024)}, resources.Memory)
+
+	// Test non-existing service
+	_, exists = sdl.GetServiceResources("nonexistent")
+	assert.False(t, exists)
+}
+
+func TestGetServiceCount(t *testing.T) {
+	sdl := &v1SDL{
+		Services: map[string]v1Service{
+			"web": {Count: 2},
+			"api": {Count: 3},
+			"db":  {Count: 0}, // Should default to 1
+		},
+	}
+
+	total := sdl.GetServiceCount()
+	// Expected: 2 + 3 + 1 = 6
+	assert.Equal(t, 6, total)
 }

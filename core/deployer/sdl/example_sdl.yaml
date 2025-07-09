@@ -8,18 +8,27 @@ services:
       - NGINX_HOST=0.0.0.0
     volumes:
       - name: config
-        mount_path: /etc/nginx
-        size: 1Gi
-        persistent: true
-        storage_class: fast-ssd
+        mount: /etc/nginx
+        read_only: false
       - name: logs
-        mount_path: /var/log/nginx
-        size: 100Mi
-        persistent: false
+        mount: /var/log/nginx
+        read_only: false
     resources:
-      cpu: 0.5
-      memory: 512Mi
-      gpu: 0
+      cpu:
+        units: 0.5
+        model: "Intel Xeon"
+        arch: "x86_64"
+        clock: "2.4GHz"
+        cache: 8Mi
+      memory:
+        size: 512Mi
+        type: "DDR4"
+        speed: 3200
+      gpu:
+        units: 0
+        attributes:
+          vendor:
+            nvidia: []
     expose:
       - port: 80
         as: 80
@@ -35,7 +44,8 @@ services:
               next_tries: 3
               next_timeout: 10
               next_cases: ["error", "timeout"]
-        accept: ["10.0.0.0/8", "192.168.0.0/16"]
+        accept:
+          items: ["10.0.0.0/8", "192.168.0.0/16"]
         http_options:
           max_body_size: 524288
           read_timeout: 60
@@ -57,21 +67,29 @@ services:
       - PORT=3000
     volumes:
       - name: app-data
-        mount_path: /app/data
-        size: 10Gi
-        persistent: true
+        mount: /app/data
+        read_only: false
     resources:
-      cpu: 1.0
-      memory: 1Gi
-      gpu: 0
+      cpu:
+        units: 1.0
+        model: "Intel Xeon"
+        arch: "x86_64"
+        clock: "2.4GHz"
+        cache: 16Mi
+      memory:
+        size: 1Gi
+        type: "DDR4"
+        speed: 3200
+      gpu:
+        units: 0
+        attributes:
+          vendor:
+            nvidia: []
     expose:
       - port: 3000
         as: 3000
         proto: tcp
     count: 3
-    ingress:
-      - host: api.example.com
-        port: 443
 
   database:
     image: postgres:13
@@ -82,16 +100,82 @@ services:
       - POSTGRES_PASSWORD=password
     volumes:
       - name: postgres-data
-        mount_path: /var/lib/postgresql/data
-        size: 50Gi
-        persistent: true
-        storage_class: ssd
+        mount: /var/lib/postgresql/data
+        read_only: false
     resources:
-      cpu: 2.0
-      memory: 4Gi
-      gpu: 0
+      cpu:
+        units: 2.0
+        model: "Intel Xeon"
+        arch: "x86_64"
+        clock: "2.4GHz"
+        cache: 32Mi
+      memory:
+        size: 4Gi
+        type: "DDR4"
+        speed: 3200
+      gpu:
+        units: 0
+        attributes:
+          vendor:
+            nvidia: []
     expose:
       - port: 5432
         as: 5432
         proto: tcp
-    count: 1 
+    count: 1
+
+  gpu-service:
+    image: nvidia/cuda:11.8-base-ubuntu20.04
+    command: ["python", "train.py"]
+    env:
+      - CUDA_VISIBLE_DEVICES=0
+    volumes:
+      - name: model-data
+        mount: /workspace/models
+        read_only: false
+    resources:
+      cpu:
+        units: 4.0
+        model: "Intel Xeon"
+        arch: "x86_64"
+        clock: "3.0GHz"
+        cache: 64Mi
+      memory:
+        size: 16Gi
+        type: "DDR4"
+        speed: 3600
+      gpu:
+        units: 1
+        attributes:
+          vendor:
+            nvidia:
+              - model: "RTX 4090"
+                ram: 24Gi
+                interface: "PCIe 4.0"
+    expose:
+      - port: 8080
+        as: 8080
+        proto: tcp
+    count: 1
+
+volumes:
+  config:
+    size: 100Mi
+    persistent: false
+    storage_class: ""
+  logs:
+    size: 1Gi
+    persistent: false
+    storage_class: ""
+  app-data:
+    size: 10Gi
+    persistent: true
+    storage_class: ssd
+  postgres-data:
+    size: 50Gi
+    persistent: true
+    storage_class: ssd
+  model-data:
+    size: 100Gi
+    persistent: true
+    storage_class: nvme

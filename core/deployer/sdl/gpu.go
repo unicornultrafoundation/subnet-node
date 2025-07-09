@@ -28,3 +28,8 @@ type v1GPUsNvidia []v1GPUNvidia
 type gpuVendor struct {
 	Nvidia v1GPUsNvidia `yaml:"nvidia"`
 }
+
+type v1GPU struct {
+	Units  gpuQuantity `yaml:"units"`
+	Vendor gpuVendor   `yaml:"vendor"`
+}
