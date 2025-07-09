@@ -32,6 +32,10 @@ func APIOption() ServeOption {
 		server.RegisterName("config", api.NewConfigAPI(n.Repo))
 		server.RegisterName("version", api.NewVersionAPI()) // Register the VersionAPI
 
+		// if cfg.GetBool("verifier.enable", false) {
+		// 	server.RegisterName("verifier", api.NewVerifierAPI(n.Verifier))
+		// }
+
 		// Handle public APIs without authentication
 		publicServer := rpc.NewServer()
 		publicServer.RegisterName("version", api.NewVersionAPI())

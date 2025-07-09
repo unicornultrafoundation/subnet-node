@@ -53,12 +53,14 @@ func NewVerifier(ds datastore.Datastore, ps p2phost.Host, P2P *p2p.P2P, acc *acc
 		pow:           NewPow(NodeVerifier, ps, P2P),
 	}
 	go v.periodicCheck(DefaultCheckInterval) // Pass the default check interval
+
 	return v
 }
 
 func (v *Verifier) Register() error {
 	v.ps.SetStreamHandler(atypes.ProtocolAppVerifierUsageReport, v.onUsageReport)
 	v.ps.SetStreamHandler(atypes.ProtocolAppSignatureRequest, v.onSignatureRequest)
+
 	log.Infof("Verifier service started and registered stream handlers")
 	return nil
 }
@@ -184,7 +186,6 @@ func (v *Verifier) periodicCheck(interval time.Duration) {
 		}
 
 		v.pow.Clear()
-
 		err = v.saveAndSendSignedUsages(signedUsages, usageReportIds)
 		if err != nil {
 			log.Errorf("Failed to save and send signed usages: %v", err)
@@ -247,7 +248,6 @@ func (v *Verifier) processUsageReports(usagesByAppId map[int64][]*pvtypes.UsageR
 				filteredLogs = append(filteredLogs, log)
 			}
 		}
-
 		// Initialize detector with threshold 2
 		detector := AnomalyDetector{Logs: filteredLogs, Threshold: 2}
 		peerScores := detector.detect()
@@ -261,6 +261,7 @@ func (v *Verifier) processUsageReports(usagesByAppId map[int64][]*pvtypes.UsageR
 				usagesByPeer[log.PeerId] = append(usagesByPeer[log.PeerId], log)
 			}
 		}
+
 		for peerId, peerLogs := range usagesByPeer {
 			if len(peerLogs) == 0 {
 				continue
@@ -288,6 +289,7 @@ func (v *Verifier) processUsageReports(usagesByAppId map[int64][]*pvtypes.UsageR
 				signedUsage.AppId = peerlog.AppId
 				signedUsage.ProviderId = peerlog.ProviderId
 				signedUsage.Duration += int64(ReportTimeThreshold.Seconds())
+				signedUsage.Score = int32(peerScores[peerlog.PeerId])
 			}
 			peerlognum := int64(len(peerLogs))
 
@@ -304,10 +306,10 @@ func (v *Verifier) processUsageReports(usagesByAppId map[int64][]*pvtypes.UsageR
 			if err := v.signResourceUsage(signedUsage); err != nil {
 				return nil, fmt.Errorf("failed to sign resource usage: %v", err)
 			}
-
 			signedUsages = append(signedUsages, signedUsage)
 		}
 	}
+
 	return signedUsages, nil
 }
 
@@ -378,11 +380,15 @@ func abs(x int64) int64 {
 
 func (s *Verifier) signResourceUsage(usage *pvtypes.SignedUsage) error {
 	log.Debugf("Signing usage: %+v\n", usage)
+
 	typedData, err := atypes.ConvertUsageToTypedData(usage, s.acc.GetChainID(), s.acc.AppStoreAddr())
+
 	if err != nil {
 		return fmt.Errorf("failed to get usage typed data: %v", err)
 	}
+
 	hash, signature, err := s.acc.SignTypedData(typedData)
+
 	if err != nil {
 		return fmt.Errorf("failed to sign usage: %v", err)
 	}
@@ -409,4 +415,23 @@ func (v *Verifier) sendProtoMessage(id peer.ID, p protocol.ID, data proto.Messag
 		return false
 	}
 	return true
+}
+
+func (v *Verifier) GetVerifierIds(ctx context.Context) ([]string, error) {
+	// Get all connected peers
+	connectedPeers := v.ps.Network().Peers()
+	verifierIds := make([]string, 0)
+
+	// For each peer, check if it's a verifier
+	for _, peerId := range connectedPeers {
+		// Check if the peer is a verifier using the PoW's verifier tracking
+		if v.pow.IsVerifierPeer(peerId.String()) {
+			verifierIds = append(verifierIds, peerId.String())
+		}
+	}
+
+	// Add our own ID as a verifier
+	verifierIds = append(verifierIds, v.ps.ID().String())
+
+	return verifierIds, nil
 }
