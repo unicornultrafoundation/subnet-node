@@ -50,6 +50,7 @@ type VMCreateRequest struct {
 	CPUCores   int    `json:"cpu_cores"`
 	MemoryMB   int    `json:"memory_mb"`
 	DiskSizeGB int    `json:"disk_size_gb"`
+	OSType     string `json:"os_type,omitempty"`
 	ISOURL     string `json:"iso_url,omitempty"`
 }
 

@@ -25,6 +25,7 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/core/deployer"
 	"github.com/unicornultrafoundation/subnet-node/core/node/resource"
 	"github.com/unicornultrafoundation/subnet-node/core/peers"
+	"github.com/unicornultrafoundation/subnet-node/core/virtualbox"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn"
 	"github.com/unicornultrafoundation/subnet-node/firewall"
 	"github.com/unicornultrafoundation/subnet-node/p2p"
@@ -55,6 +56,7 @@ type SubnetNode struct {
 	VPN             *vpn.Service               `optional:"true"`
 	Firewall        firewall.FirewallInterface `optional:"true"`
 	Deployer        *deployer.Service          `optional:"true"`
+	VirtualBox      *virtualbox.ServiceImpl    `optional:"true"`
 
 	Account *account.AccountService `optional:"true"`
 	Peers   *peers.Service          `optional:"true"`

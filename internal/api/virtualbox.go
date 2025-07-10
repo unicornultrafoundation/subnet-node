@@ -26,21 +26,6 @@ type vmResult struct {
 	VMFolder   string           `json:"vm_folder,omitempty"`
 }
 
-type vmCreateRequest struct {
-	Name       string `json:"name"`
-	CPUCores   int    `json:"cpu_cores"`
-	MemoryMB   int    `json:"memory_mb"`
-	DiskSizeGB int    `json:"disk_size_gb"`
-	ISOURL     string `json:"iso_url,omitempty"`
-}
-
-type vmUpdateRequest struct {
-	Name       string `json:"name,omitempty"`
-	CPUCores   int    `json:"cpu_cores,omitempty"`
-	MemoryMB   int    `json:"memory_mb,omitempty"`
-	DiskSizeGB int    `json:"disk_size_gb,omitempty"`
-}
-
 type vmFilter struct {
 	Status string `json:"status,omitempty"`
 	Query  string `json:"query,omitempty"`
@@ -194,13 +179,13 @@ func (api *VirtualBoxAPI) GetVM(ctx context.Context, vmID string) (*vmResult, er
 	return convertToVMResult(vm), nil
 }
 
-func (api *VirtualBoxAPI) CreateVM(ctx context.Context, req vmCreateRequest) (*vmResult, error) {
+func (api *VirtualBoxAPI) CreateVM(ctx context.Context, name string, cpuCores int, memoryMB int, diskSizeGB int, osType string) (*vmResult, error) {
 	vbReq := vbtypes.VMCreateRequest{
-		Name:       req.Name,
-		CPUCores:   req.CPUCores,
-		MemoryMB:   req.MemoryMB,
-		DiskSizeGB: req.DiskSizeGB,
-		ISOURL:     req.ISOURL,
+		Name:       name,
+		CPUCores:   cpuCores,
+		MemoryMB:   memoryMB,
+		DiskSizeGB: diskSizeGB,
+		OSType:     osType, // Pass the OS type to the service
 	}
 
 	vm, err := api.vboxService.CreateVM(ctx, vbReq)
@@ -211,12 +196,12 @@ func (api *VirtualBoxAPI) CreateVM(ctx context.Context, req vmCreateRequest) (*v
 	return convertToVMResult(vm), nil
 }
 
-func (api *VirtualBoxAPI) UpdateVM(ctx context.Context, vmID string, req vmUpdateRequest) (*vmResult, error) {
+func (api *VirtualBoxAPI) UpdateVM(ctx context.Context, vmID string, name string, cpuCores int, memoryMB int, diskSizeGB int) (*vmResult, error) {
 	vbReq := vbtypes.VMUpdateRequest{
-		Name:       req.Name,
-		CPUCores:   req.CPUCores,
-		MemoryMB:   req.MemoryMB,
-		DiskSizeGB: req.DiskSizeGB,
+		Name:       name,
+		CPUCores:   cpuCores,
+		MemoryMB:   memoryMB,
+		DiskSizeGB: diskSizeGB,
 	}
 
 	vm, err := api.vboxService.UpdateVM(ctx, vmID, vbReq)
@@ -326,4 +311,8 @@ func (api *VirtualBoxAPI) ListISOs(ctx context.Context) ([]isoInfoResult, error)
 
 func (api *VirtualBoxAPI) DeleteISO(ctx context.Context, isoPath string) error {
 	return api.vboxService.DeleteISO(ctx, isoPath)
+}
+
+func (api *VirtualBoxAPI) ListOSTypes(ctx context.Context) ([]string, error) {
+	return api.vboxService.ListOSTypes(ctx)
 }

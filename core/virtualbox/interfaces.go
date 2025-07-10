@@ -35,6 +35,9 @@ type Service interface {
 	ListISOs(ctx context.Context) ([]*vbtypes.ISOInfo, error)
 	DeleteISO(ctx context.Context, isoPath string) error
 
+	// System Information
+	ListOSTypes(ctx context.Context) ([]string, error)
+
 	// Service Lifecycle
 	Start(ctx context.Context) error
 	Stop(ctx context.Context) error
@@ -65,6 +68,7 @@ type VBoxClient interface {
 	// System Information
 	GetVBoxVersion() (string, error)
 	GetHostInfo() (map[string]string, error)
+	ListOSTypes() ([]string, error)
 
 	// Utility
 	ExecuteCommand(args ...string) (string, error)
