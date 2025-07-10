@@ -1,0 +1,83 @@
+package virtualbox
+
+import (
+	"context"
+	"math/big"
+
+	vbtypes "github.com/unicornultrafoundation/subnet-node/core/virtualbox/types"
+)
+
+// Service defines the interface for VirtualBox operations
+type Service interface {
+	// VM Management
+	CreateVM(ctx context.Context, req vbtypes.VMCreateRequest) (*vbtypes.VM, error)
+	GetVM(ctx context.Context, vmID string) (*vbtypes.VM, error)
+	GetVMs(ctx context.Context, start, end *big.Int, filter vbtypes.VMFilter) ([]*vbtypes.VM, int, error)
+	GetVMCount(ctx context.Context, filter *vbtypes.VMFilter) (*big.Int, error)
+	UpdateVM(ctx context.Context, vmID string, req vbtypes.VMUpdateRequest) (*vbtypes.VM, error)
+	DeleteVM(ctx context.Context, vmID string) error
+
+	// VM Control
+	StartVM(ctx context.Context, vmID string) (*vbtypes.VM, error)
+	StopVM(ctx context.Context, vmID string) (*vbtypes.VM, error)
+	PauseVM(ctx context.Context, vmID string) (*vbtypes.VM, error)
+	ResumeVM(ctx context.Context, vmID string) (*vbtypes.VM, error)
+	ResetVM(ctx context.Context, vmID string) (*vbtypes.VM, error)
+
+	// Resource Management
+	GetVMUsage(ctx context.Context, vmID string) (*vbtypes.VMUsage, error)
+	GetAllVMUsage(ctx context.Context) (*vbtypes.VMUsage, error)
+	GetSystemInfo(ctx context.Context) (*vbtypes.VMSystemInfo, error)
+
+	// ISO Management
+	DownloadISO(ctx context.Context, isoURL string) (*vbtypes.ISOInfo, error)
+	GetISOInfo(ctx context.Context, isoPath string) (*vbtypes.ISOInfo, error)
+	ListISOs(ctx context.Context) ([]*vbtypes.ISOInfo, error)
+	DeleteISO(ctx context.Context, isoPath string) error
+
+	// Service Lifecycle
+	Start(ctx context.Context) error
+	Stop(ctx context.Context) error
+}
+
+// VBoxClient defines the interface for VirtualBox CLI operations
+type VBoxClient interface {
+	// VM Management
+	CreateVM(name, ostype string) error
+	ModifyVM(name string, params map[string]string) error
+	DeleteVM(name string) error
+	ListVMs() ([]string, error)
+	GetVMInfo(name string) (map[string]string, error)
+
+	// Storage Management
+	CreateHD(filename string, size int) error
+	StorageController(name, controller string) error
+	StorageAttach(name, controller string, port, device int, mediumType, medium string) error
+
+	// VM Control
+	StartVM(name string, headless bool) error
+	StopVM(name string) error
+	PauseVM(name string) error
+	ResumeVM(name string) error
+	ResetVM(name string) error
+	GetVMStatus(name string) (string, error)
+
+	// System Information
+	GetVBoxVersion() (string, error)
+	GetHostInfo() (map[string]string, error)
+
+	// Utility
+	ExecuteCommand(args ...string) (string, error)
+}
+
+// StorageManager defines the interface for file storage operations
+type StorageManager interface {
+	// ISO Management
+	DownloadFile(ctx context.Context, url, destPath string) error
+	GetFileInfo(filePath string) (*vbtypes.ISOInfo, error)
+	ListFiles(dirPath string) ([]string, error)
+	DeleteFile(filePath string) error
+	FileExists(filePath string) bool
+	GetFileSize(filePath string) (int64, error)
+	CalculateChecksum(filePath string) (string, error)
+}
