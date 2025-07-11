@@ -6,8 +6,9 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// TestAttributes_GetCapabilitiesMap tests the GetCapabilitiesMap function with various scenarios
 func TestAttributes_GetCapabilitiesMap(t *testing.T) {
-	// Test case 1: Basic capabilities filtering
+	// Test case 1: Basic capabilities filtering with multiple capability types
 	attrs := Attributes{
 		"capabilities/gpu/model":   "RTX 3080",
 		"capabilities/gpu/memory":  "10GB",
@@ -19,7 +20,7 @@ func TestAttributes_GetCapabilitiesMap(t *testing.T) {
 		"capabilities/memory/type": "DDR4",
 	}
 
-	// Test GPU capabilities
+	// Test GPU capabilities extraction
 	gpuCapabilities := attrs.GetCapabilitiesMap("gpu/")
 	expectedGPU := Attributes{
 		"model":  "RTX 3080",
@@ -28,7 +29,7 @@ func TestAttributes_GetCapabilitiesMap(t *testing.T) {
 	}
 	assert.Equal(t, expectedGPU, gpuCapabilities)
 
-	// Test CPU capabilities
+	// Test CPU capabilities extraction
 	cpuCapabilities := attrs.GetCapabilitiesMap("cpu/")
 	expectedCPU := Attributes{
 		"cores":   "8",
@@ -36,7 +37,7 @@ func TestAttributes_GetCapabilitiesMap(t *testing.T) {
 	}
 	assert.Equal(t, expectedCPU, cpuCapabilities)
 
-	// Test Memory capabilities
+	// Test Memory capabilities extraction
 	memoryCapabilities := attrs.GetCapabilitiesMap("memory/")
 	expectedMemory := Attributes{
 		"size": "16GB",
@@ -44,18 +45,19 @@ func TestAttributes_GetCapabilitiesMap(t *testing.T) {
 	}
 	assert.Equal(t, expectedMemory, memoryCapabilities)
 
-	// Test non-existent prefix
+	// Test non-existent prefix should return empty map
 	nonExistentCapabilities := attrs.GetCapabilitiesMap("nonexistent/")
 	assert.Empty(t, nonExistentCapabilities)
 }
 
+// TestAttributes_GetCapabilitiesMap_EdgeCases tests edge cases and boundary conditions
 func TestAttributes_GetCapabilitiesMap_EdgeCases(t *testing.T) {
-	// Test case 2: Empty attributes
+	// Test case 2: Empty attributes map
 	emptyAttrs := Attributes{}
 	result := emptyAttrs.GetCapabilitiesMap("gpu/")
 	assert.Empty(t, result)
 
-	// Test case 3: No capabilities prefix
+	// Test case 3: Attributes without capabilities prefix
 	attrs := Attributes{
 		"gpu/model": "RTX 3080",
 		"cpu/cores": "8",
@@ -63,7 +65,7 @@ func TestAttributes_GetCapabilitiesMap_EdgeCases(t *testing.T) {
 	result = attrs.GetCapabilitiesMap("gpu/")
 	assert.Empty(t, result)
 
-	// Test case 4: Exact prefix match (should not include)
+	// Test case 4: Exact prefix match (should not include as it needs additional path)
 	attrs = Attributes{
 		"capabilities/gpu": "value",
 	}
@@ -80,7 +82,7 @@ func TestAttributes_GetCapabilitiesMap_EdgeCases(t *testing.T) {
 	}
 	assert.Equal(t, expected, result)
 
-	// Test case 6: Mixed types in capabilities
+	// Test case 6: Mixed data types in capabilities
 	attrs = Attributes{
 		"capabilities/gpu/model":    "RTX 3080",
 		"capabilities/gpu/memory":   10,
@@ -97,7 +99,9 @@ func TestAttributes_GetCapabilitiesMap_EdgeCases(t *testing.T) {
 	assert.Equal(t, expected, result)
 }
 
+// TestAttributes_AllIn tests the AllIn function with various comparison scenarios
 func TestAttributes_AllIn(t *testing.T) {
+	// Test data setup
 	a := Attributes{
 		"a": 1,
 		"b": "foo",
@@ -123,27 +127,35 @@ func TestAttributes_AllIn(t *testing.T) {
 		"b": "foo",
 		"c": true,
 	}
-	// Tất cả key/value của a đều có trong b
+
+	// Test case 1: All key/value pairs in a exist and match in b
 	assert.True(t, a.AllIn(b))
-	// Một value không khớp
+
+	// Test case 2: One value doesn't match
 	assert.False(t, a.AllIn(c))
-	// Một key không có trong b
+
+	// Test case 3: One key doesn't exist in target map
 	assert.False(t, a.AllIn(d))
-	// Một value không khớp
+
+	// Test case 4: One value doesn't match
 	assert.False(t, a.AllIn(e))
-	// So sánh với chính nó
+
+	// Test case 5: Self-comparison should always be true
 	assert.True(t, a.AllIn(a))
-	// a rỗng thì luôn true
+
+	// Test case 6: Empty source map should always return true
 	assert.True(t, (Attributes{}).AllIn(b))
-	// b rỗng thì chỉ true nếu a cũng rỗng
+
+	// Test case 7: Empty target map should only be true if source is also empty
 	assert.False(t, a.AllIn(Attributes{}))
 	assert.True(t, (Attributes{}).AllIn(Attributes{}))
-	// So sánh với value là slice (không so sánh, bỏ qua)
+
+	// Test case 8: Comparison with uncomparable types (slices) should be skipped
 	f := Attributes{
 		"arr": []int{1, 2, 3},
 	}
 	g := Attributes{
 		"arr": []int{1, 2, 3},
 	}
-	assert.True(t, f.AllIn(g)) // vì slice không so sánh, sẽ bỏ qua
+	assert.True(t, f.AllIn(g)) // Slices are not compared, so this returns true
 }
