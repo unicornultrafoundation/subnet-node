@@ -1,0 +1,187 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: manifests.depinsubnet.com
+spec:
+  group: depinsubnet.com
+  version: v1
+  names:
+    kind: Manifest
+    plural: manifests
+    singular: manifest
+  scope: Namespaced
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                lease:
+                  type: object
+                  properties:
+                    owner:
+                      type: string
+                    id:
+                      type: number
+                      format: uint64
+                group:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                    services:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          name:
+                            type: string
+                          image:
+                            type: string
+                          command:
+                            type: array
+                            items:
+                              type: string
+                          args:
+                            type: array
+                            items:
+                              type: string
+                          env:
+                            type: array
+                            items:
+                              type: string
+                          credentials:
+                            type: object
+                            nullable: true
+                            properties:
+                              host:
+                                type: string
+                              email:
+                                type: string
+                              username:
+                                type: string
+                              password:
+                                type: string
+                          resources:
+                            type: object
+                            properties:
+                              cpu:
+                                type: object
+                                properties:
+                                  units:
+                                    type: number
+                                    format: uint32
+                                  attributes:
+                                    type: array
+                                    items:
+                                      type: object
+                                      properties:
+                                        name:
+                                          type: string
+                                        value: 
+                                          type: string
+                              memory:
+                                type: object
+                                properties:
+                                  size:
+                                    type: number
+                                    format: uint32
+                                  attributes:
+                                    type: array
+                                    items:
+                                      type: object
+                                      properties:
+                                        name:
+                                          type: string
+                                        value: 
+                                          type: string
+                              gpu:
+                                type: object
+                                properties:
+                                  units:
+                                    type: number
+                                    format: uint32
+                                  attributes:
+                                    type: array
+                                    items:
+                                      type: object
+                                      properties:
+                                        name:
+                                          type: string
+                                        value: 
+                                          type: string
+                              storage:
+                                type: array
+                                items:
+                                  type: object
+                                  properties:
+                                    name:
+                                      type: string
+                                    size:
+                                      type: number
+                                      format: uint32
+                                    attributes:
+                                      type: array
+                                      items:
+                                        type: object
+                                        properties:
+                                          name:
+                                            type: string
+                                          value: 
+                                            type: string
+                            volumes:
+                              type: array
+                              items: 
+                                type: object
+                                properties:
+                                  name:
+                                    type: string
+                                  mount:
+                                    type: string
+                                  read_only: 
+                                    type: boolean
+                            count:
+                              type: number
+                              format: uint32
+                            expose:
+                              type: array
+                              items:
+                                type: object
+                                properties:
+                                  ip:
+                                    type: string
+                                  port:
+                                    type: number
+                                    format: uint16
+                                  proto:
+                                    type: string
+                                  service:
+                                    type: string
+                                  global:
+                                    type: boolean
+                                  http_options:
+                                    type: object
+                                    properties:
+                                      max_body_size:
+                                        type: integer
+                                      read_timeout:
+                                        type: integer
+                                      send_timeout:
+                                        type: integer
+                                      next_tries:
+                                        type: integer
+                                      next_timeout:
+                                        type: integer
+                                      next_cases:
+                                        type: array
+                                        items:
+                                          type: string
+                                      hosts:
+                                        type: array
+                                        items:
+                                          type: string
