@@ -34,6 +34,36 @@ spec:
                   properties:
                     name:
                       type: string
+                    credentials:
+                      type: object
+                      additionalProperties::
+                        type: object
+                        properties:
+                          host:
+                            type: string
+                          email:
+                            type: string
+                          username:
+                            type: string
+                          password:
+                            type: string
+                    volumes:
+                      type: object
+                      additionalProperties:
+                        type: object
+                        properties:
+                          size:
+                            type: number
+                            format: uint32
+                          attributes:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                name:
+                                  type: string
+                                value: 
+                                  type: string
                     services:
                       type: array
                       items:
@@ -55,18 +85,8 @@ spec:
                             type: array
                             items:
                               type: string
-                          credentials:
-                            type: object
-                            nullable: true
-                            properties:
-                              host:
-                                type: string
-                              email:
-                                type: string
-                              username:
-                                type: string
-                              password:
-                                type: string
+                          credential:
+                            type:string
                           resources:
                             type: object
                             properties:
@@ -115,25 +135,6 @@ spec:
                                           type: string
                                         value: 
                                           type: string
-                              storage:
-                                type: array
-                                items:
-                                  type: object
-                                  properties:
-                                    name:
-                                      type: string
-                                    size:
-                                      type: number
-                                      format: uint32
-                                    attributes:
-                                      type: array
-                                      items:
-                                        type: object
-                                        properties:
-                                          name:
-                                            type: string
-                                          value: 
-                                            type: string
                             volumes:
                               type: array
                               items: 

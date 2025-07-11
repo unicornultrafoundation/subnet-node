@@ -25,22 +25,21 @@ type LeaseSpec struct {
 
 // GroupSpec defines the group configuration
 type GroupSpec struct {
-	Name     string        `json:"name" yaml:"name"`
-	Services []ServiceSpec `json:"services" yaml:"services"`
+	Name        string                     `json:"name" yaml:"name"`
+	Credentials map[string]CredentialsSpec `json:"credentials,omitempty" yaml:"credentials,omitempty"`
+	Volumes     map[string]VolumeSpec      `json:"volumes,omitempty" yaml:"volumes,omitempty"`
+	Services    []ServiceSpec              `json:"services" yaml:"services"`
 }
 
 // ServiceSpec defines a service within a group
 type ServiceSpec struct {
-	Name        string           `json:"name" yaml:"name"`
-	Image       string           `json:"image" yaml:"image"`
-	Command     []string         `json:"command,omitempty" yaml:"command,omitempty"`
-	Args        []string         `json:"args,omitempty" yaml:"args,omitempty"`
-	Env         []string         `json:"env,omitempty" yaml:"env,omitempty"`
-	Credentials *CredentialsSpec `json:"credentials,omitempty" yaml:"credentials,omitempty"`
-	Resources   ResourceSpec     `json:"resources" yaml:"resources"`
-	Volumes     []VolumeSpec     `json:"volumes,omitempty" yaml:"volumes,omitempty"`
-	Count       uint32           `json:"count" yaml:"count"`
-	Expose      []ExposeSpec     `json:"expose,omitempty" yaml:"expose,omitempty"`
+	Name       string       `json:"name" yaml:"name"`
+	Image      string       `json:"image" yaml:"image"`
+	Command    []string     `json:"command,omitempty" yaml:"command,omitempty"`
+	Args       []string     `json:"args,omitempty" yaml:"args,omitempty"`
+	Env        []string     `json:"env,omitempty" yaml:"env,omitempty"`
+	Credential string       `json:"credential,omitempty" yaml:"credential,omitempty"`
+	Resources  ResourceSpec `json:"resources" yaml:"resources"`
 }
 
 // CredentialsSpec defines container registry credentials
@@ -53,10 +52,12 @@ type CredentialsSpec struct {
 
 // ResourceSpec defines resource requirements
 type ResourceSpec struct {
-	CPU     *CPUResource      `json:"cpu,omitempty" yaml:"cpu,omitempty"`
-	Memory  *MemoryResource   `json:"memory,omitempty" yaml:"memory,omitempty"`
-	GPU     *GPUResource      `json:"gpu,omitempty" yaml:"gpu,omitempty"`
-	Storage []StorageResource `json:"storage,omitempty" yaml:"storage,omitempty"`
+	CPU     *CPUResource    `json:"cpu,omitempty" yaml:"cpu,omitempty"`
+	Memory  *MemoryResource `json:"memory,omitempty" yaml:"memory,omitempty"`
+	GPU     *GPUResource    `json:"gpu,omitempty" yaml:"gpu,omitempty"`
+	Volumes []VolumeSpec    `json:"volumes,omitempty" yaml:"volumes,omitempty"`
+	Count   uint32          `json:"count" yaml:"count"`
+	Expose  []ExposeSpec    `json:"expose,omitempty" yaml:"expose,omitempty"`
 }
 
 // CPUResource defines CPU requirements
@@ -77,18 +78,13 @@ type GPUResource struct {
 	Attributes []Attribute `json:"attributes,omitempty" yaml:"attributes,omitempty"`
 }
 
-// StorageResource defines storage requirements
-type StorageResource struct {
-	Name       string      `json:"name" yaml:"name"`
-	Size       uint32      `json:"size" yaml:"size"`
-	Attributes []Attribute `json:"attributes,omitempty" yaml:"attributes,omitempty"`
-}
-
-// VolumeSpec defines volume mounts
+// VolumeSpec defines volume configuration
 type VolumeSpec struct {
-	Name     string `json:"name" yaml:"name"`
-	Mount    string `json:"mount" yaml:"mount"`
-	ReadOnly bool   `json:"read_only" yaml:"read_only"`
+	Name       string      `json:"name,omitempty" yaml:"name,omitempty"`
+	Mount      string      `json:"mount,omitempty" yaml:"mount,omitempty"`
+	ReadOnly   bool        `json:"read_only,omitempty" yaml:"read_only,omitempty"`
+	Size       uint32      `json:"size,omitempty" yaml:"size,omitempty"`
+	Attributes []Attribute `json:"attributes,omitempty" yaml:"attributes,omitempty"`
 }
 
 // ExposeSpec defines service exposure configuration

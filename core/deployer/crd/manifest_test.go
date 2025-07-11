@@ -27,10 +27,26 @@ func TestManifestStructs(t *testing.T) {
 			},
 			Group: GroupSpec{
 				Name: "test-group",
+				Credentials: map[string]CredentialsSpec{
+					"docker-registry": {
+						Host:     "docker.io",
+						Username: "username",
+						Password: "password",
+					},
+				},
+				Volumes: map[string]VolumeSpec{
+					"data-volume": {
+						Size: 1024,
+						Attributes: []Attribute{
+							{Name: "type", Value: "SSD"},
+						},
+					},
+				},
 				Services: []ServiceSpec{
 					{
-						Name:  "test-service",
-						Image: "nginx:latest",
+						Name:       "test-service",
+						Image:      "nginx:latest",
+						Credential: "docker-registry",
 						Resources: ResourceSpec{
 							CPU: &CPUResource{
 								Units: 1000,
@@ -44,22 +60,22 @@ func TestManifestStructs(t *testing.T) {
 									{Name: "type", Value: "RAM"},
 								},
 							},
-						},
-						Volumes: []VolumeSpec{
-							{
-								Name:     "data",
-								Mount:    "/data",
-								ReadOnly: false,
+							Volumes: []VolumeSpec{
+								{
+									Name:     "data",
+									Mount:    "/data",
+									ReadOnly: false,
+								},
 							},
-						},
-						Count: 1,
-						Expose: []ExposeSpec{
-							{
-								IP:      "0.0.0.0",
-								Port:    80,
-								Proto:   "tcp",
-								Service: "test-service",
-								Global:  true,
+							Count: 1,
+							Expose: []ExposeSpec{
+								{
+									IP:      "0.0.0.0",
+									Port:    80,
+									Proto:   "tcp",
+									Service: "test-service",
+									Global:  true,
+								},
 							},
 						},
 					},
@@ -83,9 +99,9 @@ func TestManifestStructs(t *testing.T) {
 	assert.Equal(t, manifest.Spec.Lease.ID, unmarshaledManifest.Spec.Lease.ID)
 	assert.Equal(t, manifest.Spec.Group.Name, unmarshaledManifest.Spec.Group.Name)
 	assert.Equal(t, len(manifest.Spec.Group.Services), len(unmarshaledManifest.Spec.Group.Services))
-	assert.Equal(t, manifest.Spec.Group.Services[0].Count, unmarshaledManifest.Spec.Group.Services[0].Count)
-	assert.Equal(t, len(manifest.Spec.Group.Services[0].Volumes), len(unmarshaledManifest.Spec.Group.Services[0].Volumes))
-	assert.Equal(t, len(manifest.Spec.Group.Services[0].Expose), len(unmarshaledManifest.Spec.Group.Services[0].Expose))
+	assert.Equal(t, manifest.Spec.Group.Services[0].Resources.Count, unmarshaledManifest.Spec.Group.Services[0].Resources.Count)
+	assert.Equal(t, len(manifest.Spec.Group.Services[0].Resources.Volumes), len(unmarshaledManifest.Spec.Group.Services[0].Resources.Volumes))
+	assert.Equal(t, len(manifest.Spec.Group.Services[0].Resources.Expose), len(unmarshaledManifest.Spec.Group.Services[0].Resources.Expose))
 }
 
 func TestManifestValidation(t *testing.T) {
@@ -158,7 +174,9 @@ func TestManifestValidation(t *testing.T) {
 					{
 						Name:  "test-service",
 						Image: "nginx:latest",
-						Count: 0, // Invalid count
+						Resources: ResourceSpec{
+							Count: 0, // Invalid count
+						},
 					},
 				},
 			},
@@ -269,27 +287,29 @@ func TestManifestList(t *testing.T) {
 }
 
 func TestServiceSpecStructure(t *testing.T) {
-	// Test that ServiceSpec has the correct structure with volumes, count, expose outside resources
+	// Test that ServiceSpec has the correct structure with volumes, count, expose in resources
 	service := ServiceSpec{
-		Name:  "test-service",
-		Image: "nginx:latest",
+		Name:       "test-service",
+		Image:      "nginx:latest",
+		Credential: "docker-registry",
 		Resources: ResourceSpec{
 			CPU: &CPUResource{Units: 1000},
-		},
-		Volumes: []VolumeSpec{
-			{Name: "data", Mount: "/data", ReadOnly: false},
-		},
-		Count: 2,
-		Expose: []ExposeSpec{
-			{IP: "0.0.0.0", Port: 80, Proto: "tcp", Service: "test-service"},
+			Volumes: []VolumeSpec{
+				{Name: "data", Mount: "/data", ReadOnly: false},
+			},
+			Count: 2,
+			Expose: []ExposeSpec{
+				{IP: "0.0.0.0", Port: 80, Proto: "tcp", Service: "test-service"},
+			},
 		},
 	}
 
 	// Verify structure
 	assert.Equal(t, "test-service", service.Name)
 	assert.Equal(t, "nginx:latest", service.Image)
+	assert.Equal(t, "docker-registry", service.Credential)
 	assert.NotNil(t, service.Resources.CPU)
-	assert.Len(t, service.Volumes, 1)
-	assert.Equal(t, uint32(2), service.Count)
-	assert.Len(t, service.Expose, 1)
+	assert.Len(t, service.Resources.Volumes, 1)
+	assert.Equal(t, uint32(2), service.Resources.Count)
+	assert.Len(t, service.Resources.Expose, 1)
 }

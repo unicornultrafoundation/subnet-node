@@ -25,10 +25,28 @@ func ExampleManifest() *Manifest {
 			},
 			Group: GroupSpec{
 				Name: "example-group",
+				Credentials: map[string]CredentialsSpec{
+					"docker-registry": {
+						Host:     "docker.io",
+						Email:    "user@example.com",
+						Username: "username",
+						Password: "password",
+					},
+				},
+				Volumes: map[string]VolumeSpec{
+					"data-volume": {
+						Size: 1024,
+						Attributes: []Attribute{
+							{Name: "type", Value: "SSD"},
+							{Name: "class", Value: "premium"},
+						},
+					},
+				},
 				Services: []ServiceSpec{
 					{
-						Name:  "web-service",
-						Image: "nginx:latest",
+						Name:       "web-service",
+						Image:      "nginx:latest",
+						Credential: "docker-registry",
 						Command: []string{
 							"nginx",
 							"-g",
@@ -38,23 +56,19 @@ func ExampleManifest() *Manifest {
 							"NGINX_HOST=localhost",
 							"NGINX_PORT=80",
 						},
-						Credentials: &CredentialsSpec{
-							Host:     "docker.io",
-							Email:    "user@example.com",
-							Username: "username",
-							Password: "password",
-						},
 						Resources: ResourceSpec{
 							CPU: &CPUResource{
 								Units: 1000,
 								Attributes: []Attribute{
 									{Name: "arch", Value: "x86_64"},
+									{Name: "vendor", Value: "intel"},
 								},
 							},
 							Memory: &MemoryResource{
 								Size: 512,
 								Attributes: []Attribute{
 									{Name: "type", Value: "RAM"},
+									{Name: "ecc", Value: "true"},
 								},
 							},
 							GPU: &GPUResource{
@@ -64,39 +78,30 @@ func ExampleManifest() *Manifest {
 									{Name: "model", Value: "RTX 3080"},
 								},
 							},
-							Storage: []StorageResource{
+							Volumes: []VolumeSpec{
 								{
-									Name: "data",
-									Size: 1024,
-									Attributes: []Attribute{
-										{Name: "type", Value: "SSD"},
-									},
+									Name:     "data",
+									Mount:    "/data",
+									ReadOnly: false,
 								},
 							},
-						},
-						Volumes: []VolumeSpec{
-							{
-								Name:     "data",
-								Mount:    "/data",
-								ReadOnly: false,
-							},
-						},
-						Count: 2,
-						Expose: []ExposeSpec{
-							{
-								IP:      "0.0.0.0",
-								Port:    80,
-								Proto:   "tcp",
-								Service: "web-service",
-								Global:  true,
-								HTTPOptions: &HTTPOptions{
-									MaxBodySize: 1048576,
-									ReadTimeout: 30,
-									SendTimeout: 30,
-									NextTries:   3,
-									NextTimeout: 10,
-									NextCases:   []string{"error", "timeout"},
-									Hosts:       []string{"example.com", "www.example.com"},
+							Count: 2,
+							Expose: []ExposeSpec{
+								{
+									IP:      "0.0.0.0",
+									Port:    80,
+									Proto:   "tcp",
+									Service: "web-service",
+									Global:  true,
+									HTTPOptions: &HTTPOptions{
+										MaxBodySize: 1048576,
+										ReadTimeout: 30,
+										SendTimeout: 30,
+										NextTries:   3,
+										NextTimeout: 10,
+										NextCases:   []string{"error", "timeout"},
+										Hosts:       []string{"example.com", "www.example.com"},
+									},
 								},
 							},
 						},
@@ -144,7 +149,7 @@ func ValidateManifest(manifest *Manifest) error {
 			return fmt.Errorf("service %d image is required", i)
 		}
 
-		if service.Count == 0 {
+		if service.Resources.Count == 0 {
 			return fmt.Errorf("service %d count must be greater than 0", i)
 		}
 	}
