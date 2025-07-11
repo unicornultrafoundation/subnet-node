@@ -27,7 +27,7 @@ spec:
                     owner:
                       type: string
                     id:
-                      type: number
+                      type: integer
                       format: uint64
                 group:
                   type: object
@@ -36,7 +36,7 @@ spec:
                       type: string
                     credentials:
                       type: object
-                      additionalProperties::
+                      additionalProperties:
                         type: object
                         properties:
                           host:
@@ -53,24 +53,17 @@ spec:
                         type: object
                         properties:
                           size:
-                            type: number
-                            format: uint32
+                            type: string
+                          class:
+                            type: string
                           attributes:
-                            type: array
-                            items:
-                              type: object
-                              properties:
-                                name:
-                                  type: string
-                                value: 
-                                  type: string
+                            type: object
+                            additionalProperties: true
                     services:
-                      type: array
-                      items:
+                      type: object
+                      additionalProperties:
                         type: object
                         properties:
-                          name:
-                            type: string
                           image:
                             type: string
                           command:
@@ -94,95 +87,74 @@ spec:
                                 type: object
                                 properties:
                                   units:
-                                    type: number
-                                    format: uint32
+                                    type: string
                                   attributes:
-                                    type: array
-                                    items:
-                                      type: object
-                                      properties:
-                                        name:
-                                          type: string
-                                        value: 
-                                          type: string
+                                    type: object
+                                    additionalProperties: true
                               memory:
                                 type: object
                                 properties:
                                   size:
-                                    type: number
-                                    format: uint32
+                                    type: string
                                   attributes:
-                                    type: array
-                                    items:
-                                      type: object
-                                      properties:
-                                        name:
-                                          type: string
-                                        value: 
-                                          type: string
+                                    type: object
+                                    additionalProperties: true
                               gpu:
                                 type: object
                                 properties:
                                   units:
-                                    type: number
-                                    format: uint32
+                                    type: string
                                   attributes:
-                                    type: array
-                                    items:
-                                      type: object
-                                      properties:
-                                        name:
-                                          type: string
-                                        value: 
-                                          type: string
-                            volumes:
-                              type: array
-                              items: 
-                                type: object
-                                properties:
-                                  name:
-                                    type: string
-                                  mount:
-                                    type: string
-                                  read_only: 
-                                    type: boolean
-                            count:
-                              type: number
-                              format: uint32
-                            expose:
-                              type: array
-                              items:
-                                type: object
-                                properties:
-                                  ip:
-                                    type: string
-                                  port:
-                                    type: number
-                                    format: uint16
-                                  proto:
-                                    type: string
-                                  service:
-                                    type: string
-                                  global:
-                                    type: boolean
-                                  http_options:
                                     type: object
-                                    properties:
-                                      max_body_size:
-                                        type: integer
-                                      read_timeout:
-                                        type: integer
-                                      send_timeout:
-                                        type: integer
-                                      next_tries:
-                                        type: integer
-                                      next_timeout:
-                                        type: integer
-                                      next_cases:
-                                        type: array
-                                        items:
-                                          type: string
-                                      hosts:
-                                        type: array
-                                        items:
-                                          type: string
+                                    additionalProperties: true
+                          volumes:
+                            type: array
+                            items: 
+                              type: object
+                              properties:
+                                name:
+                                  type: string
+                                mount:
+                                  type: string
+                                read_only: 
+                                  type: boolean
+                          count:
+                            type: integer
+                            format: uint32
+                          expose:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                ip:
+                                  type: string
+                                port:
+                                  type: number
+                                  format: uint16
+                                proto:
+                                  type: string
+                                service:
+                                  type: string
+                                global:
+                                  type: boolean
+                                http_options:
+                                  type: object
+                                  properties:
+                                    max_body_size:
+                                      type: integer
+                                    read_timeout:
+                                      type: integer
+                                    send_timeout:
+                                      type: integer
+                                    next_tries:
+                                      type: integer
+                                    next_timeout:
+                                      type: integer
+                                    next_cases:
+                                      type: array
+                                      items:
+                                        type: string
+                                hosts:
+                                  type: array
+                                  items:
+                                    type: string
