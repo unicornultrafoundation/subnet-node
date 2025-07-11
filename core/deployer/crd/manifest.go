@@ -59,32 +59,34 @@ type ResourceSpec struct {
 	GPU    *GPUResource    `json:"gpu,omitempty" yaml:"gpu,omitempty"`
 }
 
+type Attributes map[string]interface{}
+
 // CPUResource defines CPU requirements
 type CPUResource struct {
-	Units      string                 `json:"units" yaml:"units"`
-	Attributes map[string]interface{} `json:"attributes,omitempty" yaml:"attributes,omitempty"`
+	Units      string     `json:"units" yaml:"units"`
+	Attributes Attributes `json:"attributes,omitempty" yaml:"attributes,omitempty"`
 }
 
 // MemoryResource defines memory requirements
 type MemoryResource struct {
-	Size       string                 `json:"size" yaml:"size"`
-	Attributes map[string]interface{} `json:"attributes,omitempty" yaml:"attributes,omitempty"`
+	Size       string     `json:"size" yaml:"size"`
+	Attributes Attributes `json:"attributes,omitempty" yaml:"attributes,omitempty"`
 }
 
 // GPUResource defines GPU requirements
 type GPUResource struct {
-	Units      string                 `json:"units" yaml:"units"`
-	Attributes map[string]interface{} `json:"attributes,omitempty" yaml:"attributes,omitempty"`
+	Units      string     `json:"units" yaml:"units"`
+	Attributes Attributes `json:"attributes,omitempty" yaml:"attributes,omitempty"`
 }
 
 // VolumeSpec defines volume configuration
 type VolumeSpec struct {
-	Name       string                 `json:"name,omitempty" yaml:"name,omitempty"`
-	Mount      string                 `json:"mount,omitempty" yaml:"mount,omitempty"`
-	ReadOnly   bool                   `json:"read_only,omitempty" yaml:"read_only,omitempty"`
-	Size       string                 `json:"size,omitempty" yaml:"size,omitempty"`
-	Class      string                 `json:"class,omitempty" yaml:"class,omitempty"`
-	Attributes map[string]interface{} `json:"attributes,omitempty" yaml:"attributes,omitempty"`
+	Name       string     `json:"name,omitempty" yaml:"name,omitempty"`
+	Mount      string     `json:"mount,omitempty" yaml:"mount,omitempty"`
+	ReadOnly   bool       `json:"read_only,omitempty" yaml:"read_only,omitempty"`
+	Size       string     `json:"size,omitempty" yaml:"size,omitempty"`
+	Class      string     `json:"class,omitempty" yaml:"class,omitempty"`
+	Attributes Attributes `json:"attributes,omitempty" yaml:"attributes,omitempty"`
 }
 
 // ExposeSpec defines service exposure configuration

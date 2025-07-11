@@ -394,3 +394,264 @@ func createValidManifest() *Manifest {
 		},
 	}
 }
+
+func TestParseManifestFromJSON(t *testing.T) {
+	// Test JSON string that represents a complete manifest
+	jsonStr := `{
+		"apiVersion": "depinsubnet.com/v1",
+		"kind": "Manifest",
+		"metadata": {
+			"name": "test-manifest",
+			"namespace": "default"
+		},
+		"spec": {
+			"lease": {
+				"owner": "0x1234567890abcdef",
+				"id": 12345
+			},
+			"group": {
+				"name": "test-group",
+				"credentials": {
+					"docker-registry": {
+						"host": "docker.io",
+						"email": "user@example.com",
+						"username": "username",
+						"password": "password"
+					}
+				},
+				"volumes": {
+					"data-volume": {
+						"size": "10Gi",
+						"class": "ssd",
+						"attributes": {
+							"type": "persistent",
+							"performance": "high",
+							"encrypted": true,
+							"iops": 3000
+						}
+					}
+				},
+				"services": {
+					"web-service": {
+						"image": "nginx:latest",
+						"command": ["nginx", "-g", "daemon off;"],
+						"args": ["--config", "/etc/nginx/nginx.conf"],
+						"env": ["NODE_ENV=production"],
+						"credential": "docker-registry",
+						"resources": {
+							"cpu": {
+								"units": "1000",
+								"attributes": {
+									"arch": "x86_64",
+									"vendor": "intel",
+									"cores": 8,
+									"threads": 16
+								}
+							},
+							"memory": {
+								"size": "512Mi",
+								"attributes": {
+									"type": "DDR4",
+									"speed": "3200MHz",
+									"ecc": true,
+									"channels": 2
+								}
+							},
+							"gpu": {
+								"units": "1",
+								"attributes": {
+									"model": "RTX 3080",
+									"vendor": "nvidia",
+									"memory": "10GB",
+									"cuda": true,
+									"tensor_cores": 272
+								}
+							}
+						},
+						"volumes": [
+							{
+								"name": "data-volume",
+								"mount": "/data",
+								"read_only": false
+							}
+						],
+						"count": 3,
+						"expose": [
+							{
+								"ip": "0.0.0.0",
+								"port": 80,
+								"proto": "tcp",
+								"service": "web-service",
+								"global": true,
+								"http_options": {
+									"max_body_size": 1048576,
+									"read_timeout": 30,
+									"send_timeout": 30,
+									"next_tries": 3,
+									"next_timeout": 10,
+									"next_cases": ["error", "timeout"]
+								},
+								"hosts": ["example.com", "www.example.com"]
+							}
+						]
+					}
+				}
+			}
+		}
+	}`
+
+	// Parse JSON into manifest
+	var manifest Manifest
+	err := json.Unmarshal([]byte(jsonStr), &manifest)
+	require.NoError(t, err)
+
+	// Verify basic structure
+	assert.Equal(t, "depinsubnet.com/v1", manifest.APIVersion)
+	assert.Equal(t, "Manifest", manifest.Kind)
+	assert.Equal(t, "test-manifest", manifest.Name)
+	assert.Equal(t, "default", manifest.Namespace)
+
+	// Verify lease
+	assert.Equal(t, "0x1234567890abcdef", manifest.Spec.Lease.Owner)
+	assert.Equal(t, uint64(12345), manifest.Spec.Lease.ID)
+
+	// Verify group
+	assert.Equal(t, "test-group", manifest.Spec.Group.Name)
+
+	// Verify credentials
+	assert.Len(t, manifest.Spec.Group.Credentials, 1)
+	cred := manifest.Spec.Group.Credentials["docker-registry"]
+	assert.Equal(t, "docker.io", cred.Host)
+	assert.Equal(t, "user@example.com", cred.Email)
+	assert.Equal(t, "username", cred.Username)
+	assert.Equal(t, "password", cred.Password)
+
+	// Verify volumes
+	assert.Len(t, manifest.Spec.Group.Volumes, 1)
+	vol := manifest.Spec.Group.Volumes["data-volume"]
+	assert.Equal(t, "10Gi", vol.Size)
+	assert.Equal(t, "ssd", vol.Class)
+	assert.Equal(t, "persistent", vol.Attributes["type"])
+	assert.Equal(t, "high", vol.Attributes["performance"])
+	assert.Equal(t, true, vol.Attributes["encrypted"])
+	assert.Equal(t, float64(3000), vol.Attributes["iops"]) // JSON numbers become float64
+
+	// Verify services
+	assert.Len(t, manifest.Spec.Group.Services, 1)
+	service := manifest.Spec.Group.Services["web-service"]
+	assert.Equal(t, "nginx:latest", service.Image)
+	assert.Equal(t, []string{"nginx", "-g", "daemon off;"}, service.Command)
+	assert.Equal(t, []string{"--config", "/etc/nginx/nginx.conf"}, service.Args)
+	assert.Equal(t, []string{"NODE_ENV=production"}, service.Env)
+	assert.Equal(t, "docker-registry", service.Credential)
+
+	// Verify resources
+	assert.NotNil(t, service.Resources.CPU)
+	assert.Equal(t, "1000", service.Resources.CPU.Units)
+	assert.Equal(t, "x86_64", service.Resources.CPU.Attributes["arch"])
+	assert.Equal(t, "intel", service.Resources.CPU.Attributes["vendor"])
+	assert.Equal(t, float64(8), service.Resources.CPU.Attributes["cores"])
+	assert.Equal(t, float64(16), service.Resources.CPU.Attributes["threads"])
+
+	assert.NotNil(t, service.Resources.Memory)
+	assert.Equal(t, "512Mi", service.Resources.Memory.Size)
+	assert.Equal(t, "DDR4", service.Resources.Memory.Attributes["type"])
+	assert.Equal(t, "3200MHz", service.Resources.Memory.Attributes["speed"])
+	assert.Equal(t, true, service.Resources.Memory.Attributes["ecc"])
+	assert.Equal(t, float64(2), service.Resources.Memory.Attributes["channels"])
+
+	assert.NotNil(t, service.Resources.GPU)
+	assert.Equal(t, "1", service.Resources.GPU.Units)
+	assert.Equal(t, "RTX 3080", service.Resources.GPU.Attributes["model"])
+	assert.Equal(t, "nvidia", service.Resources.GPU.Attributes["vendor"])
+	assert.Equal(t, "10GB", service.Resources.GPU.Attributes["memory"])
+	assert.Equal(t, true, service.Resources.GPU.Attributes["cuda"])
+	assert.Equal(t, float64(272), service.Resources.GPU.Attributes["tensor_cores"])
+
+	// Verify service volumes
+	assert.Len(t, service.Volumes, 1)
+	serviceVol := service.Volumes[0]
+	assert.Equal(t, "data-volume", serviceVol.Name)
+	assert.Equal(t, "/data", serviceVol.Mount)
+	assert.Equal(t, false, serviceVol.ReadOnly)
+
+	// Verify count
+	assert.Equal(t, uint32(3), service.Count)
+
+	// Verify expose
+	assert.Len(t, service.Expose, 1)
+	expose := service.Expose[0]
+	assert.Equal(t, "0.0.0.0", expose.IP)
+	assert.Equal(t, uint16(80), expose.Port)
+	assert.Equal(t, "tcp", expose.Proto)
+	assert.Equal(t, "web-service", expose.Service)
+	assert.Equal(t, true, expose.Global)
+	assert.Equal(t, []string{"example.com", "www.example.com"}, expose.Hosts)
+
+	// Verify HTTP options
+	assert.NotNil(t, expose.HTTPOptions)
+	assert.Equal(t, 1048576, expose.HTTPOptions.MaxBodySize)
+	assert.Equal(t, 30, expose.HTTPOptions.ReadTimeout)
+	assert.Equal(t, 30, expose.HTTPOptions.SendTimeout)
+	assert.Equal(t, 3, expose.HTTPOptions.NextTries)
+	assert.Equal(t, 10, expose.HTTPOptions.NextTimeout)
+	assert.Equal(t, []string{"error", "timeout"}, expose.HTTPOptions.NextCases)
+}
+
+func TestParseMinimalManifestFromJSON(t *testing.T) {
+	// Test minimal JSON string with only required fields
+	jsonStr := `{
+		"apiVersion": "depinsubnet.com/v1",
+		"kind": "Manifest",
+		"metadata": {
+			"name": "minimal-manifest"
+		},
+		"spec": {
+			"lease": {
+				"owner": "0x1234567890abcdef",
+				"id": 12345
+			},
+			"group": {
+				"name": "minimal-group",
+				"services": {
+					"minimal-service": {
+						"image": "nginx:latest",
+						"count": 1
+					}
+				}
+			}
+		}
+	}`
+
+	// Parse JSON into manifest
+	var manifest Manifest
+	err := json.Unmarshal([]byte(jsonStr), &manifest)
+	require.NoError(t, err)
+
+	// Verify basic structure
+	assert.Equal(t, "depinsubnet.com/v1", manifest.APIVersion)
+	assert.Equal(t, "Manifest", manifest.Kind)
+	assert.Equal(t, "minimal-manifest", manifest.Name)
+
+	// Verify lease
+	assert.Equal(t, "0x1234567890abcdef", manifest.Spec.Lease.Owner)
+	assert.Equal(t, uint64(12345), manifest.Spec.Lease.ID)
+
+	// Verify group
+	assert.Equal(t, "minimal-group", manifest.Spec.Group.Name)
+
+	// Verify services
+	assert.Len(t, manifest.Spec.Group.Services, 1)
+	service := manifest.Spec.Group.Services["minimal-service"]
+	assert.Equal(t, "nginx:latest", service.Image)
+	assert.Equal(t, uint32(1), service.Count)
+
+	// Verify optional fields are empty/nil
+	assert.Empty(t, manifest.Spec.Group.Credentials)
+	assert.Empty(t, manifest.Spec.Group.Volumes)
+	assert.Nil(t, service.Resources.CPU)
+	assert.Nil(t, service.Resources.Memory)
+	assert.Nil(t, service.Resources.GPU)
+	assert.Empty(t, service.Volumes)
+	assert.Empty(t, service.Expose)
+}
