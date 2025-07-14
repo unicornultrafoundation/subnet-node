@@ -43,37 +43,6 @@ type Service interface {
 	Stop(ctx context.Context) error
 }
 
-// VBoxClient defines the interface for VirtualBox CLI operations
-type VBoxClient interface {
-	// VM Management
-	CreateVM(name, ostype string) error
-	ModifyVM(name string, params map[string]string) error
-	DeleteVM(name string) error
-	ListVMs() ([]string, error)
-	GetVMInfo(name string) (map[string]string, error)
-
-	// Storage Management
-	CreateHD(filename string, size int) error
-	StorageController(name, controller string) error
-	StorageAttach(name, controller string, port, device int, mediumType, medium string) error
-
-	// VM Control
-	StartVM(name string, headless bool) error
-	StopVM(name string) error
-	PauseVM(name string) error
-	ResumeVM(name string) error
-	ResetVM(name string) error
-	GetVMStatus(name string) (string, error)
-
-	// System Information
-	GetVBoxVersion() (string, error)
-	GetHostInfo() (map[string]string, error)
-	ListOSTypes() ([]string, error)
-
-	// Utility
-	ExecuteCommand(args ...string) (string, error)
-}
-
 // StorageManager defines the interface for file storage operations
 type StorageManager interface {
 	// ISO Management
@@ -84,4 +53,8 @@ type StorageManager interface {
 	FileExists(filePath string) bool
 	GetFileSize(filePath string) (int64, error)
 	CalculateChecksum(filePath string) (string, error)
+
+	// ISO OS Type Management
+	DetermineOSTypeAndISO(ctx context.Context, req vbtypes.VMCreateRequest) (string, string, error)
+	GetSupportedOSTypes() []string
 }

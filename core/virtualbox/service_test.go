@@ -174,7 +174,6 @@ func TestNewService(t *testing.T) {
 	if err != nil {
 		t.Errorf("Failed to get system info: %v", err)
 	} else {
-		t.Logf("VirtualBox version: %s", info.VBoxVersion)
 		t.Logf("Host OS: %s", info.HostOS)
 		t.Logf("Host Arch: %s", info.HostArch)
 	}
@@ -337,4 +336,99 @@ func TestDownloadISO(t *testing.T) {
 	for _, iso := range isos {
 		t.Logf("ISO: %s", iso.Path)
 	}
+}
+
+func TestServiceImpl_validateResources(t *testing.T) {
+	config := &ServiceConfig{
+		DefaultOSType: "Ubuntu_ARM64",
+	}
+	service, err := NewService(config)
+	if err != nil {
+		t.Fatalf("Failed to create service: %v", err)
+	}
+
+	tests := []struct {
+		name    string
+		req     vbtypes.VMCreateRequest
+		wantErr bool
+	}{
+		{
+			name: "valid resources",
+			req: vbtypes.VMCreateRequest{
+				Name:       "test-vm",
+				CPUCores:   1,
+				MemoryMB:   1024,
+				DiskSizeGB: 10,
+			},
+			wantErr: false,
+		},
+		{
+			name: "excessive CPU cores",
+			req: vbtypes.VMCreateRequest{
+				Name:       "test-vm",
+				CPUCores:   1000, // Unrealistic number
+				MemoryMB:   1024,
+				DiskSizeGB: 10,
+			},
+			wantErr: true,
+		},
+		{
+			name: "excessive memory",
+			req: vbtypes.VMCreateRequest{
+				Name:       "test-vm",
+				CPUCores:   1,
+				MemoryMB:   1000000, // 1TB - unrealistic
+				DiskSizeGB: 10,
+			},
+			wantErr: true,
+		},
+		{
+			name: "excessive disk space",
+			req: vbtypes.VMCreateRequest{
+				Name:       "test-vm",
+				CPUCores:   1,
+				MemoryMB:   1024,
+				DiskSizeGB: 1000000, // 1PB - unrealistic
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := service.validateResources(context.Background(), tt.req)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("validateResources() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestServiceImpl_GetSystemInfo(t *testing.T) {
+	config := &ServiceConfig{
+		DefaultOSType: "Ubuntu_ARM64",
+	}
+	service, err := NewService(config)
+	if err != nil {
+		t.Fatalf("Failed to create service: %v", err)
+	}
+
+	info, err := service.GetSystemInfo(context.Background())
+	if err != nil {
+		t.Fatalf("GetSystemInfo() failed: %v", err)
+	}
+
+	// Basic validation
+	if info.HostOS == "" {
+		t.Error("Expected non-empty HostOS")
+	}
+	if info.HostArch == "" {
+		t.Error("Expected non-empty HostArch")
+	}
+	if info.AvailableCPUs <= 0 {
+		t.Error("Expected positive AvailableCPUs")
+	}
+
+	// Note: AvailableRAMMB and AvailableDiskGB might be 0 if resource detection fails
+	// This is acceptable as the method has fallback behavior
 }

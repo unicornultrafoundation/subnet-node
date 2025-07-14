@@ -9,9 +9,11 @@ The VirtualBox service provides a comprehensive API for managing Virtual Machine
 - **VM Management**: Create, update, delete, and list Virtual Machines
 - **VM Control**: Start, stop, pause, resume, and reset VMs
 - **ISO Management**: Automatic download and management of ISO files
+- **OS Type Management**: Intelligent OS type and ISO URL determination
 - **Resource Monitoring**: Track VM resource usage and system information
+- **Resource Validation**: Check system resources before VM creation to prevent failures
 - **ARM64 Support**: Optimized for ARM64 architecture (Apple Silicon, etc.)
-- **Ubuntu Support**: Pre-configured for Ubuntu 24.04 ARM64 server
+- **Multi-OS Support**: Support for Ubuntu, Debian, Fedora, CentOS, RedHat, Oracle Linux, Windows, FreeBSD, and more
 
 ## Architecture
 
@@ -30,6 +32,7 @@ The VirtualBox service is organized into several components:
 - `Service`: Main service interface for VM operations
 - `VBoxClient`: Interface for VirtualBox CLI operations
 - `StorageManager`: Interface for file storage operations
+- `ISOOSTypeManager`: Interface for OS type and ISO URL determination
 
 ## Installation
 
@@ -42,6 +45,16 @@ The VirtualBox service is organized into several components:
    - Windows: Download from Oracle website
 
 2. **Go**: Ensure Go 1.24+ is installed
+
+### Validation
+
+The VirtualBox service validates the installation once during service creation. This includes:
+
+- Checking if VBoxManage is available in the PATH
+- Verifying VirtualBox version
+- Testing basic VirtualBox functionality
+
+If validation fails, the service creation will return an error immediately.
 
 ### Setup
 
@@ -60,13 +73,14 @@ import (
     "context"
     "log"
 
+    "github.com/unicornultrafoundation/subnet-node/core/node/resource"
     "github.com/unicornultrafoundation/subnet-node/core/virtualbox"
     vbtypes "github.com/unicornultrafoundation/subnet-node/core/virtualbox/types"
 )
 
 func main() {
     // Create VirtualBox service
-    service, err := virtualbox.NewService()
+    service, err := virtualbox.NewService(config)
     if err != nil {
         log.Fatal(err)
     }
@@ -159,6 +173,78 @@ params := map[string]string{
 }
 ```
 
+### Resource Integration
+
+The VirtualBox service integrates with the resource system for comprehensive resource management:
+
+- **Direct Resource Access**: Uses the resource package directly for system resource information
+- **Real-time Resource Detection**: Gets current system resources on demand
+- **Comprehensive Resource Info**: CPU, memory, disk, and network information
+- **Cross-platform Support**: Works on multiple operating systems
+- **Error Handling**: Graceful fallback if resource detection fails
+
+### Resource Validation
+
+The service includes comprehensive resource validation before VM creation to prevent failures due to insufficient system resources:
+
+- **CPU Validation**: Checks available CPU cores against VM requirements
+- **Memory Validation**: Validates available RAM with 20% buffer for system overhead
+- **Disk Space Validation**: Ensures sufficient disk space with 10% buffer
+- **Resource Aggregation**: Considers resources used by existing VMs
+- **Graceful Degradation**: Continues with VM creation if resource detection fails
+
+```go
+// Resource validation is automatically performed during VM creation
+req := vbtypes.VMCreateRequest{
+    Name:       "my-vm",
+    CPUCores:   4,
+    MemoryMB:   8192,
+    DiskSizeGB: 50,
+}
+
+// This will automatically validate resources before creating the VM
+vm, err := service.CreateVM(ctx, req)
+if err != nil {
+    // Error will include resource validation details if validation fails
+    log.Printf("VM creation failed: %v", err)
+}
+```
+
+### Storage Manager with ISO OS Type Management
+
+The service includes an enhanced Storage Manager that handles both file storage operations and ISO OS type management:
+
+- **File Storage**: Download, manage, and validate ISO files
+- **Automatic OS Type Detection**: Determines the appropriate OS type based on system architecture
+- **ISO URL Resolution**: Maps OS types to their corresponding ISO download URLs
+- **Architecture Compatibility**: Validates OS type compatibility with the current system architecture
+- **Configuration Integration**: Uses service configuration defaults when available
+
+```go
+// The storage manager is automatically created with the service
+// Determine OS type and ISO URL for a VM request
+osType, isoURL, err := service.storageMgr.DetermineOSTypeAndISO(ctx, req)
+
+// Get supported OS types for current architecture
+supportedTypes := service.storageMgr.GetSupportedOSTypes()
+
+// Download and manage ISO files
+err = service.storageMgr.DownloadFile(ctx, isoURL, destPath)
+isoInfo, err := service.storageMgr.GetFileInfo(isoPath)
+```
+
+**Supported OS Types:**
+
+- Ubuntu (64-bit, ARM64)
+- Debian (64-bit, ARM64)
+- Fedora (64-bit, ARM64)
+- CentOS (64-bit, ARM64)
+- RedHat (64-bit, ARM64)
+- Oracle Linux (64-bit, ARM64)
+- Windows (64-bit, ARM64)
+- FreeBSD (64-bit, ARM64)
+- NetBSD (64-bit, ARM64)
+
 ## File Structure
 
 ```
@@ -167,9 +253,10 @@ core/virtualbox/
 │   └── types.go          # Data structures and types
 ├── interfaces.go         # Service interfaces
 ├── client.go            # VirtualBox CLI client
-├── storage.go           # File storage manager
+├── storage.go           # File storage manager with ISO OS type management
 ├── service.go           # Main service implementation
-├── service_test.go      # Unit tests
+├── service_test.go      # Service unit tests
+├── storage_test.go      # Storage manager unit tests
 └── README.md           # This file
 ```
 
@@ -212,6 +299,12 @@ Run the tests to verify the service works:
 # Run all tests
 go test ./core/virtualbox/...
 
+# Run service tests
+go test -v ./core/virtualbox/ -run TestService
+
+# Run storage manager tests
+go test -v ./core/virtualbox/ -run TestStorageManager
+
 # Run specific test
 go test -v ./core/virtualbox/ -run TestCreateVM
 
@@ -219,7 +312,7 @@ go test -v ./core/virtualbox/ -run TestCreateVM
 go test -v ./core/virtualbox/...
 ```
 
-Note: Tests require VirtualBox to be installed and will be skipped if not available.
+Note: Service tests require VirtualBox to be installed and will be skipped if not available. Storage manager tests can run without VirtualBox.
 
 ## Troubleshooting
 

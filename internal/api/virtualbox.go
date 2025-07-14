@@ -102,7 +102,6 @@ func convertToSystemInfoResult(info *vbtypes.VMSystemInfo) *vmSystemInfoResult {
 		return nil
 	}
 	return &vmSystemInfoResult{
-		VBoxVersion:     info.VBoxVersion,
 		HostOS:          info.HostOS,
 		HostArch:        info.HostArch,
 		AvailableCPUs:   info.AvailableCPUs,
@@ -270,30 +269,6 @@ func (api *VirtualBoxAPI) GetAllVMUsage(ctx context.Context) (*vmUsageResult, er
 		return nil, err
 	}
 	return convertToVMUsageResult(usage), nil
-}
-
-func (api *VirtualBoxAPI) GetSystemInfo(ctx context.Context) (*vmSystemInfoResult, error) {
-	info, err := api.vboxService.GetSystemInfo(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return convertToSystemInfoResult(info), nil
-}
-
-func (api *VirtualBoxAPI) DownloadISO(ctx context.Context, isoURL string) (*isoInfoResult, error) {
-	iso, err := api.vboxService.DownloadISO(ctx, isoURL)
-	if err != nil {
-		return nil, err
-	}
-	return convertToISOInfoResult(iso), nil
-}
-
-func (api *VirtualBoxAPI) GetISOInfo(ctx context.Context, isoPath string) (*isoInfoResult, error) {
-	iso, err := api.vboxService.GetISOInfo(ctx, isoPath)
-	if err != nil {
-		return nil, err
-	}
-	return convertToISOInfoResult(iso), nil
 }
 
 func (api *VirtualBoxAPI) ListISOs(ctx context.Context) ([]isoInfoResult, error) {

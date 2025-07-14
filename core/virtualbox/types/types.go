@@ -82,7 +82,6 @@ type VMUsage struct {
 
 // VMSystemInfo represents system information about the VirtualBox installation
 type VMSystemInfo struct {
-	VBoxVersion     string `json:"vbox_version"`
 	HostOS          string `json:"host_os"`
 	HostArch        string `json:"host_arch"`
 	AvailableCPUs   int    `json:"available_cpus"`

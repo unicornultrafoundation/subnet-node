@@ -77,7 +77,6 @@ func main() {
 	if err != nil {
 		log.Printf("Failed to get system info: %v", err)
 	} else {
-		fmt.Printf("VirtualBox Version: %s\n", info.VBoxVersion)
 		fmt.Printf("Host OS: %s\n", info.HostOS)
 		fmt.Printf("Host Architecture: %s\n", info.HostArch)
 	}

@@ -15,6 +15,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/config"
+	"github.com/unicornultrafoundation/subnet-node/core/node/resource"
 	vbtypes "github.com/unicornultrafoundation/subnet-node/core/virtualbox/types"
 )
 
@@ -85,12 +86,13 @@ type ServiceImpl struct {
 	vmDir      string
 	stopChan   chan struct{}
 	config     *ServiceConfig
+	vboxExec   *VBoxManageExecutor
 }
 
 // NewService creates a new VirtualBox service
 func NewService(config *ServiceConfig) (*ServiceImpl, error) {
-	// Create storage manager
-	storageMgr, err := NewStorageManager()
+	// Create storage manager with configuration
+	storageMgr, err := NewStorageManagerWithConfig(config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create storage manager: %w", err)
 	}
@@ -102,12 +104,20 @@ func NewService(config *ServiceConfig) (*ServiceImpl, error) {
 	}
 	vmDir := filepath.Join(homeDir, "VirtualBox VMs")
 
-	return &ServiceImpl{
+	service := &ServiceImpl{
 		storageMgr: storageMgr,
 		vmDir:      vmDir,
 		stopChan:   make(chan struct{}),
 		config:     config,
-	}, nil
+		vboxExec:   NewVBoxManageExecutor(vmDir),
+	}
+
+	// Validate VirtualBox installation once during service creation
+	if err := service.validateVirtualBoxInstallation(); err != nil {
+		return nil, fmt.Errorf("VirtualBox validation failed: %w", err)
+	}
+
+	return service, nil
 }
 
 // LoadServiceConfig loads VirtualBox service configuration from the main config
@@ -164,12 +174,6 @@ func LoadServiceConfig(cfg *config.C) *ServiceConfig {
 // Start starts the VirtualBox service
 func (s *ServiceImpl) Start(ctx context.Context) error {
 	serviceLog.Info("Starting VirtualBox service")
-
-	// Verify VirtualBox is available by trying to list machines
-	if err := s.validateVirtualBoxInstallation(); err != nil {
-		return fmt.Errorf("VirtualBox validation failed: %w", err)
-	}
-
 	serviceLog.Info("VirtualBox service started successfully")
 	return nil
 }
@@ -188,10 +192,12 @@ func (s *ServiceImpl) CreateVM(ctx context.Context, req vbtypes.VMCreateRequest)
 
 	serviceLog.Infof("Creating VM: %s", req.Name)
 
-	// Validate VirtualBox installation first
-	if err := s.validateVirtualBoxInstallation(); err != nil {
-		return nil, fmt.Errorf("VirtualBox validation failed: %w", err)
+	// Validate system resources before creating VM
+	serviceLog.Infof("Validating system resources...")
+	if err := s.validateResources(ctx, req); err != nil {
+		return nil, fmt.Errorf("resource validation failed: %w", err)
 	}
+	serviceLog.Infof("Resource validation passed")
 
 	// Generate unique VM ID
 	vmID := generateVMID(req.Name)
@@ -199,7 +205,7 @@ func (s *ServiceImpl) CreateVM(ctx context.Context, req vbtypes.VMCreateRequest)
 
 	// Determine OS type and ISO URL based on the request
 	serviceLog.Infof("Determining OS type and ISO URL...")
-	osType, isoURL, err := s.determineOSTypeAndISOFromRequest(req)
+	osType, isoURL, err := s.storageMgr.DetermineOSTypeAndISO(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to determine OS type: %w", err)
 	}
@@ -222,31 +228,61 @@ func (s *ServiceImpl) CreateVM(ctx context.Context, req vbtypes.VMCreateRequest)
 
 	// Create VM using VBoxManage
 	serviceLog.Infof("Creating VM with VBoxManage...")
-	if err := s.createVMWithVBoxManage(req.Name, vmFolder); err != nil {
+	if err := s.vboxExec.CreateVM(req.Name); err != nil {
 		return nil, fmt.Errorf("failed to create VM: %w", err)
 	}
 	serviceLog.Infof("VM created successfully")
 
 	// Configure VM hardware using VBoxManage
 	serviceLog.Infof("Configuring VM hardware...")
-	if err := s.configureVMHardwareWithVBoxManage(req.Name, req, osType); err != nil {
+	if err := s.vboxExec.ConfigureVMHardware(req.Name, req, osType); err != nil {
 		serviceLog.Errorf("Failed to configure VM hardware: %v", err)
 		// Clean up on failure
 		serviceLog.Infof("Cleaning up failed VM...")
-		if delErr := s.deleteVMWithVBoxManage(req.Name); delErr != nil {
+		if delErr := s.vboxExec.DeleteVM(req.Name); delErr != nil {
 			serviceLog.Errorf("Failed to delete VM during cleanup: %v", delErr)
 		}
 		return nil, fmt.Errorf("failed to configure VM hardware: %w", err)
 	}
 	serviceLog.Infof("VM hardware configured successfully")
 
+	// Configure network adapter
+	serviceLog.Infof("Configuring network adapter...")
+	if err := s.vboxExec.ConfigureNetwork(req.Name, s.config.DefaultNetworkType); err != nil {
+		serviceLog.Errorf("Failed to configure network adapter: %v", err)
+		// Clean up on failure
+		serviceLog.Infof("Cleaning up failed VM...")
+		if delErr := s.vboxExec.DeleteVM(req.Name); delErr != nil {
+			serviceLog.Errorf("Failed to delete VM during cleanup: %v", delErr)
+		}
+		return nil, fmt.Errorf("failed to configure network adapter: %w", err)
+	}
+	serviceLog.Infof("Network adapter configured successfully")
+
 	// Create and attach storage using VBoxManage
 	serviceLog.Infof("Setting up VM storage...")
-	if err := s.setupVMStorageWithVBoxManage(req.Name, req, isoPath); err != nil {
+
+	// Cloud-init: generate files and ISO
+	cloudInitISO := ""
+	// For demonstration, use req.Name as hostname and username, and a default password
+	hostname := req.Name
+	username := req.Name
+	password := "password123" // In real use, get from request or config
+	_, _, cloudInitDir, err := s.vboxExec.GenerateCloudInitFiles(req.Name, hostname, username, password)
+	if err != nil {
+		serviceLog.Errorf("Failed to generate cloud-init files: %v", err)
+	} else {
+		cloudInitISO, err = s.vboxExec.GenerateCloudInitISO(cloudInitDir)
+		if err != nil {
+			serviceLog.Errorf("Failed to generate cloud-init ISO: %v", err)
+		}
+	}
+
+	if err := s.vboxExec.SetupStorage(req.Name, req, isoPath, cloudInitISO); err != nil {
 		serviceLog.Errorf("Failed to setup VM storage: %v", err)
 		// Clean up on failure
 		serviceLog.Infof("Cleaning up failed VM...")
-		if delErr := s.deleteVMWithVBoxManage(req.Name); delErr != nil {
+		if delErr := s.vboxExec.DeleteVM(req.Name); delErr != nil {
 			serviceLog.Errorf("Failed to delete VM during cleanup: %v", delErr)
 		}
 		return nil, fmt.Errorf("failed to setup VM storage: %w", err)
@@ -273,22 +309,169 @@ func (s *ServiceImpl) CreateVM(ctx context.Context, req vbtypes.VMCreateRequest)
 	return vm, nil
 }
 
-// createVMWithVBoxManage creates a VM using VBoxManage
-func (s *ServiceImpl) createVMWithVBoxManage(name, baseFolder string) error {
-	args := []string{"createvm", "--name", name, "--register"}
-	if baseFolder != "" {
-		args = append(args, "--basefolder", baseFolder)
-	}
+// validateResources checks if the system has sufficient resources to create the VM
+func (s *ServiceImpl) validateResources(ctx context.Context, req vbtypes.VMCreateRequest) error {
+	serviceLog.Infof("Checking system resources for VM requirements...")
 
-	cmd := exec.Command("VBoxManage", args...)
-	output, err := cmd.CombinedOutput()
+	// Get detailed resource information
+	resourceInfo, err := resource.GetResource()
 	if err != nil {
-		return fmt.Errorf("VBoxManage createvm failed: %w, output: %s", err, string(output))
+		serviceLog.Warnf("Failed to get system resources, skipping validation: %v", err)
+		return nil // Skip validation if we can't get resource info
 	}
 
-	serviceLog.Infof("VBoxManage createvm output: %s", string(output))
+	serviceLog.Infof("Validating VM requirements against system resources...")
+	serviceLog.Infof("VM Requirements: CPU=%d cores, Memory=%d MB, Disk=%d GB", req.CPUCores, req.MemoryMB, req.DiskSizeGB)
+	serviceLog.Infof("System Resources: CPU=%d cores, Memory=%d MB, Disk=%d GB",
+		resourceInfo.CPU.Count,
+		resourceInfo.Memory.Total/(1024*1024),       // Convert bytes to MB
+		resourceInfo.Storage.Total/(1024*1024*1024)) // Convert bytes to GB
+
+	// Validate CPU cores
+	if err := s.validateCPUResources(req, resourceInfo); err != nil {
+		return fmt.Errorf("CPU validation failed: %w", err)
+	}
+
+	// Validate memory
+	if err := s.validateMemoryResources(req, resourceInfo); err != nil {
+		return fmt.Errorf("memory validation failed: %w", err)
+	}
+
+	// Validate disk space
+	if err := s.validateDiskResources(req, resourceInfo); err != nil {
+		return fmt.Errorf("disk validation failed: %w", err)
+	}
+
+	// Check existing VMs to ensure we don't overcommit resources
+	// if err := s.validateAgainstExistingVMs(ctx, req, resourceInfo); err != nil {
+	// 	return fmt.Errorf("existing VM validation failed: %w", err)
+	// }
+
+	serviceLog.Infof("Resource validation passed successfully")
 	return nil
 }
+
+// validateCPUResources validates CPU requirements
+func (s *ServiceImpl) validateCPUResources(req vbtypes.VMCreateRequest, resourceInfo *resource.ResourceInfo) error {
+	// Check if requested CPU cores exceed available cores
+	if req.CPUCores > resourceInfo.CPU.Count {
+		return fmt.Errorf("insufficient CPU cores: requested %d, available %d", req.CPUCores, resourceInfo.CPU.Count)
+	}
+
+	// Check for reasonable CPU allocation (not more than 80% of available cores)
+	maxRecommendedCores := int(float64(resourceInfo.CPU.Count) * 0.8)
+	if req.CPUCores > maxRecommendedCores {
+		serviceLog.Warnf("CPU allocation warning: requested %d cores exceeds recommended maximum of %d cores", req.CPUCores, maxRecommendedCores)
+	}
+
+	serviceLog.Infof("CPU validation passed: %d cores requested, %d available", req.CPUCores, resourceInfo.CPU.Count)
+	return nil
+}
+
+// validateMemoryResources validates memory requirements
+func (s *ServiceImpl) validateMemoryResources(req vbtypes.VMCreateRequest, resourceInfo *resource.ResourceInfo) error {
+	// Convert memory from bytes to MB
+	availableMemoryMB := int(resourceInfo.Memory.Total / (1024 * 1024))
+
+	// Check if requested memory exceeds available memory
+	if req.MemoryMB > availableMemoryMB {
+		return fmt.Errorf("insufficient memory: requested %d MB, available %d MB", req.MemoryMB, availableMemoryMB)
+	}
+
+	// Check for reasonable memory allocation (not more than 80% of available memory)
+	maxRecommendedMemoryMB := int(float64(availableMemoryMB) * 0.8)
+	if req.MemoryMB > maxRecommendedMemoryMB {
+		serviceLog.Warnf("Memory allocation warning: requested %d MB exceeds recommended maximum of %d MB", req.MemoryMB, maxRecommendedMemoryMB)
+	}
+
+	// Add 20% buffer for system overhead
+	requiredMemoryWithBuffer := int(float64(req.MemoryMB) * 1.2)
+	if requiredMemoryWithBuffer > availableMemoryMB {
+		return fmt.Errorf("insufficient memory with system buffer: required %d MB, available %d MB", requiredMemoryWithBuffer, availableMemoryMB)
+	}
+
+	serviceLog.Infof("Memory validation passed: %d MB requested, %d MB available", req.MemoryMB, availableMemoryMB)
+	return nil
+}
+
+// validateDiskResources validates disk space requirements
+func (s *ServiceImpl) validateDiskResources(req vbtypes.VMCreateRequest, resourceInfo *resource.ResourceInfo) error {
+	// Convert storage from bytes to GB
+	availableDiskGB := int(resourceInfo.Storage.Total / (1024 * 1024 * 1024))
+
+	// Check if requested disk space exceeds available disk space
+	if req.DiskSizeGB > availableDiskGB {
+		return fmt.Errorf("insufficient disk space: requested %d GB, available %d GB", req.DiskSizeGB, availableDiskGB)
+	}
+
+	// Check for reasonable disk allocation (not more than 90% of available disk space)
+	maxRecommendedDiskGB := int(float64(availableDiskGB) * 0.9)
+	if req.DiskSizeGB > maxRecommendedDiskGB {
+		serviceLog.Warnf("Disk allocation warning: requested %d GB exceeds recommended maximum of %d GB", req.DiskSizeGB, maxRecommendedDiskGB)
+	}
+
+	// Add 10% buffer for overhead (file system, metadata, etc.)
+	requiredDiskWithBuffer := int(float64(req.DiskSizeGB) * 1.1)
+	if requiredDiskWithBuffer > availableDiskGB {
+		return fmt.Errorf("insufficient disk space with overhead buffer: required %d GB, available %d GB", requiredDiskWithBuffer, availableDiskGB)
+	}
+
+	serviceLog.Infof("Disk validation passed: %d GB requested, %d GB available", req.DiskSizeGB, availableDiskGB)
+	return nil
+}
+
+// validateAgainstExistingVMs checks if creating this VM would overcommit resources with existing VMs
+// func (s *ServiceImpl) validateAgainstExistingVMs(ctx context.Context, req vbtypes.VMCreateRequest, resourceInfo *resource.ResourceInfo) error {
+// 	// Get all existing VMs
+// 	vms, _, err := s.GetVMs(ctx, big.NewInt(0), big.NewInt(1000), vbtypes.VMFilter{})
+// 	if err != nil {
+// 		serviceLog.Warnf("Failed to get existing VMs for resource validation: %v", err)
+// 		return nil // Skip this validation if we can't get existing VMs
+// 	}
+
+// 	// Calculate total resources used by existing VMs
+// 	totalExistingCPU := 0
+// 	totalExistingMemory := 0
+// 	totalExistingDisk := 0
+
+// 	for _, vm := range vms {
+// 		// Only count running VMs for resource usage
+// 		if vm.Status == vbtypes.Running {
+// 			totalExistingCPU += vm.CPUCores
+// 			totalExistingMemory += vm.MemoryMB
+// 			totalExistingDisk += vm.DiskSizeGB
+// 		}
+// 	}
+
+// 	// Convert resource info to appropriate units
+// 	availableCPU := resourceInfo.CPU.Count
+// 	availableMemoryMB := int(resourceInfo.Memory.Total / (1024 * 1024))
+// 	availableDiskGB := int(resourceInfo.Storage.Total / (1024 * 1024 * 1024))
+
+// 	// Check if adding this VM would exceed available resources
+// 	newTotalCPU := totalExistingCPU + req.CPUCores
+// 	newTotalMemory := totalExistingMemory + req.MemoryMB
+// 	newTotalDisk := totalExistingDisk + req.DiskSizeGB
+
+// 	if newTotalCPU > availableCPU {
+// 		return fmt.Errorf("CPU overcommit: existing VMs use %d cores, new VM requires %d cores, total %d exceeds available %d",
+// 			totalExistingCPU, req.CPUCores, newTotalCPU, availableCPU)
+// 	}
+
+// 	if newTotalMemory > availableMemoryMB {
+// 		return fmt.Errorf("memory overcommit: existing VMs use %d MB, new VM requires %d MB, total %d exceeds available %d",
+// 			totalExistingMemory, req.MemoryMB, newTotalMemory, availableMemoryMB)
+// 	}
+
+// 	if newTotalDisk > availableDiskGB {
+// 		return fmt.Errorf("disk overcommit: existing VMs use %d GB, new VM requires %d GB, total %d exceeds available %d",
+// 			totalExistingDisk, req.DiskSizeGB, newTotalDisk, availableDiskGB)
+// 	}
+
+// 	serviceLog.Infof("Existing VM validation passed: current usage CPU=%d/%d, Memory=%d/%d MB, Disk=%d/%d GB",
+// 		totalExistingCPU, availableCPU, totalExistingMemory, availableMemoryMB, totalExistingDisk, availableDiskGB)
+// 	return nil
+// }
 
 // GetVM gets a VM by ID using VBoxManage
 func (s *ServiceImpl) GetVM(ctx context.Context, vmID string) (*vbtypes.VM, error) {
@@ -462,8 +645,8 @@ func (s *ServiceImpl) DeleteVM(ctx context.Context, vmID string) error {
 		}
 	}
 
-	// Delete VM using VBoxManage
-	if err := s.deleteVMWithVBoxManage(vmName); err != nil {
+	// Delete VM using VBoxManage executor
+	if err := s.vboxExec.DeleteVM(vmName); err != nil {
 		return fmt.Errorf("failed to delete VM: %w", err)
 	}
 
@@ -489,14 +672,9 @@ func (s *ServiceImpl) StartVM(ctx context.Context, vmID string) (*vbtypes.VM, er
 
 	serviceLog.Infof("Starting VM: %s", vmName)
 
-	// Start the VM using VBoxManage
-	cmd := exec.Command("VBoxManage", "startvm", vmName)
-	if s.config.Headless {
-		cmd = exec.Command("VBoxManage", "startvm", vmName, "--type", "headless")
-	}
-
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return nil, fmt.Errorf("failed to start VM: %w, output: %s", err, string(output))
+	// Start the VM using VBoxManage executor
+	if err := s.vboxExec.StartVM(vmName, s.config.Headless); err != nil {
+		return nil, fmt.Errorf("failed to start VM: %w", err)
 	}
 
 	// Get updated VM info
@@ -518,10 +696,9 @@ func (s *ServiceImpl) StopVM(ctx context.Context, vmID string) (*vbtypes.VM, err
 
 	serviceLog.Infof("Stopping VM: %s", vmName)
 
-	// Stop the VM using VBoxManage
-	cmd := exec.Command("VBoxManage", "controlvm", vmName, "poweroff")
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return nil, fmt.Errorf("failed to stop VM: %w, output: %s", err, string(output))
+	// Stop the VM using VBoxManage executor
+	if err := s.vboxExec.StopVM(vmName); err != nil {
+		return nil, fmt.Errorf("failed to stop VM: %w", err)
 	}
 
 	// Get updated VM info
@@ -543,10 +720,9 @@ func (s *ServiceImpl) PauseVM(ctx context.Context, vmID string) (*vbtypes.VM, er
 
 	serviceLog.Infof("Pausing VM: %s", vmName)
 
-	// Pause the VM using VBoxManage
-	cmd := exec.Command("VBoxManage", "controlvm", vmName, "pause")
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return nil, fmt.Errorf("failed to pause VM: %w, output: %s", err, string(output))
+	// Pause the VM using VBoxManage executor
+	if err := s.vboxExec.PauseVM(vmName); err != nil {
+		return nil, fmt.Errorf("failed to pause VM: %w", err)
 	}
 
 	// Get updated VM info
@@ -568,10 +744,9 @@ func (s *ServiceImpl) ResumeVM(ctx context.Context, vmID string) (*vbtypes.VM, e
 
 	serviceLog.Infof("Resuming VM: %s", vmName)
 
-	// Resume the VM using VBoxManage
-	cmd := exec.Command("VBoxManage", "controlvm", vmName, "resume")
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return nil, fmt.Errorf("failed to resume VM: %w, output: %s", err, string(output))
+	// Resume the VM using VBoxManage executor
+	if err := s.vboxExec.ResumeVM(vmName); err != nil {
+		return nil, fmt.Errorf("failed to resume VM: %w", err)
 	}
 
 	// Get updated VM info
@@ -593,10 +768,9 @@ func (s *ServiceImpl) ResetVM(ctx context.Context, vmID string) (*vbtypes.VM, er
 
 	serviceLog.Infof("Resetting VM: %s", vmName)
 
-	// Reset the VM using VBoxManage
-	cmd := exec.Command("VBoxManage", "controlvm", vmName, "reset")
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return nil, fmt.Errorf("failed to reset VM: %w, output: %s", err, string(output))
+	// Reset the VM using VBoxManage executor
+	if err := s.vboxExec.ResetVM(vmName); err != nil {
+		return nil, fmt.Errorf("failed to reset VM: %w", err)
 	}
 
 	// Get updated VM info
@@ -642,21 +816,31 @@ func (s *ServiceImpl) GetAllVMUsage(ctx context.Context) (*vbtypes.VMUsage, erro
 
 // GetSystemInfo gets system information
 func (s *ServiceImpl) GetSystemInfo(ctx context.Context) (*vbtypes.VMSystemInfo, error) {
-	// Get VirtualBox version using VBoxManage
-	cmd := exec.Command("VBoxManage", "--version")
-	output, err := cmd.Output()
-	vboxVersion := "VBoxManage"
-	if err == nil {
-		vboxVersion = strings.TrimSpace(string(output))
+	// Get system resources using the direct resource function
+	resourceInfo, err := resource.GetResource()
+	if err != nil {
+		serviceLog.Warnf("Failed to get system resources: %v", err)
+		// Fallback to basic information
+		info := &vbtypes.VMSystemInfo{
+			HostOS:          runtime.GOOS,
+			HostArch:        runtime.GOARCH,
+			AvailableCPUs:   runtime.NumCPU(),
+			AvailableRAMMB:  0,
+			AvailableDiskGB: 0,
+		}
+		return info, nil
 	}
 
+	// Convert resource info to appropriate units
+	availableRAMMB := int(resourceInfo.Memory.Total / (1024 * 1024))          // Convert bytes to MB
+	availableDiskGB := int(resourceInfo.Storage.Total / (1024 * 1024 * 1024)) // Convert bytes to GB
+
 	info := &vbtypes.VMSystemInfo{
-		VBoxVersion:     vboxVersion,
 		HostOS:          runtime.GOOS,
 		HostArch:        runtime.GOARCH,
-		AvailableCPUs:   runtime.NumCPU(),
-		AvailableRAMMB:  0, // TODO: Implement RAM detection
-		AvailableDiskGB: 0, // TODO: Implement disk space detection
+		AvailableCPUs:   resourceInfo.CPU.Count,
+		AvailableRAMMB:  availableRAMMB,
+		AvailableDiskGB: availableDiskGB,
 	}
 
 	return info, nil
@@ -712,113 +896,7 @@ func (s *ServiceImpl) DeleteISO(ctx context.Context, isoPath string) error {
 
 // ListOSTypes lists all available OS types that can run on the current machine
 func (s *ServiceImpl) ListOSTypes(ctx context.Context) ([]string, error) {
-	// Detect the current machine architecture
-	arch := runtime.GOARCH
-	os := runtime.GOOS
-
-	// Define OS types based on architecture
-	var osTypes []string
-
-	switch arch {
-	case "arm64", "aarch64":
-		// ARM64 architecture - Apple Silicon, ARM servers, etc.
-		osTypes = []string{
-			"Ubuntu_ARM64",
-			"Debian_ARM64",
-			"Fedora_ARM64",
-			"OpenSUSE_ARM64",
-			"ArchLinux_ARM64",
-			"RedHat_ARM64",
-			"Oracle_ARM64",
-			"Linux_ARM64",
-			"FreeBSD_ARM64",
-			"NetBSD_ARM64",
-			"BSD_ARM64",
-			"Other_ARM64",
-		}
-	case "amd64", "x86_64":
-		// x86_64 architecture - Intel/AMD 64-bit
-		osTypes = []string{
-			"Ubuntu_64",
-			"Debian_64",
-			"Fedora_64",
-			"OpenSUSE_64",
-			"ArchLinux_64",
-			"RedHat_64",
-			"Oracle_64",
-			"Linux_64",
-			"Windows10_64",
-			"Windows11_64",
-			"Windows2019_64",
-			"Windows2022_64",
-			"FreeBSD_64",
-			"NetBSD_64",
-			"BSD_64",
-			"Other_64",
-		}
-	case "arm":
-		// 32-bit ARM architecture
-		osTypes = []string{
-			"Ubuntu",
-			"Debian",
-			"Fedora",
-			"OpenSUSE",
-			"ArchLinux",
-			"RedHat",
-			"Oracle",
-			"Linux",
-			"Other",
-		}
-	case "386", "i386":
-		// 32-bit x86 architecture
-		osTypes = []string{
-			"Ubuntu",
-			"Debian",
-			"Fedora",
-			"OpenSUSE",
-			"ArchLinux",
-			"RedHat",
-			"Oracle",
-			"Linux",
-			"Windows10",
-			"Windows7",
-			"WindowsXP",
-			"Other",
-		}
-	default:
-		// Unknown architecture - return basic types
-		osTypes = []string{
-			"Other",
-			"Linux",
-		}
-	}
-
-	// Add OS-specific types based on the host OS
-	switch os {
-	case "darwin":
-		// macOS host - add macOS guest types
-		if arch == "arm64" {
-			osTypes = append(osTypes, "MacOS_ARM64", "Darwin_ARM64")
-		} else if arch == "amd64" {
-			osTypes = append(osTypes, "MacOS_64", "Darwin_64")
-		}
-	case "linux":
-		// Linux host - already covered above
-	case "windows":
-		// Windows host - already covered above
-	}
-
-	// Sort and remove duplicates
-	seen := make(map[string]bool)
-	var uniqueOSTypes []string
-	for _, osType := range osTypes {
-		if !seen[osType] {
-			seen[osType] = true
-			uniqueOSTypes = append(uniqueOSTypes, osType)
-		}
-	}
-
-	return uniqueOSTypes, nil
+	return s.storageMgr.GetSupportedOSTypes(), nil
 }
 
 // ensureISO ensures an ISO file is available locally
@@ -833,10 +911,12 @@ func (s *ServiceImpl) ensureISO(ctx context.Context, isoURL string) (string, err
 	isoPath := filepath.Join(isoDir, isoName)
 
 	if s.storageMgr.FileExists(isoPath) {
+		serviceLog.Infof("ISO already exists: %s", isoPath)
 		return isoPath, nil
 	}
 
 	// Download ISO
+	serviceLog.Infof("Downloading ISO: %s", isoPath)
 	if err := s.storageMgr.DownloadFile(ctx, isoURL, isoPath); err != nil {
 		return "", err
 	}
@@ -1003,84 +1083,6 @@ func (s *ServiceImpl) setupVMStorageWithVBoxManage(vmName string, req vbtypes.VM
 func generateVMID(name string) string {
 	// Simple ID generation - in production, you might want a more sophisticated approach
 	return fmt.Sprintf("vm-%s-%d", strings.ToLower(name), time.Now().Unix())
-}
-
-// determineOSTypeAndISO determines the appropriate OS type and ISO URL based on system architecture
-func (s *ServiceImpl) determineOSTypeAndISO(ctx context.Context) (string, string, error) {
-	// Detect the current machine architecture
-	arch := runtime.GOARCH
-
-	// Map architecture to appropriate OS type and ISO URL
-	switch arch {
-	case "arm64", "aarch64":
-		return "Ubuntu_ARM64", "https://cdimage.ubuntu.com/releases/24.04/release/ubuntu-24.04.2-live-server-arm64.iso", nil
-	case "amd64", "x86_64":
-		return "Ubuntu_64", "https://cdimage.ubuntu.com/releases/24.04/release/ubuntu-24.04.2-live-server-amd64.iso", nil
-	case "arm":
-		return "Ubuntu", "https://cdimage.ubuntu.com/releases/24.04/release/ubuntu-24.04.2-live-server-armhf.iso", nil
-	case "386", "i386":
-		return "Ubuntu", "https://cdimage.ubuntu.com/releases/24.04/release/ubuntu-24.04.2-live-server-i386.iso", nil
-	default:
-		// Fallback to Ubuntu_64 for unknown architectures
-		return "Ubuntu_64", "https://cdimage.ubuntu.com/releases/24.04/release/ubuntu-24.04.2-live-server-amd64.iso", nil
-	}
-}
-
-// determineOSTypeAndISOFromRequest determines the appropriate OS type and ISO URL based on the request
-func (s *ServiceImpl) determineOSTypeAndISOFromRequest(req vbtypes.VMCreateRequest) (string, string, error) {
-	// Use provided OS type or determine from architecture
-	osType := req.OSType
-	if osType == "" {
-		// Fallback to architecture-based detection
-		arch := runtime.GOARCH
-		switch arch {
-		case "arm64", "aarch64":
-			osType = "Ubuntu_ARM64"
-		case "amd64", "x86_64":
-			osType = "Ubuntu_64"
-		case "arm":
-			osType = "Ubuntu"
-		case "386", "i386":
-			osType = "Ubuntu"
-		default:
-			osType = "Ubuntu_64"
-		}
-	}
-
-	// Use provided ISO URL or determine based on OS type
-	isoURL := req.ISOURL
-	if isoURL == "" {
-		isoURL = s.getISOURLForOSType(osType)
-	}
-
-	return osType, isoURL, nil
-}
-
-// getISOURLForOSType returns the ISO URL for a given OS type
-func (s *ServiceImpl) getISOURLForOSType(osType string) string {
-	switch osType {
-	case "Ubuntu_64":
-		// Use a working Ubuntu 24.04 LTS server ISO URL
-		return "https://releases.ubuntu.com/24.04/ubuntu-24.04.2-live-server-amd64.iso"
-	case "Ubuntu_ARM64":
-		// Use Ubuntu 24.04 LTS server ARM64 ISO
-		return "https://releases.ubuntu.com/24.04/ubuntu-24.04.2-live-server-arm64.iso"
-	case "Debian_64":
-		return "https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/debian-12.5.0-amd64-netinst.iso"
-	case "Debian_ARM64":
-		return "https://cdimage.debian.org/debian-cd/current/arm64/iso-cd/debian-12.5.0-arm64-netinst.iso"
-	case "Fedora_64":
-		return "https://download.fedoraproject.org/pub/fedora/linux/releases/40/Server/x86_64/iso/Fedora-Server-dvd-x86_64-40-1.14.iso"
-	case "Fedora_ARM64":
-		return "https://download.fedoraproject.org/pub/fedora/linux/releases/40/Server/aarch64/iso/Fedora-Server-dvd-aarch64-40-1.14.iso"
-	case "CentOS_64":
-		return "https://mirror.stream.centos.org/9-stream/BaseOS/x86_64/iso/CentOS-Stream-9-latest-x86_64-boot.iso"
-	case "CentOS_ARM64":
-		return "https://mirror.stream.centos.org/9-stream/BaseOS/aarch64/iso/CentOS-Stream-9-latest-aarch64-boot.iso"
-	default:
-		// Default to Ubuntu 64-bit
-		return "https://releases.ubuntu.com/24.04/ubuntu-24.04.2-live-server-amd64.iso"
-	}
 }
 
 // validateVirtualBoxInstallation checks if VirtualBox is properly installed
