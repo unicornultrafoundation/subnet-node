@@ -4,7 +4,7 @@ import "reflect"
 
 // Attributes represents a map of string keys to any values, commonly used for storing
 // configuration attributes, capabilities, and metadata.
-type Attributes map[string]any
+type Attributes map[string]string
 
 // GetCapabilitiesMap extracts capabilities from the attributes map that match the given prefix.
 // It filters keys that start with "capabilities/" + prefix and returns a new map with the prefix removed.

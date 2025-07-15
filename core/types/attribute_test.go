@@ -15,7 +15,7 @@ func TestAttributes_GetCapabilitiesMap(t *testing.T) {
 		"capabilities/cpu/cores":   "8",
 		"capabilities/cpu/threads": "16",
 		"other/attribute":          "value",
-		"capabilities/gpu/cuda":    true,
+		"capabilities/gpu/cuda":    "true",
 		"capabilities/memory/size": "16GB",
 		"capabilities/memory/type": "DDR4",
 	}
@@ -25,7 +25,7 @@ func TestAttributes_GetCapabilitiesMap(t *testing.T) {
 	expectedGPU := Attributes{
 		"model":  "RTX 3080",
 		"memory": "10GB",
-		"cuda":   true,
+		"cuda":   "true",
 	}
 	assert.Equal(t, expectedGPU, gpuCapabilities)
 
@@ -85,16 +85,16 @@ func TestAttributes_GetCapabilitiesMap_EdgeCases(t *testing.T) {
 	// Test case 6: Mixed data types in capabilities
 	attrs = Attributes{
 		"capabilities/gpu/model":    "RTX 3080",
-		"capabilities/gpu/memory":   10,
-		"capabilities/gpu/enabled":  true,
-		"capabilities/gpu/features": []string{"cuda", "tensor_cores"},
+		"capabilities/gpu/memory":   "10",
+		"capabilities/gpu/enabled":  "true",
+		"capabilities/gpu/features": "cuda,tensor_cores",
 	}
 	result = attrs.GetCapabilitiesMap("gpu/")
 	expected = Attributes{
 		"model":    "RTX 3080",
-		"memory":   10,
-		"enabled":  true,
-		"features": []string{"cuda", "tensor_cores"},
+		"memory":   "10",
+		"enabled":  "true",
+		"features": "cuda,tensor_cores",
 	}
 	assert.Equal(t, expected, result)
 }
@@ -103,29 +103,29 @@ func TestAttributes_GetCapabilitiesMap_EdgeCases(t *testing.T) {
 func TestAttributes_AllIn(t *testing.T) {
 	// Test data setup
 	a := Attributes{
-		"a": 1,
+		"a": "1",
 		"b": "foo",
-		"c": true,
+		"c": "true",
 	}
 	b := Attributes{
-		"a": 1,
+		"a": "1",
 		"b": "foo",
-		"c": true,
-		"d": 1,
+		"c": "true",
+		"d": "1",
 	}
 	c := Attributes{
-		"a": 1,
+		"a": "1",
 		"b": "foo",
-		"c": false,
+		"c": "false",
 	}
 	d := Attributes{
-		"a": 1,
+		"a": "1",
 		"b": "foo",
 	}
 	e := Attributes{
-		"a": 2,
+		"a": "2",
 		"b": "foo",
-		"c": true,
+		"c": "true",
 	}
 
 	// Test case 1: All key/value pairs in a exist and match in b
@@ -152,10 +152,10 @@ func TestAttributes_AllIn(t *testing.T) {
 
 	// Test case 8: Comparison with uncomparable types (slices) should be skipped
 	f := Attributes{
-		"arr": []int{1, 2, 3},
+		"arr": "1,2,3",
 	}
 	g := Attributes{
-		"arr": []int{1, 2, 3},
+		"arr": "1,2,3",
 	}
 	assert.True(t, f.AllIn(g)) // Slices are not compared, so this returns true
 }
