@@ -280,11 +280,6 @@ func (s *StorageManagerImpl) determineOSType(req vbtypes.VMCreateRequest) (strin
 
 // determineISOURL determines the appropriate ISO URL based on request and OS type
 func (s *StorageManagerImpl) determineISOURL(req vbtypes.VMCreateRequest, osType string) (string, error) {
-	// If ISO URL is explicitly provided in the request, use it
-	if req.ISOURL != "" {
-		storageLog.Infof("Using provided ISO URL: %s", req.ISOURL)
-		return req.ISOURL, nil
-	}
 
 	// Determine ISO URL based on OS type
 	isoURL := s.getISOURLForOSType(osType)
@@ -352,15 +347,7 @@ func (s *StorageManagerImpl) isValidOSType(osType string) bool {
 	validPatterns := []string{
 		"Ubuntu", "Ubuntu_64", "Ubuntu_ARM64",
 		"Debian", "Debian_64", "Debian_ARM64",
-		"Fedora", "Fedora_64", "Fedora_ARM64",
-		"CentOS", "CentOS_64", "CentOS_ARM64",
-		"RedHat", "RedHat_64", "RedHat_ARM64",
-		"Oracle", "Oracle_64", "Oracle_ARM64",
-		"Linux", "Linux_64", "Linux_ARM64",
 		"Windows", "Windows_64", "Windows_ARM64",
-		"FreeBSD", "FreeBSD_64", "FreeBSD_ARM64",
-		"NetBSD", "NetBSD_64", "NetBSD_ARM64",
-		"BSD", "BSD_64", "BSD_ARM64",
 		"Other", "Other_64", "Other_ARM64",
 	}
 
@@ -398,10 +385,10 @@ func (s *StorageManagerImpl) validateArchitectureCompatibility(osType string) er
 
 	// Define architecture compatibility rules
 	compatibilityMap := map[string][]string{
-		"arm64": {"Ubuntu_ARM64", "Debian_ARM64", "Fedora_ARM64", "CentOS_ARM64", "RedHat_ARM64", "Oracle_ARM64", "Linux_ARM64", "FreeBSD_ARM64", "NetBSD_ARM64", "BSD_ARM64", "Other_ARM64"},
-		"amd64": {"Ubuntu_64", "Debian_64", "Fedora_64", "CentOS_64", "RedHat_64", "Oracle_64", "Linux_64", "Windows_64", "FreeBSD_64", "NetBSD_64", "BSD_64", "Other_64"},
-		"arm":   {"Ubuntu", "Debian", "Fedora", "CentOS", "RedHat", "Oracle", "Linux", "FreeBSD", "NetBSD", "BSD", "Other"},
-		"386":   {"Ubuntu", "Debian", "Fedora", "CentOS", "RedHat", "Oracle", "Linux", "Windows", "FreeBSD", "NetBSD", "BSD", "Other"},
+		"arm64": {"Ubuntu_ARM64", "Debian_ARM64", "Windows_ARM64", "Other_ARM64"},
+		"amd64": {"Ubuntu_64", "Debian_64", "Windows_64", "Other_64"},
+		"arm":   {"Ubuntu", "Debian", "Windows", "Other"},
+		"386":   {"Ubuntu", "Debian", "Windows", "Other"},
 	}
 
 	// Get compatible OS types for current architecture
@@ -436,115 +423,45 @@ func (s *StorageManagerImpl) getISOURLForOSType(osType string) string {
 		arch := runtime.GOARCH
 		switch arch {
 		case "arm64", "aarch64":
-			return "https://releases.ubuntu.com/24.04/ubuntu-24.04.2-live-server-arm64.iso"
+			return "https://cdimage.ubuntu.com/releases/24.04/release/ubuntu-24.04.2-live-server-arm64.iso"
 		case "amd64", "x86_64":
 			return "https://releases.ubuntu.com/24.04/ubuntu-24.04.2-live-server-amd64.iso"
 		case "arm":
 			return "https://cdimage.ubuntu.com/releases/24.04/release/ubuntu-24.04.2-live-server-arm64.iso"
-		case "386", "i386":
-			return "https://releases.ubuntu.com/24.04/ubuntu-24.04.2-live-server-i386.iso"
 		default:
 			return "https://releases.ubuntu.com/24.04/ubuntu-24.04.2-live-server-amd64.iso"
 		}
 	case "Debian_64":
-		return "https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/debian-12.5.0-amd64-netinst.iso"
+		return "https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/debian-12.11.0-amd64-netinst.iso"
 	case "Debian_ARM64":
-		return "https://cdimage.debian.org/debian-cd/current/arm64/iso-cd/debian-12.5.0-arm64-netinst.iso"
+		return "https://cdimage.debian.org/debian-cd/current/arm64/iso-cd/debian-12.11.0-arm64-netinst.iso"
 	case "Debian":
 		// Use appropriate Debian ISO based on architecture
 		arch := runtime.GOARCH
 		switch arch {
 		case "arm64", "aarch64":
-			return "https://cdimage.debian.org/debian-cd/current/arm64/iso-cd/debian-12.5.0-arm64-netinst.iso"
+			return "https://cdimage.debian.org/debian-cd/current/arm64/iso-cd/debian-12.11.0-arm64-netinst.iso"
 		case "amd64", "x86_64":
-			return "https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/debian-12.5.0-amd64-netinst.iso"
-		case "arm":
-			return "https://cdimage.debian.org/debian-cd/current/armhf/iso-cd/debian-12.5.0-armhf-netinst.iso"
-		case "386", "i386":
-			return "https://cdimage.debian.org/debian-cd/current/i386/iso-cd/debian-12.5.0-i386-netinst.iso"
+			return "https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/debian-12.11.0-amd64-netinst.iso"
 		default:
-			return "https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/debian-12.5.0-amd64-netinst.iso"
+			return "https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/debian-12.11.0-amd64-netinst.iso"
 		}
-	case "Fedora_64":
-		return "https://download.fedoraproject.org/pub/fedora/linux/releases/40/Server/x86_64/iso/Fedora-Server-dvd-x86_64-40-1.14.iso"
-	case "Fedora_ARM64":
-		return "https://download.fedoraproject.org/pub/fedora/linux/releases/40/Server/aarch64/iso/Fedora-Server-dvd-aarch64-40-1.14.iso"
-	case "Fedora":
-		// Use appropriate Fedora ISO based on architecture
-		arch := runtime.GOARCH
-		switch arch {
-		case "arm64", "aarch64":
-			return "https://download.fedoraproject.org/pub/fedora/linux/releases/40/Server/aarch64/iso/Fedora-Server-dvd-aarch64-40-1.14.iso"
-		case "amd64", "x86_64":
-			return "https://download.fedoraproject.org/pub/fedora/linux/releases/40/Server/x86_64/iso/Fedora-Server-dvd-x86_64-40-1.14.iso"
-		default:
-			return "https://download.fedoraproject.org/pub/fedora/linux/releases/40/Server/x86_64/iso/Fedora-Server-dvd-x86_64-40-1.14.iso"
-		}
-	case "CentOS_64":
-		return "https://mirror.stream.centos.org/9-stream/BaseOS/x86_64/iso/CentOS-Stream-9-latest-x86_64-boot.iso"
-	case "CentOS_ARM64":
-		return "https://mirror.stream.centos.org/9-stream/BaseOS/aarch64/iso/CentOS-Stream-9-latest-aarch64-boot.iso"
-	case "CentOS":
-		// Use appropriate CentOS ISO based on architecture
-		arch := runtime.GOARCH
-		switch arch {
-		case "arm64", "aarch64":
-			return "https://mirror.stream.centos.org/9-stream/BaseOS/aarch64/iso/CentOS-Stream-9-latest-aarch64-boot.iso"
-		case "amd64", "x86_64":
-			return "https://mirror.stream.centos.org/9-stream/BaseOS/x86_64/iso/CentOS-Stream-9-latest-x86_64-boot.iso"
-		default:
-			return "https://mirror.stream.centos.org/9-stream/BaseOS/x86_64/iso/CentOS-Stream-9-latest-x86_64-boot.iso"
-		}
-	case "RedHat_64":
-		return "https://access.redhat.com/downloads/content/rhel/9.0/x86_64/iso/rhel-9.0-x86_64-boot.iso"
-	case "RedHat_ARM64":
-		return "https://access.redhat.com/downloads/content/rhel/9.0/aarch64/iso/rhel-9.0-aarch64-boot.iso"
-	case "Oracle_64":
-		return "https://yum.oracle.com/ISOS/OracleLinux/OL9/u0/x86_64/OracleLinux-R9-U0-x86_64-boot.iso"
-	case "Oracle_ARM64":
-		return "https://yum.oracle.com/ISOS/OracleLinux/OL9/u0/aarch64/OracleLinux-R9-U0-aarch64-boot.iso"
-	case "Linux_64":
-		return "https://releases.ubuntu.com/24.04/ubuntu-24.04.2-live-server-amd64.iso"
-	case "Linux_ARM64":
-		return "https://releases.ubuntu.com/24.04/ubuntu-24.04.2-live-server-arm64.iso"
-	case "Linux":
-		// Use appropriate Linux ISO based on architecture
-		arch := runtime.GOARCH
-		switch arch {
-		case "arm64", "aarch64":
-			return "https://releases.ubuntu.com/24.04/ubuntu-24.04.2-live-server-arm64.iso"
-		case "amd64", "x86_64":
-			return "https://releases.ubuntu.com/24.04/ubuntu-24.04.2-live-server-amd64.iso"
-		default:
-			return "https://releases.ubuntu.com/24.04/ubuntu-24.04.2-live-server-amd64.iso"
-		}
-	case "Windows_64":
-		return "https://software-download.microsoft.com/download/pr/888969d5-f34g-4e03-ac9d-1f9786c69161/22000.318.211104-1236.co_release_svc_refresh_CLIENTENTERPRISEEVAL_OEMRET_x64FRE_en-us.iso"
-	case "Windows_ARM64":
-		return "https://software-download.microsoft.com/download/pr/888969d5-f34g-4e03-ac9d-1f9786c69161/22000.318.211104-1236.co_release_svc_refresh_CLIENTENTERPRISEEVAL_OEMRET_ARM64FRE_en-us.iso"
-	case "FreeBSD_64":
-		return "https://download.freebsd.org/ftp/releases/amd64/amd64/13.2-RELEASE/FreeBSD-13.2-RELEASE-amd64-bootonly.iso"
-	case "FreeBSD_ARM64":
-		return "https://download.freebsd.org/ftp/releases/arm64/aarch64/13.2-RELEASE/FreeBSD-13.2-RELEASE-arm64-aarch64-bootonly.iso"
-	case "FreeBSD":
-		// Use appropriate FreeBSD ISO based on architecture
-		arch := runtime.GOARCH
-		switch arch {
-		case "arm64", "aarch64":
-			return "https://download.freebsd.org/ftp/releases/arm64/aarch64/13.2-RELEASE/FreeBSD-13.2-RELEASE-arm64-aarch64-bootonly.iso"
-		case "amd64", "x86_64":
-			return "https://download.freebsd.org/ftp/releases/amd64/amd64/13.2-RELEASE/FreeBSD-13.2-RELEASE-amd64-bootonly.iso"
-		default:
-			return "https://download.freebsd.org/ftp/releases/amd64/amd64/13.2-RELEASE/FreeBSD-13.2-RELEASE-amd64-bootonly.iso"
-		}
-	case "NetBSD_64":
-		return "https://cdn.netbsd.org/pub/NetBSD/NetBSD-9.3/amd64/installation/cdrom/NetBSD-9.3-amd64.iso"
-	case "NetBSD_ARM64":
-		return "https://cdn.netbsd.org/pub/NetBSD/NetBSD-9.3/evbarm-aarch64/installation/cdrom/NetBSD-9.3-evbarm-aarch64.iso"
-	case "BSD_64":
-		return "https://download.freebsd.org/ftp/releases/amd64/amd64/13.2-RELEASE/FreeBSD-13.2-RELEASE-amd64-bootonly.iso"
-	case "BSD_ARM64":
-		return "https://download.freebsd.org/ftp/releases/arm64/aarch64/13.2-RELEASE/FreeBSD-13.2-RELEASE-arm64-aarch64-bootonly.iso"
+	// case "Windows_64":
+	// 	return "https://software-download.microsoft.com/download/pr/888969d5-f34g-4e03-ac9d-1f9786c69161/22000.318.211104-1236.co_release_svc_refresh_CLIENTENTERPRISEEVAL_OEMRET_x64FRE_en-us.iso"
+	// case "Windows_ARM64":
+	// 	return "https://software-download.microsoft.com/download/pr/888969d5-f34g-4e03-ac9d-1f9786c69161/22000.318.211104-1236.co_release_svc_refresh_CLIENTENTERPRISEEVAL_OEMRET_ARM64FRE_en-us.iso"
+	// case "Windows":
+	// 	// Use appropriate Windows ISO based on architecture
+	// 	arch := runtime.GOARCH
+	// 	switch arch {
+	// 	case "arm64", "aarch64":
+	// 		return "https://software-download.microsoft.com/download/pr/888969d5-f34g-4e03-ac9d-1f9786c69161/22000.318.211104-1236.co_release_svc_refresh_CLIENTENTERPRISEEVAL_OEMRET_ARM64FRE_en-us.iso"
+	// 	case "amd64", "x86_64":
+	// 		return "https://software-download.microsoft.com/download/pr/888969d5-f34g-4e03-ac9d-1f9786c69161/22000.318.211104-1236.co_release_svc_refresh_CLIENTENTERPRISEEVAL_OEMRET_x64FRE_en-us.iso"
+	// 	default:
+	// 		return "https://software-download.microsoft.com/download/pr/888969d5-f34g-4e03-ac9d-1f9786c69161/22000.318.211104-1236.co_release_svc_refresh_CLIENTENTERPRISEEVAL_OEMRET_x64FRE_en-us.iso"
+	// 	}
+
 	case "Other_64":
 		return "https://releases.ubuntu.com/24.04/ubuntu-24.04.2-live-server-amd64.iso"
 	case "Other_ARM64":
@@ -571,10 +488,10 @@ func (s *StorageManagerImpl) GetSupportedOSTypes() []string {
 	currentArch := runtime.GOARCH
 
 	compatibilityMap := map[string][]string{
-		"arm64": {"Ubuntu_ARM64", "Debian_ARM64", "Fedora_ARM64", "CentOS_ARM64", "RedHat_ARM64", "Oracle_ARM64", "Linux_ARM64", "FreeBSD_ARM64", "NetBSD_ARM64", "BSD_ARM64", "Other_ARM64"},
-		"amd64": {"Ubuntu_64", "Debian_64", "Fedora_64", "CentOS_64", "RedHat_64", "Oracle_64", "Linux_64", "Windows_64", "FreeBSD_64", "NetBSD_64", "BSD_64", "Other_64"},
-		"arm":   {"Ubuntu", "Debian", "Fedora", "CentOS", "RedHat", "Oracle", "Linux", "FreeBSD", "NetBSD", "BSD", "Other"},
-		"386":   {"Ubuntu", "Debian", "Fedora", "CentOS", "RedHat", "Oracle", "Linux", "Windows", "FreeBSD", "NetBSD", "BSD", "Other"},
+		"arm64": {"Ubuntu_ARM64", "Debian_ARM64", "Windows_ARM64", "Other_ARM64"},
+		"amd64": {"Ubuntu_64", "Debian_64", "Windows_64", "Other_64"},
+		"arm":   {"Ubuntu", "Debian", "Windows", "Other"},
+		"386":   {"Ubuntu", "Debian", "Windows", "Other"},
 	}
 
 	if compatibleTypes, exists := compatibilityMap[currentArch]; exists {
@@ -585,15 +502,7 @@ func (s *StorageManagerImpl) GetSupportedOSTypes() []string {
 	return []string{
 		"Ubuntu", "Ubuntu_64", "Ubuntu_ARM64",
 		"Debian", "Debian_64", "Debian_ARM64",
-		"Fedora", "Fedora_64", "Fedora_ARM64",
-		"CentOS", "CentOS_64", "CentOS_ARM64",
-		"RedHat", "RedHat_64", "RedHat_ARM64",
-		"Oracle", "Oracle_64", "Oracle_ARM64",
-		"Linux", "Linux_64", "Linux_ARM64",
 		"Windows", "Windows_64", "Windows_ARM64",
-		"FreeBSD", "FreeBSD_64", "FreeBSD_ARM64",
-		"NetBSD", "NetBSD_64", "NetBSD_ARM64",
-		"BSD", "BSD_64", "BSD_ARM64",
 		"Other", "Other_64", "Other_ARM64",
 	}
 }

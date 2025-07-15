@@ -410,7 +410,6 @@ func TestCreateVM(t *testing.T) {
 		CPUCores:   1,
 		MemoryMB:   1024,
 		DiskSizeGB: 10,
-		ISOURL:     "https://cdimage.ubuntu.com/releases/24.04/release/ubuntu-24.04.2-live-server-arm64.iso",
 	}
 
 	vm, err := service.CreateVM(ctx, req)

@@ -12,19 +12,38 @@ import (
 )
 
 func main() {
-	fmt.Println("VirtualBox Service Example")
-	fmt.Println("==========================")
+	fmt.Println("VirtualBox Service Example with Hardware Detection")
+	fmt.Println("==================================================")
 
-	// Create VirtualBox service
-	fmt.Println("Creating VirtualBox service...")
-	// Create a default configuration for the example
+	// Demonstrate hardware detection
+	fmt.Println("\n1. Hardware Detection Demo:")
+	detector := virtualbox.NewHardwareDetector()
+	hardware, err := detector.DetectHardware()
+	if err != nil {
+		log.Fatalf("Failed to detect hardware: %v", err)
+	}
+
+	fmt.Printf("   Architecture: %s\n", hardware.Architecture)
+	fmt.Printf("   CPU Count: %d\n", hardware.CPUCount)
+	fmt.Printf("   Total Memory: %d MB\n", hardware.TotalMemoryMB)
+	fmt.Printf("   GPU Type: %s (Cores: %d)\n", hardware.GPUType, hardware.GPUCount)
+	fmt.Printf("   Platform: %s\n", hardware.OSType)
+
+	// Get VirtualBox settings based on hardware
+	settings := detector.GetVirtualBoxSettings(hardware)
+	fmt.Printf("   Recommended OS Type: %s\n", settings.OSType)
+	fmt.Printf("   Recommended Chipset: %s\n", settings.Chipset)
+	fmt.Printf("   Recommended VRAM: %d MB\n", settings.VRAMMB)
+
+	// Create VirtualBox service with hardware-aware configuration
+	fmt.Println("\n2. Creating VirtualBox service with hardware detection...")
 	config := &virtualbox.ServiceConfig{
 		Enable:             true,
 		DefaultMemoryMB:    2048,
 		DefaultCPUs:        2,
 		DefaultDiskSizeGB:  20,
 		DefaultNetworkType: "nat",
-		DefaultOSType:      "Ubuntu_arm64",
+		DefaultOSType:      settings.OSType, // Use detected OS type
 		VMStartTimeout:     60 * time.Second,
 		VMStopTimeout:      30 * time.Second,
 		VMDeleteTimeout:    60 * time.Second,
@@ -102,7 +121,7 @@ func main() {
 		CPUCores:   1,
 		MemoryMB:   2048,
 		DiskSizeGB: 10,
-		ISOURL:     "https://cdimage.ubuntu.com/releases/24.04/release/ubuntu-24.04.2-live-server-arm64.iso",
+		// Note: ISO URL is handled internally by the service based on OS type
 	}
 
 	vm, err := service.CreateVM(ctx, req)

@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/sirupsen/logrus"
@@ -87,9 +88,22 @@ func (e *VBoxManageExecutor) CreateVM(vmName string, osType string) error {
 	return nil
 }
 
-// ConfigureVMHardware configures VM hardware settings
+// ConfigureVMHardware configures VM hardware settings with dynamic hardware detection
 func (e *VBoxManageExecutor) ConfigureVMHardware(vmName string, cpuCount int, memoryMB int) error {
 	vboxLog.Infof("Configuring VM hardware for: %s", vmName)
+
+	// Detect hardware and get appropriate settings
+	detector := NewHardwareDetector()
+	hardware, err := detector.DetectHardware()
+	if err != nil {
+		vboxLog.Warnf("Hardware detection failed, using fallback settings: %v", err)
+		// Fallback to basic settings
+		return e.configureVMHardwareFallback(vmName, cpuCount, memoryMB)
+	}
+
+	settings := detector.GetVirtualBoxSettings(hardware)
+	vboxLog.Infof("Detected hardware: %+v", hardware)
+	vboxLog.Infof("Using VirtualBox settings: %+v", settings)
 
 	// Set CPU count
 	if err := e.setCPUs(vmName, cpuCount); err != nil {
@@ -101,29 +115,29 @@ func (e *VBoxManageExecutor) ConfigureVMHardware(vmName string, cpuCount int, me
 		return fmt.Errorf("failed to set memory: %w", err)
 	}
 
-	// Set VRAM (video memory)
-	if err := e.setVRAM(vmName, 16); err != nil {
+	// Set VRAM based on detected hardware
+	if err := e.setVRAM(vmName, settings.VRAMMB); err != nil {
 		return fmt.Errorf("failed to set VRAM: %w", err)
 	}
 
-	// Set chipset for ARM64
-	if err := e.setChipset(vmName, "armv8virtual"); err != nil {
+	// Set chipset based on detected hardware
+	if err := e.setChipset(vmName, settings.Chipset); err != nil {
 		return fmt.Errorf("failed to set chipset: %w", err)
 	}
 
-	// Set firmware to EFI
-	if err := e.setFirmware(vmName, "efi"); err != nil {
+	// Set firmware based on detected hardware
+	if err := e.setFirmware(vmName, settings.Firmware); err != nil {
 		return fmt.Errorf("failed to set firmware: %w", err)
 	}
 
-	// Set graphics controller
-	if err := e.setGraphicsController(vmName, "vmsvga"); err != nil {
+	// Set graphics controller based on detected hardware
+	if err := e.setGraphicsController(vmName, settings.GraphicsController); err != nil {
 		return fmt.Errorf("failed to set graphics controller: %w", err)
 	}
 
-	// Disable IOAPIC for ARM64
-	if err := e.setIOAPIC(vmName, false); err != nil {
-		return fmt.Errorf("failed to disable IOAPIC: %w", err)
+	// Set IOAPIC based on detected hardware
+	if err := e.setIOAPIC(vmName, settings.IOAPICEnabled); err != nil {
+		return fmt.Errorf("failed to set IOAPIC: %w", err)
 	}
 
 	// Set boot order
@@ -136,13 +150,13 @@ func (e *VBoxManageExecutor) ConfigureVMHardware(vmName string, cpuCount int, me
 		return fmt.Errorf("failed to configure input devices: %w", err)
 	}
 
-	// Configure USB
-	if err := e.configureUSB(vmName); err != nil {
+	// Configure USB based on detected hardware
+	if err := e.configureUSBWithSettings(vmName, settings.USBController); err != nil {
 		return fmt.Errorf("failed to configure USB: %w", err)
 	}
 
-	// Configure audio
-	if err := e.configureAudio(vmName); err != nil {
+	// Configure audio based on detected hardware
+	if err := e.configureAudioWithSettings(vmName, settings.AudioController, settings.AudioOutput, settings.AudioInput); err != nil {
 		return fmt.Errorf("failed to configure audio: %w", err)
 	}
 
@@ -497,6 +511,109 @@ func (e *VBoxManageExecutor) configureUSB(vmName string) error {
 func (e *VBoxManageExecutor) configureAudio(vmName string) error {
 	vboxLog.Infof("Configuring audio")
 	_, err := e.executeCommand("modifyvm", vmName, "--audio-controller", "hda", "--audio-out", "on", "--audio-in", "off")
+	return err
+}
+
+// configureVMHardwareFallback provides fallback hardware configuration when detection fails
+func (e *VBoxManageExecutor) configureVMHardwareFallback(vmName string, cpuCount int, memoryMB int) error {
+	vboxLog.Infof("Using fallback hardware configuration for: %s", vmName)
+
+	// Set CPU count
+	if err := e.setCPUs(vmName, cpuCount); err != nil {
+		return fmt.Errorf("failed to set CPU count: %w", err)
+	}
+
+	// Set memory
+	if err := e.setMemory(vmName, memoryMB); err != nil {
+		return fmt.Errorf("failed to set memory: %w", err)
+	}
+
+	// Set VRAM (video memory) - fallback to 16MB
+	if err := e.setVRAM(vmName, 16); err != nil {
+		return fmt.Errorf("failed to set VRAM: %w", err)
+	}
+
+	// Set chipset based on runtime architecture
+	chipset := "ich9"
+	if runtime.GOARCH == "arm64" || runtime.GOARCH == "aarch64" {
+		chipset = "armv8virtual"
+	}
+	if err := e.setChipset(vmName, chipset); err != nil {
+		return fmt.Errorf("failed to set chipset: %w", err)
+	}
+
+	// Set firmware - fallback to EFI for most architectures
+	firmware := "efi"
+	if runtime.GOARCH == "386" || runtime.GOARCH == "i386" {
+		firmware = "bios"
+	}
+	if err := e.setFirmware(vmName, firmware); err != nil {
+		return fmt.Errorf("failed to set firmware: %w", err)
+	}
+
+	// Set graphics controller - fallback to vmsvga
+	if err := e.setGraphicsController(vmName, "vmsvga"); err != nil {
+		return fmt.Errorf("failed to set graphics controller: %w", err)
+	}
+
+	// Set IOAPIC based on architecture
+	ioapicEnabled := true
+	if runtime.GOARCH == "arm64" || runtime.GOARCH == "aarch64" || runtime.GOARCH == "arm" {
+		ioapicEnabled = false
+	}
+	if err := e.setIOAPIC(vmName, ioapicEnabled); err != nil {
+		return fmt.Errorf("failed to set IOAPIC: %w", err)
+	}
+
+	// Set boot order
+	if err := e.setBootOrder(vmName); err != nil {
+		return fmt.Errorf("failed to set boot order: %w", err)
+	}
+
+	// Configure input devices
+	if err := e.configureInputDevices(vmName); err != nil {
+		return fmt.Errorf("failed to configure input devices: %w", err)
+	}
+
+	// Configure USB
+	if err := e.configureUSB(vmName); err != nil {
+		return fmt.Errorf("failed to configure USB: %w", err)
+	}
+
+	// Configure audio
+	if err := e.configureAudio(vmName); err != nil {
+		return fmt.Errorf("failed to configure audio: %w", err)
+	}
+
+	vboxLog.Infof("Fallback VM hardware configuration completed for: %s", vmName)
+	return nil
+}
+
+// configureUSBWithSettings configures USB with specific controller settings
+func (e *VBoxManageExecutor) configureUSBWithSettings(vmName, usbController string) error {
+	vboxLog.Infof("Configuring USB with controller: %s", usbController)
+
+	switch usbController {
+	case "xHCI":
+		_, err := e.executeCommand("modifyvm", vmName, "--usbohci", "off", "--usbehci", "off", "--usbxhci", "on")
+		return err
+	case "EHCI":
+		_, err := e.executeCommand("modifyvm", vmName, "--usbohci", "off", "--usbehci", "on", "--usbxhci", "off")
+		return err
+	case "OHCI":
+		_, err := e.executeCommand("modifyvm", vmName, "--usbohci", "on", "--usbehci", "off", "--usbxhci", "off")
+		return err
+	default:
+		// Default to xHCI
+		_, err := e.executeCommand("modifyvm", vmName, "--usbohci", "off", "--usbehci", "off", "--usbxhci", "on")
+		return err
+	}
+}
+
+// configureAudioWithSettings configures audio with specific settings
+func (e *VBoxManageExecutor) configureAudioWithSettings(vmName, controller, output, input string) error {
+	vboxLog.Infof("Configuring audio with controller: %s, output: %s, input: %s", controller, output, input)
+	_, err := e.executeCommand("modifyvm", vmName, "--audio-controller", controller, "--audio-out", output, "--audio-in", input)
 	return err
 }
 

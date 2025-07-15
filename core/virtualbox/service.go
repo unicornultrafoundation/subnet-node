@@ -920,9 +920,21 @@ func (s *ServiceImpl) ensureISO(ctx context.Context, isoURL string) (string, err
 	return isoPath, nil
 }
 
-// configureVMHardwareWithVBoxManage configures VM hardware using VBoxManage
+// configureVMHardwareWithVBoxManage configures VM hardware using VBoxManage with dynamic hardware detection
 func (s *ServiceImpl) configureVMHardwareWithVBoxManage(vmName string, req vbtypes.VMCreateRequest, osType string) error {
 	serviceLog.Infof("Starting VM hardware configuration with VBoxManage...")
+
+	// Detect hardware and get appropriate settings
+	detector := NewHardwareDetector()
+	hardware, err := detector.DetectHardware()
+	if err != nil {
+		serviceLog.Warnf("Hardware detection failed, using fallback settings: %v", err)
+		return s.configureVMHardwareWithVBoxManageFallback(vmName, req, osType)
+	}
+
+	settings := detector.GetVirtualBoxSettings(hardware)
+	serviceLog.Infof("Detected hardware: %+v", hardware)
+	serviceLog.Infof("Using VirtualBox settings: %+v", settings)
 
 	// Set OS type
 	serviceLog.Infof("Setting OS type: %s", osType)
@@ -945,39 +957,160 @@ func (s *ServiceImpl) configureVMHardwareWithVBoxManage(vmName string, req vbtyp
 		return fmt.Errorf("failed to set memory: %w, output: %s", err, string(output))
 	}
 
-	// Set VRAM (video memory) - use 16MB for ARM64 as per working script
+	// Set VRAM based on detected hardware
+	serviceLog.Infof("Setting VRAM to %d MB", settings.VRAMMB)
+	cmd = exec.Command("VBoxManage", "modifyvm", vmName, "--vram", fmt.Sprintf("%d", settings.VRAMMB))
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to set VRAM: %w, output: %s", err, string(output))
+	}
+
+	// Set chipset based on detected hardware
+	serviceLog.Infof("Setting chipset to %s", settings.Chipset)
+	cmd = exec.Command("VBoxManage", "modifyvm", vmName, "--chipset", settings.Chipset)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to set chipset: %w, output: %s", err, string(output))
+	}
+
+	// Set firmware based on detected hardware
+	serviceLog.Infof("Setting firmware to %s", settings.Firmware)
+	cmd = exec.Command("VBoxManage", "modifyvm", vmName, "--firmware", settings.Firmware)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to set firmware: %w, output: %s", err, string(output))
+	}
+
+	// Set graphics controller based on detected hardware
+	serviceLog.Infof("Setting graphics controller to %s", settings.GraphicsController)
+	cmd = exec.Command("VBoxManage", "modifyvm", vmName, "--graphicscontroller", settings.GraphicsController)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to set graphics controller: %w, output: %s", err, string(output))
+	}
+
+	// Set IOAPIC based on detected hardware
+	ioapicStatus := "off"
+	if settings.IOAPICEnabled {
+		ioapicStatus = "on"
+	}
+	serviceLog.Infof("Setting IOAPIC to %s", ioapicStatus)
+	cmd = exec.Command("VBoxManage", "modifyvm", vmName, "--ioapic", ioapicStatus)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to set IOAPIC: %w, output: %s", err, string(output))
+	}
+
+	// Set boot order
+	serviceLog.Infof("Setting boot order")
+	cmd = exec.Command("VBoxManage", "modifyvm", vmName, "--boot1", "dvd", "--boot2", "disk", "--boot3", "none", "--boot4", "none")
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to set boot order: %w, output: %s", err, string(output))
+	}
+
+	// Configure input devices
+	serviceLog.Infof("Configuring input devices...")
+	cmd = exec.Command("VBoxManage", "modifyvm", vmName, "--mouse", "usbtablet", "--keyboard", "usb")
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to configure input devices: %w, output: %s", err, string(output))
+	}
+
+	// Configure USB based on detected hardware
+	serviceLog.Infof("Configuring USB with controller: %s", settings.USBController)
+	switch settings.USBController {
+	case "xHCI":
+		cmd = exec.Command("VBoxManage", "modifyvm", vmName, "--usbohci", "off", "--usbehci", "off", "--usbxhci", "on")
+	case "EHCI":
+		cmd = exec.Command("VBoxManage", "modifyvm", vmName, "--usbohci", "off", "--usbehci", "on", "--usbxhci", "off")
+	case "OHCI":
+		cmd = exec.Command("VBoxManage", "modifyvm", vmName, "--usbohci", "on", "--usbehci", "off", "--usbxhci", "off")
+	default:
+		cmd = exec.Command("VBoxManage", "modifyvm", vmName, "--usbohci", "off", "--usbehci", "off", "--usbxhci", "on")
+	}
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to configure USB: %w, output: %s", err, string(output))
+	}
+
+	// Configure audio based on detected hardware
+	serviceLog.Infof("Configuring audio with controller: %s, output: %s, input: %s", settings.AudioController, settings.AudioOutput, settings.AudioInput)
+	cmd = exec.Command("VBoxManage", "modifyvm", vmName, "--audio-controller", settings.AudioController, "--audio-out", settings.AudioOutput, "--audio-in", settings.AudioInput)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to configure audio: %w, output: %s", err, string(output))
+	}
+
+	serviceLog.Infof("VM hardware configuration completed successfully")
+	return nil
+}
+
+// configureVMHardwareWithVBoxManageFallback provides fallback hardware configuration when detection fails
+func (s *ServiceImpl) configureVMHardwareWithVBoxManageFallback(vmName string, req vbtypes.VMCreateRequest, osType string) error {
+	serviceLog.Infof("Using fallback hardware configuration for: %s", vmName)
+
+	// Set OS type
+	serviceLog.Infof("Setting OS type: %s", osType)
+	cmd := exec.Command("VBoxManage", "modifyvm", vmName, "--ostype", osType)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to set OS type: %w, output: %s", err, string(output))
+	}
+
+	// Set CPU count
+	serviceLog.Infof("Setting CPU count to %d", req.CPUCores)
+	cmd = exec.Command("VBoxManage", "modifyvm", vmName, "--cpus", fmt.Sprintf("%d", req.CPUCores))
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to set CPU count: %w, output: %s", err, string(output))
+	}
+
+	// Set memory
+	serviceLog.Infof("Setting memory to %d MB", req.MemoryMB)
+	cmd = exec.Command("VBoxManage", "modifyvm", vmName, "--memory", fmt.Sprintf("%d", req.MemoryMB))
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to set memory: %w, output: %s", err, string(output))
+	}
+
+	// Set VRAM (video memory) - fallback to 16MB
 	serviceLog.Infof("Setting VRAM to 16 MB")
 	cmd = exec.Command("VBoxManage", "modifyvm", vmName, "--vram", "16")
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to set VRAM: %w, output: %s", err, string(output))
 	}
 
-	// Set chipset to armv8virtual for ARM64
-	serviceLog.Infof("Setting chipset to armv8virtual")
-	cmd = exec.Command("VBoxManage", "modifyvm", vmName, "--chipset", "armv8virtual")
+	// Set chipset based on runtime architecture
+	chipset := "ich9"
+	if runtime.GOARCH == "arm64" || runtime.GOARCH == "aarch64" {
+		chipset = "armv8virtual"
+	}
+	serviceLog.Infof("Setting chipset to %s", chipset)
+	cmd = exec.Command("VBoxManage", "modifyvm", vmName, "--chipset", chipset)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to set chipset: %w, output: %s", err, string(output))
 	}
 
-	// Set firmware to EFI for ARM64
-	serviceLog.Infof("Setting firmware to EFI")
-	cmd = exec.Command("VBoxManage", "modifyvm", vmName, "--firmware", "efi")
+	// Set firmware - fallback to EFI for most architectures
+	firmware := "efi"
+	if runtime.GOARCH == "386" || runtime.GOARCH == "i386" {
+		firmware = "bios"
+	}
+	serviceLog.Infof("Setting firmware to %s", firmware)
+	cmd = exec.Command("VBoxManage", "modifyvm", vmName, "--firmware", firmware)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to set firmware: %w, output: %s", err, string(output))
 	}
 
-	// Set graphics controller to VMSVGA
-	serviceLog.Infof("Setting graphics controller to VMSVGA")
+	// Set graphics controller - fallback to vmsvga
+	serviceLog.Infof("Setting graphics controller to vmsvga")
 	cmd = exec.Command("VBoxManage", "modifyvm", vmName, "--graphicscontroller", "vmsvga")
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to set graphics controller: %w, output: %s", err, string(output))
 	}
 
-	// Disable IOAPIC for ARM64
-	serviceLog.Infof("Disabling IOAPIC")
-	cmd = exec.Command("VBoxManage", "modifyvm", vmName, "--ioapic", "off")
+	// Set IOAPIC based on architecture
+	ioapicEnabled := true
+	if runtime.GOARCH == "arm64" || runtime.GOARCH == "aarch64" || runtime.GOARCH == "arm" {
+		ioapicEnabled = false
+	}
+	ioapicStatus := "on"
+	if !ioapicEnabled {
+		ioapicStatus = "off"
+	}
+	serviceLog.Infof("Setting IOAPIC to %s", ioapicStatus)
+	cmd = exec.Command("VBoxManage", "modifyvm", vmName, "--ioapic", ioapicStatus)
 	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to disable IOAPIC: %w, output: %s", err, string(output))
+		return fmt.Errorf("failed to set IOAPIC: %w, output: %s", err, string(output))
 	}
 
 	// Set boot order
@@ -1008,7 +1141,7 @@ func (s *ServiceImpl) configureVMHardwareWithVBoxManage(vmName string, req vbtyp
 		return fmt.Errorf("failed to configure audio: %w, output: %s", err, string(output))
 	}
 
-	serviceLog.Infof("VM hardware configuration completed successfully")
+	serviceLog.Infof("Fallback VM hardware configuration completed for: %s", vmName)
 	return nil
 }
 

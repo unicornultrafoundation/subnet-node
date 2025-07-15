@@ -70,7 +70,6 @@ func TestStorageManagerImpl_DetermineOSTypeAndISO(t *testing.T) {
 			name: "with explicit ISO URL",
 			req: vbtypes.VMCreateRequest{
 				Name:       "test-vm",
-				ISOURL:     "https://example.com/test.iso",
 				CPUCores:   2,
 				MemoryMB:   2048,
 				DiskSizeGB: 20,
