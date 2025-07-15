@@ -1,0 +1,62 @@
+package event
+
+import (
+	dtypes "github.com/unicornultrafoundation/subnet-node/proto/subnet/k8s/deployment/v1"
+	mani "github.com/unicornultrafoundation/subnet-node/proto/subnet/k8s/manifest/v1"
+	mtypes "github.com/unicornultrafoundation/subnet-node/proto/subnet/k8s/market/v1"
+)
+
+// LeaseWon is the data structure that includes leaseID, group and price
+type LeaseWon struct {
+	LeaseID mtypes.LeaseID
+	Group   *dtypes.Group
+}
+
+// ManifestReceived stores leaseID, manifest received, deployment and group details
+// to be provisioned by the Provider.
+type ManifestReceived struct {
+	LeaseID    mtypes.LeaseID
+	Manifest   *mani.Manifest
+	Deployment *dtypes.QueryDeploymentResponse
+	Group      *dtypes.Group
+}
+
+// ManifestGroup returns group if present in manifest or nil
+func (ev ManifestReceived) ManifestGroup() *mani.Group {
+	for _, mgroup := range *ev.Manifest {
+		if mgroup.Name == ev.Group.GroupSpec.Name {
+			mgroup := mgroup
+			return &mgroup
+		}
+	}
+	return nil
+}
+
+// ClusterDeploymentStatus represents status of the cluster deployment
+type ClusterDeploymentStatus string
+
+const (
+	ClusterDeploymentUnknown ClusterDeploymentStatus = "unknown"
+	// ClusterDeploymentUpdated is used whenever the deployment in the cluster is updated but may not be functional
+	ClusterDeploymentUpdated ClusterDeploymentStatus = "updated"
+	// ClusterDeploymentPending is used when cluster deployment status is pending
+	ClusterDeploymentPending ClusterDeploymentStatus = "pending"
+	// ClusterDeploymentDeployed is used when cluster deployment status is deployed
+	ClusterDeploymentDeployed ClusterDeploymentStatus = "deployed"
+)
+
+// ClusterDeployment stores leaseID, group details and deployment status
+type ClusterDeployment struct {
+	LeaseID mtypes.LeaseID
+	Group   *mani.Group
+	Status  ClusterDeploymentStatus
+}
+
+type LeaseAddFundsMonitor struct {
+	mtypes.LeaseID
+	IsNewLease bool
+}
+
+type LeaseRemoveFundsMonitor struct {
+	mtypes.LeaseID
+}

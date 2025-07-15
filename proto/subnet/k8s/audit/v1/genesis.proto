@@ -1,0 +1,16 @@
+syntax = "proto3";
+package subnet.k8s.audit.v1;
+
+import "gogoproto/gogo.proto";
+import "audit/v1/audit.proto";
+
+option go_package = "github.com/unicornultrafoundation/subnet-node/proto/subnet/k8s/audit/v1";
+
+// GenesisState defines the basic genesis state used by audit module
+message GenesisState {
+  repeated AuditedAttributes attributes = 1 [
+    (gogoproto.nullable) = false,
+    (gogoproto.jsontag) = "attributes",
+    (gogoproto.moretags) = "yaml:\"attributes\""
+  ];
+}

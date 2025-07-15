@@ -1,0 +1,143 @@
+syntax = "proto3";
+package subnet.k8s.market.v1;
+
+import "gogoproto/gogo.proto";
+import "google/api/annotations.proto";
+import "utils/query/pagination.proto";
+
+import "market/v1/order.proto";
+import "market/v1/bid.proto";
+import "market/v1/lease.proto";
+
+option go_package = "github.com/unicornultrafoundation/subnet-node/proto/subnet/k8s/market/v1";
+
+// Query defines the gRPC querier service
+service Query {
+  // Orders queries orders with filters
+  rpc Orders(QueryOrdersRequest) returns (QueryOrdersResponse) {
+    option (google.api.http).get = "/subnet/k8s/market/v1/orders/list";
+  }
+
+  // Order queries order details
+  rpc Order(QueryOrderRequest) returns (QueryOrderResponse) {
+    option (google.api.http).get = "/subnet/k8s/market/v1/orders/info";
+  }
+
+  // Bids queries bids with filters
+  rpc Bids(QueryBidsRequest) returns (QueryBidsResponse) {
+    option (google.api.http).get = "/subnet/k8s/market/v1/bids/list";
+  }
+
+  // Bid queries bid details
+  rpc Bid(QueryBidRequest) returns (QueryBidResponse) {
+    option (google.api.http).get = "/subnet/k8s/market/v1/bids/info";
+  }
+
+  // Leases queries leases with filters
+  rpc Leases(QueryLeasesRequest) returns (QueryLeasesResponse) {
+    option (google.api.http).get = "/subnet/k8s/market/v1/leases/list";
+  }
+
+  // Lease queries lease details
+  rpc Lease(QueryLeaseRequest) returns (QueryLeaseResponse) {
+    option (google.api.http).get = "/subnet/k8s/market/v1/leases/info";
+  }
+}
+
+// QueryOrdersRequest is request type for the Query/Orders RPC method
+message QueryOrdersRequest {
+  OrderFilters filters = 1 [
+    (gogoproto.nullable) = false
+  ];
+
+  utils.query.PageRequest pagination = 2;
+}
+
+// QueryOrdersResponse is response type for the Query/Orders RPC method
+message QueryOrdersResponse {
+  repeated Order orders = 1 [
+    (gogoproto.nullable)     = false,
+    (gogoproto.castrepeated) = "Orders"
+  ];
+
+  utils.query.PageResponse pagination = 2;
+}
+
+// QueryOrderRequest is request type for the Query/Order RPC method
+message QueryOrderRequest {
+  OrderID id = 1 [
+    (gogoproto.nullable)   = false,
+    (gogoproto.customname) = "ID"
+  ];
+}
+
+// QueryOrderResponse is response type for the Query/Order RPC method
+message QueryOrderResponse {
+  Order order = 1 [
+    (gogoproto.nullable) = false
+  ];
+}
+
+// QueryBidsRequest is request type for the Query/Bids RPC method
+message QueryBidsRequest {
+  BidFilters filters = 1 [
+    (gogoproto.nullable) = false
+  ];
+
+  utils.query.PageRequest pagination = 2;
+}
+
+// QueryBidsResponse is response type for the Query/Bids RPC method
+message QueryBidsResponse {
+  repeated QueryBidResponse bids = 1 [
+    (gogoproto.nullable) = false
+  ];
+
+  utils.query.PageResponse pagination = 2;
+}
+
+// QueryBidRequest is request type for the Query/Bid RPC method
+message QueryBidRequest {
+  BidID id = 1 [
+    (gogoproto.nullable)   = false,
+    (gogoproto.customname) = "ID"
+  ];
+}
+
+// QueryBidResponse is response type for the Query/Bid RPC method
+message QueryBidResponse {
+  Bid bid = 1 [(gogoproto.nullable) = false];
+}
+
+// QueryLeasesRequest is request type for the Query/Leases RPC method
+message QueryLeasesRequest {
+  LeaseFilters filters = 1 [
+    (gogoproto.nullable) = false
+  ];
+
+  utils.query.PageRequest pagination = 2;
+}
+
+// QueryLeasesResponse is response type for the Query/Leases RPC method
+message QueryLeasesResponse {
+  repeated QueryLeaseResponse leases = 1 [
+    (gogoproto.nullable) = false
+  ];
+
+  utils.query.PageResponse pagination = 2;
+}
+
+// QueryLeaseRequest is request type for the Query/Lease RPC method
+message QueryLeaseRequest {
+  LeaseID id = 1 [
+    (gogoproto.nullable)   = false,
+    (gogoproto.customname) = "ID"
+  ];
+}
+
+// QueryLeaseResponse is response type for the Query/Lease RPC method
+message QueryLeaseResponse {
+  Lease lease = 1 [
+    (gogoproto.nullable) = false
+  ];
+}

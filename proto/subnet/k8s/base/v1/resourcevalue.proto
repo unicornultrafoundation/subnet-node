@@ -1,0 +1,15 @@
+syntax = "proto3";
+package subnet.k8s.base.v1;
+
+import "gogoproto/gogo.proto";
+
+option go_package = "github.com/unicornultrafoundation/subnet-node/proto/subnet/k8s/base/v1";
+
+// Unit stores cpu, memory and storage metrics
+message ResourceValue {
+  option (gogoproto.equal) = true;
+  string val = 1 [
+    (gogoproto.nullable)   = false,
+    (gogoproto.customtype) = "github.com/unicornultrafoundation/subnet-node/proto/subnet/k8s/utils.BigInt"
+  ];
+}

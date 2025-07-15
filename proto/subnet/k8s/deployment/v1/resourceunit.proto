@@ -1,0 +1,23 @@
+syntax = "proto3";
+package subnet.k8s.deployment.v1;
+
+import "gogoproto/gogo.proto";
+import "base/v1/resources.proto";
+
+option go_package = "github.com/unicornultrafoundation/subnet-node/proto/subnet/k8s/deployment/v1";
+
+// ResourceUnit extends Resources and adds Count along with the Price
+message ResourceUnit {
+  option (gogoproto.equal) = true;
+
+  subnet.k8s.base.v1.Resources resource = 1 [
+    (gogoproto.nullable) = false,
+    (gogoproto.embed)    = true,
+    (gogoproto.jsontag)  = "resource",
+    (gogoproto.moretags) = "yaml:\"resource\""
+  ];
+  uint32 count = 2 [
+    (gogoproto.jsontag)  = "count",
+    (gogoproto.moretags) = "yaml:\"count\""
+  ];
+}

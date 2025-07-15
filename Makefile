@@ -16,8 +16,22 @@ endif
 
 proto-gen: check-proto-deps
 	@echo "Generating Protobuf files"
-	@go run github.com/bufbuild/buf/cmd/buf generate
+	@go run github.com/bufbuild/buf/cmd/buf generate --exclude-path proto/subnet/k8s
 .PHONY: proto-gen
+
+proto-gen-k8s: check-proto-deps
+	@echo "Generating Protobuf files (k8s only)"
+	cd proto/subnet/k8s && go run github.com/bufbuild/buf/cmd/buf generate --exclude-path k8s.io
+	@echo "Cleaning up unused imports in generated Go files"
+	@goimports -w proto/subnet/k8s/
+.PHONY: proto-gen-k8s
+
+mock-gen:
+	@go run github.com/vektra/mockery/v2@latest \
+		--dir=core/k8s/types/v1/clients/ip \
+		--output=core/k8s/types/v1/clients/ip/mocks \
+		--name=Client
+.PHONY: mock-gen
 
 # These targets are provided for convenience and are intended for local
 # execution only.

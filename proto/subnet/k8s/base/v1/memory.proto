@@ -1,0 +1,24 @@
+syntax = "proto3";
+package subnet.k8s.base.v1;
+
+import "gogoproto/gogo.proto";
+import "base/v1/attribute.proto";
+import "base/v1/resourcevalue.proto";
+
+option go_package = "github.com/unicornultrafoundation/subnet-node/proto/subnet/k8s/base/v1";
+
+// Memory stores resource quantity and memory attributes
+message Memory {
+  option (gogoproto.equal) = true;
+  ResourceValue quantity   = 1 [
+    (gogoproto.nullable) = false,
+    (gogoproto.jsontag) = "size",
+    (gogoproto.moretags) = "yaml:\"size\""
+  ];
+  repeated Attribute attributes = 2 [
+    (gogoproto.nullable) = false,
+    (gogoproto.castrepeated) = "Attributes",
+    (gogoproto.jsontag)  = "attributes,omitempty",
+    (gogoproto.moretags) = "yaml:\"attributes,omitempty\""
+  ];
+}

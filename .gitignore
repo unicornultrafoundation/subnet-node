@@ -1,2 +1,4 @@
 /.env
 /build
+/vendor
+/proto/subnet/k8s/k8s.io

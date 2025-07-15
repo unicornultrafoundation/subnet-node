@@ -1,0 +1,32 @@
+syntax = "proto3";
+package subnet.k8s.deployment.v1;
+
+import "gogoproto/gogo.proto";
+import "base/v1/attribute.proto";
+import "deployment/v1/resourceunit.proto";
+
+option go_package = "github.com/unicornultrafoundation/subnet-node/proto/subnet/k8s/deployment/v1";
+
+// GroupSpec stores group specifications
+message GroupSpec {
+  option (gogoproto.equal)           = false;
+  option (gogoproto.goproto_getters) = false;
+
+  string name = 1 [
+    (gogoproto.jsontag)  = "name",
+    (gogoproto.moretags) = "yaml:\"name\""
+  ];
+
+  subnet.k8s.base.v1.PlacementRequirements requirements = 2 [
+    (gogoproto.nullable) = false,
+    (gogoproto.jsontag)  = "requirements",
+    (gogoproto.moretags) = "yaml:\"requirements\""
+  ];
+
+  repeated ResourceUnit resources = 3 [
+    (gogoproto.nullable)     = false,
+    (gogoproto.castrepeated) = "ResourceUnits",
+    (gogoproto.jsontag)      = "resources",
+    (gogoproto.moretags)     = "yaml:\"resources\""
+  ];
+}
