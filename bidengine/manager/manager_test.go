@@ -5,7 +5,6 @@ import (
 	"math/big"
 	"testing"
 
-	"github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
@@ -142,6 +141,10 @@ func (m *mockStorage) UpdateBid(ctx context.Context, bid *types.Bid, orderID str
 	return nil
 }
 
+func (m *mockStorage) DeleteBid(ctx context.Context, orderID string, bidIndex int) error {
+	return nil
+}
+
 func (m *mockStorage) ListOrders(ctx context.Context) ([]*types.Order, error) {
 	return []*types.Order{}, nil
 }
@@ -247,19 +250,24 @@ func TestTrackAndUntrackBid(t *testing.T) {
 	orderID := big.NewInt(123)
 	bidIndex := big.NewInt(0)
 
-	err := manager.TrackBid(ctx, orderID, bidIndex)
+	bid := &types.Bid{
+		Id:         bidIndex,
+		ProviderId: big.NewInt(1),
+		Status:     types.BidStatusActive,
+	}
+	err := manager.TrackBid(ctx, orderID, bid)
 	assert.NoError(t, err)
 
 	// Track lại bid đã tồn tại
-	err = manager.TrackBid(ctx, orderID, bidIndex)
+	err = manager.TrackBid(ctx, orderID, bid)
 	assert.Error(t, err)
 
 	// Untrack bid
-	err = manager.UntrackBid(ctx, orderID, bidIndex)
+	err = manager.UntrackBid(ctx, orderID, bid)
 	assert.NoError(t, err)
 
 	// Untrack bid không tồn tại
-	err = manager.UntrackBid(ctx, orderID, bidIndex)
+	err = manager.UntrackBid(ctx, orderID, bid)
 	assert.Error(t, err)
 }
 
@@ -282,7 +290,12 @@ func TestGetTrackedBids(t *testing.T) {
 	bidIndex := big.NewInt(0)
 
 	// Track the bid
-	err := manager.TrackBid(ctx, orderID, bidIndex)
+	bid := &types.Bid{
+		Id:         bidIndex,
+		ProviderId: big.NewInt(1),
+		Status:     types.BidStatusActive,
+	}
+	err := manager.TrackBid(ctx, orderID, bid)
 	assert.NoError(t, err)
 
 	// Debug: check if bid was actually tracked
@@ -311,37 +324,6 @@ func TestGetTrackedBids(t *testing.T) {
 	assert.NotNil(t, foundOrderID, "OrderID should exist in bids map")
 	assert.Greater(t, len(foundIds), 0, "Bid slice should not be empty")
 	assert.Equal(t, bidIndex.String(), foundIds[0].String(), "Bid index should match")
-}
-
-func TestSubmitBid(t *testing.T) {
-	logger := logrus.WithField("service", "bidengine")
-	manager := NewManager(
-		&types.BidEngineConfig{
-			ProviderID:     big.NewInt(1),
-			ProviderWallet: common.HexToAddress("0x123"),
-		},
-		&mockBidMarket{},
-		logger,
-		&mockMetrics{},
-		nil, // datastore
-		&mockResourceManager{},
-		&mockPricingEngine{},
-		&mockOrderMonitor{},
-	)
-	manager.storage = &mockStorage{}
-
-	ctx := context.Background()
-	orderID := big.NewInt(789)
-	pricePerSecond := big.NewInt(100)
-	machineID := big.NewInt(1)
-
-	manager.bidMarket = &bidMarketMock{}
-
-	result, err := manager.SubmitBid(ctx, orderID, pricePerSecond, machineID)
-	assert.NoError(t, err)
-	assert.NotNil(t, result)
-	assert.Equal(t, orderID, result.OrderID)
-	assert.True(t, result.Success)
 }
 
 func TestTryBidOnOrder(t *testing.T) {

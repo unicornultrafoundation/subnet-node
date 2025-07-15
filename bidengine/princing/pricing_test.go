@@ -49,11 +49,10 @@ func TestCalculateResourcePrice(t *testing.T) {
 	engine := testEngine()
 	machine := testMachine()
 	usage := &types.ResourceUsage{
-		CPUUsed:     big.NewInt(2),
-		GPUUsed:     big.NewInt(1),
-		MemoryUsed:  big.NewInt(1024),
-		DiskUsed:    big.NewInt(100),
-		NetworkUsed: big.NewInt(10), // ensure network cost is included
+		CPUUsed:    big.NewInt(2),
+		GPUUsed:    big.NewInt(1),
+		MemoryUsed: big.NewInt(1024),
+		DiskUsed:   big.NewInt(100),
 	}
 	price, err := engine.CalculateResourcePrice(context.Background(), machine, usage)
 	assert.NoError(t, err)

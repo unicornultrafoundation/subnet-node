@@ -46,7 +46,7 @@ func (b *BidMarketContractImpl) GetOrder(ctx context.Context, orderID *big.Int) 
 	}
 
 	return &bidenginetypes.Order{
-		ID:                        orderID,
+		ID:                        big.NewInt(orderID.Int64()),
 		MachineType:               orderData.MachineType,
 		Owner:                     orderData.Owner,
 		Status:                    bidenginetypes.OrderStatus(orderData.Status),
@@ -102,6 +102,7 @@ func (b *BidMarketContractImpl) GetBids(ctx context.Context, orderID *big.Int) (
 	bids := make([]bidenginetypes.Bid, len(bidsData))
 	for i, bidData := range bidsData {
 		bids[i] = bidenginetypes.Bid{
+			Id:             big.NewInt(int64(i)),
 			Provider:       bidData.Provider,
 			PricePerSecond: bidData.PricePerSecond,
 			Status:         bidenginetypes.BidStatus(bidData.Status),
@@ -688,5 +689,5 @@ func (p *ProviderContractImpl) ValidateMachineRequirements(ctx context.Context, 
 
 	return p.contract.ValidateMachineRequirements(callOpts, machineType, providerID, machineID,
 		requirements.CPUUsed, requirements.MemoryUsed, requirements.DiskUsed,
-		requirements.GPUUsed, requirements.NetworkUsed, requirements.NetworkUsed)
+		requirements.GPUUsed, big.NewInt(0), big.NewInt(0))
 }

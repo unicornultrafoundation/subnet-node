@@ -117,19 +117,17 @@ func TestResourceMetrics(t *testing.T) {
 
 	// Test resource utilization
 	usage1 := &types.ResourceUsage{
-		CPUUsed:     big.NewInt(4),
-		GPUUsed:     big.NewInt(2),
-		MemoryUsed:  big.NewInt(8192),
-		DiskUsed:    big.NewInt(100),
-		NetworkUsed: big.NewInt(1000),
+		CPUUsed:    big.NewInt(4),
+		GPUUsed:    big.NewInt(2),
+		MemoryUsed: big.NewInt(8192),
+		DiskUsed:   big.NewInt(100),
 	}
 
 	usage2 := &types.ResourceUsage{
-		CPUUsed:     big.NewInt(8),
-		GPUUsed:     big.NewInt(4),
-		MemoryUsed:  big.NewInt(16384),
-		DiskUsed:    big.NewInt(200),
-		NetworkUsed: big.NewInt(2000),
+		CPUUsed:    big.NewInt(8),
+		GPUUsed:    big.NewInt(4),
+		MemoryUsed: big.NewInt(16384),
+		DiskUsed:   big.NewInt(200),
 	}
 
 	metrics.RecordResourceUtilization(usage1)

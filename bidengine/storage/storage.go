@@ -339,6 +339,19 @@ func (s *Storage) UpdateBid(ctx context.Context, bid *Bid, orderID string, bidIn
 	return nil
 }
 
+// DeleteBid removes a bid from storage
+func (s *Storage) DeleteBid(ctx context.Context, orderID string, bidIndex int) error {
+	key := ds.NewKey(bidPrefix + orderID + "/" + strconv.Itoa(bidIndex))
+
+	err := s.ds.Delete(ctx, key)
+	if err != nil {
+		return fmt.Errorf("failed to delete bid: %w", err)
+	}
+
+	s.logger.Debug("Deleted bid from storage", "bidIndex", bidIndex, "orderID", orderID)
+	return nil
+}
+
 // SaveMachine saves a machine to storage
 func (s *Storage) SaveMachine(ctx context.Context, machine *Machine) error {
 	machineID := machine.ID.String()

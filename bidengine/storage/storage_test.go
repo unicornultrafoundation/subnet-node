@@ -315,6 +315,8 @@ func TestGetBids(t *testing.T) {
 	bids, err := storage.GetBids(context.Background(), "1")
 	assert.NoError(t, err)
 	assert.Len(t, bids, 1)
+	assert.Equal(t, bids[0].MachineId.String(), bid.MachineId.String())
+
 	mockDS.AssertExpectations(t)
 }
 

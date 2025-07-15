@@ -86,7 +86,9 @@ func (bm *Manager) Start(ctx context.Context) error {
 
 	// Load persisted bids from storage (without lock)
 	if err := bm.loadPersistedBids(ctx); err != nil {
-		bm.logger.Warn("Failed to load persisted bids", "error", err)
+		bm.logger.WithFields(logrus.Fields{
+			"error": err,
+		}).Warn("Failed to load persisted bids")
 	}
 
 	bm.orderMonitor.RegisterEventHandler(types.OrderEventNew, bm.handleOrderCreate)
@@ -128,124 +130,105 @@ func (bm *Manager) handleOrderCreate(event *types.OrderEvent) {
 	// Extract order from event
 	order := event.Order
 	if order == nil {
-		bm.logger.Warn("Received order event without order data", "orderID", event.OrderID)
+		bm.logger.WithFields(logrus.Fields{
+			"orderID": event.OrderID.String(),
+		}).Warn("Received order event without order data")
 		return
 	}
 
-	bm.logger.Info("Received new order event",
-		"orderID", order.ID.String(),
-		"status", order.Status,
-		"machineType", order.MachineType.String())
+	bm.logger.WithFields(logrus.Fields{
+		"orderID":     order.ID.String(),
+		"status":      order.Status,
+		"machineType": order.MachineType.String(),
+	}).Info("Received new order event")
 
 	// Try to bid on the new order
 	if err := bm.TryBidOnOrder(bm.ctx, order); err != nil {
-		bm.logger.Warn("Failed to bid on new order",
-			"orderID", order.ID.String(),
-			"error", err)
+		bm.logger.WithFields(logrus.Fields{
+			"orderID": order.ID.String(),
+			"error":   err,
+		}).Warn("Failed to bid on new order")
 	}
 }
 
 // SubmitBid submits a bid to the blockchain
-func (bm *Manager) SubmitBid(ctx context.Context, orderID *big.Int, pricePerSecond *big.Int, machineID *big.Int) (*types.BidResult, error) {
+func (bm *Manager) SubmitBid(ctx context.Context, orderID *big.Int, pricePerSecond *big.Int, machineID *big.Int) error {
 	bm.mu.Lock()
 	defer bm.mu.Unlock()
 
 	// Validate inputs
 	if orderID == nil {
-		return nil, fmt.Errorf("order ID cannot be nil")
+		return fmt.Errorf("order ID cannot be nil")
 	}
 
 	if machineID == nil {
-		return nil, fmt.Errorf("machine ID cannot be nil")
+		return fmt.Errorf("machine ID cannot be nil")
 	}
 
 	if pricePerSecond == nil || pricePerSecond.Cmp(big.NewInt(0)) <= 0 {
-		return nil, fmt.Errorf("price must be greater than zero")
+		return fmt.Errorf("price must be greater than zero")
 	}
 
 	// Use provider ID from configuration
 	providerID := bm.config.ProviderID
 	if providerID == nil {
-		return nil, fmt.Errorf("provider ID not configured")
+		return fmt.Errorf("provider ID not configured")
 	}
 
 	// Submit bid to blockchain
 	tx, err := bm.bidMarket.SubmitBid(ctx, orderID, pricePerSecond, providerID, machineID)
 	if err != nil {
-		bm.logger.Error("Failed to submit bid to blockchain",
-			"orderID", orderID.String(),
-			"pricePerSecond", pricePerSecond.String(),
-			"providerID", providerID.String(),
-			"machineID", machineID.String(),
-			"error", err)
-		return nil, fmt.Errorf("failed to submit bid: %w", err)
+		bm.logger.WithFields(logrus.Fields{
+			"orderID":        orderID.String(),
+			"pricePerSecond": pricePerSecond.String(),
+			"providerID":     providerID.String(),
+			"machineID":      machineID.String(),
+			"error":          err,
+		}).Error("Failed to submit bid to blockchain")
+		return fmt.Errorf("failed to submit bid: %w", err)
 	}
 
 	// Wait for transaction confirmation and get bid index
 	bidIndex, err := bm.bidMarket.GetBidIndexFromTransaction(ctx, tx, orderID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get bid index from transaction: %w", err)
+		return fmt.Errorf("failed to get bid index from transaction: %w", err)
 	}
 
 	// Allocate resources immediately after successful bid submission
 	if err := bm.allocateResourcesForBid(ctx, orderID, machineID); err != nil {
-		bm.logger.Warn("Failed to allocate resources for bid",
-			"orderID", orderID.String(),
-			"error", err)
+		bm.logger.WithFields(logrus.Fields{
+			"orderID": orderID.String(),
+			"error":   err,
+		}).Warn("Failed to allocate resources for bid")
 		// Don't fail the bid submission if resource allocation fails
 	}
 
-	// Create extended bid
-	extendedBid := &ExtendedBid{
-		Bid: &types.Bid{
-			Id:             bidIndex,
-			Provider:       bm.config.ProviderWallet,
-			PricePerSecond: pricePerSecond,
-			Status:         types.BidStatusActive,
-			CreatedAt:      big.NewInt(time.Now().Unix()),
-			ProviderId:     providerID,
-			MachineId:      machineID,
-		},
-		OrderID:         orderID.String(),
-		TransactionHash: tx.Hash().String(),
-		SubmittedAt:     time.Now(),
+	bid := &types.Bid{
+		Id:             bidIndex,
+		ProviderId:     providerID,
+		MachineId:      machineID,
+		PricePerSecond: pricePerSecond,
+		Status:         types.BidStatusActive,
+		CreatedAt:      big.NewInt(1),
 	}
-
-	// Track bid using orderID only (one bid per provider per order)
-	bidKey := orderID.String()
-	bm.pendingBids[bidKey] = extendedBid
-
-	// Save bid to storage with actual bidIndex
-	if err := bm.storage.SaveBid(ctx, extendedBid.Bid, orderID.String(), int(bidIndex.Int64())); err != nil {
-		bm.logger.Warn("Failed to save bid to storage", "error", err)
-	}
-
-	// Create bid result
-	bidResult := &types.BidResult{
-		OrderID:   orderID,
-		BidIndex:  bidIndex,
-		Success:   true,
-		TxHash:    tx.Hash(),
-		Timestamp: time.Now(),
-	}
-
-	// Store bid result
-	bm.bidResults[orderID.String()] = bidResult
 
 	// Track the bid for monitoring
-	if err := bm.trackBidInternal(ctx, orderID, bidIndex); err != nil {
-		bm.logger.Warn("Failed to track bid", "error", err)
+	if err := bm.trackBidInternal(ctx, orderID, bid); err != nil {
+		bm.logger.WithFields(logrus.Fields{
+			"error": err,
+		}).Warn("Failed to track bid")
 	}
 
-	bm.logger.Info("Bid submitted successfully",
-		"orderID", orderID.String(),
-		"bidIndex", bidIndex.String(),
-		"pricePerSecond", pricePerSecond.String(),
-		"machineID", machineID.String(),
-		"txHash", tx.Hash().String())
+	bm.logger.WithFields(logrus.Fields{
+		"orderID":        orderID.String(),
+		"bidIndex":       bidIndex.String(),
+		"pricePerSecond": pricePerSecond.String(),
+		"machineID":      machineID.String(),
+		"txHash":         tx.Hash().String(),
+	}).Info("Bid submitted successfully")
 
 	bm.metrics.IncrementBidsSubmitted()
-	return bidResult, nil
+	return nil
 }
 
 // CancelBid cancels a pending bid
@@ -256,10 +239,11 @@ func (bm *Manager) CancelBid(ctx context.Context, orderID *big.Int, bidIndex *bi
 	// Cancel bid on blockchain
 	tx, err := bm.bidMarket.CancelBid(ctx, orderID, bidIndex)
 	if err != nil {
-		bm.logger.Error("Failed to cancel bid on blockchain",
-			"orderID", orderID.String(),
-			"bidIndex", bidIndex.String(),
-			"error", err)
+		bm.logger.WithFields(logrus.Fields{
+			"orderID":  orderID.String(),
+			"bidIndex": bidIndex.String(),
+			"error":    err,
+		}).Error("Failed to cancel bid on blockchain")
 		return fmt.Errorf("failed to cancel bid on blockchain: %w", err)
 	}
 
@@ -271,7 +255,9 @@ func (bm *Manager) CancelBid(ctx context.Context, orderID *big.Int, bidIndex *bi
 
 		// Update bid in storage with correct bidIndex
 		if err := bm.storage.UpdateBid(ctx, bid.Bid, bid.OrderID, int(bidIndex.Int64())); err != nil {
-			bm.logger.Warn("Failed to update bid in storage", "error", err)
+			bm.logger.WithFields(logrus.Fields{
+				"error": err,
+			}).Warn("Failed to update bid in storage")
 		}
 
 		// Cleanup the cancelled bid
@@ -281,55 +267,63 @@ func (bm *Manager) CancelBid(ctx context.Context, orderID *big.Int, bidIndex *bi
 		bm.mu.Lock()
 	}
 
-	bm.logger.Info("Bid cancelled successfully",
-		"orderID", orderID.String(),
-		"bidIndex", bidIndex.String(),
-		"txHash", tx.Hash().String())
+	bm.logger.WithFields(logrus.Fields{
+		"orderID":  orderID.String(),
+		"bidIndex": bidIndex.String(),
+		"txHash":   tx.Hash().String(),
+	}).Info("Bid cancelled successfully")
 
 	return nil
 }
 
 // TrackBid tracks a bid
-func (bm *Manager) TrackBid(ctx context.Context, orderID *big.Int, bidIndex *big.Int) error {
+func (bm *Manager) TrackBid(ctx context.Context, orderID *big.Int, bid *types.Bid) error {
 	bm.mu.Lock()
 	defer bm.mu.Unlock()
 
-	return bm.trackBidInternal(ctx, orderID, bidIndex)
+	return bm.trackBidInternal(ctx, orderID, bid)
 }
 
 // trackBidInternal is an internal method for tracking a bid
-func (bm *Manager) trackBidInternal(ctx context.Context, orderID *big.Int, bidIndex *big.Int) error {
+func (bm *Manager) trackBidInternal(ctx context.Context, orderID *big.Int, bid *types.Bid) error {
 	// Track bid using orderID only
 	bidKey := orderID.String()
 	if _, exists := bm.pendingBids[bidKey]; exists {
 		return fmt.Errorf("bid already tracked for order %s", orderID.String())
 	}
 
-	// Create extended bid for tracking
 	extendedBid := &ExtendedBid{
-		Bid: &types.Bid{
-			Id: bidIndex,
-		},
+		Bid:         bid,
 		OrderID:     orderID.String(),
 		SubmittedAt: time.Now(),
 	}
 
 	bm.pendingBids[bidKey] = extendedBid
-	bm.logger.Info("Bid tracked", "orderID", orderID.String(), "bidIndex", bidIndex.String())
+	bm.logger.WithFields(logrus.Fields{
+		"orderID":  orderID.String(),
+		"bidIndex": bid.Id.String(),
+	}).Info("Bid tracked")
+
+	// Save bid to storage with actual bidIndex
+	if err := bm.storage.SaveBid(ctx, extendedBid.Bid, orderID.String(), int(bid.Id.Int64())); err != nil {
+		bm.logger.WithFields(logrus.Fields{
+			"error": err,
+		}).Warn("Failed to save bid to storage")
+	}
 
 	return nil
 }
 
 // UntrackBid untracks a bid
-func (bm *Manager) UntrackBid(ctx context.Context, orderID *big.Int, bidIndex *big.Int) error {
+func (bm *Manager) UntrackBid(ctx context.Context, orderID *big.Int, bid *types.Bid) error {
 	bm.mu.Lock()
 	defer bm.mu.Unlock()
 
-	return bm.untrackBidInternal(ctx, orderID, bidIndex)
+	return bm.untrackBidInternal(ctx, orderID, bid)
 }
 
 // untrackBidInternal is an internal method for untracking a bid
-func (bm *Manager) untrackBidInternal(ctx context.Context, orderID *big.Int, bidIndex *big.Int) error {
+func (bm *Manager) untrackBidInternal(_ context.Context, orderID *big.Int, bid *types.Bid) error {
 	// Untrack bid using orderID only
 	bidKey := orderID.String()
 	if _, exists := bm.pendingBids[bidKey]; !exists {
@@ -337,7 +331,10 @@ func (bm *Manager) untrackBidInternal(ctx context.Context, orderID *big.Int, bid
 	}
 
 	delete(bm.pendingBids, bidKey)
-	bm.logger.Info("Bid untracked", "orderID", orderID.String(), "bidIndex", bidIndex.String())
+	bm.logger.WithFields(logrus.Fields{
+		"orderID":  orderID.String(),
+		"bidIndex": bid.Id.String(),
+	}).Info("Bid untracked")
 
 	return nil
 }
@@ -353,7 +350,9 @@ func (bm *Manager) GetTrackedBids(ctx context.Context) (map[*big.Int][]*big.Int,
 		// Parse orderID from bidKey (which is now just orderID)
 		orderID, ok := new(big.Int).SetString(bidKey, 10)
 		if !ok {
-			bm.logger.Warn("Invalid orderID in bidKey", "bidKey", bidKey)
+			bm.logger.WithFields(logrus.Fields{
+				"bidKey": bidKey,
+			}).Warn("Invalid orderID in bidKey")
 			continue
 		}
 
@@ -412,14 +411,18 @@ func (bm *Manager) cleanupBid(orderID *big.Int, reason string) {
 	bm.mu.Unlock()
 
 	if !exists {
-		bm.logger.Debug("No pending bid found for cleanup", "orderID", orderID.String(), "reason", reason)
+		bm.logger.WithFields(logrus.Fields{
+			"orderID": orderID.String(),
+			"reason":  reason,
+		}).Debug("No pending bid found for cleanup")
 		return
 	}
 
-	bm.logger.Info("Cleaning up bid",
-		"orderID", orderID.String(),
-		"bidIndex", bid.Bid.Id.String(),
-		"reason", reason)
+	bm.logger.WithFields(logrus.Fields{
+		"orderID":  orderID.String(),
+		"bidIndex": bid.Bid.Id.String(),
+		"reason":   reason,
+	}).Info("Cleaning up bid")
 
 	// Remove from pending bids
 	bm.mu.Lock()
@@ -428,27 +431,29 @@ func (bm *Manager) cleanupBid(orderID *big.Int, reason string) {
 
 	// Deallocate resources
 	if err := bm.deallocateResourcesForBid(bm.ctx, orderID); err != nil {
-		bm.logger.Error("Failed to deallocate resources during bid cleanup",
-			"orderID", orderID.String(),
-			"reason", reason,
-			"error", err)
+		bm.logger.WithFields(logrus.Fields{
+			"orderID": orderID.String(),
+			"reason":  reason,
+			"error":   err,
+		}).Error("Failed to deallocate resources during bid cleanup")
 	}
 
-	// Update bid status in storage
-	bid.Bid.Status = types.BidStatusCancelled
-	if err := bm.storage.UpdateBid(bm.ctx, bid.Bid, bid.OrderID, int(bid.Bid.Id.Int64())); err != nil {
-		bm.logger.Warn("Failed to update bid status in storage during cleanup",
-			"orderID", orderID.String(),
-			"error", err)
+	// Delete bid from storage
+	if err := bm.storage.DeleteBid(bm.ctx, bid.OrderID, int(bid.Bid.Id.Int64())); err != nil {
+		bm.logger.WithFields(logrus.Fields{
+			"orderID": orderID.String(),
+			"error":   err,
+		}).Warn("Failed to delete bid from storage during cleanup")
 	}
 
 	// Record metrics for rejected bid
 	bm.metrics.IncrementBidsRejected()
 
-	bm.logger.Info("Bid cleanup completed",
-		"orderID", orderID.String(),
-		"bidIndex", bid.Bid.Id.String(),
-		"reason", reason)
+	bm.logger.WithFields(logrus.Fields{
+		"orderID":  orderID.String(),
+		"bidIndex": bid.Bid.Id.String(),
+		"reason":   reason,
+	}).Info("Bid cleanup completed")
 }
 
 // handleOrderClosed handles order closed events
@@ -458,11 +463,15 @@ func (bm *Manager) handleOrderClosed(event *types.OrderEvent) {
 	// Extract order from event
 	order := event.Order
 	if order == nil {
-		bm.logger.Warn("Received order event without order data", "orderID", event.OrderID)
+		bm.logger.WithFields(logrus.Fields{
+			"orderID": event.OrderID.String(),
+		}).Warn("Received order event without order data")
 		return
 	}
 
-	bm.logger.Info("Received order closed event", "orderID", order.ID.String())
+	bm.logger.WithFields(logrus.Fields{
+		"orderID": order.ID.String(),
+	}).Info("Received order closed event")
 
 	// Cleanup bid if exists
 	bm.cleanupBid(order.ID, "order_closed")
@@ -475,14 +484,31 @@ func (bm *Manager) handleOrderExpired(event *types.OrderEvent) {
 	// Extract order from event
 	order := event.Order
 	if order == nil {
-		bm.logger.Warn("Received order event without order data", "orderID", event.OrderID)
+		bm.logger.WithFields(logrus.Fields{
+			"orderID": event.OrderID.String(),
+		}).Warn("Received order event without order data")
 		return
 	}
 
-	bm.logger.Info("Received order expired event", "orderID", order.ID.String())
+	bm.logger.WithFields(logrus.Fields{
+		"orderID": order.ID.String(),
+	}).Info("Received order expired event")
 
 	// Cleanup bid if exists
 	bm.cleanupBid(order.ID, "order_expired")
+
+	tx, err := bm.bidMarket.CloseOrder(bm.ctx, order.ID, "order_expired")
+	if err != nil {
+		bm.logger.WithFields(logrus.Fields{
+			"orderID": order.ID.String(),
+			"error":   err,
+		}).Error("Failed to close order")
+	} else {
+		bm.logger.WithFields(logrus.Fields{
+			"orderID": order.ID.String(),
+			"txHash":  tx.Hash().String(),
+		}).Info("Order closed successfully")
+	}
 }
 
 // handleOrderAccepted handles order accepted events
@@ -494,26 +520,47 @@ func (bm *Manager) handleOrderAccepted(event *types.OrderEvent) {
 	// Extract order from event
 	order := event.Order
 	if order == nil {
-		bm.logger.Warn("Received order event without order data", "orderID", event.OrderID)
+		bm.logger.WithFields(logrus.Fields{
+			"orderID": event.OrderID.String(),
+		}).Warn("Received order event without order data")
 		return
 	}
 
-	bm.logger.Info("Received order accepted event", "orderID", order.ID.String())
+	bm.logger.WithFields(logrus.Fields{
+		"orderID": order.ID.String(),
+	}).Info("Received order accepted event")
 
 	// Check if we have a pending bid for this order
 	bm.mu.Lock()
 	bidKey := order.ID.String()
 	if bid, exists := bm.pendingBids[bidKey]; exists {
+		bm.logger.WithFields(logrus.Fields{
+			"orderID":            order.ID.String(),
+			"acceptedProviderID": order.AcceptedProviderId,
+			"ourProviderID":      bid.Bid.ProviderId,
+			"acceptedMachineID":  order.AcceptedMachineId,
+			"ourMachineID":       bid.Bid.MachineId,
+			"orderStatus":        order.Status,
+			"bidStatus":          bid.Bid.Status,
+		}).Debug("Checking if our bid was accepted")
+
 		// Check if our bid was accepted by comparing provider IDs
-		if order.AcceptedProviderId != nil && bid.Bid.ProviderId != nil &&
-			order.AcceptedProviderId.Cmp(bid.Bid.ProviderId) == 0 {
+		isMatched := order.IsMatched(bid.Bid)
+		bm.logger.WithFields(logrus.Fields{
+			"orderID":   order.ID.String(),
+			"isMatched": isMatched,
+		}).Debug("Bid matching result")
+
+		if isMatched {
 			// Our bid was accepted
 			oldBidStatus := bid.Bid.Status
 			bid.Bid.Status = types.BidStatusAccepted
 
 			// Update bid in storage
 			if err := bm.storage.UpdateBid(bm.ctx, bid.Bid, bid.OrderID, int(bid.Bid.Id.Int64())); err != nil {
-				bm.logger.Warn("Failed to update bid in storage", "error", err)
+				bm.logger.WithFields(logrus.Fields{
+					"error": err,
+				}).Warn("Failed to update bid in storage")
 			}
 
 			// Record metrics for accepted bid
@@ -521,17 +568,19 @@ func (bm *Manager) handleOrderAccepted(event *types.OrderEvent) {
 				bm.metrics.IncrementBidsAccepted()
 			}
 
-			bm.logger.Info("Our bid was accepted",
-				"orderID", order.ID.String(),
-				"bidIndex", bid.Bid.Id.String(),
-				"providerID", bid.Bid.ProviderId.String(),
-				"machineID", bid.Bid.MachineId.String())
+			bm.logger.WithFields(logrus.Fields{
+				"orderID":    order.ID.String(),
+				"bidIndex":   bid.Bid.Id.String(),
+				"providerID": bid.Bid.ProviderId.String(),
+				"machineID":  bid.Bid.MachineId.String(),
+			}).Info("Our bid was accepted")
 		} else {
 			// Another provider's bid was accepted, not ours
-			bm.logger.Info("Another provider's bid was accepted, untracking order",
-				"orderID", order.ID.String(),
-				"acceptedProviderID", order.AcceptedProviderId,
-				"ourProviderID", bid.Bid.ProviderId)
+			bm.logger.WithFields(logrus.Fields{
+				"orderID":            order.ID.String(),
+				"acceptedProviderID": order.AcceptedProviderId,
+				"ourProviderID":      bid.Bid.ProviderId,
+			}).Info("Another provider's bid was accepted, untracking order")
 
 			// Cleanup our rejected bid
 			bm.mu.Unlock()
@@ -539,18 +588,26 @@ func (bm *Manager) handleOrderAccepted(event *types.OrderEvent) {
 
 			// Untrack the order since it's no longer relevant to us
 			if err := bm.orderMonitor.UntrackOrder(bm.ctx, order.ID); err != nil {
-				bm.logger.Warn("Failed to untrack accepted order", "orderID", order.ID.String(), "error", err)
+				bm.logger.WithFields(logrus.Fields{
+					"orderID": order.ID.String(),
+					"error":   err,
+				}).Warn("Failed to untrack accepted order")
 			}
 			return
 		}
 	} else {
 		// No pending bid for this order, it was accepted by another provider
-		bm.logger.Info("Order accepted by another provider (no pending bid), untracking order", "orderID", order.ID.String())
+		bm.logger.WithFields(logrus.Fields{
+			"orderID": order.ID.String(),
+		}).Info("Order accepted by another provider (no pending bid), untracking order")
 
 		// Untrack the order since it's no longer relevant to us
 		bm.mu.Unlock()
 		if err := bm.orderMonitor.UntrackOrder(bm.ctx, order.ID); err != nil {
-			bm.logger.Warn("Failed to untrack accepted order", "orderID", order.ID.String(), "error", err)
+			bm.logger.WithFields(logrus.Fields{
+				"orderID": order.ID.String(),
+				"error":   err,
+			}).Warn("Failed to untrack accepted order")
 		}
 		return
 	}
@@ -559,20 +616,14 @@ func (bm *Manager) handleOrderAccepted(event *types.OrderEvent) {
 
 // deallocateResourcesForBid deallocates resources for a bid
 func (bm *Manager) deallocateResourcesForBid(ctx context.Context, orderID *big.Int) error {
-	// Stop the resource first
-	if err := bm.resourceManager.StopResource(ctx, orderID); err != nil {
-		bm.logger.Warn("Failed to stop resource",
-			"orderID", orderID.String(),
-			"error", err)
-	}
-
 	// Deallocate resources
 	if err := bm.resourceManager.DeallocateResources(ctx, orderID); err != nil {
 		return fmt.Errorf("failed to deallocate resources: %w", err)
 	}
 
-	bm.logger.Info("Resources deallocated for bid",
-		"orderID", orderID.String())
+	bm.logger.WithFields(logrus.Fields{
+		"orderID": orderID.String(),
+	}).Info("Resources deallocated for bid")
 
 	return nil
 }
@@ -593,7 +644,10 @@ func (bm *Manager) loadPersistedBids(ctx context.Context) error {
 	for _, order := range orders {
 		bids, err := bm.storage.GetBids(ctx, order.ID.String())
 		if err != nil {
-			bm.logger.Warn("Failed to load bids for order", "orderID", order.ID, "error", err)
+			bm.logger.WithFields(logrus.Fields{
+				"orderID": order.ID.String(),
+				"error":   err,
+			}).Warn("Failed to load bids for order")
 			continue
 		}
 
@@ -606,12 +660,17 @@ func (bm *Manager) loadPersistedBids(ctx context.Context) error {
 					OrderID: order.ID.String(),
 				}
 				bm.pendingBids[bidKey] = extendedBid
-				bm.logger.Debug("Loaded pending bid from storage", "orderID", order.ID.String(), "bidIndex", i)
+				bm.logger.WithFields(logrus.Fields{
+					"orderID":  order.ID.String(),
+					"bidIndex": i,
+				}).Debug("Loaded pending bid from storage")
 			}
 		}
 	}
 
-	bm.logger.Info("Loaded persisted bids", "pendingBids", len(bm.pendingBids))
+	bm.logger.WithFields(logrus.Fields{
+		"pendingBids": len(bm.pendingBids),
+	}).Info("Loaded persisted bids")
 	return nil
 }
 
@@ -643,11 +702,10 @@ func (bm *Manager) allocateResourcesForBid(ctx context.Context, orderID *big.Int
 
 	// Create resource usage based on order requirements
 	resourceUsage := &types.ResourceUsage{
-		CPUUsed:     order.CpuCores,
-		GPUUsed:     order.GpuCores,
-		MemoryUsed:  order.MemoryMB,
-		DiskUsed:    order.DiskGB,
-		NetworkUsed: order.UploadMbps, // Using upload speed as network usage
+		CPUUsed:    order.CpuCores,
+		GPUUsed:    order.GpuCores,
+		MemoryUsed: order.MemoryMB,
+		DiskUsed:   order.DiskGB,
 	}
 
 	// Allocate resources
@@ -655,15 +713,11 @@ func (bm *Manager) allocateResourcesForBid(ctx context.Context, orderID *big.Int
 		return fmt.Errorf("failed to allocate resources: %w", err)
 	}
 
-	// Start the resource
-	if err := bm.resourceManager.StartResource(ctx, orderID, machine); err != nil {
-		return fmt.Errorf("failed to start resource: %w", err)
-	}
-
-	bm.logger.Info("Resources allocated and started for bid",
-		"orderID", orderID.String(),
-		"machineID", machineID.String(),
-		"resourceUsage", resourceUsage)
+	bm.logger.WithFields(logrus.Fields{
+		"orderID":       orderID.String(),
+		"machineID":     machineID.String(),
+		"resourceUsage": resourceUsage,
+	}).Info("Resources allocated and started for bid")
 
 	return nil
 }
@@ -672,17 +726,17 @@ func (bm *Manager) allocateResourcesForBid(ctx context.Context, orderID *big.Int
 func (bm *Manager) TryBidOnOrder(ctx context.Context, order *types.Order) error {
 	// Check if order is open for bidding
 	if order.Status != types.OrderStatusOpen {
-		bm.logger.Debug("Order not open for bidding", "orderID", order.ID, "status", order.Status)
+		bm.logger.WithFields(logrus.Fields{
+			"orderID": order.ID.String(),
+			"status":  order.Status,
+		}).Debug("Order not open for bidding")
 		return nil
 	}
 
-	// Check if bidding is still open
-	isOpen, err := bm.bidMarket.IsBiddingOpen(ctx, order.ID)
-	if err != nil {
-		return fmt.Errorf("failed to check if bidding is open: %w", err)
-	}
-	if !isOpen {
-		bm.logger.Debug("Bidding is closed for order", "orderID", order.ID)
+	if !order.IsOrderWithinBiddingTime() {
+		bm.logger.WithFields(logrus.Fields{
+			"orderID": order.ID.String(),
+		}).Debug("Bidding is closed for order")
 		return nil
 	}
 
@@ -693,14 +747,19 @@ func (bm *Manager) TryBidOnOrder(ctx context.Context, order *types.Order) error 
 	bm.mu.RUnlock()
 
 	if hasBid {
-		bm.logger.Debug("Already have a bid for order", "orderID", order.ID)
+		bm.logger.WithFields(logrus.Fields{
+			"orderID": order.ID.String(),
+		}).Debug("Already have a bid for order")
 		return nil
 	}
 
 	// Find suitable machine for this order
 	machine, err := bm.findSuitableMachine(ctx, order)
 	if err != nil {
-		bm.logger.Debug("No suitable machine found for order", "orderID", order.ID, "error", err)
+		bm.logger.WithFields(logrus.Fields{
+			"orderID": order.ID.String(),
+			"error":   err,
+		}).Debug("No suitable machine found for order")
 		return nil // Not an error, just no suitable machine
 	}
 
@@ -712,30 +771,22 @@ func (bm *Manager) TryBidOnOrder(ctx context.Context, order *types.Order) error 
 
 	// Check if price is within order limits
 	if pricePerSecond.Cmp(order.MaxBidPrice) > 0 {
-		bm.logger.Debug("Calculated price exceeds order max price",
-			"orderID", order.ID,
-			"calculatedPrice", pricePerSecond,
-			"maxPrice", order.MaxBidPrice)
+		bm.logger.WithFields(logrus.Fields{
+			"orderID":         order.ID.String(),
+			"calculatedPrice": pricePerSecond.String(),
+			"maxPrice":        order.MaxBidPrice.String(),
+		}).Debug("Calculated price exceeds order max price")
 		return nil
 	}
 
 	// Submit bid
-	bm.logger.Info("Attempting to bid on order",
-		"orderID", order.ID,
-		"pricePerSecond", pricePerSecond,
-		"machineID", machine.ID)
+	bm.logger.WithFields(logrus.Fields{
+		"orderID":        order.ID.String(),
+		"pricePerSecond": pricePerSecond.String(),
+		"machineID":      machine.ID.String(),
+	}).Info("Attempting to bid on order")
 
-	result, err := bm.SubmitBid(ctx, order.ID, pricePerSecond, machine.ID)
-	if err != nil {
-		return fmt.Errorf("failed to submit bid: %w", err)
-	}
-
-	bm.logger.Info("Successfully submitted bid",
-		"orderID", order.ID,
-		"bidIndex", result.BidIndex,
-		"txHash", result.TxHash)
-
-	return nil
+	return bm.SubmitBid(ctx, order.ID, pricePerSecond, machine.ID)
 }
 
 // findSuitableMachine finds a machine that can fulfill the order requirements
@@ -767,7 +818,10 @@ func (bm *Manager) findSuitableMachine(ctx context.Context, order *types.Order) 
 
 		canAllocate, err := bm.resourceManager.CanAllocateResources(ctx, machine, required)
 		if err != nil {
-			bm.logger.Debug("Failed to check resource allocation", "machineID", machine.ID, "error", err)
+			bm.logger.WithFields(logrus.Fields{
+				"machineID": machine.ID.String(),
+				"error":     err,
+			}).Debug("Failed to check resource allocation")
 			continue
 		}
 
