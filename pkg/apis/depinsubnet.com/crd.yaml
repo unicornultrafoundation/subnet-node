@@ -4,14 +4,14 @@ metadata:
   name: manifests.depinsubnet.com
 spec:
   group: depinsubnet.com
-  version: v1
+  version: v1alpha1
   names:
     kind: Manifest
     plural: manifests
     singular: manifest
   scope: Namespaced
   versions:
-    - name: v1
+    - name: v1alpha1
       served: true
       storage: true
       schema:
