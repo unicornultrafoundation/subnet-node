@@ -253,8 +253,9 @@ func (e *VBoxManageExecutor) SetupStorage(vmName string, req vbtypes.VMCreateReq
 	vboxLog.Infof("Setting up storage for VM: %s", vmName)
 
 	// Create virtual disk
-	diskPath, err := e.createVirtualDisk(vmName, req)
-	if err != nil {
+	diskPath := filepath.Join(e.vmDir, vmName, fmt.Sprintf("%s.vdi", vmName))
+	diskSizeGB := req.DiskSizeGB
+	if _, err := e.createVirtualDisk(vmName, diskPath, diskSizeGB); err != nil {
 		return fmt.Errorf("failed to create virtual disk: %w", err)
 	}
 
@@ -617,11 +618,11 @@ func (e *VBoxManageExecutor) configureAudioWithSettings(vmName, controller, outp
 	return err
 }
 
-func (e *VBoxManageExecutor) createVirtualDisk(vmName string, req vbtypes.VMCreateRequest) (string, error) {
+// createVirtualDisk creates a virtual disk for a VM
+func (e *VBoxManageExecutor) createVirtualDisk(vmName string, diskPath string, diskSizeGB int) (string, error) {
 	vboxLog.Infof("Creating virtual disk")
-	diskPath := filepath.Join(e.vmDir, vmName, fmt.Sprintf("%s.vdi", vmName))
 
-	_, err := e.executeCommand("createhd", "--filename", diskPath, "--size", fmt.Sprintf("%d", req.DiskSizeGB*1024), "--format", "VDI")
+	_, err := e.executeCommand("createhd", "--filename", diskPath, "--size", fmt.Sprintf("%d", diskSizeGB*1024), "--format", "VDI")
 	if err != nil {
 		return "", err
 	}
@@ -646,4 +647,26 @@ func (e *VBoxManageExecutor) attachISO(vmName, isoPath string) error {
 	vboxLog.Infof("Attaching ISO to VirtioSCSI controller")
 	_, err := e.executeCommand("storageattach", vmName, "--storagectl", "VirtioSCSI", "--port", "1", "--device", "0", "--type", "dvddrive", "--medium", isoPath)
 	return err
+}
+
+// UpdateCPUCores updates the CPU cores of a VM
+func (e *VBoxManageExecutor) UpdateCPUCores(vmName string, cpuCores int) error {
+	vboxLog.Infof("Updating CPU cores for VM %s to %d", vmName, cpuCores)
+	cmd := exec.Command("VBoxManage", "modifyvm", vmName, "--cpus", fmt.Sprintf("%d", cpuCores))
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to update CPU cores: %w, output: %s", err, string(output))
+	}
+	return nil
+}
+
+// UpdateMemory updates the memory of a VM
+func (e *VBoxManageExecutor) UpdateMemory(vmName string, memoryMB int) error {
+	vboxLog.Infof("Updating memory for VM %s to %d MB", vmName, memoryMB)
+	cmd := exec.Command("VBoxManage", "modifyvm", vmName, "--memory", fmt.Sprintf("%d", memoryMB))
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to update memory: %w, output: %s", err, string(output))
+	}
+	return nil
 }

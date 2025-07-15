@@ -10,145 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/unicornultrafoundation/subnet-node/config"
 	vbtypes "github.com/unicornultrafoundation/subnet-node/core/virtualbox/types"
 )
-
-func TestLoadServiceConfig(t *testing.T) {
-	// Create a test config
-	cfg := config.NewC(nil)
-
-	// Set some test values with proper nesting
-	cfg.Settings = map[string]any{
-		"virtualbox": map[string]any{
-			"enable":               true,
-			"default_memory_mb":    4096,
-			"default_cpus":         4,
-			"default_disk_size_gb": 40,
-			"default_network_type": "bridged",
-			"default_os_type":      "Ubuntu_64",
-			"vm_start_timeout":     "120s",
-			"vm_stop_timeout":      "60s",
-			"vm_delete_timeout":    "120s",
-			"monitor_interval":     "60s",
-			"headless":             false,
-			"network": map[string]any{
-				"default_bridge_name": "en1",
-				"enable_nat":          false,
-				"enable_bridged":      true,
-				"enable_hostonly":     true,
-				"enable_internal":     false,
-			},
-			"storage": map[string]any{
-				"default_controller": "virtioSCSI",
-				"default_type":       "vmdk",
-				"enable_trim":        false,
-				"enable_compression": true,
-			},
-			"advanced": map[string]any{
-				"enable_audio":         true,
-				"enable_usb":           true,
-				"enable_vrde":          false,
-				"vrde_port":            3390,
-				"enable_pae":           true,
-				"enable_nested_paging": false,
-				"enable_hw_virt":       false,
-			},
-		},
-	}
-
-	// Load the configuration
-	serviceConfig := LoadServiceConfig(cfg)
-
-	// Verify the configuration was loaded correctly
-	if !serviceConfig.Enable {
-		t.Error("Expected Enable to be true")
-	}
-	if serviceConfig.DefaultMemoryMB != 4096 {
-		t.Errorf("Expected DefaultMemoryMB to be 4096, got %d", serviceConfig.DefaultMemoryMB)
-	}
-	if serviceConfig.DefaultCPUs != 4 {
-		t.Errorf("Expected DefaultCPUs to be 4, got %d", serviceConfig.DefaultCPUs)
-	}
-	if serviceConfig.DefaultDiskSizeGB != 40 {
-		t.Errorf("Expected DefaultDiskSizeGB to be 40, got %d", serviceConfig.DefaultDiskSizeGB)
-	}
-	if serviceConfig.DefaultNetworkType != "bridged" {
-		t.Errorf("Expected DefaultNetworkType to be 'bridged', got %s", serviceConfig.DefaultNetworkType)
-	}
-	if serviceConfig.DefaultOSType != "Ubuntu_64" {
-		t.Errorf("Expected DefaultOSType to be 'Ubuntu_64', got %s", serviceConfig.DefaultOSType)
-	}
-	if serviceConfig.VMStartTimeout != 120*time.Second {
-		t.Errorf("Expected VMStartTimeout to be 120s, got %v", serviceConfig.VMStartTimeout)
-	}
-	if serviceConfig.VMStopTimeout != 60*time.Second {
-		t.Errorf("Expected VMStopTimeout to be 60s, got %v", serviceConfig.VMStopTimeout)
-	}
-	if serviceConfig.VMDeleteTimeout != 120*time.Second {
-		t.Errorf("Expected VMDeleteTimeout to be 120s, got %v", serviceConfig.VMDeleteTimeout)
-	}
-	if serviceConfig.MonitorInterval != 60*time.Second {
-		t.Errorf("Expected MonitorInterval to be 60s, got %v", serviceConfig.MonitorInterval)
-	}
-	if serviceConfig.Headless {
-		t.Error("Expected Headless to be false")
-	}
-
-	// Test Network configuration
-	if serviceConfig.Network.DefaultBridgeName != "en1" {
-		t.Errorf("Expected DefaultBridgeName to be 'en1', got %s", serviceConfig.Network.DefaultBridgeName)
-	}
-	if serviceConfig.Network.EnableNAT {
-		t.Error("Expected EnableNAT to be false")
-	}
-	if !serviceConfig.Network.EnableBridged {
-		t.Error("Expected EnableBridged to be true")
-	}
-	if !serviceConfig.Network.EnableHostOnly {
-		t.Error("Expected EnableHostOnly to be true")
-	}
-	if serviceConfig.Network.EnableInternal {
-		t.Error("Expected EnableInternal to be false")
-	}
-
-	// Test Storage configuration
-	if serviceConfig.Storage.DefaultController != "virtioSCSI" {
-		t.Errorf("Expected DefaultController to be 'virtioSCSI', got %s", serviceConfig.Storage.DefaultController)
-	}
-	if serviceConfig.Storage.DefaultType != "vmdk" {
-		t.Errorf("Expected DefaultType to be 'vmdk', got %s", serviceConfig.Storage.DefaultType)
-	}
-	if serviceConfig.Storage.EnableTrim {
-		t.Error("Expected EnableTrim to be false")
-	}
-	if !serviceConfig.Storage.EnableCompression {
-		t.Error("Expected EnableCompression to be true")
-	}
-
-	// Test Advanced configuration
-	if !serviceConfig.Advanced.EnableAudio {
-		t.Error("Expected EnableAudio to be true")
-	}
-	if !serviceConfig.Advanced.EnableUSB {
-		t.Error("Expected EnableUSB to be true")
-	}
-	if serviceConfig.Advanced.EnableVRDE {
-		t.Error("Expected EnableVRDE to be false")
-	}
-	if serviceConfig.Advanced.VRDEPort != 3390 {
-		t.Errorf("Expected VRDEPort to be 3390, got %d", serviceConfig.Advanced.VRDEPort)
-	}
-	if !serviceConfig.Advanced.EnablePAE {
-		t.Error("Expected EnablePAE to be true")
-	}
-	if serviceConfig.Advanced.EnableNestedPaging {
-		t.Error("Expected EnableNestedPaging to be false")
-	}
-	if serviceConfig.Advanced.EnableHWVirt {
-		t.Error("Expected EnableHWVirt to be false")
-	}
-}
 
 // TestGenerateCloudInitISO tests the generateCloudInitISO function specifically
 func TestGenerateCloudInitISO(t *testing.T) {
@@ -159,23 +22,8 @@ func TestGenerateCloudInitISO(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir) // Clean up after test
 
-	// Create a minimal service configuration
-	config := &ServiceConfig{
-		Enable:             true,
-		DefaultMemoryMB:    2048,
-		DefaultCPUs:        2,
-		DefaultDiskSizeGB:  20,
-		DefaultNetworkType: "nat",
-		DefaultOSType:      "Ubuntu_arm64",
-		VMStartTimeout:     60 * time.Second,
-		VMStopTimeout:      30 * time.Second,
-		VMDeleteTimeout:    60 * time.Second,
-		MonitorInterval:    30 * time.Second,
-		Headless:           true,
-	}
-
 	// Create a storage manager
-	storageMgr, err := NewStorageManagerWithConfig(config)
+	storageMgr, err := NewStorageManager()
 	if err != nil {
 		t.Fatalf("Failed to create storage manager: %v", err)
 	}
@@ -185,7 +33,6 @@ func TestGenerateCloudInitISO(t *testing.T) {
 		storageMgr: storageMgr,
 		vmDir:      tempDir,
 		stopChan:   make(chan struct{}),
-		config:     config,
 		vboxExec:   NewVBoxManageExecutor(tempDir),
 	}
 
@@ -251,23 +98,8 @@ func TestGenerateCloudInitISOReal(t *testing.T) {
 	// Uncomment the next line to run this test
 	// t.Skip("Skipping test with real VirtualBox directory")
 
-	// Create a minimal service configuration
-	config := &ServiceConfig{
-		Enable:             true,
-		DefaultMemoryMB:    2048,
-		DefaultCPUs:        2,
-		DefaultDiskSizeGB:  20,
-		DefaultNetworkType: "nat",
-		DefaultOSType:      "Ubuntu_arm64",
-		VMStartTimeout:     60 * time.Second,
-		VMStopTimeout:      30 * time.Second,
-		VMDeleteTimeout:    60 * time.Second,
-		MonitorInterval:    30 * time.Second,
-		Headless:           true,
-	}
-
 	// Create a storage manager
-	storageMgr, err := NewStorageManagerWithConfig(config)
+	storageMgr, err := NewStorageManager()
 	if err != nil {
 		t.Fatalf("Failed to create storage manager: %v", err)
 	}
@@ -284,7 +116,6 @@ func TestGenerateCloudInitISOReal(t *testing.T) {
 		storageMgr: storageMgr,
 		vmDir:      realVMDir,
 		stopChan:   make(chan struct{}),
-		config:     config,
 		vboxExec:   NewVBoxManageExecutor(realVMDir),
 	}
 
@@ -332,21 +163,7 @@ func TestGenerateCloudInitISOReal(t *testing.T) {
 
 func TestNewService(t *testing.T) {
 	// This test will only work if VirtualBox is installed
-	config := &ServiceConfig{
-		Enable:             true,
-		DefaultMemoryMB:    2048,
-		DefaultCPUs:        2,
-		DefaultDiskSizeGB:  20,
-		DefaultNetworkType: "nat",
-		DefaultOSType:      "Ubuntu_arm64",
-		VMStartTimeout:     60 * time.Second,
-		VMStopTimeout:      30 * time.Second,
-		VMDeleteTimeout:    60 * time.Second,
-		MonitorInterval:    30 * time.Second,
-		Headless:           true,
-	}
-
-	service, err := NewService(config)
+	service, err := NewService()
 	if err != nil {
 		t.Skipf("VirtualBox service creation failed (VirtualBox may not be installed): %v", err)
 		return
@@ -377,21 +194,7 @@ func TestNewService(t *testing.T) {
 
 func TestCreateVM(t *testing.T) {
 	// This test will only work if VirtualBox is installed
-	config := &ServiceConfig{
-		Enable:             true,
-		DefaultMemoryMB:    2048,
-		DefaultCPUs:        2,
-		DefaultDiskSizeGB:  20,
-		DefaultNetworkType: "nat",
-		DefaultOSType:      "Ubuntu_arm64",
-		VMStartTimeout:     60 * time.Second,
-		VMStopTimeout:      30 * time.Second,
-		VMDeleteTimeout:    60 * time.Second,
-		MonitorInterval:    30 * time.Second,
-		Headless:           true,
-	}
-
-	service, err := NewService(config)
+	service, err := NewService()
 	if err != nil {
 		t.Skipf("VirtualBox service creation failed (VirtualBox may not be installed): %v", err)
 		return
@@ -431,21 +234,7 @@ func TestCreateVM(t *testing.T) {
 
 func TestListVMs(t *testing.T) {
 	// This test will only work if VirtualBox is installed
-	config := &ServiceConfig{
-		Enable:             true,
-		DefaultMemoryMB:    2048,
-		DefaultCPUs:        2,
-		DefaultDiskSizeGB:  20,
-		DefaultNetworkType: "nat",
-		DefaultOSType:      "Ubuntu_arm64",
-		VMStartTimeout:     60 * time.Second,
-		VMStopTimeout:      30 * time.Second,
-		VMDeleteTimeout:    60 * time.Second,
-		MonitorInterval:    30 * time.Second,
-		Headless:           true,
-	}
-
-	service, err := NewService(config)
+	service, err := NewService()
 	if err != nil {
 		t.Skipf("VirtualBox service creation failed (VirtualBox may not be installed): %v", err)
 		return
@@ -473,21 +262,7 @@ func TestListVMs(t *testing.T) {
 
 func TestDownloadISO(t *testing.T) {
 	// This test will only work if VirtualBox is installed
-	config := &ServiceConfig{
-		Enable:             true,
-		DefaultMemoryMB:    2048,
-		DefaultCPUs:        2,
-		DefaultDiskSizeGB:  20,
-		DefaultNetworkType: "nat",
-		DefaultOSType:      "Ubuntu_arm64",
-		VMStartTimeout:     60 * time.Second,
-		VMStopTimeout:      30 * time.Second,
-		VMDeleteTimeout:    60 * time.Second,
-		MonitorInterval:    30 * time.Second,
-		Headless:           true,
-	}
-
-	service, err := NewService(config)
+	service, err := NewService()
 	if err != nil {
 		t.Skipf("VirtualBox service creation failed (VirtualBox may not be installed): %v", err)
 		return
@@ -528,12 +303,10 @@ func TestDownloadISO(t *testing.T) {
 }
 
 func TestServiceImpl_validateResources(t *testing.T) {
-	config := &ServiceConfig{
-		DefaultOSType: "Ubuntu_ARM64",
-	}
-	service, err := NewService(config)
+	service, err := NewService()
 	if err != nil {
-		t.Fatalf("Failed to create service: %v", err)
+		t.Skipf("VirtualBox service creation failed (VirtualBox may not be installed): %v", err)
+		return
 	}
 
 	tests := []struct {
@@ -594,12 +367,10 @@ func TestServiceImpl_validateResources(t *testing.T) {
 }
 
 func TestServiceImpl_GetSystemInfo(t *testing.T) {
-	config := &ServiceConfig{
-		DefaultOSType: "Ubuntu_ARM64",
-	}
-	service, err := NewService(config)
+	service, err := NewService()
 	if err != nil {
-		t.Fatalf("Failed to create service: %v", err)
+		t.Skipf("VirtualBox service creation failed (VirtualBox may not be installed): %v", err)
+		return
 	}
 
 	info, err := service.GetSystemInfo(context.Background())
@@ -631,23 +402,8 @@ func TestCloudInitPerVM(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir) // Clean up after test
 
-	// Create a minimal service configuration
-	config := &ServiceConfig{
-		Enable:             true,
-		DefaultMemoryMB:    2048,
-		DefaultCPUs:        2,
-		DefaultDiskSizeGB:  20,
-		DefaultNetworkType: "nat",
-		DefaultOSType:      "Ubuntu_arm64",
-		VMStartTimeout:     60 * time.Second,
-		VMStopTimeout:      30 * time.Second,
-		VMDeleteTimeout:    60 * time.Second,
-		MonitorInterval:    30 * time.Second,
-		Headless:           true,
-	}
-
 	// Create a storage manager
-	storageMgr, err := NewStorageManagerWithConfig(config)
+	storageMgr, err := NewStorageManager()
 	if err != nil {
 		t.Fatalf("Failed to create storage manager: %v", err)
 	}
@@ -657,7 +413,6 @@ func TestCloudInitPerVM(t *testing.T) {
 		storageMgr: storageMgr,
 		vmDir:      tempDir,
 		stopChan:   make(chan struct{}),
-		config:     config,
 		vboxExec:   NewVBoxManageExecutor(tempDir),
 	}
 
@@ -764,23 +519,8 @@ func TestGenerateCloudInitFilesSample(t *testing.T) {
 	}
 	vmDir := filepath.Join(homeDir, "VirtualBox VMs")
 
-	// Create a minimal service configuration
-	config := &ServiceConfig{
-		Enable:             true,
-		DefaultMemoryMB:    2048,
-		DefaultCPUs:        2,
-		DefaultDiskSizeGB:  20,
-		DefaultNetworkType: "nat",
-		DefaultOSType:      "Ubuntu_arm64",
-		VMStartTimeout:     60 * time.Second,
-		VMStopTimeout:      30 * time.Second,
-		VMDeleteTimeout:    60 * time.Second,
-		MonitorInterval:    30 * time.Second,
-		Headless:           true,
-	}
-
 	// Create a storage manager
-	storageMgr, err := NewStorageManagerWithConfig(config)
+	storageMgr, err := NewStorageManager()
 	if err != nil {
 		t.Fatalf("Failed to create storage manager: %v", err)
 	}
@@ -790,7 +530,6 @@ func TestGenerateCloudInitFilesSample(t *testing.T) {
 		storageMgr: storageMgr,
 		vmDir:      vmDir,
 		stopChan:   make(chan struct{}),
-		config:     config,
 		vboxExec:   NewVBoxManageExecutor(vmDir),
 	}
 
@@ -919,23 +658,8 @@ func TestSimpleCloudInit(t *testing.T) {
 	}
 	vmDir := filepath.Join(homeDir, "VirtualBox VMs")
 
-	// Create a minimal service configuration
-	config := &ServiceConfig{
-		Enable:             true,
-		DefaultMemoryMB:    2048,
-		DefaultCPUs:        2,
-		DefaultDiskSizeGB:  20,
-		DefaultNetworkType: "nat",
-		DefaultOSType:      "Ubuntu_arm64",
-		VMStartTimeout:     60 * time.Second,
-		VMStopTimeout:      30 * time.Second,
-		VMDeleteTimeout:    60 * time.Second,
-		MonitorInterval:    30 * time.Second,
-		Headless:           true,
-	}
-
 	// Create a storage manager
-	storageMgr, err := NewStorageManagerWithConfig(config)
+	storageMgr, err := NewStorageManager()
 	if err != nil {
 		t.Fatalf("Failed to create storage manager: %v", err)
 	}
@@ -945,7 +669,6 @@ func TestSimpleCloudInit(t *testing.T) {
 		storageMgr: storageMgr,
 		vmDir:      vmDir,
 		stopChan:   make(chan struct{}),
-		config:     config,
 		vboxExec:   NewVBoxManageExecutor(vmDir),
 	}
 

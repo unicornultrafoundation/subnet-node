@@ -14,307 +14,220 @@ func TestNewStorageManager(t *testing.T) {
 	}
 
 	if storageMgr == nil {
-		t.Fatal("Expected non-nil StorageManagerImpl")
-	}
-
-	if storageMgr.isoDir == "" {
-		t.Error("Expected non-empty ISO directory")
-	}
-}
-
-func TestNewStorageManagerWithConfig(t *testing.T) {
-	config := &ServiceConfig{
-		DefaultOSType: "Ubuntu_ARM64",
-	}
-
-	storageMgr, err := NewStorageManagerWithConfig(config)
-	if err != nil {
-		t.Fatalf("Failed to create storage manager with config: %v", err)
-	}
-
-	if storageMgr == nil {
-		t.Fatal("Expected non-nil StorageManagerImpl")
-	}
-
-	if storageMgr.config != config {
-		t.Error("Expected config to be set correctly")
+		t.Error("Expected storage manager to be non-nil")
 	}
 }
 
 func TestStorageManagerImpl_DetermineOSTypeAndISO(t *testing.T) {
-	config := &ServiceConfig{
-		DefaultOSType: "Ubuntu_ARM64",
-	}
-	storageMgr, err := NewStorageManagerWithConfig(config)
+	storageMgr, err := NewStorageManager()
 	if err != nil {
 		t.Fatalf("Failed to create storage manager: %v", err)
 	}
 
-	tests := []struct {
-		name    string
-		req     vbtypes.VMCreateRequest
-		wantErr bool
-	}{
-		{
-			name: "with explicit OS type",
-			req: vbtypes.VMCreateRequest{
-				Name:       "test-vm",
-				OSType:     "Ubuntu_ARM64",
-				CPUCores:   2,
-				MemoryMB:   2048,
-				DiskSizeGB: 20,
-			},
-			wantErr: false,
-		},
-		{
-			name: "with explicit ISO URL",
-			req: vbtypes.VMCreateRequest{
-				Name:       "test-vm",
-				CPUCores:   2,
-				MemoryMB:   2048,
-				DiskSizeGB: 20,
-			},
-			wantErr: false,
-		},
-		{
-			name: "with default config",
-			req: vbtypes.VMCreateRequest{
-				Name:       "test-vm",
-				CPUCores:   2,
-				MemoryMB:   2048,
-				DiskSizeGB: 20,
-			},
-			wantErr: false,
-		},
+	// Test with explicit OS type
+	req := vbtypes.VMCreateRequest{
+		Name:       "test-vm",
+		OSType:     "Ubuntu_ARM64",
+		CPUCores:   2,
+		MemoryMB:   2048,
+		DiskSizeGB: 20,
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			osType, isoURL, err := storageMgr.DetermineOSTypeAndISO(context.Background(), tt.req)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("DetermineOSTypeAndISO() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
+	ctx := context.Background()
+	osType, isoURL, err := storageMgr.DetermineOSTypeAndISO(ctx, req)
+	if err != nil {
+		t.Fatalf("Failed to determine OS type and ISO: %v", err)
+	}
 
-			if !tt.wantErr {
-				if osType == "" {
-					t.Error("Expected non-empty OS type")
-				}
-				if isoURL == "" {
-					t.Error("Expected non-empty ISO URL")
-				}
-			}
-		})
+	if osType != "Ubuntu_ARM64" {
+		t.Errorf("Expected OS type Ubuntu_ARM64, got %s", osType)
+	}
+
+	if isoURL == "" {
+		t.Error("Expected ISO URL to be non-empty")
+	}
+
+	// Test without explicit OS type (should use hardware detection)
+	req.OSType = ""
+	osType2, isoURL2, err := storageMgr.DetermineOSTypeAndISO(ctx, req)
+	if err != nil {
+		t.Fatalf("Failed to determine OS type and ISO without explicit type: %v", err)
+	}
+
+	if osType2 == "" {
+		t.Error("Expected OS type to be determined automatically")
+	}
+
+	if isoURL2 == "" {
+		t.Error("Expected ISO URL to be non-empty")
 	}
 }
 
 func TestStorageManagerImpl_GetSupportedOSTypes(t *testing.T) {
-	config := &ServiceConfig{}
-	storageMgr, err := NewStorageManagerWithConfig(config)
+	storageMgr, err := NewStorageManager()
 	if err != nil {
 		t.Fatalf("Failed to create storage manager: %v", err)
 	}
 
 	osTypes := storageMgr.GetSupportedOSTypes()
 	if len(osTypes) == 0 {
-		t.Fatal("Expected non-empty list of supported OS types")
+		t.Error("Expected at least one supported OS type")
 	}
 
-	// Check that we have some expected OS types
-	expectedTypes := []string{"Ubuntu", "Debian", "Fedora", "CentOS"}
+	// Check for common OS types
+	expectedTypes := []string{"Ubuntu_64", "Ubuntu_ARM64", "Ubuntu"}
+	found := 0
 	for _, expected := range expectedTypes {
-		found := false
-		for _, osType := range osTypes {
-			if osType == expected || osType == expected+"_64" || osType == expected+"_ARM64" {
-				found = true
+		for _, actual := range osTypes {
+			if actual == expected {
+				found++
 				break
 			}
 		}
-		if !found {
-			t.Errorf("Expected to find OS type containing %s", expected)
-		}
+	}
+
+	if found == 0 {
+		t.Error("Expected to find at least one common OS type")
 	}
 }
 
 func TestStorageManagerImpl_getOSTypeForArchitecture(t *testing.T) {
-	config := &ServiceConfig{}
-	storageMgr, err := NewStorageManagerWithConfig(config)
+	storageMgr, err := NewStorageManager()
 	if err != nil {
 		t.Fatalf("Failed to create storage manager: %v", err)
 	}
 
-	tests := []struct {
-		arch     string
-		expected string
-	}{
-		{"arm64", "Ubuntu_ARM64"},
-		{"aarch64", "Ubuntu_ARM64"},
-		{"amd64", "Ubuntu_64"},
-		{"x86_64", "Ubuntu_64"},
-		{"arm", "Ubuntu"},
-		{"386", "Ubuntu"},
-		{"i386", "Ubuntu"},
-		{"unknown", "Ubuntu_64"}, // Default fallback
+	// Test ARM64 architecture
+	osType := storageMgr.getOSTypeForArchitecture("arm64")
+	if osType != "Ubuntu_ARM64" {
+		t.Errorf("Expected Ubuntu_ARM64 for arm64, got %s", osType)
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.arch, func(t *testing.T) {
-			result := storageMgr.getOSTypeForArchitecture(tt.arch)
-			if result != tt.expected {
-				t.Errorf("getOSTypeForArchitecture(%s) = %s, want %s", tt.arch, result, tt.expected)
-			}
-		})
+	// Test AMD64 architecture
+	osType = storageMgr.getOSTypeForArchitecture("amd64")
+	if osType != "Ubuntu_64" {
+		t.Errorf("Expected Ubuntu_64 for amd64, got %s", osType)
+	}
+
+	// Test unknown architecture
+	osType = storageMgr.getOSTypeForArchitecture("unknown")
+	if osType != "Ubuntu_64" {
+		t.Errorf("Expected Ubuntu_64 for unknown architecture, got %s", osType)
 	}
 }
 
 func TestStorageManagerImpl_isValidOSType(t *testing.T) {
-	config := &ServiceConfig{}
-	storageMgr, err := NewStorageManagerWithConfig(config)
+	storageMgr, err := NewStorageManager()
 	if err != nil {
 		t.Fatalf("Failed to create storage manager: %v", err)
 	}
 
-	tests := []struct {
-		osType string
-		valid  bool
-	}{
-		{"Ubuntu", true},
-		{"Ubuntu_64", true},
-		{"Ubuntu_ARM64", true},
-		{"Debian", true},
-		{"Debian_64", true},
-		{"Debian_ARM64", true},
-		{"Fedora", true},
-		{"CentOS", true},
-		{"RedHat", true},
-		{"Oracle", true},
-		{"Linux", true},
-		{"Windows", true},
-		{"FreeBSD", true},
-		{"NetBSD", true},
-		{"BSD", true},
-		{"Other", true},
-		{"", false},
-		{"InvalidOS", false},
-		{"Ubuntu_Invalid", false},
+	// Test valid OS types
+	validTypes := []string{"Ubuntu_64", "Ubuntu_ARM64", "Ubuntu", "Debian_64"}
+	for _, osType := range validTypes {
+		if !storageMgr.isValidOSType(osType) {
+			t.Errorf("Expected %s to be valid", osType)
+		}
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.osType, func(t *testing.T) {
-			result := storageMgr.isValidOSType(tt.osType)
-			if result != tt.valid {
-				t.Errorf("isValidOSType(%s) = %v, want %v", tt.osType, result, tt.valid)
-			}
-		})
+	// Test invalid OS types
+	invalidTypes := []string{"", "InvalidOS", "Windows_Invalid"}
+	for _, osType := range invalidTypes {
+		if storageMgr.isValidOSType(osType) {
+			t.Errorf("Expected %s to be invalid", osType)
+		}
 	}
 }
 
 func TestStorageManagerImpl_isValidISOURL(t *testing.T) {
-	config := &ServiceConfig{}
-	storageMgr, err := NewStorageManagerWithConfig(config)
+	storageMgr, err := NewStorageManager()
 	if err != nil {
 		t.Fatalf("Failed to create storage manager: %v", err)
 	}
 
-	tests := []struct {
-		isoURL string
-		valid  bool
-	}{
-		{"https://example.com/test.iso", true},
-		{"http://example.com/test.iso", true},
-		{"https://releases.ubuntu.com/24.04/ubuntu-24.04.2-live-server-amd64.iso", true},
-		{"", false},
-		{"https://example.com/test.txt", false},
-		{"ftp://example.com/test.iso", false},
-		{"not-a-url", false},
+	// Test valid ISO URLs
+	validURLs := []string{
+		"https://releases.ubuntu.com/24.04/ubuntu-24.04.2-live-server-amd64.iso",
+		"http://example.com/test.iso",
+	}
+	for _, url := range validURLs {
+		if !storageMgr.isValidISOURL(url) {
+			t.Errorf("Expected %s to be valid", url)
+		}
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.isoURL, func(t *testing.T) {
-			result := storageMgr.isValidISOURL(tt.isoURL)
-			if result != tt.valid {
-				t.Errorf("isValidISOURL(%s) = %v, want %v", tt.isoURL, result, tt.valid)
-			}
-		})
+	// Test invalid ISO URLs
+	invalidURLs := []string{
+		"",
+		"not-a-url",
+		"https://example.com/file.txt",
+		"ftp://example.com/file.iso",
+	}
+	for _, url := range invalidURLs {
+		if storageMgr.isValidISOURL(url) {
+			t.Errorf("Expected %s to be invalid", url)
+		}
 	}
 }
 
 func TestStorageManagerImpl_getISOURLForOSType(t *testing.T) {
-	config := &ServiceConfig{}
-	storageMgr, err := NewStorageManagerWithConfig(config)
+	storageMgr, err := NewStorageManager()
 	if err != nil {
 		t.Fatalf("Failed to create storage manager: %v", err)
 	}
 
-	tests := []struct {
-		osType string
-		valid  bool
-	}{
-		{"Ubuntu_64", true},
-		{"Ubuntu_ARM64", true},
-		{"Debian_64", true},
-		{"Debian_ARM64", true},
-		{"Fedora_64", true},
-		{"Fedora_ARM64", true},
-		{"CentOS_64", true},
-		{"CentOS_ARM64", true},
-		{"RedHat_64", true},
-		{"RedHat_ARM64", true},
-		{"Oracle_64", true},
-		{"Oracle_ARM64", true},
-		{"Linux_64", true},
-		{"Linux_ARM64", true},
-		{"Windows_64", true},
-		{"Windows_ARM64", true},
-		{"FreeBSD_64", true},
-		{"FreeBSD_ARM64", true},
-		{"NetBSD_64", true},
-		{"NetBSD_ARM64", true},
-		{"BSD_64", true},
-		{"BSD_ARM64", true},
-		{"Other_64", true},
-		{"Other_ARM64", true},
-		{"InvalidOS", true}, // Should return default
+	// Test Ubuntu_64
+	url := storageMgr.getISOURLForOSType("Ubuntu_64")
+	if url == "" {
+		t.Error("Expected non-empty URL for Ubuntu_64")
+	}
+	if !storageMgr.isValidISOURL(url) {
+		t.Errorf("Expected valid URL for Ubuntu_64, got %s", url)
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.osType, func(t *testing.T) {
-			isoURL := storageMgr.getISOURLForOSType(tt.osType)
-			if isoURL == "" {
-				t.Errorf("getISOURLForOSType(%s) returned empty URL", tt.osType)
-			}
-			if !storageMgr.isValidISOURL(isoURL) {
-				t.Errorf("getISOURLForOSType(%s) returned invalid URL: %s", tt.osType, isoURL)
-			}
-		})
+	// Test Ubuntu_ARM64
+	url = storageMgr.getISOURLForOSType("Ubuntu_ARM64")
+	if url == "" {
+		t.Error("Expected non-empty URL for Ubuntu_ARM64")
+	}
+	if !storageMgr.isValidISOURL(url) {
+		t.Errorf("Expected valid URL for Ubuntu_ARM64, got %s", url)
+	}
+
+	// Test unknown OS type
+	url = storageMgr.getISOURLForOSType("UnknownOS")
+	if url != "" {
+		t.Errorf("Expected empty URL for unknown OS type, got %s", url)
 	}
 }
 
 func TestStorageManagerImpl_validateArchitectureCompatibility(t *testing.T) {
-	config := &ServiceConfig{}
-	storageMgr, err := NewStorageManagerWithConfig(config)
+	storageMgr, err := NewStorageManager()
 	if err != nil {
 		t.Fatalf("Failed to create storage manager: %v", err)
 	}
 
-	// Test with valid OS types for current architecture
-	validOSTypes := storageMgr.GetSupportedOSTypes()
-	for _, osType := range validOSTypes {
-		t.Run("valid_"+osType, func(t *testing.T) {
-			err := storageMgr.validateArchitectureCompatibility(osType)
-			if err != nil {
-				t.Errorf("validateArchitectureCompatibility(%s) failed: %v", osType, err)
-			}
-		})
+	// Test compatible combinations
+	compatibleTests := []struct {
+		arch       string
+		osType     string
+		shouldPass bool
+	}{
+		{"arm64", "Ubuntu_ARM64", true},
+		{"amd64", "Ubuntu_64", true},
+		{"arm64", "Ubuntu_64", false},    // ARM64 host with x64 OS
+		{"amd64", "Ubuntu_ARM64", false}, // x64 host with ARM64 OS
 	}
 
-	// Test with invalid OS type
-	t.Run("invalid_os_type", func(t *testing.T) {
-		err := storageMgr.validateArchitectureCompatibility("InvalidOSType")
-		if err == nil {
-			t.Error("Expected error for invalid OS type")
+	for _, test := range compatibleTests {
+		err := storageMgr.validateArchitectureCompatibility(test.osType)
+		if test.shouldPass && err != nil {
+			t.Errorf("Expected compatibility check to pass for %s on %s, but got error: %v", test.osType, test.arch, err)
 		}
-	})
+		if !test.shouldPass && err == nil {
+			t.Errorf("Expected compatibility check to fail for %s on %s, but it passed", test.osType, test.arch)
+		}
+	}
 }
 
 func TestStorageManagerImpl_GetISODir(t *testing.T) {

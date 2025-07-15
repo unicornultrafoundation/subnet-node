@@ -22,7 +22,6 @@ var storageLog = logrus.WithField("service", "virtualbox-storage")
 // StorageManagerImpl implements the StorageManager interface
 type StorageManagerImpl struct {
 	isoDir string
-	config *ServiceConfig
 }
 
 // NewStorageManager creates a new storage manager
@@ -39,16 +38,6 @@ func NewStorageManager() (*StorageManagerImpl, error) {
 	return &StorageManagerImpl{
 		isoDir: isoDir,
 	}, nil
-}
-
-// NewStorageManagerWithConfig creates a new storage manager with configuration
-func NewStorageManagerWithConfig(config *ServiceConfig) (*StorageManagerImpl, error) {
-	storageMgr, err := NewStorageManager()
-	if err != nil {
-		return nil, err
-	}
-	storageMgr.config = config
-	return storageMgr, nil
 }
 
 // DownloadFile downloads a file from URL to the specified destination
@@ -265,16 +254,21 @@ func (s *StorageManagerImpl) determineOSType(req vbtypes.VMCreateRequest) (strin
 		return req.OSType, nil
 	}
 
-	// Use default from configuration if available
-	if s.config != nil && s.config.DefaultOSType != "" {
-		storageLog.Infof("Using default OS type from config: %s", s.config.DefaultOSType)
-		return s.config.DefaultOSType, nil
+	// Use hardware detection to determine appropriate OS type
+	detector := NewHardwareDetector()
+	hardwareInfo, err := detector.DetectHardware()
+	if err != nil {
+		storageLog.Warnf("Hardware detection failed, falling back to architecture-based detection: %v", err)
+		// Fallback to architecture-based detection
+		arch := runtime.GOARCH
+		osType := s.getOSTypeForArchitecture(arch)
+		storageLog.Infof("Using architecture-based OS type: %s (for %s)", osType, arch)
+		return osType, nil
 	}
 
-	// Fallback to architecture-based detection
-	arch := runtime.GOARCH
-	osType := s.getOSTypeForArchitecture(arch)
-	storageLog.Infof("Using architecture-based OS type: %s (for %s)", osType, arch)
+	// Determine OS type based on hardware information
+	osType := s.getOSTypeForHardware(hardwareInfo)
+	storageLog.Infof("Using hardware-based OS type: %s (for %s architecture)", osType, hardwareInfo.Architecture)
 	return osType, nil
 }
 
@@ -322,6 +316,24 @@ func (s *StorageManagerImpl) validateOSTypeAndISOCombination(osType, isoURL stri
 // getOSTypeForArchitecture returns the appropriate OS type for the given architecture
 func (s *StorageManagerImpl) getOSTypeForArchitecture(arch string) string {
 	switch arch {
+	case "arm64", "aarch64":
+		return "Ubuntu_ARM64"
+	case "amd64", "x86_64":
+		return "Ubuntu_64"
+	case "arm":
+		return "Ubuntu"
+	case "386", "i386":
+		return "Ubuntu"
+	default:
+		// Default to Ubuntu 64-bit for unknown architectures
+		return "Ubuntu_64"
+	}
+}
+
+// getOSTypeForHardware returns the appropriate OS type based on hardware information
+func (s *StorageManagerImpl) getOSTypeForHardware(hardwareInfo *HardwareInfo) string {
+	// Use the architecture from hardware detection
+	switch hardwareInfo.Architecture {
 	case "arm64", "aarch64":
 		return "Ubuntu_ARM64"
 	case "amd64", "x86_64":

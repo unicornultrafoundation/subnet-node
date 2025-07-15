@@ -14,10 +14,7 @@ func VirtualBoxService(lc fx.Lifecycle, cfg *config.C) (*virtualbox.ServiceImpl,
 		return nil, nil
 	}
 
-	// Load VirtualBox service configuration
-	serviceConfig := virtualbox.LoadServiceConfig(cfg)
-
-	service, err := virtualbox.NewService(serviceConfig)
+	service, err := virtualbox.NewService()
 	if err != nil {
 		return nil, err
 	}

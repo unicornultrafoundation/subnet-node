@@ -21,78 +21,19 @@ import (
 
 var serviceLog = logrus.WithField("service", "virtualbox")
 
-// ServiceConfig holds the configuration for the VirtualBox service
-type ServiceConfig struct {
-	Enable bool
-
-	// VM defaults
-	DefaultMemoryMB    int
-	DefaultCPUs        int
-	DefaultDiskSizeGB  int
-	DefaultNetworkType string
-	DefaultOSType      string
-
-	// Timeouts
-	VMStartTimeout  time.Duration
-	VMStopTimeout   time.Duration
-	VMDeleteTimeout time.Duration
-
-	// Monitoring
-	MonitorInterval time.Duration
-	Headless        bool
-
-	// Network configuration
-	Network NetworkConfig
-
-	// Storage configuration
-	Storage StorageConfig
-
-	// Advanced settings
-	Advanced AdvancedConfig
-}
-
-// NetworkConfig holds network-related configuration
-type NetworkConfig struct {
-	DefaultBridgeName string
-	EnableNAT         bool
-	EnableBridged     bool
-	EnableHostOnly    bool
-	EnableInternal    bool
-}
-
-// StorageConfig holds storage-related configuration
-type StorageConfig struct {
-	DefaultController string
-	DefaultType       string
-	EnableTrim        bool
-	EnableCompression bool
-}
-
-// AdvancedConfig holds advanced VirtualBox settings
-type AdvancedConfig struct {
-	EnableAudio        bool
-	EnableUSB          bool
-	EnableVRDE         bool
-	VRDEPort           int
-	EnablePAE          bool
-	EnableNestedPaging bool
-	EnableHWVirt       bool
-}
-
 // ServiceImpl implements the Service interface
 type ServiceImpl struct {
 	mu         sync.RWMutex
 	storageMgr StorageManager
 	vmDir      string
 	stopChan   chan struct{}
-	config     *ServiceConfig
 	vboxExec   *VBoxManageExecutor
 }
 
 // NewService creates a new VirtualBox service
-func NewService(config *ServiceConfig) (*ServiceImpl, error) {
-	// Create storage manager with configuration
-	storageMgr, err := NewStorageManagerWithConfig(config)
+func NewService() (*ServiceImpl, error) {
+	// Create storage manager
+	storageMgr, err := NewStorageManager()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create storage manager: %w", err)
 	}
@@ -107,7 +48,6 @@ func NewService(config *ServiceConfig) (*ServiceImpl, error) {
 		storageMgr: storageMgr,
 		vmDir:      vmDir,
 		stopChan:   make(chan struct{}),
-		config:     config,
 		vboxExec:   NewVBoxManageExecutor(vmDir),
 	}
 
@@ -124,55 +64,9 @@ func NewService(config *ServiceConfig) (*ServiceImpl, error) {
 	return service, nil
 }
 
-// LoadServiceConfig loads VirtualBox service configuration from the main config
-func LoadServiceConfig(cfg *config.C) *ServiceConfig {
-	return &ServiceConfig{
-		Enable: cfg.GetBool("virtualbox.enable", false),
-
-		// VM defaults
-		DefaultMemoryMB:    cfg.GetInt("virtualbox.default_memory_mb", 2048),
-		DefaultCPUs:        cfg.GetInt("virtualbox.default_cpus", 2),
-		DefaultDiskSizeGB:  cfg.GetInt("virtualbox.default_disk_size_gb", 20),
-		DefaultNetworkType: cfg.GetString("virtualbox.default_network_type", "nat"),
-		DefaultOSType:      cfg.GetString("virtualbox.default_os_type", "Ubuntu_arm64"),
-
-		// Timeouts
-		VMStartTimeout:  cfg.GetDuration("virtualbox.vm_start_timeout", 60*time.Second),
-		VMStopTimeout:   cfg.GetDuration("virtualbox.vm_stop_timeout", 30*time.Second),
-		VMDeleteTimeout: cfg.GetDuration("virtualbox.vm_delete_timeout", 60*time.Second),
-
-		// Monitoring
-		MonitorInterval: cfg.GetDuration("virtualbox.monitor_interval", 30*time.Second),
-		Headless:        cfg.GetBool("virtualbox.headless", true),
-
-		// Network configuration
-		Network: NetworkConfig{
-			DefaultBridgeName: cfg.GetString("virtualbox.network.default_bridge_name", "en0"),
-			EnableNAT:         cfg.GetBool("virtualbox.network.enable_nat", true),
-			EnableBridged:     cfg.GetBool("virtualbox.network.enable_bridged", true),
-			EnableHostOnly:    cfg.GetBool("virtualbox.network.enable_hostonly", false),
-			EnableInternal:    cfg.GetBool("virtualbox.network.enable_internal", false),
-		},
-
-		// Storage configuration
-		Storage: StorageConfig{
-			DefaultController: cfg.GetString("virtualbox.storage.default_controller", "SATA"),
-			DefaultType:       cfg.GetString("virtualbox.storage.default_type", "vdi"),
-			EnableTrim:        cfg.GetBool("virtualbox.storage.enable_trim", true),
-			EnableCompression: cfg.GetBool("virtualbox.storage.enable_compression", false),
-		},
-
-		// Advanced settings
-		Advanced: AdvancedConfig{
-			EnableAudio:        cfg.GetBool("virtualbox.advanced.enable_audio", false),
-			EnableUSB:          cfg.GetBool("virtualbox.advanced.enable_usb", false),
-			EnableVRDE:         cfg.GetBool("virtualbox.advanced.enable_vrde", true),
-			VRDEPort:           cfg.GetInt("virtualbox.advanced.vrde_port", 3389),
-			EnablePAE:          cfg.GetBool("virtualbox.advanced.enable_pae", false),
-			EnableNestedPaging: cfg.GetBool("virtualbox.advanced.enable_nested_paging", true),
-			EnableHWVirt:       cfg.GetBool("virtualbox.advanced.enable_hw_virt", true),
-		},
-	}
+// IsVirtualBoxEnabled checks if VirtualBox service is enabled in the configuration
+func IsVirtualBoxEnabled(cfg *config.C) bool {
+	return cfg.GetBool("virtualbox.enable", false)
 }
 
 // Start starts the VirtualBox service
@@ -202,6 +96,15 @@ func (s *ServiceImpl) CreateVM(ctx context.Context, req vbtypes.VMCreateRequest)
 		return nil, fmt.Errorf("resource validation failed: %w", err)
 	}
 	serviceLog.Infof("Resource validation passed")
+
+	// Validate OS type compatibility with hardware if provided
+	if req.OSType != "" {
+		serviceLog.Infof("Validating OS type compatibility: %s", req.OSType)
+		if err := s.validateOSTypeCompatibility(req.OSType); err != nil {
+			return nil, fmt.Errorf("OS type validation failed: %w", err)
+		}
+		serviceLog.Infof("OS type validation passed")
+	}
 
 	// Generate unique VM ID
 	vmID := generateVMID(req.Name)
@@ -252,7 +155,7 @@ func (s *ServiceImpl) CreateVM(ctx context.Context, req vbtypes.VMCreateRequest)
 
 	// Configure network adapter
 	serviceLog.Infof("Configuring network adapter...")
-	if err := s.vboxExec.ConfigureNetwork(req.Name, s.config.DefaultNetworkType); err != nil {
+	if err := s.vboxExec.ConfigureNetwork(req.Name, "nat"); err != nil {
 		serviceLog.Errorf("Failed to configure network adapter: %v", err)
 		// Clean up on failure
 		serviceLog.Infof("Cleaning up failed VM...")
@@ -338,10 +241,7 @@ func (s *ServiceImpl) validateResources(ctx context.Context, req vbtypes.VMCreat
 		return fmt.Errorf("disk validation failed: %w", err)
 	}
 
-	// Check existing VMs to ensure we don't overcommit resources
-	// if err := s.validateAgainstExistingVMs(ctx, req, resourceInfo); err != nil {
-	// 	return fmt.Errorf("existing VM validation failed: %w", err)
-	// }
+	// TODO: Check existing VMs to ensure we don't overcommit resources
 
 	serviceLog.Infof("Resource validation passed successfully")
 	return nil
@@ -416,58 +316,65 @@ func (s *ServiceImpl) validateDiskResources(req vbtypes.VMCreateRequest, resourc
 	return nil
 }
 
-// validateAgainstExistingVMs checks if creating this VM would overcommit resources with existing VMs
-// func (s *ServiceImpl) validateAgainstExistingVMs(ctx context.Context, req vbtypes.VMCreateRequest, resourceInfo *resource.ResourceInfo) error {
-// 	// Get all existing VMs
-// 	vms, _, err := s.GetVMs(ctx, big.NewInt(0), big.NewInt(1000), vbtypes.VMFilter{})
-// 	if err != nil {
-// 		serviceLog.Warnf("Failed to get existing VMs for resource validation: %v", err)
-// 		return nil // Skip this validation if we can't get existing VMs
-// 	}
+// validateOSTypeCompatibility validates if the provided OS type is compatible with the detected hardware
+func (s *ServiceImpl) validateOSTypeCompatibility(requestedOSType string) error {
+	serviceLog.Infof("Validating OS type compatibility for: %s", requestedOSType)
 
-// 	// Calculate total resources used by existing VMs
-// 	totalExistingCPU := 0
-// 	totalExistingMemory := 0
-// 	totalExistingDisk := 0
+	// Detect hardware to determine appropriate OS type
+	detector := NewHardwareDetector()
+	hardware, err := detector.DetectHardware()
+	if err != nil {
+		serviceLog.Warnf("Hardware detection failed, skipping OS type validation: %v", err)
+		return nil // Skip validation if we can't detect hardware
+	}
 
-// 	for _, vm := range vms {
-// 		// Only count running VMs for resource usage
-// 		if vm.Status == vbtypes.Running {
-// 			totalExistingCPU += vm.CPUCores
-// 			totalExistingMemory += vm.MemoryMB
-// 			totalExistingDisk += vm.DiskSizeGB
-// 		}
-// 	}
+	// Get the appropriate OS type for the detected hardware
+	appropriateOSType := detector.determineOSType(hardware)
+	serviceLog.Infof("Detected hardware architecture: %s", hardware.Architecture)
+	serviceLog.Infof("Appropriate OS type for hardware: %s", appropriateOSType)
+	serviceLog.Infof("Requested OS type: %s", requestedOSType)
 
-// 	// Convert resource info to appropriate units
-// 	availableCPU := resourceInfo.CPU.Count
-// 	availableMemoryMB := int(resourceInfo.Memory.Total / (1024 * 1024))
-// 	availableDiskGB := int(resourceInfo.Storage.Total / (1024 * 1024 * 1024))
+	// Check if the requested OS type is compatible with the hardware architecture
+	if !s.isOSTypeCompatible(requestedOSType, hardware.Architecture) {
+		return fmt.Errorf("OS type '%s' is not compatible with hardware architecture '%s'. Recommended OS type: '%s'",
+			requestedOSType, hardware.Architecture, appropriateOSType)
+	}
 
-// 	// Check if adding this VM would exceed available resources
-// 	newTotalCPU := totalExistingCPU + req.CPUCores
-// 	newTotalMemory := totalExistingMemory + req.MemoryMB
-// 	newTotalDisk := totalExistingDisk + req.DiskSizeGB
+	serviceLog.Infof("OS type validation passed: %s is compatible with %s architecture", requestedOSType, hardware.Architecture)
+	return nil
+}
 
-// 	if newTotalCPU > availableCPU {
-// 		return fmt.Errorf("CPU overcommit: existing VMs use %d cores, new VM requires %d cores, total %d exceeds available %d",
-// 			totalExistingCPU, req.CPUCores, newTotalCPU, availableCPU)
-// 	}
+// isOSTypeCompatible checks if an OS type is compatible with a given architecture
+func (s *ServiceImpl) isOSTypeCompatible(osType, architecture string) bool {
+	// Define compatibility matrix
+	compatibilityMap := map[string][]string{
+		"Ubuntu_ARM64": {"arm64", "aarch64"},
+		"Ubuntu_64":    {"amd64", "x86_64"},
+		"Ubuntu":       {"arm", "386", "i386", "amd64", "x86_64", "arm64", "aarch64"},
+		"Debian_ARM64": {"arm64", "aarch64"},
+		"Debian_64":    {"amd64", "x86_64"},
+		"Debian":       {"arm", "386", "i386", "amd64", "x86_64", "arm64", "aarch64"},
+		// "Windows_ARM64": {"arm64", "aarch64"},
+		// "Windows_64":    {"amd64", "x86_64"},
+		// "Windows":       {"amd64", "x86_64"},
+	}
 
-// 	if newTotalMemory > availableMemoryMB {
-// 		return fmt.Errorf("memory overcommit: existing VMs use %d MB, new VM requires %d MB, total %d exceeds available %d",
-// 			totalExistingMemory, req.MemoryMB, newTotalMemory, availableMemoryMB)
-// 	}
+	// Check if the OS type is in our compatibility map
+	supportedArchitectures, exists := compatibilityMap[osType]
+	if !exists {
+		serviceLog.Warnf("Unknown OS type: %s, allowing it to pass validation", osType)
+		return true // Allow unknown OS types to pass validation
+	}
 
-// 	if newTotalDisk > availableDiskGB {
-// 		return fmt.Errorf("disk overcommit: existing VMs use %d GB, new VM requires %d GB, total %d exceeds available %d",
-// 			totalExistingDisk, req.DiskSizeGB, newTotalDisk, availableDiskGB)
-// 	}
+	// Check if the architecture is supported by this OS type
+	for _, supportedArch := range supportedArchitectures {
+		if supportedArch == architecture {
+			return true
+		}
+	}
 
-// 	serviceLog.Infof("Existing VM validation passed: current usage CPU=%d/%d, Memory=%d/%d MB, Disk=%d/%d GB",
-// 		totalExistingCPU, availableCPU, totalExistingMemory, availableMemoryMB, totalExistingDisk, availableDiskGB)
-// 	return nil
-// }
+	return false
+}
 
 // GetVM gets a VM by ID using VBoxManage
 func (s *ServiceImpl) GetVM(ctx context.Context, vmID string) (*vbtypes.VM, error) {
@@ -477,15 +384,14 @@ func (s *ServiceImpl) GetVM(ctx context.Context, vmID string) (*vbtypes.VM, erro
 	// For now, we'll use the VM name as ID
 	vmName := vmID
 
-	// Get VM info from VirtualBox using VBoxManage
-	cmd := exec.Command("VBoxManage", "showvminfo", vmName, "--machinereadable")
-	output, err := cmd.Output()
+	// Get VM info from VirtualBox using VBoxManageExecutor
+	output, err := s.vboxExec.executeCommand("showvminfo", vmName, "--machinereadable")
 	if err != nil {
 		return nil, fmt.Errorf("VM not found: %w", err)
 	}
 
 	// Parse the machine-readable output
-	vmInfo := s.parseMachineReadableOutput(string(output))
+	vmInfo := s.parseMachineReadableOutput(output)
 
 	// Create VM object from machine info
 	vm := &vbtypes.VM{
@@ -506,15 +412,11 @@ func (s *ServiceImpl) GetVMs(ctx context.Context, start, end *big.Int, filter vb
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	// Get all VMs using VBoxManage
-	cmd := exec.Command("VBoxManage", "list", "vms")
-	output, err := cmd.Output()
+	// Get all VMs using VBoxManageExecutor
+	vmNames, err := s.vboxExec.ListVMs()
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to list VMs: %w", err)
 	}
-
-	// Parse the output to get VM names
-	vmNames := s.parseVMListOutput(string(output))
 
 	var vms []*vbtypes.VM
 	for _, vmName := range vmNames {
@@ -557,13 +459,10 @@ func (s *ServiceImpl) GetVMCount(ctx context.Context, filter *vbtypes.VMFilter) 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	cmd := exec.Command("VBoxManage", "list", "vms")
-	output, err := cmd.Output()
+	vmNames, err := s.vboxExec.ListVMs()
 	if err != nil {
 		return big.NewInt(0), fmt.Errorf("failed to list VMs: %w", err)
 	}
-
-	vmNames := s.parseVMListOutput(string(output))
 
 	if filter == nil {
 		return big.NewInt(int64(len(vmNames))), nil
@@ -605,17 +504,15 @@ func (s *ServiceImpl) UpdateVM(ctx context.Context, vmID string, req vbtypes.VMU
 
 	// Update VM parameters using VBoxManage
 	if req.CPUCores > 0 && req.CPUCores != vm.CPUCores {
-		cmd := exec.Command("VBoxManage", "modifyvm", vmName, "--cpus", fmt.Sprintf("%d", req.CPUCores))
-		if output, err := cmd.CombinedOutput(); err != nil {
-			return nil, fmt.Errorf("failed to update CPU cores: %w, output: %s", err, string(output))
+		if err := s.vboxExec.UpdateCPUCores(vmName, req.CPUCores); err != nil {
+			return nil, err
 		}
 		vm.CPUCores = req.CPUCores
 	}
 
 	if req.MemoryMB > 0 && req.MemoryMB != vm.MemoryMB {
-		cmd := exec.Command("VBoxManage", "modifyvm", vmName, "--memory", fmt.Sprintf("%d", req.MemoryMB))
-		if output, err := cmd.CombinedOutput(); err != nil {
-			return nil, fmt.Errorf("failed to update memory: %w, output: %s", err, string(output))
+		if err := s.vboxExec.UpdateMemory(vmName, req.MemoryMB); err != nil {
+			return nil, err
 		}
 		vm.MemoryMB = req.MemoryMB
 	}
@@ -650,15 +547,6 @@ func (s *ServiceImpl) DeleteVM(ctx context.Context, vmID string) error {
 	return nil
 }
 
-// deleteVMWithVBoxManage deletes a VM using VBoxManage
-func (s *ServiceImpl) deleteVMWithVBoxManage(vmName string) error {
-	cmd := exec.Command("VBoxManage", "unregistervm", vmName, "--delete")
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("VBoxManage unregistervm failed: %w, output: %s", err, string(output))
-	}
-	return nil
-}
-
 // StartVM starts a VM using VBoxManage
 func (s *ServiceImpl) StartVM(ctx context.Context, vmID string) (*vbtypes.VM, error) {
 	s.mu.Lock()
@@ -669,7 +557,7 @@ func (s *ServiceImpl) StartVM(ctx context.Context, vmID string) (*vbtypes.VM, er
 	serviceLog.Infof("Starting VM: %s", vmName)
 
 	// Start the VM using VBoxManage executor
-	if err := s.vboxExec.StartVM(vmName, s.config.Headless); err != nil {
+	if err := s.vboxExec.StartVM(vmName, true); err != nil {
 		return nil, fmt.Errorf("failed to start VM: %w", err)
 	}
 
@@ -938,99 +826,75 @@ func (s *ServiceImpl) configureVMHardwareWithVBoxManage(vmName string, req vbtyp
 
 	// Set OS type
 	serviceLog.Infof("Setting OS type: %s", osType)
-	cmd := exec.Command("VBoxManage", "modifyvm", vmName, "--ostype", osType)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to set OS type: %w, output: %s", err, string(output))
+	if err := s.vboxExec.setOSType(vmName, osType); err != nil {
+		return fmt.Errorf("failed to set OS type: %w", err)
 	}
 
 	// Set CPU count
 	serviceLog.Infof("Setting CPU count to %d", req.CPUCores)
-	cmd = exec.Command("VBoxManage", "modifyvm", vmName, "--cpus", fmt.Sprintf("%d", req.CPUCores))
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to set CPU count: %w, output: %s", err, string(output))
+	if err := s.vboxExec.setCPUs(vmName, req.CPUCores); err != nil {
+		return fmt.Errorf("failed to set CPU count: %w", err)
 	}
 
 	// Set memory
 	serviceLog.Infof("Setting memory to %d MB", req.MemoryMB)
-	cmd = exec.Command("VBoxManage", "modifyvm", vmName, "--memory", fmt.Sprintf("%d", req.MemoryMB))
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to set memory: %w, output: %s", err, string(output))
+	if err := s.vboxExec.setMemory(vmName, req.MemoryMB); err != nil {
+		return fmt.Errorf("failed to set memory: %w", err)
 	}
 
 	// Set VRAM based on detected hardware
 	serviceLog.Infof("Setting VRAM to %d MB", settings.VRAMMB)
-	cmd = exec.Command("VBoxManage", "modifyvm", vmName, "--vram", fmt.Sprintf("%d", settings.VRAMMB))
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to set VRAM: %w, output: %s", err, string(output))
+	if err := s.vboxExec.setVRAM(vmName, settings.VRAMMB); err != nil {
+		return fmt.Errorf("failed to set VRAM: %w", err)
 	}
 
 	// Set chipset based on detected hardware
 	serviceLog.Infof("Setting chipset to %s", settings.Chipset)
-	cmd = exec.Command("VBoxManage", "modifyvm", vmName, "--chipset", settings.Chipset)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to set chipset: %w, output: %s", err, string(output))
+	if err := s.vboxExec.setChipset(vmName, settings.Chipset); err != nil {
+		return fmt.Errorf("failed to set chipset: %w", err)
 	}
 
 	// Set firmware based on detected hardware
 	serviceLog.Infof("Setting firmware to %s", settings.Firmware)
-	cmd = exec.Command("VBoxManage", "modifyvm", vmName, "--firmware", settings.Firmware)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to set firmware: %w, output: %s", err, string(output))
+	if err := s.vboxExec.setFirmware(vmName, settings.Firmware); err != nil {
+		return fmt.Errorf("failed to set firmware: %w", err)
 	}
 
 	// Set graphics controller based on detected hardware
 	serviceLog.Infof("Setting graphics controller to %s", settings.GraphicsController)
-	cmd = exec.Command("VBoxManage", "modifyvm", vmName, "--graphicscontroller", settings.GraphicsController)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to set graphics controller: %w, output: %s", err, string(output))
+	if err := s.vboxExec.setGraphicsController(vmName, settings.GraphicsController); err != nil {
+		return fmt.Errorf("failed to set graphics controller: %w", err)
 	}
 
 	// Set IOAPIC based on detected hardware
-	ioapicStatus := "off"
-	if settings.IOAPICEnabled {
-		ioapicStatus = "on"
-	}
-	serviceLog.Infof("Setting IOAPIC to %s", ioapicStatus)
-	cmd = exec.Command("VBoxManage", "modifyvm", vmName, "--ioapic", ioapicStatus)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to set IOAPIC: %w, output: %s", err, string(output))
+	ioapicStatus := settings.IOAPICEnabled
+	serviceLog.Infof("Setting IOAPIC to %v", ioapicStatus)
+	if err := s.vboxExec.setIOAPIC(vmName, ioapicStatus); err != nil {
+		return fmt.Errorf("failed to set IOAPIC: %w", err)
 	}
 
 	// Set boot order
 	serviceLog.Infof("Setting boot order")
-	cmd = exec.Command("VBoxManage", "modifyvm", vmName, "--boot1", "dvd", "--boot2", "disk", "--boot3", "none", "--boot4", "none")
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to set boot order: %w, output: %s", err, string(output))
+	if err := s.vboxExec.setBootOrder(vmName); err != nil {
+		return fmt.Errorf("failed to set boot order: %w", err)
 	}
 
 	// Configure input devices
 	serviceLog.Infof("Configuring input devices...")
-	cmd = exec.Command("VBoxManage", "modifyvm", vmName, "--mouse", "usbtablet", "--keyboard", "usb")
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to configure input devices: %w, output: %s", err, string(output))
+	if err := s.vboxExec.configureInputDevices(vmName); err != nil {
+		return fmt.Errorf("failed to configure input devices: %w", err)
 	}
 
 	// Configure USB based on detected hardware
 	serviceLog.Infof("Configuring USB with controller: %s", settings.USBController)
-	switch settings.USBController {
-	case "xHCI":
-		cmd = exec.Command("VBoxManage", "modifyvm", vmName, "--usbohci", "off", "--usbehci", "off", "--usbxhci", "on")
-	case "EHCI":
-		cmd = exec.Command("VBoxManage", "modifyvm", vmName, "--usbohci", "off", "--usbehci", "on", "--usbxhci", "off")
-	case "OHCI":
-		cmd = exec.Command("VBoxManage", "modifyvm", vmName, "--usbohci", "on", "--usbehci", "off", "--usbxhci", "off")
-	default:
-		cmd = exec.Command("VBoxManage", "modifyvm", vmName, "--usbohci", "off", "--usbehci", "off", "--usbxhci", "on")
-	}
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to configure USB: %w, output: %s", err, string(output))
+	if err := s.vboxExec.configureUSBWithSettings(vmName, settings.USBController); err != nil {
+		return fmt.Errorf("failed to configure USB: %w", err)
 	}
 
 	// Configure audio based on detected hardware
 	serviceLog.Infof("Configuring audio with controller: %s, output: %s, input: %s", settings.AudioController, settings.AudioOutput, settings.AudioInput)
-	cmd = exec.Command("VBoxManage", "modifyvm", vmName, "--audio-controller", settings.AudioController, "--audio-out", settings.AudioOutput, "--audio-in", settings.AudioInput)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to configure audio: %w, output: %s", err, string(output))
+	if err := s.vboxExec.configureAudioWithSettings(vmName, settings.AudioController, settings.AudioOutput, settings.AudioInput); err != nil {
+		return fmt.Errorf("failed to configure audio: %w", err)
 	}
 
 	serviceLog.Infof("VM hardware configuration completed successfully")
@@ -1043,30 +907,26 @@ func (s *ServiceImpl) configureVMHardwareWithVBoxManageFallback(vmName string, r
 
 	// Set OS type
 	serviceLog.Infof("Setting OS type: %s", osType)
-	cmd := exec.Command("VBoxManage", "modifyvm", vmName, "--ostype", osType)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to set OS type: %w, output: %s", err, string(output))
+	if err := s.vboxExec.setOSType(vmName, osType); err != nil {
+		return fmt.Errorf("failed to set OS type: %w", err)
 	}
 
 	// Set CPU count
 	serviceLog.Infof("Setting CPU count to %d", req.CPUCores)
-	cmd = exec.Command("VBoxManage", "modifyvm", vmName, "--cpus", fmt.Sprintf("%d", req.CPUCores))
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to set CPU count: %w, output: %s", err, string(output))
+	if err := s.vboxExec.setCPUs(vmName, req.CPUCores); err != nil {
+		return fmt.Errorf("failed to set CPU count: %w", err)
 	}
 
 	// Set memory
 	serviceLog.Infof("Setting memory to %d MB", req.MemoryMB)
-	cmd = exec.Command("VBoxManage", "modifyvm", vmName, "--memory", fmt.Sprintf("%d", req.MemoryMB))
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to set memory: %w, output: %s", err, string(output))
+	if err := s.vboxExec.setMemory(vmName, req.MemoryMB); err != nil {
+		return fmt.Errorf("failed to set memory: %w", err)
 	}
 
 	// Set VRAM (video memory) - fallback to 16MB
 	serviceLog.Infof("Setting VRAM to 16 MB")
-	cmd = exec.Command("VBoxManage", "modifyvm", vmName, "--vram", "16")
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to set VRAM: %w, output: %s", err, string(output))
+	if err := s.vboxExec.setVRAM(vmName, 16); err != nil {
+		return fmt.Errorf("failed to set VRAM: %w", err)
 	}
 
 	// Set chipset based on runtime architecture
@@ -1075,9 +935,8 @@ func (s *ServiceImpl) configureVMHardwareWithVBoxManageFallback(vmName string, r
 		chipset = "armv8virtual"
 	}
 	serviceLog.Infof("Setting chipset to %s", chipset)
-	cmd = exec.Command("VBoxManage", "modifyvm", vmName, "--chipset", chipset)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to set chipset: %w, output: %s", err, string(output))
+	if err := s.vboxExec.setChipset(vmName, chipset); err != nil {
+		return fmt.Errorf("failed to set chipset: %w", err)
 	}
 
 	// Set firmware - fallback to EFI for most architectures
@@ -1086,16 +945,14 @@ func (s *ServiceImpl) configureVMHardwareWithVBoxManageFallback(vmName string, r
 		firmware = "bios"
 	}
 	serviceLog.Infof("Setting firmware to %s", firmware)
-	cmd = exec.Command("VBoxManage", "modifyvm", vmName, "--firmware", firmware)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to set firmware: %w, output: %s", err, string(output))
+	if err := s.vboxExec.setFirmware(vmName, firmware); err != nil {
+		return fmt.Errorf("failed to set firmware: %w", err)
 	}
 
 	// Set graphics controller - fallback to vmsvga
 	serviceLog.Infof("Setting graphics controller to vmsvga")
-	cmd = exec.Command("VBoxManage", "modifyvm", vmName, "--graphicscontroller", "vmsvga")
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to set graphics controller: %w, output: %s", err, string(output))
+	if err := s.vboxExec.setGraphicsController(vmName, "vmsvga"); err != nil {
+		return fmt.Errorf("failed to set graphics controller: %w", err)
 	}
 
 	// Set IOAPIC based on architecture
@@ -1103,42 +960,34 @@ func (s *ServiceImpl) configureVMHardwareWithVBoxManageFallback(vmName string, r
 	if runtime.GOARCH == "arm64" || runtime.GOARCH == "aarch64" || runtime.GOARCH == "arm" {
 		ioapicEnabled = false
 	}
-	ioapicStatus := "on"
-	if !ioapicEnabled {
-		ioapicStatus = "off"
-	}
-	serviceLog.Infof("Setting IOAPIC to %s", ioapicStatus)
-	cmd = exec.Command("VBoxManage", "modifyvm", vmName, "--ioapic", ioapicStatus)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to set IOAPIC: %w, output: %s", err, string(output))
+	ioapicStatus := ioapicEnabled
+	serviceLog.Infof("Setting IOAPIC to %v", ioapicStatus)
+	if err := s.vboxExec.setIOAPIC(vmName, ioapicStatus); err != nil {
+		return fmt.Errorf("failed to set IOAPIC: %w", err)
 	}
 
 	// Set boot order
 	serviceLog.Infof("Setting boot order")
-	cmd = exec.Command("VBoxManage", "modifyvm", vmName, "--boot1", "dvd", "--boot2", "disk", "--boot3", "none", "--boot4", "none")
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to set boot order: %w, output: %s", err, string(output))
+	if err := s.vboxExec.setBootOrder(vmName); err != nil {
+		return fmt.Errorf("failed to set boot order: %w", err)
 	}
 
 	// Configure input devices
 	serviceLog.Infof("Configuring input devices...")
-	cmd = exec.Command("VBoxManage", "modifyvm", vmName, "--mouse", "usbtablet", "--keyboard", "usb")
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to configure input devices: %w, output: %s", err, string(output))
+	if err := s.vboxExec.configureInputDevices(vmName); err != nil {
+		return fmt.Errorf("failed to configure input devices: %w", err)
 	}
 
 	// Configure USB
 	serviceLog.Infof("Configuring USB...")
-	cmd = exec.Command("VBoxManage", "modifyvm", vmName, "--usbohci", "off", "--usbehci", "off", "--usbxhci", "on")
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to configure USB: %w, output: %s", err, string(output))
+	if err := s.vboxExec.configureUSB(vmName); err != nil {
+		return fmt.Errorf("failed to configure USB: %w", err)
 	}
 
 	// Configure audio
 	serviceLog.Infof("Configuring audio...")
-	cmd = exec.Command("VBoxManage", "modifyvm", vmName, "--audio-controller", "hda", "--audio-out", "on", "--audio-in", "off")
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to configure audio: %w, output: %s", err, string(output))
+	if err := s.vboxExec.configureAudio(vmName); err != nil {
+		return fmt.Errorf("failed to configure audio: %w", err)
 	}
 
 	serviceLog.Infof("Fallback VM hardware configuration completed for: %s", vmName)
@@ -1154,34 +1003,30 @@ func (s *ServiceImpl) setupVMStorageWithVBoxManage(vmName string, req vbtypes.VM
 	diskPath := filepath.Join(s.vmDir, req.Name, fmt.Sprintf("%s.vdi", req.Name))
 	serviceLog.Infof("Disk path: %s", diskPath)
 
-	cmd := exec.Command("VBoxManage", "createhd", "--filename", diskPath, "--size", fmt.Sprintf("%d", req.DiskSizeGB*1024), "--format", "VDI")
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to create virtual disk: %w, output: %s", err, string(output))
+	if _, err := s.vboxExec.createVirtualDisk(vmName, diskPath, req.DiskSizeGB); err != nil {
+		return fmt.Errorf("failed to create virtual disk: %w", err)
 	}
 	serviceLog.Infof("Virtual disk created successfully")
 
 	// Add VirtioSCSI controller using VBoxManage (better for ARM64)
 	serviceLog.Infof("Adding VirtioSCSI controller...")
-	cmd = exec.Command("VBoxManage", "storagectl", vmName, "--name", "VirtioSCSI", "--add", "virtio-scsi", "--bootable", "on")
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to add VirtioSCSI controller: %w, output: %s", err, string(output))
+	if err := s.vboxExec.addVirtioSCSIController(vmName); err != nil {
+		return fmt.Errorf("failed to add VirtioSCSI controller: %w", err)
 	}
 	serviceLog.Infof("VirtioSCSI controller added successfully")
 
 	// Attach disk to VirtioSCSI controller
 	serviceLog.Infof("Attaching disk to VirtioSCSI controller...")
-	cmd = exec.Command("VBoxManage", "storageattach", vmName, "--storagectl", "VirtioSCSI", "--port", "0", "--device", "0", "--type", "hdd", "--medium", diskPath)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to attach disk: %w, output: %s", err, string(output))
+	if err := s.vboxExec.attachDisk(vmName, diskPath); err != nil {
+		return fmt.Errorf("failed to attach disk: %w", err)
 	}
 	serviceLog.Infof("Disk attached successfully")
 
 	// Attach ISO to VirtioSCSI controller if available
 	if isoPath != "" {
 		serviceLog.Infof("Attaching ISO to VirtioSCSI controller...")
-		cmd = exec.Command("VBoxManage", "storageattach", vmName, "--storagectl", "VirtioSCSI", "--port", "1", "--device", "0", "--type", "dvddrive", "--medium", isoPath)
-		if output, err := cmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("failed to attach ISO: %w, output: %s", err, string(output))
+		if err := s.vboxExec.attachISO(vmName, isoPath); err != nil {
+			return fmt.Errorf("failed to attach ISO: %w", err)
 		}
 		serviceLog.Infof("ISO attached successfully")
 	}

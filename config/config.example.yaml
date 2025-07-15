@@ -70,44 +70,4 @@ logging:
   file_path: "logs/subnet-node.log" # log file path when output is file
 
 virtualbox:
-  enable: false # Set to true to enable VirtualBox service
-  # VM defaults
-  default_memory_mb: 2048
-  default_cpus: 2
-  default_disk_size_gb: 20
-  default_network_type: "nat" # nat, bridged, hostonly, internal
-  default_os_type: "Ubuntu_arm64" # Use Ubuntu ARM64 for Apple Silicon
-
-  # Timeouts
-  vm_start_timeout: "60s"
-  vm_stop_timeout: "30s"
-  vm_delete_timeout: "60s"
-
-  # Monitoring
-  monitor_interval: "30s"
-  headless: true
-
-  # Network configuration
-  network:
-    default_bridge_name: "en0"
-    enable_nat: true
-    enable_bridged: true
-    enable_hostonly: false
-    enable_internal: false
-
-  # Storage configuration
-  storage:
-    default_controller: "SATA"
-    default_type: "vdi"
-    enable_trim: true
-    enable_compression: false
-
-  # Advanced settings
-  advanced:
-    enable_audio: false
-    enable_usb: false
-    enable_vrde: true
-    vrde_port: 3389
-    enable_pae: false
-    enable_nested_paging: true
-    enable_hw_virt: true
+  enable: false
