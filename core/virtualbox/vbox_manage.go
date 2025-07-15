@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/sirupsen/logrus"
+	"github.com/unicornultrafoundation/subnet-node/common/fsutil"
+	"github.com/unicornultrafoundation/subnet-node/core/virtualbox/templates"
 	vbtypes "github.com/unicornultrafoundation/subnet-node/core/virtualbox/types"
 )
 
@@ -16,14 +18,49 @@ var vboxLog = logrus.WithField("component", "vboxmanage")
 
 // VBoxManageExecutor provides functions to execute VBoxManage commands
 type VBoxManageExecutor struct {
-	vmDir string
+	vmDir       string
+	templateMgr *templates.TemplateManager
 }
 
 // NewVBoxManageExecutor creates a new VBoxManage executor
 func NewVBoxManageExecutor(vmDir string) *VBoxManageExecutor {
+	// Get template directory (relative to the project root)
+	// We need to find the project root and then navigate to templates
+	projectRoot := findProjectRoot()
+	templateDir := filepath.Join(projectRoot, "core", "virtualbox", "templates")
+
 	return &VBoxManageExecutor{
-		vmDir: vmDir,
+		vmDir:       vmDir,
+		templateMgr: templates.NewTemplateManager(templateDir),
 	}
+}
+
+// findProjectRoot finds the project root directory by looking for go.mod
+func findProjectRoot() string {
+	// Start from current working directory
+	currentDir, err := os.Getwd()
+	if err != nil {
+		// Fallback to a reasonable default
+		return "."
+	}
+
+	// Walk up the directory tree to find go.mod
+	dir := currentDir
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			return dir
+		}
+
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			// Reached root directory
+			break
+		}
+		dir = parent
+	}
+
+	// Fallback to current directory
+	return currentDir
 }
 
 // executeCommand executes a VBoxManage command and returns the output
@@ -37,10 +74,10 @@ func (e *VBoxManageExecutor) executeCommand(args ...string) (string, error) {
 }
 
 // CreateVM creates a new VM using VBoxManage
-func (e *VBoxManageExecutor) CreateVM(vmName string) error {
+func (e *VBoxManageExecutor) CreateVM(vmName string, osType string) error {
 	vboxLog.Infof("Creating VM: %s", vmName)
 
-	cmd := exec.Command("VBoxManage", "createvm", "--name", vmName, "--ostype", "Ubuntu_arm64", "--register")
+	cmd := exec.Command("VBoxManage", "createvm", "--name", vmName, "--ostype", osType, "--register")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to create VM: %w, output: %s", err, string(output))
@@ -51,21 +88,16 @@ func (e *VBoxManageExecutor) CreateVM(vmName string) error {
 }
 
 // ConfigureVMHardware configures VM hardware settings
-func (e *VBoxManageExecutor) ConfigureVMHardware(vmName string, req vbtypes.VMCreateRequest, osType string) error {
+func (e *VBoxManageExecutor) ConfigureVMHardware(vmName string, cpuCount int, memoryMB int) error {
 	vboxLog.Infof("Configuring VM hardware for: %s", vmName)
 
-	// Set OS type
-	if err := e.setOSType(vmName, osType); err != nil {
-		return fmt.Errorf("failed to set OS type: %w", err)
-	}
-
 	// Set CPU count
-	if err := e.setCPUs(vmName, req.CPUCores); err != nil {
+	if err := e.setCPUs(vmName, cpuCount); err != nil {
 		return fmt.Errorf("failed to set CPU count: %w", err)
 	}
 
 	// Set memory
-	if err := e.setMemory(vmName, req.MemoryMB); err != nil {
+	if err := e.setMemory(vmName, memoryMB); err != nil {
 		return fmt.Errorf("failed to set memory: %w", err)
 	}
 
@@ -135,47 +167,34 @@ func (e *VBoxManageExecutor) ConfigureNetwork(vmName string, networkType string)
 // GenerateCloudInitFiles creates meta-data and user-data files for cloud-init
 func (e *VBoxManageExecutor) GenerateCloudInitFiles(vmName, hostname, username, password string) (metaDataPath, userDataPath, cloudInitDir string, err error) {
 	cloudInitDir = filepath.Join(e.vmDir, vmName, "cloud-init")
-	if err := os.MkdirAll(cloudInitDir, 0755); err != nil {
+	if err := fsutil.DirWritable(cloudInitDir); err != nil {
 		return "", "", "", fmt.Errorf("failed to create cloud-init dir: %w", err)
 	}
 
-	metaData := fmt.Sprintf("instance-id: %s\nlocal-hostname: %s\n", vmName, hostname)
+	// Prepare template data
+	templateData := templates.CloudInitData{
+		InstanceID: vmName,
+		Hostname:   hostname,
+		Username:   username,
+		Password:   password,
+	}
+
+	// Generate meta-data from template
+	metaData, err := e.templateMgr.GenerateMetaData(templateData)
+	if err != nil {
+		return "", "", "", fmt.Errorf("failed to generate meta-data from template: %w", err)
+	}
+
 	metaDataPath = filepath.Join(cloudInitDir, "meta-data")
 	if err := ioutil.WriteFile(metaDataPath, []byte(metaData), 0644); err != nil {
 		return "", "", "", fmt.Errorf("failed to write meta-data: %w", err)
 	}
 
-	userData := fmt.Sprintf(`#cloud-config
-runcmd:
-  - [eval, 'echo $(cat /proc/cmdline) "autoinstall" > /root/cmdline']
-  - [eval, 'mount -n --bind -o ro /root/cmdline /proc/cmdline']
-  - [eval, 'snap restart subiquity.subiquity-server']
-  - [eval, 'snap restart subiquity.subiquity-service']
-autoinstall:
-  version: 1
-  locale: en_US
-  keyboard:
-    layout: us
-  identity:
-    hostname: %s
-    username: %s
-    password: %s
-  ssh:
-    install-server: true
-    allow-pw: true
-  storage:
-    layout:
-      name: direct
-  packages:
-    - openssh-server
-    - curl
-    - wget
-  user-data:
-    users:
-      - name: %s
-        sudo: ALL=(ALL) NOPASSWD:ALL
-        shell: /bin/bash
-`, hostname, username, password, username)
+	// Generate user-data from template
+	userData, err := e.templateMgr.GenerateUserData(templateData)
+	if err != nil {
+		return "", "", "", fmt.Errorf("failed to generate user-data from template: %w", err)
+	}
 
 	userDataPath = filepath.Join(cloudInitDir, "user-data")
 	if err := ioutil.WriteFile(userDataPath, []byte(userData), 0644); err != nil {

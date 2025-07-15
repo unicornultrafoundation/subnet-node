@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
+	"github.com/unicornultrafoundation/subnet-node/common/fsutil"
 	vbtypes "github.com/unicornultrafoundation/subnet-node/core/virtualbox/types"
 )
 
@@ -26,13 +27,12 @@ type StorageManagerImpl struct {
 
 // NewStorageManager creates a new storage manager
 func NewStorageManager() (*StorageManagerImpl, error) {
-	homeDir, err := os.UserHomeDir()
+	isoDir, err := fsutil.ExpandHome("~/VirtualBox VMs/ISOs")
 	if err != nil {
-		return nil, fmt.Errorf("failed to get home directory: %w", err)
+		return nil, fmt.Errorf("failed to expand ISO directory path: %w", err)
 	}
 
-	isoDir := filepath.Join(homeDir, "VirtualBox VMs", "ISOs")
-	if err := os.MkdirAll(isoDir, 0755); err != nil {
+	if err := fsutil.DirWritable(isoDir); err != nil {
 		return nil, fmt.Errorf("failed to create ISO directory: %w", err)
 	}
 
@@ -57,7 +57,7 @@ func (s *StorageManagerImpl) DownloadFile(ctx context.Context, url, destPath str
 
 	// Create the destination directory if it doesn't exist
 	destDir := filepath.Dir(destPath)
-	if err := os.MkdirAll(destDir, 0755); err != nil {
+	if err := fsutil.DirWritable(destDir); err != nil {
 		return fmt.Errorf("failed to create destination directory: %w", err)
 	}
 

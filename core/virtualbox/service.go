@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"math/big"
-	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -14,6 +13,7 @@ import (
 	"os/exec"
 
 	"github.com/sirupsen/logrus"
+	"github.com/unicornultrafoundation/subnet-node/common/fsutil"
 	"github.com/unicornultrafoundation/subnet-node/config"
 	"github.com/unicornultrafoundation/subnet-node/core/node/resource"
 	vbtypes "github.com/unicornultrafoundation/subnet-node/core/virtualbox/types"
@@ -98,11 +98,10 @@ func NewService(config *ServiceConfig) (*ServiceImpl, error) {
 	}
 
 	// Get VM directory
-	homeDir, err := os.UserHomeDir()
+	vmDir, err := fsutil.ExpandHome("~/VirtualBox VMs")
 	if err != nil {
-		return nil, fmt.Errorf("failed to get home directory: %w", err)
+		return nil, fmt.Errorf("failed to expand VM directory path: %w", err)
 	}
-	vmDir := filepath.Join(homeDir, "VirtualBox VMs")
 
 	service := &ServiceImpl{
 		storageMgr: storageMgr,
@@ -115,6 +114,11 @@ func NewService(config *ServiceConfig) (*ServiceImpl, error) {
 	// Validate VirtualBox installation once during service creation
 	if err := service.validateVirtualBoxInstallation(); err != nil {
 		return nil, fmt.Errorf("VirtualBox validation failed: %w", err)
+	}
+
+	// Validate cloud-init templates
+	if err := service.vboxExec.templateMgr.ValidateTemplates(); err != nil {
+		return nil, fmt.Errorf("cloud-init template validation failed: %w", err)
 	}
 
 	return service, nil
@@ -222,20 +226,20 @@ func (s *ServiceImpl) CreateVM(ctx context.Context, req vbtypes.VMCreateRequest)
 	// Create VM directory
 	vmFolder := filepath.Join(s.vmDir, req.Name)
 	serviceLog.Infof("Creating VM directory: %s", vmFolder)
-	if err := os.MkdirAll(vmFolder, 0755); err != nil {
+	if err := fsutil.DirWritable(vmFolder); err != nil {
 		return nil, fmt.Errorf("failed to create VM directory: %w", err)
 	}
 
 	// Create VM using VBoxManage
 	serviceLog.Infof("Creating VM with VBoxManage...")
-	if err := s.vboxExec.CreateVM(req.Name); err != nil {
+	if err := s.vboxExec.CreateVM(req.Name, req.OSType); err != nil {
 		return nil, fmt.Errorf("failed to create VM: %w", err)
 	}
 	serviceLog.Infof("VM created successfully")
 
 	// Configure VM hardware using VBoxManage
 	serviceLog.Infof("Configuring VM hardware...")
-	if err := s.vboxExec.ConfigureVMHardware(req.Name, req, osType); err != nil {
+	if err := s.vboxExec.ConfigureVMHardware(req.Name, req.CPUCores, req.MemoryMB); err != nil {
 		serviceLog.Errorf("Failed to configure VM hardware: %v", err)
 		// Clean up on failure
 		serviceLog.Infof("Cleaning up failed VM...")
@@ -262,20 +266,12 @@ func (s *ServiceImpl) CreateVM(ctx context.Context, req vbtypes.VMCreateRequest)
 	// Create and attach storage using VBoxManage
 	serviceLog.Infof("Setting up VM storage...")
 
-	// Cloud-init: generate files and ISO
+	// Generate cloud-init ISO
 	cloudInitISO := ""
-	// For demonstration, use req.Name as hostname and username, and a default password
-	hostname := req.Name
-	username := req.Name
-	password := "password123" // In real use, get from request or config
-	_, _, cloudInitDir, err := s.vboxExec.GenerateCloudInitFiles(req.Name, hostname, username, password)
+	cloudInitISO, err = s.generateCloudInitISO(req.Name)
 	if err != nil {
-		serviceLog.Errorf("Failed to generate cloud-init files: %v", err)
-	} else {
-		cloudInitISO, err = s.vboxExec.GenerateCloudInitISO(cloudInitDir)
-		if err != nil {
-			serviceLog.Errorf("Failed to generate cloud-init ISO: %v", err)
-		}
+		serviceLog.Errorf("Failed to generate cloud-init ISO: %v", err)
+		// Continue without cloud-init ISO - it's not critical for VM creation
 	}
 
 	if err := s.vboxExec.SetupStorage(req.Name, req, isoPath, cloudInitISO); err != nil {
@@ -1012,26 +1008,7 @@ func (s *ServiceImpl) configureVMHardwareWithVBoxManage(vmName string, req vbtyp
 		return fmt.Errorf("failed to configure audio: %w, output: %s", err, string(output))
 	}
 
-	// Configure network adapter
-	serviceLog.Infof("Configuring network adapter...")
-	if err := s.configureNetworkAdapterWithVBoxManage(vmName); err != nil {
-		return fmt.Errorf("failed to configure network adapter: %w", err)
-	}
-
 	serviceLog.Infof("VM hardware configuration completed successfully")
-	return nil
-}
-
-// configureNetworkAdapterWithVBoxManage configures the network adapter using VBoxManage
-func (s *ServiceImpl) configureNetworkAdapterWithVBoxManage(vmName string) error {
-	// Set network adapter to NAT
-	serviceLog.Infof("Setting network adapter to NAT...")
-	cmd := exec.Command("VBoxManage", "modifyvm", vmName, "--nic1", "nat", "--cableconnected1", "on")
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to set network adapter: %w, output: %s", err, string(output))
-	}
-
-	serviceLog.Infof("Network adapter configuration completed")
 	return nil
 }
 
@@ -1078,6 +1055,31 @@ func (s *ServiceImpl) setupVMStorageWithVBoxManage(vmName string, req vbtypes.VM
 
 	serviceLog.Infof("VM storage setup completed successfully")
 	return nil
+}
+
+// generateCloudInitISO generates cloud-init files and ISO for a VM
+func (s *ServiceImpl) generateCloudInitISO(vmName string) (string, error) {
+	serviceLog.Infof("Generating cloud-init ISO for VM: %s", vmName)
+
+	// Generate VM-specific cloud-init configuration
+	hostname := vmName
+	username := "ubuntu"                             // Default username for Ubuntu
+	password := "$1$qEV0GJMu$IRNWWiN.evGgqUjBDnbRn0" // Generate simple password based on VM name
+
+	// Create VM-specific cloud-init configuration
+	_, _, cloudInitDir, err := s.vboxExec.GenerateCloudInitFiles(vmName, hostname, username, password)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate cloud-init files: %w", err)
+	}
+
+	cloudInitISO, err := s.vboxExec.GenerateCloudInitISO(cloudInitDir)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate cloud-init ISO: %w", err)
+	}
+
+	serviceLog.Infof("Successfully generated cloud-init ISO for VM %s: %s", vmName, cloudInitISO)
+	serviceLog.Infof("VM %s cloud-init credentials - Username: %s, Password: %s", vmName, username, password)
+	return cloudInitISO, nil
 }
 
 func generateVMID(name string) string {
