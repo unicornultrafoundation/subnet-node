@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"math/big"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/unicornultrafoundation/subnet-node/core/virtualbox"
@@ -149,16 +148,9 @@ func (api *VirtualBoxAPI) GetVMCount(ctx context.Context, vmFilter *vmFilter) (*
 	return (*hexutil.Big)(vmCount), nil
 }
 
-func (api *VirtualBoxAPI) GetVMs(ctx context.Context, start int64, end int64, vmFilter *vmFilter) ([]vmResult, error) {
-	var filter vbtypes.VMFilter
-	if vmFilter != nil {
-		filter = vbtypes.VMFilter{
-			Status: vmFilter.Status,
-			Query:  vmFilter.Query,
-		}
-	}
+func (api *VirtualBoxAPI) GetVMs(ctx context.Context, vmFilter *vmFilter) ([]vmResult, error) {
 
-	vms, _, err := api.vboxService.GetVMs(ctx, big.NewInt(start), big.NewInt(end), filter)
+	vms, _, err := api.vboxService.GetVMs(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -178,13 +170,15 @@ func (api *VirtualBoxAPI) GetVM(ctx context.Context, vmID string) (*vmResult, er
 	return convertToVMResult(vm), nil
 }
 
-func (api *VirtualBoxAPI) CreateVM(ctx context.Context, name string, cpuCores int, memoryMB int, diskSizeGB int, osType string) (*vmResult, error) {
+func (api *VirtualBoxAPI) CreateVM(ctx context.Context, name string, cpuCores int, memoryMB int, diskSizeGB int, osType string, username string, password string) (*vmResult, error) {
 	vbReq := vbtypes.VMCreateRequest{
 		Name:       name,
 		CPUCores:   cpuCores,
 		MemoryMB:   memoryMB,
 		DiskSizeGB: diskSizeGB,
 		OSType:     osType, // Pass the OS type to the service
+		Username:   username,
+		Password:   password,
 	}
 
 	vm, err := api.vboxService.CreateVM(ctx, vbReq)

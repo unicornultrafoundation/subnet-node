@@ -3,7 +3,6 @@ package virtualbox
 import (
 	"context"
 	"io/ioutil"
-	"math/big"
 	"os"
 	"path/filepath"
 	"strings"
@@ -45,7 +44,7 @@ func TestGenerateCloudInitISO(t *testing.T) {
 		t.Fatalf("Failed to create VM directory: %v", err)
 	}
 
-	cloudInitISO, err := service.generateCloudInitISO(vmName)
+	cloudInitISO, err := service.generateCloudInitISO(vmName, "ubuntu", "test-password")
 
 	if err != nil {
 		t.Fatalf("generateCloudInitISO failed: %v", err)
@@ -134,7 +133,7 @@ func TestGenerateCloudInitISOReal(t *testing.T) {
 		t.Logf("Cleaned up test VM directory: %s", vmDir)
 	}()
 
-	cloudInitISO, err := service.generateCloudInitISO(vmName)
+	cloudInitISO, err := service.generateCloudInitISO(vmName, "ubuntu", "test-password")
 
 	if err != nil {
 		t.Fatalf("generateCloudInitISO failed: %v", err)
@@ -248,13 +247,13 @@ func TestListVMs(t *testing.T) {
 	defer service.Stop(ctx)
 
 	// Test listing VMs
-	vms, _, err := service.GetVMs(ctx, big.NewInt(0), big.NewInt(10), vbtypes.VMFilter{})
+	vms, count, err := service.GetVMs(ctx)
 	if err != nil {
 		t.Errorf("Failed to list VMs: %v", err)
 		return
 	}
 
-	t.Logf("Found %d VMs", len(vms))
+	t.Logf("Found %d VMs (count: %d)", len(vms), count)
 	for _, vm := range vms {
 		t.Logf("VM: %s (Status: %s)", vm.Name, vm.Status)
 	}
@@ -428,7 +427,7 @@ func TestCloudInitPerVM(t *testing.T) {
 		}
 
 		// Generate cloud-init ISO for this VM
-		cloudInitISO, err := service.generateCloudInitISO(vmName)
+		cloudInitISO, err := service.generateCloudInitISO(vmName, "ubuntu", "test-password")
 		if err != nil {
 			t.Fatalf("Failed to generate cloud-init ISO for %s: %v", vmName, err)
 		}

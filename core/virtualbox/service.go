@@ -171,7 +171,7 @@ func (s *ServiceImpl) CreateVM(ctx context.Context, req vbtypes.VMCreateRequest)
 
 	// Generate cloud-init ISO
 	cloudInitISO := ""
-	cloudInitISO, err = s.generateCloudInitISO(req.Name)
+	cloudInitISO, err = s.generateCloudInitISO(req.Name, req.Username, req.Password)
 	if err != nil {
 		serviceLog.Errorf("Failed to generate cloud-init ISO: %v", err)
 		// Continue without cloud-init ISO - it's not critical for VM creation
@@ -407,8 +407,8 @@ func (s *ServiceImpl) GetVM(ctx context.Context, vmID string) (*vbtypes.VM, erro
 	return vm, nil
 }
 
-// GetVMs gets a list of VMs with pagination and filtering using VBoxManage
-func (s *ServiceImpl) GetVMs(ctx context.Context, start, end *big.Int, filter vbtypes.VMFilter) ([]*vbtypes.VM, int, error) {
+// GetVMs gets a list of all VMs
+func (s *ServiceImpl) GetVMs(ctx context.Context) ([]*vbtypes.VM, int, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -427,31 +427,10 @@ func (s *ServiceImpl) GetVMs(ctx context.Context, start, end *big.Int, filter vb
 			continue
 		}
 
-		// Apply filters
-		if filter.Status != "" && string(vm.Status) != filter.Status {
-			continue
-		}
-		if filter.Query != "" && !strings.Contains(strings.ToLower(vm.Name), strings.ToLower(filter.Query)) {
-			continue
-		}
-
 		vms = append(vms, vm)
 	}
 
-	// Apply pagination
-	total := len(vms)
-	startIdx := int(start.Int64())
-	endIdx := int(end.Int64())
-
-	if startIdx >= total {
-		return []*vbtypes.VM{}, total, nil
-	}
-
-	if endIdx > total {
-		endIdx = total
-	}
-
-	return vms[startIdx:endIdx], total, nil
+	return vms, len(vms), nil
 }
 
 // GetVMCount gets the count of VMs with optional filtering
@@ -1036,16 +1015,19 @@ func (s *ServiceImpl) setupVMStorageWithVBoxManage(vmName string, req vbtypes.VM
 }
 
 // generateCloudInitISO generates cloud-init files and ISO for a VM
-func (s *ServiceImpl) generateCloudInitISO(vmName string) (string, error) {
+func (s *ServiceImpl) generateCloudInitISO(vmName string, username string, password string) (string, error) {
 	serviceLog.Infof("Generating cloud-init ISO for VM: %s", vmName)
 
 	// Generate VM-specific cloud-init configuration
 	hostname := vmName
-	username := "ubuntu"                             // Default username for Ubuntu
-	password := "$1$qEV0GJMu$IRNWWiN.evGgqUjBDnbRn0" // Generate simple password based on VM name
+
+	hashedPassword, err := hashPassword(password)
+	if err != nil {
+		return "", fmt.Errorf("failed to hash password: %w", err)
+	}
 
 	// Create VM-specific cloud-init configuration
-	_, _, cloudInitDir, err := s.vboxExec.GenerateCloudInitFiles(vmName, hostname, username, password)
+	_, _, cloudInitDir, err := s.vboxExec.GenerateCloudInitFiles(vmName, hostname, username, hashedPassword)
 	if err != nil {
 		return "", fmt.Errorf("failed to generate cloud-init files: %w", err)
 	}
@@ -1058,6 +1040,16 @@ func (s *ServiceImpl) generateCloudInitISO(vmName string) (string, error) {
 	serviceLog.Infof("Successfully generated cloud-init ISO for VM %s: %s", vmName, cloudInitISO)
 	serviceLog.Infof("VM %s cloud-init credentials - Username: %s, Password: %s", vmName, username, password)
 	return cloudInitISO, nil
+}
+
+func hashPassword(password string) (string, error) {
+	// openssl passwd -1  <password>
+	cmd := exec.Command("openssl", "passwd", "-1", password)
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to hash password: %w", err)
+	}
+	return string(output), nil
 }
 
 func generateVMID(name string) string {

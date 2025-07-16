@@ -51,6 +51,8 @@ type VMCreateRequest struct {
 	MemoryMB   int    `json:"memory_mb"`
 	DiskSizeGB int    `json:"disk_size_gb"`
 	OSType     string `json:"os_type,omitempty"`
+	Username   string `json:"username,omitempty"`
+	Password   string `json:"password,omitempty"`
 }
 
 // VMUpdateRequest represents a request to update an existing VM
