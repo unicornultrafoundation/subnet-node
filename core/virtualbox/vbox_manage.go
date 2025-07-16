@@ -670,3 +670,14 @@ func (e *VBoxManageExecutor) UpdateMemory(vmName string, memoryMB int) error {
 	}
 	return nil
 }
+
+// SetupSSHPortForward sets up port forwarding for SSH from a host port to the VM's port 22
+func (e *VBoxManageExecutor) SetupSSHPortForward(vmName string, hostPort int, guestPort int) error {
+	vboxLog.Infof("Setting up SSH port forwarding: host %d -> guest %d for VM: %s", hostPort, guestPort, vmName)
+	// Remove any existing rule named "ssh"
+	_, _ = e.executeCommand("modifyvm", vmName, "--natpf1", "delete", "ssh")
+	// Add new rule
+	rule := fmt.Sprintf("ssh,tcp,,%d,,%d", hostPort, guestPort)
+	_, err := e.executeCommand("modifyvm", vmName, "--natpf1", rule)
+	return err
+}

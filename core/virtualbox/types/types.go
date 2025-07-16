@@ -28,20 +28,18 @@ const (
 
 // VM represents a Virtual Machine configuration and state
 type VM struct {
-	ID         string    `json:"id"`
-	Name       string    `json:"name"`
-	Status     VMStatus  `json:"status"`
-	CPUCores   int       `json:"cpu_cores"`
-	MemoryMB   int       `json:"memory_mb"`
-	DiskSizeGB int       `json:"disk_size_gb"`
-	ISOURL     string    `json:"iso_url"`
-	ISOPath    string    `json:"iso_path"`
-	CreatedAt  time.Time `json:"created_at"`
-	UpdatedAt  time.Time `json:"updated_at"`
-	IPAddress  string    `json:"ip_address,omitempty"`
-	SSHPort    int       `json:"ssh_port,omitempty"`
-	VBoxPath   string    `json:"vbox_path"`
-	VMFolder   string    `json:"vm_folder"`
+	ID         string   `json:"id"`
+	Name       string   `json:"name"`
+	Status     VMStatus `json:"status"`
+	CPUCores   int      `json:"cpu_cores"`
+	MemoryMB   int      `json:"memory_mb"`
+	DiskSizeGB int      `json:"disk_size_gb"`
+	ISOURL     string   `json:"iso_url"`
+	ISOPath    string   `json:"iso_path"`
+	IPAddress  string   `json:"ip_address,omitempty"`
+	SSHPort    int      `json:"ssh_port,omitempty"`
+	VBoxPath   string   `json:"vbox_path"`
+	VMFolder   string   `json:"vm_folder"`
 }
 
 // VMCreateRequest represents a request to create a new VM

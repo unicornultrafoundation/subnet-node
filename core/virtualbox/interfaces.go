@@ -2,7 +2,6 @@ package virtualbox
 
 import (
 	"context"
-	"math/big"
 
 	vbtypes "github.com/unicornultrafoundation/subnet-node/core/virtualbox/types"
 )
@@ -13,7 +12,6 @@ type Service interface {
 	CreateVM(ctx context.Context, req vbtypes.VMCreateRequest) (*vbtypes.VM, error)
 	GetVM(ctx context.Context, vmID string) (*vbtypes.VM, error)
 	GetVMs(ctx context.Context) ([]*vbtypes.VM, int, error)
-	GetVMCount(ctx context.Context, filter *vbtypes.VMFilter) (*big.Int, error)
 	UpdateVM(ctx context.Context, vmID string, req vbtypes.VMUpdateRequest) (*vbtypes.VM, error)
 	DeleteVM(ctx context.Context, vmID string) error
 

@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ipfs/go-datastore"
+	"github.com/ipfs/go-datastore/sync"
 	vbtypes "github.com/unicornultrafoundation/subnet-node/core/virtualbox/types"
 )
 
@@ -162,7 +164,8 @@ func TestGenerateCloudInitISOReal(t *testing.T) {
 
 func TestNewService(t *testing.T) {
 	// This test will only work if VirtualBox is installed
-	service, err := NewService()
+	ds := sync.MutexWrap(datastore.NewMapDatastore())
+	service, err := NewService(ds)
 	if err != nil {
 		t.Skipf("VirtualBox service creation failed (VirtualBox may not be installed): %v", err)
 		return
@@ -191,9 +194,21 @@ func TestNewService(t *testing.T) {
 	}
 }
 
+func TestNewServiceWithDatastore(t *testing.T) {
+	ds := sync.MutexWrap(datastore.NewMapDatastore())
+	service, err := NewService(ds)
+	if err != nil {
+		t.Fatalf("Failed to create VirtualBoxService with datastore: %v", err)
+	}
+	if service.datastore == nil {
+		t.Error("Expected datastore to be set in VirtualBoxService, got nil")
+	}
+}
+
 func TestCreateVM(t *testing.T) {
 	// This test will only work if VirtualBox is installed
-	service, err := NewService()
+	ds := sync.MutexWrap(datastore.NewMapDatastore())
+	service, err := NewService(ds)
 	if err != nil {
 		t.Skipf("VirtualBox service creation failed (VirtualBox may not be installed): %v", err)
 		return
@@ -232,8 +247,8 @@ func TestCreateVM(t *testing.T) {
 }
 
 func TestListVMs(t *testing.T) {
-	// This test will only work if VirtualBox is installed
-	service, err := NewService()
+	ds := sync.MutexWrap(datastore.NewMapDatastore())
+	service, err := NewService(ds)
 	if err != nil {
 		t.Skipf("VirtualBox service creation failed (VirtualBox may not be installed): %v", err)
 		return
@@ -260,8 +275,8 @@ func TestListVMs(t *testing.T) {
 }
 
 func TestDownloadISO(t *testing.T) {
-	// This test will only work if VirtualBox is installed
-	service, err := NewService()
+	ds := sync.MutexWrap(datastore.NewMapDatastore())
+	service, err := NewService(ds)
 	if err != nil {
 		t.Skipf("VirtualBox service creation failed (VirtualBox may not be installed): %v", err)
 		return
@@ -302,7 +317,8 @@ func TestDownloadISO(t *testing.T) {
 }
 
 func TestServiceImpl_validateResources(t *testing.T) {
-	service, err := NewService()
+	ds := sync.MutexWrap(datastore.NewMapDatastore())
+	service, err := NewService(ds)
 	if err != nil {
 		t.Skipf("VirtualBox service creation failed (VirtualBox may not be installed): %v", err)
 		return
@@ -366,7 +382,8 @@ func TestServiceImpl_validateResources(t *testing.T) {
 }
 
 func TestServiceImpl_GetSystemInfo(t *testing.T) {
-	service, err := NewService()
+	ds := sync.MutexWrap(datastore.NewMapDatastore())
+	service, err := NewService(ds)
 	if err != nil {
 		t.Skipf("VirtualBox service creation failed (VirtualBox may not be installed): %v", err)
 		return
@@ -394,6 +411,12 @@ func TestServiceImpl_GetSystemInfo(t *testing.T) {
 
 // TestCloudInitPerVM tests that each VM gets its own separate cloud-init data
 func TestCloudInitPerVM(t *testing.T) {
+	ds := sync.MutexWrap(datastore.NewMapDatastore())
+	storageMgr, err := NewStorageManager()
+	if err != nil {
+		t.Fatalf("Failed to create storage manager: %v", err)
+	}
+
 	// Create a temporary directory for testing
 	tempDir, err := os.MkdirTemp("", "virtualbox-cloudinit-test-*")
 	if err != nil {
@@ -401,18 +424,13 @@ func TestCloudInitPerVM(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir) // Clean up after test
 
-	// Create a storage manager
-	storageMgr, err := NewStorageManager()
-	if err != nil {
-		t.Fatalf("Failed to create storage manager: %v", err)
-	}
-
 	// Create a service instance with the temp directory
 	service := &ServiceImpl{
 		storageMgr: storageMgr,
 		vmDir:      tempDir,
 		stopChan:   make(chan struct{}),
 		vboxExec:   NewVBoxManageExecutor(tempDir),
+		datastore:  ds,
 	}
 
 	// Test creating cloud-init for multiple VMs

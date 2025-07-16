@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/unicornultrafoundation/subnet-node/core/virtualbox"
 	vbtypes "github.com/unicornultrafoundation/subnet-node/core/virtualbox/types"
 )
@@ -17,17 +16,10 @@ type vmResult struct {
 	DiskSizeGB int              `json:"disk_size_gb,omitempty"`
 	ISOURL     string           `json:"iso_url,omitempty"`
 	ISOPath    string           `json:"iso_path,omitempty"`
-	CreatedAt  string           `json:"created_at,omitempty"`
-	UpdatedAt  string           `json:"updated_at,omitempty"`
 	IPAddress  string           `json:"ip_address,omitempty"`
 	SSHPort    int              `json:"ssh_port,omitempty"`
 	VBoxPath   string           `json:"vbox_path,omitempty"`
 	VMFolder   string           `json:"vm_folder,omitempty"`
-}
-
-type vmFilter struct {
-	Status string `json:"status,omitempty"`
-	Query  string `json:"query,omitempty"`
 }
 
 type vmUsageResult struct {
@@ -71,8 +63,6 @@ func convertToVMResult(vm *vbtypes.VM) *vmResult {
 		DiskSizeGB: vm.DiskSizeGB,
 		ISOURL:     vm.ISOURL,
 		ISOPath:    vm.ISOPath,
-		CreatedAt:  vm.CreatedAt.Format("2006-01-02T15:04:05Z"),
-		UpdatedAt:  vm.UpdatedAt.Format("2006-01-02T15:04:05Z"),
 		IPAddress:  vm.IPAddress,
 		SSHPort:    vm.SSHPort,
 		VBoxPath:   vm.VBoxPath,
@@ -131,25 +121,7 @@ func NewVirtualBoxAPI(vboxService virtualbox.Service) *VirtualBoxAPI {
 	return &VirtualBoxAPI{vboxService: vboxService}
 }
 
-func (api *VirtualBoxAPI) GetVMCount(ctx context.Context, vmFilter *vmFilter) (*hexutil.Big, error) {
-	var filter *vbtypes.VMFilter
-	if vmFilter != nil {
-		filter = &vbtypes.VMFilter{
-			Status: vmFilter.Status,
-			Query:  vmFilter.Query,
-		}
-	}
-
-	vmCount, err := api.vboxService.GetVMCount(ctx, filter)
-	if err != nil {
-		return nil, err
-	}
-
-	return (*hexutil.Big)(vmCount), nil
-}
-
-func (api *VirtualBoxAPI) GetVMs(ctx context.Context, vmFilter *vmFilter) ([]vmResult, error) {
-
+func (api *VirtualBoxAPI) GetVMs(ctx context.Context) ([]vmResult, error) {
 	vms, _, err := api.vboxService.GetVMs(ctx)
 	if err != nil {
 		return nil, err

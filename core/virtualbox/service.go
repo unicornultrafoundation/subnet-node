@@ -3,14 +3,19 @@ package virtualbox
 import (
 	"context"
 	"fmt"
-	"math/big"
+	"net"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"encoding/json"
 	"os/exec"
+
+	"github.com/ipfs/go-datastore"
+	"github.com/ipfs/go-datastore/query"
 
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/common/fsutil"
@@ -28,10 +33,11 @@ type ServiceImpl struct {
 	vmDir      string
 	stopChan   chan struct{}
 	vboxExec   *VBoxManageExecutor
+	datastore  datastore.Datastore
 }
 
 // NewService creates a new VirtualBox service
-func NewService() (*ServiceImpl, error) {
+func NewService(ds datastore.Datastore) (*ServiceImpl, error) {
 	// Create storage manager
 	storageMgr, err := NewStorageManager()
 	if err != nil {
@@ -49,6 +55,7 @@ func NewService() (*ServiceImpl, error) {
 		vmDir:      vmDir,
 		stopChan:   make(chan struct{}),
 		vboxExec:   NewVBoxManageExecutor(vmDir),
+		datastore:  ds,
 	}
 
 	// Validate VirtualBox installation once during service creation
@@ -139,14 +146,24 @@ func (s *ServiceImpl) CreateVM(ctx context.Context, req vbtypes.VMCreateRequest)
 		return nil, fmt.Errorf("failed to create VM: %w", err)
 	}
 	serviceLog.Infof("VM created successfully")
+	// Get the actual UUID from VBoxManage
+	output, err := s.vboxExec.executeCommand("showvminfo", req.Name, "--machinereadable")
+	if err != nil {
+		return nil, fmt.Errorf("failed to get VM info for UUID: %w", err)
+	}
+	vmInfo := s.parseMachineReadableOutput(output)
+	vmUuid := vmInfo["UUID"]
+	if vmUuid == "" {
+		return nil, fmt.Errorf("could not retrieve VM UUID from VBoxManage output")
+	}
 
 	// Configure VM hardware using VBoxManage
 	serviceLog.Infof("Configuring VM hardware...")
-	if err := s.vboxExec.ConfigureVMHardware(req.Name, req.CPUCores, req.MemoryMB); err != nil {
+	if err := s.vboxExec.ConfigureVMHardware(vmUuid, req.CPUCores, req.MemoryMB); err != nil {
 		serviceLog.Errorf("Failed to configure VM hardware: %v", err)
 		// Clean up on failure
 		serviceLog.Infof("Cleaning up failed VM...")
-		if delErr := s.vboxExec.DeleteVM(req.Name); delErr != nil {
+		if delErr := s.vboxExec.DeleteVM(vmUuid); delErr != nil {
 			serviceLog.Errorf("Failed to delete VM during cleanup: %v", delErr)
 		}
 		return nil, fmt.Errorf("failed to configure VM hardware: %w", err)
@@ -155,11 +172,11 @@ func (s *ServiceImpl) CreateVM(ctx context.Context, req vbtypes.VMCreateRequest)
 
 	// Configure network adapter
 	serviceLog.Infof("Configuring network adapter...")
-	if err := s.vboxExec.ConfigureNetwork(req.Name, "nat"); err != nil {
+	if err := s.vboxExec.ConfigureNetwork(vmUuid, "nat"); err != nil {
 		serviceLog.Errorf("Failed to configure network adapter: %v", err)
 		// Clean up on failure
 		serviceLog.Infof("Cleaning up failed VM...")
-		if delErr := s.vboxExec.DeleteVM(req.Name); delErr != nil {
+		if delErr := s.vboxExec.DeleteVM(vmUuid); delErr != nil {
 			serviceLog.Errorf("Failed to delete VM during cleanup: %v", delErr)
 		}
 		return nil, fmt.Errorf("failed to configure network adapter: %w", err)
@@ -177,20 +194,20 @@ func (s *ServiceImpl) CreateVM(ctx context.Context, req vbtypes.VMCreateRequest)
 		// Continue without cloud-init ISO - it's not critical for VM creation
 	}
 
-	if err := s.vboxExec.SetupStorage(req.Name, req, isoPath, cloudInitISO); err != nil {
+	if err := s.vboxExec.SetupStorage(vmUuid, req, isoPath, cloudInitISO); err != nil {
 		serviceLog.Errorf("Failed to setup VM storage: %v", err)
 		// Clean up on failure
 		serviceLog.Infof("Cleaning up failed VM...")
-		if delErr := s.vboxExec.DeleteVM(req.Name); delErr != nil {
+		if delErr := s.vboxExec.DeleteVM(vmUuid); delErr != nil {
 			serviceLog.Errorf("Failed to delete VM during cleanup: %v", delErr)
 		}
 		return nil, fmt.Errorf("failed to setup VM storage: %w", err)
 	}
 	serviceLog.Infof("VM storage setup completed")
 
-	// Create VM object
+	// Create VM object (no CreatedAt/UpdatedAt)
 	vm := &vbtypes.VM{
-		ID:         vmID,
+		ID:         vmUuid,
 		Name:       req.Name,
 		Status:     vbtypes.Stopped,
 		CPUCores:   req.CPUCores,
@@ -198,10 +215,13 @@ func (s *ServiceImpl) CreateVM(ctx context.Context, req vbtypes.VMCreateRequest)
 		DiskSizeGB: req.DiskSizeGB,
 		ISOURL:     isoURL,
 		ISOPath:    isoPath,
-		CreatedAt:  time.Now(),
-		UpdatedAt:  time.Now(),
 		VBoxPath:   "VBoxManage",
 		VMFolder:   vmFolder,
+	}
+
+	// Store VM metadata in datastore
+	if err := s.storeVMMetadata(ctx, vm); err != nil {
+		serviceLog.Warnf("Failed to store VM metadata in datastore: %v", err)
 	}
 
 	serviceLog.Infof("Successfully created VM: %s", req.Name)
@@ -212,12 +232,55 @@ func (s *ServiceImpl) CreateVM(ctx context.Context, req vbtypes.VMCreateRequest)
 func (s *ServiceImpl) validateResources(ctx context.Context, req vbtypes.VMCreateRequest) error {
 	serviceLog.Infof("Checking system resources for VM requirements...")
 
-	// Get detailed resource information
 	resourceInfo, err := resource.GetResource()
 	if err != nil {
 		serviceLog.Warnf("Failed to get system resources, skipping validation: %v", err)
 		return nil // Skip validation if we can't get resource info
 	}
+
+	// Sum resources of all actually running VMs
+	// vms, _, err := s.GetVMs(ctx)
+	// if err != nil {
+	// 	serviceLog.Warnf("Failed to get existing VMs, skipping overcommit check: %v", err)
+	// } else {
+	// 	totalCPUs := 0
+	// 	totalMem := 0
+	// 	totalDisk := 0
+	// 	for _, vm := range vms {
+	// 		status := vm.Status
+	// 		if status != vbtypes.Running {
+	// 			// Refresh status from VBoxManage for accuracy
+	// 			output, err := s.vboxExec.executeCommand("showvminfo", vm.ID, "--machinereadable")
+	// 			if err == nil {
+	// 				vmInfo := s.parseMachineReadableOutput(output)
+	// 				status = s.parseVMStatus(vmInfo["VMState"])
+	// 			}
+	// 		}
+	// 		if status == vbtypes.Running {
+	// 			totalCPUs += vm.CPUCores
+	// 			totalMem += vm.MemoryMB
+	// 			totalDisk += vm.DiskSizeGB
+	// 		}
+	// 	}
+	// 	// Add the new VM's requirements
+	// 	totalCPUs += req.CPUCores
+	// 	totalMem += req.MemoryMB
+	// 	totalDisk += req.DiskSizeGB
+
+	// 	availableCPUs := resourceInfo.CPU.Count
+	// 	availableMem := int(resourceInfo.Memory.Total / (1024 * 1024))
+	// 	availableDisk := int(resourceInfo.Storage.Total / (1024 * 1024 * 1024))
+
+	// 	if totalCPUs > availableCPUs {
+	// 		return fmt.Errorf("insufficient CPU cores: total required %d, available %d", totalCPUs, availableCPUs)
+	// 	}
+	// 	if totalMem > availableMem {
+	// 		return fmt.Errorf("insufficient memory: total required %d MB, available %d MB", totalMem, availableMem)
+	// 	}
+	// 	if totalDisk > availableDisk {
+	// 		return fmt.Errorf("insufficient disk space: total required %d GB, available %d GB", totalDisk, availableDisk)
+	// 	}
+	// }
 
 	serviceLog.Infof("Validating VM requirements against system resources...")
 	serviceLog.Infof("VM Requirements: CPU=%d cores, Memory=%d MB, Disk=%d GB", req.CPUCores, req.MemoryMB, req.DiskSizeGB)
@@ -240,8 +303,6 @@ func (s *ServiceImpl) validateResources(ctx context.Context, req vbtypes.VMCreat
 	if err := s.validateDiskResources(req, resourceInfo); err != nil {
 		return fmt.Errorf("disk validation failed: %w", err)
 	}
-
-	// TODO: Check existing VMs to ensure we don't overcommit resources
 
 	serviceLog.Infof("Resource validation passed successfully")
 	return nil
@@ -377,33 +438,50 @@ func (s *ServiceImpl) isOSTypeCompatible(osType, architecture string) bool {
 }
 
 // GetVM gets a VM by ID using VBoxManage
-func (s *ServiceImpl) GetVM(ctx context.Context, vmID string) (*vbtypes.VM, error) {
+func (s *ServiceImpl) GetVM(ctx context.Context, uuid string) (*vbtypes.VM, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	// For now, we'll use the VM name as ID
-	vmName := vmID
+	// Try datastore first
+	if vm, err := s.getVMMetadata(ctx, uuid); err == nil && vm != nil {
+		output, err := s.vboxExec.executeCommand("showvminfo", uuid, "--machinereadable")
+		if err == nil {
+			vmInfo := s.parseMachineReadableOutput(output)
+			vm.Status = s.parseVMStatus(vmInfo["VMState"])
+			// If SSHPort is not set, try to parse from NAT rules
+			if vm.SSHPort == 0 {
+				if port := parseSSHPortFromNAT(vmInfo); port > 0 {
+					vm.SSHPort = port
+				}
+			}
+		}
+		return vm, nil
+	}
 
-	// Get VM info from VirtualBox using VBoxManageExecutor
-	output, err := s.vboxExec.executeCommand("showvminfo", vmName, "--machinereadable")
+	// Fallback to VBoxManage
+	output, err := s.vboxExec.executeCommand("showvminfo", uuid, "--machinereadable")
 	if err != nil {
 		return nil, fmt.Errorf("VM not found: %w", err)
 	}
-
-	// Parse the machine-readable output
 	vmInfo := s.parseMachineReadableOutput(output)
-
-	// Create VM object from machine info
-	vm := &vbtypes.VM{
-		ID:       vmID,
-		Name:     vmName,
-		Status:   s.parseVMStatus(vmInfo["VMState"]),
-		CPUCores: s.parseIntOrDefault(vmInfo["cpus"], 1),
-		MemoryMB: s.parseIntOrDefault(vmInfo["memory"], 1024),
-		VBoxPath: "VBoxManage",
-		VMFolder: filepath.Join(s.vmDir, vmName),
+	name := vmInfo["name"]
+	if name == "" {
+		return nil, fmt.Errorf("could not find VM name for UUID %s", uuid)
 	}
-
+	vm := &vbtypes.VM{
+		ID:         uuid,
+		Name:       name,
+		Status:     s.parseVMStatus(vmInfo["VMState"]),
+		CPUCores:   s.parseIntOrDefault(vmInfo["cpus"], 1),
+		MemoryMB:   s.parseIntOrDefault(vmInfo["memory"], 1024),
+		DiskSizeGB: 0, // Not available from VBoxManage output
+		ISOURL:     "",
+		ISOPath:    "",
+		VBoxPath:   "VBoxManage",
+		VMFolder:   filepath.Join(s.vmDir, name),
+	}
+	// Store in datastore for next time
+	_ = s.storeVMMetadata(ctx, vm)
 	return vm, nil
 }
 
@@ -412,237 +490,209 @@ func (s *ServiceImpl) GetVMs(ctx context.Context) ([]*vbtypes.VM, int, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	// Get all VMs using VBoxManageExecutor
-	vmNames, err := s.vboxExec.ListVMs()
+	start := time.Now()
+	q := query.Query{Prefix: "virtualbox/vm/"}
+	results, err := s.datastore.Query(ctx, q)
+	if err == nil {
+		var vms []*vbtypes.VM
+		for result := range results.Next() {
+			if result.Error != nil {
+				continue
+			}
+			var vm vbtypes.VM
+			if err := json.Unmarshal(result.Value, &vm); err == nil {
+				vms = append(vms, &vm)
+			}
+		}
+		_ = results.Close()
+		logrus.Infof("GetVMs: fetched %d VMs from datastore in %s", len(vms), time.Since(start))
+		return vms, len(vms), nil
+	}
+	logrus.Warnf("GetVMs: datastore query failed (%v), falling back to VBoxManage", err)
+
+	// Fallback: Get all VMs using VBoxManageExecutor (legacy/first run)
+	output, err := s.vboxExec.executeCommand("list", "vms")
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to list VMs: %w", err)
 	}
-
+	lines := strings.Split(output, "\n")
 	var vms []*vbtypes.VM
-	for _, vmName := range vmNames {
-		// Get detailed info for each VM
-		vm, err := s.GetVM(ctx, vmName)
-		if err != nil {
-			serviceLog.Warnf("Failed to get VM info for %s: %v", vmName, err)
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
 			continue
 		}
-
-		vms = append(vms, vm)
+		start := strings.Index(line, "\"")
+		end := strings.LastIndex(line, "\"")
+		brace := strings.LastIndex(line, "{")
+		braceEnd := strings.LastIndex(line, "}")
+		if start != -1 && end != -1 && brace != -1 && braceEnd != -1 && brace < braceEnd {
+			uuid := line[brace+1 : braceEnd]
+			vm, err := s.GetVM(ctx, uuid)
+			if err != nil {
+				serviceLog.Warnf("Failed to get VM info for %s: %v", uuid, err)
+				continue
+			}
+			vms = append(vms, vm)
+		}
 	}
-
 	return vms, len(vms), nil
 }
 
-// GetVMCount gets the count of VMs with optional filtering
-func (s *ServiceImpl) GetVMCount(ctx context.Context, filter *vbtypes.VMFilter) (*big.Int, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	vmNames, err := s.vboxExec.ListVMs()
-	if err != nil {
-		return big.NewInt(0), fmt.Errorf("failed to list VMs: %w", err)
-	}
-
-	if filter == nil {
-		return big.NewInt(int64(len(vmNames))), nil
-	}
-
-	count := 0
-	for _, vmName := range vmNames {
-		vm, err := s.GetVM(ctx, vmName)
-		if err != nil {
-			continue
-		}
-
-		// Apply filters
-		if filter.Status != "" && string(vm.Status) != filter.Status {
-			continue
-		}
-		if filter.Query != "" && !strings.Contains(strings.ToLower(vm.Name), strings.ToLower(filter.Query)) {
-			continue
-		}
-
-		count++
-	}
-
-	return big.NewInt(int64(count)), nil
-}
-
 // UpdateVM updates an existing VM using VBoxManage
-func (s *ServiceImpl) UpdateVM(ctx context.Context, vmID string, req vbtypes.VMUpdateRequest) (*vbtypes.VM, error) {
+func (s *ServiceImpl) UpdateVM(ctx context.Context, uuid string, req vbtypes.VMUpdateRequest) (*vbtypes.VM, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	vmName := vmID // Using name as ID for now
-
-	// Get current VM
-	vm, err := s.GetVM(ctx, vmID)
+	vm, err := s.GetVM(ctx, uuid)
 	if err != nil {
 		return nil, err
 	}
-
-	// Update VM parameters using VBoxManage
 	if req.CPUCores > 0 && req.CPUCores != vm.CPUCores {
-		if err := s.vboxExec.UpdateCPUCores(vmName, req.CPUCores); err != nil {
+		if err := s.vboxExec.UpdateCPUCores(uuid, req.CPUCores); err != nil {
 			return nil, err
 		}
 		vm.CPUCores = req.CPUCores
 	}
-
 	if req.MemoryMB > 0 && req.MemoryMB != vm.MemoryMB {
-		if err := s.vboxExec.UpdateMemory(vmName, req.MemoryMB); err != nil {
+		if err := s.vboxExec.UpdateMemory(uuid, req.MemoryMB); err != nil {
 			return nil, err
 		}
 		vm.MemoryMB = req.MemoryMB
 	}
+	if req.DiskSizeGB > 0 && req.DiskSizeGB != vm.DiskSizeGB {
+		vm.DiskSizeGB = req.DiskSizeGB // (actual disk resize not implemented here)
+	}
 
-	vm.UpdatedAt = time.Now()
+	// Store updated VM metadata in datastore
+	if err := s.storeVMMetadata(ctx, vm); err != nil {
+		serviceLog.Warnf("Failed to store updated VM metadata in datastore: %v", err)
+	}
+
 	return vm, nil
 }
 
 // DeleteVM deletes a VM using VBoxManage
-func (s *ServiceImpl) DeleteVM(ctx context.Context, vmID string) error {
+func (s *ServiceImpl) DeleteVM(ctx context.Context, uuid string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	vmName := vmID // Using name as ID for now
+	fmt.Println(1111)
+	serviceLog.Infof("Deleting VM: %s", uuid)
+	vm, err := s.GetVM(ctx, uuid)
+	fmt.Println(2222)
 
-	serviceLog.Infof("Deleting VM: %s", vmName)
-
-	// Get the machine
-	vm, err := s.GetVM(ctx, vmID)
 	if err == nil && vm.Status == vbtypes.Running {
-		if _, stopErr := s.StopVM(ctx, vmID); stopErr != nil {
+		if _, stopErr := s.StopVM(ctx, uuid); stopErr != nil {
 			serviceLog.Warnf("Failed to stop VM before deletion: %v", stopErr)
 		}
 	}
 
-	// Delete VM using VBoxManage executor
-	if err := s.vboxExec.DeleteVM(vmName); err != nil {
+	fmt.Println(3333)
+	if err := s.vboxExec.DeleteVM(uuid); err != nil {
 		return fmt.Errorf("failed to delete VM: %w", err)
 	}
 
-	serviceLog.Infof("Successfully deleted VM: %s", vmName)
+	// Delete VM metadata from datastore
+	if err := s.deleteVMMetadata(ctx, uuid); err != nil {
+		serviceLog.Warnf("Failed to delete VM metadata from datastore: %v", err)
+	}
+
+	fmt.Println(4444)
+	serviceLog.Infof("Successfully deleted VM: %s", uuid)
 	return nil
 }
 
 // StartVM starts a VM using VBoxManage
-func (s *ServiceImpl) StartVM(ctx context.Context, vmID string) (*vbtypes.VM, error) {
+func (s *ServiceImpl) StartVM(ctx context.Context, uuid string) (*vbtypes.VM, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	vmName := vmID // Using name as ID for now
-
-	serviceLog.Infof("Starting VM: %s", vmName)
-
-	// Start the VM using VBoxManage executor
-	if err := s.vboxExec.StartVM(vmName, true); err != nil {
-		return nil, fmt.Errorf("failed to start VM: %w", err)
+	serviceLog.Infof("Starting VM: %s", uuid)
+	// 1. Set up SSH port forwarding BEFORE starting the VM
+	hostPort, err := getAvailablePort()
+	if err != nil {
+		return nil, fmt.Errorf("failed to find available port for SSH forwarding: %w", err)
+	}
+	if err := s.vboxExec.SetupSSHPortForward(uuid, hostPort, 22); err != nil {
+		return nil, fmt.Errorf("failed to set up SSH port forwarding: %w", err)
 	}
 
-	// Get updated VM info
-	vm, err := s.GetVM(ctx, vmID)
+	// 2. Now start the VM
+	if err := s.vboxExec.StartVM(uuid, true); err != nil {
+		return nil, fmt.Errorf("failed to start VM: %w", err)
+	}
+	vm, err := s.GetVM(ctx, uuid)
 	if err != nil {
 		return nil, err
 	}
-
-	serviceLog.Infof("Successfully started VM: %s", vmName)
+	vm.SSHPort = hostPort
+	if err := s.storeVMMetadata(ctx, vm); err != nil {
+		serviceLog.Warnf("Failed to store updated VM metadata in datastore: %v", err)
+	}
+	serviceLog.Infof("Successfully started VM: %s", uuid)
 	return vm, nil
 }
 
 // StopVM stops a VM using VBoxManage
-func (s *ServiceImpl) StopVM(ctx context.Context, vmID string) (*vbtypes.VM, error) {
+func (s *ServiceImpl) StopVM(ctx context.Context, uuid string) (*vbtypes.VM, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	vmName := vmID // Using name as ID for now
-
-	serviceLog.Infof("Stopping VM: %s", vmName)
-
-	// Stop the VM using VBoxManage executor
-	if err := s.vboxExec.StopVM(vmName); err != nil {
+	serviceLog.Infof("Stopping VM: %s", uuid)
+	if err := s.vboxExec.StopVM(uuid); err != nil {
 		return nil, fmt.Errorf("failed to stop VM: %w", err)
 	}
-
-	// Get updated VM info
-	vm, err := s.GetVM(ctx, vmID)
+	vm, err := s.GetVM(ctx, uuid)
 	if err != nil {
 		return nil, err
 	}
-
-	serviceLog.Infof("Successfully stopped VM: %s", vmName)
+	serviceLog.Infof("Successfully stopped VM: %s", uuid)
 	return vm, nil
 }
 
 // PauseVM pauses a VM using VBoxManage
-func (s *ServiceImpl) PauseVM(ctx context.Context, vmID string) (*vbtypes.VM, error) {
+func (s *ServiceImpl) PauseVM(ctx context.Context, uuid string) (*vbtypes.VM, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	vmName := vmID // Using name as ID for now
-
-	serviceLog.Infof("Pausing VM: %s", vmName)
-
-	// Pause the VM using VBoxManage executor
-	if err := s.vboxExec.PauseVM(vmName); err != nil {
+	serviceLog.Infof("Pausing VM: %s", uuid)
+	if err := s.vboxExec.PauseVM(uuid); err != nil {
 		return nil, fmt.Errorf("failed to pause VM: %w", err)
 	}
-
-	// Get updated VM info
-	vm, err := s.GetVM(ctx, vmID)
+	vm, err := s.GetVM(ctx, uuid)
 	if err != nil {
 		return nil, err
 	}
-
-	serviceLog.Infof("Successfully paused VM: %s", vmName)
+	serviceLog.Infof("Successfully paused VM: %s", uuid)
 	return vm, nil
 }
 
 // ResumeVM resumes a VM using VBoxManage
-func (s *ServiceImpl) ResumeVM(ctx context.Context, vmID string) (*vbtypes.VM, error) {
+func (s *ServiceImpl) ResumeVM(ctx context.Context, uuid string) (*vbtypes.VM, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	vmName := vmID // Using name as ID for now
-
-	serviceLog.Infof("Resuming VM: %s", vmName)
-
-	// Resume the VM using VBoxManage executor
-	if err := s.vboxExec.ResumeVM(vmName); err != nil {
+	serviceLog.Infof("Resuming VM: %s", uuid)
+	if err := s.vboxExec.ResumeVM(uuid); err != nil {
 		return nil, fmt.Errorf("failed to resume VM: %w", err)
 	}
-
-	// Get updated VM info
-	vm, err := s.GetVM(ctx, vmID)
+	vm, err := s.GetVM(ctx, uuid)
 	if err != nil {
 		return nil, err
 	}
-
-	serviceLog.Infof("Successfully resumed VM: %s", vmName)
+	serviceLog.Infof("Successfully resumed VM: %s", uuid)
 	return vm, nil
 }
 
 // ResetVM resets a VM using VBoxManage
-func (s *ServiceImpl) ResetVM(ctx context.Context, vmID string) (*vbtypes.VM, error) {
+func (s *ServiceImpl) ResetVM(ctx context.Context, uuid string) (*vbtypes.VM, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	vmName := vmID // Using name as ID for now
-
-	serviceLog.Infof("Resetting VM: %s", vmName)
-
-	// Reset the VM using VBoxManage executor
-	if err := s.vboxExec.ResetVM(vmName); err != nil {
+	serviceLog.Infof("Resetting VM: %s", uuid)
+	if err := s.vboxExec.ResetVM(uuid); err != nil {
 		return nil, fmt.Errorf("failed to reset VM: %w", err)
 	}
-
-	// Get updated VM info
-	vm, err := s.GetVM(ctx, vmID)
+	vm, err := s.GetVM(ctx, uuid)
 	if err != nil {
 		return nil, err
 	}
-
-	serviceLog.Infof("Successfully reset VM: %s", vmName)
+	serviceLog.Infof("Successfully reset VM: %s", uuid)
 	return vm, nil
 }
 
@@ -1108,41 +1158,13 @@ func (s *ServiceImpl) parseMachineReadableOutput(output string) map[string]strin
 	return result
 }
 
-func (s *ServiceImpl) parseVMListOutput(output string) []string {
-	var vmNames []string
-	lines := strings.Split(output, "\n")
-
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-
-		// Parse "VMName" {uuid} format
-		if strings.Contains(line, `"`) {
-			start := strings.Index(line, `"`)
-			end := strings.LastIndex(line, `"`)
-			if start != -1 && end != -1 && start != end {
-				vmName := line[start+1 : end]
-				vmNames = append(vmNames, vmName)
-			}
-		}
-	}
-
-	return vmNames
-}
-
-func (s *ServiceImpl) parseVMStatus(status string) vbtypes.VMStatus {
-	switch strings.ToLower(status) {
+func (s *ServiceImpl) parseVMStatus(vmState string) vbtypes.VMStatus {
+	switch strings.ToLower(vmState) {
 	case "running":
 		return vbtypes.Running
-	case "poweroff":
-		return vbtypes.Stopped
 	case "paused":
 		return vbtypes.Paused
-	case "saved":
-		return vbtypes.Stopped
-	case "aborted":
+	case "poweroff", "saved", "aborted":
 		return vbtypes.Stopped
 	default:
 		return vbtypes.Unknown
@@ -1154,9 +1176,76 @@ func (s *ServiceImpl) parseIntOrDefault(value string, defaultValue int) int {
 		return defaultValue
 	}
 
-	if parsed, err := fmt.Sscanf(value, "%d", &defaultValue); err != nil || parsed != 1 {
+	num, err := strconv.Atoi(value)
+	if err != nil {
 		return defaultValue
 	}
 
-	return defaultValue
+	return num
+}
+
+// Store VM metadata in datastore
+func (s *ServiceImpl) storeVMMetadata(ctx context.Context, vm *vbtypes.VM) error {
+	data, err := json.Marshal(vm)
+	if err != nil {
+		return err
+	}
+	key := datastore.NewKey("virtualbox/vm/" + vm.ID)
+	return s.datastore.Put(ctx, key, data)
+}
+
+// Retrieve VM metadata from datastore
+func (s *ServiceImpl) getVMMetadata(ctx context.Context, uuid string) (*vbtypes.VM, error) {
+	key := datastore.NewKey("virtualbox/vm/" + uuid)
+	data, err := s.datastore.Get(ctx, key)
+	if err != nil {
+		return nil, err
+	}
+	var vm vbtypes.VM
+	if err := json.Unmarshal(data, &vm); err != nil {
+		return nil, err
+	}
+	return &vm, nil
+}
+
+// Delete VM metadata from datastore
+func (s *ServiceImpl) deleteVMMetadata(ctx context.Context, uuid string) error {
+	key := datastore.NewKey("virtualbox/vm/" + uuid)
+	return s.datastore.Delete(ctx, key)
+}
+
+// getAvailablePort finds an available TCP port on the host
+func getAvailablePort() (int, error) {
+	l, err := net.Listen("tcp", ":0")
+	if err != nil {
+		return 0, err
+	}
+	defer l.Close()
+	addr := l.Addr().String()
+	_, portStr, err := net.SplitHostPort(addr)
+	if err != nil {
+		return 0, err
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		return 0, err
+	}
+	return port, nil
+}
+
+// Helper to parse SSH port from NAT rules in VBoxManage output
+func parseSSHPortFromNAT(vmInfo map[string]string) int {
+	for k, v := range vmInfo {
+		if strings.HasPrefix(k, "Forwarding(") && strings.Contains(v, "ssh") {
+			// Format: "ssh,tcp,,hostport,,guestport"
+			parts := strings.Split(v, ",")
+			if len(parts) >= 5 {
+				hostPort, err := strconv.Atoi(parts[3])
+				if err == nil {
+					return hostPort
+				}
+			}
+		}
+	}
+	return 0
 }
