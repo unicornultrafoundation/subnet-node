@@ -10,6 +10,7 @@ import (
 type Service interface {
 	// VM Management
 	CreateVM(ctx context.Context, req vbtypes.VMCreateRequest) (*vbtypes.VM, error)
+	CreateAndStartVM(ctx context.Context, req vbtypes.VMCreateRequest) (*vbtypes.VM, error)
 	GetVM(ctx context.Context, vmID string) (*vbtypes.VM, error)
 	GetVMs(ctx context.Context) ([]*vbtypes.VM, int, error)
 	UpdateVM(ctx context.Context, vmID string, req vbtypes.VMUpdateRequest) (*vbtypes.VM, error)

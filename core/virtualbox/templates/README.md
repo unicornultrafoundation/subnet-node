@@ -1,108 +1,129 @@
 # Cloud-Init Templates
 
-This directory contains template files for generating cloud-init configuration for VirtualBox VMs.
+This directory contains cloud-init templates for VirtualBox VM creation and cloning.
 
 ## Template Files
 
-### `cloud-init-user-data.tmpl`
+### Regular VM Templates
 
-The main cloud-init configuration file that defines:
+- `cloud-init-user-data.tmpl` - User data template for regular VM creation
+- `cloud-init-meta-data.tmpl` - Meta data template for regular VM creation
 
-- Ubuntu autoinstaller configuration
-- User account setup
-- SSH configuration
-- Package installation
-- System configuration
+### Clone VM Templates
 
-### `cloud-init-meta-data.tmpl`
+- `cloud-init-user-data-clone-vm.tmpl` - User data template for clone VM creation
+- `cloud-init-meta-data-clone-vm.tmpl` - Meta data template for clone VM creation
 
-Metadata file containing:
+## Template Data Structure
 
-- Instance ID
-- Hostname
+All templates use the `CloudInitData` structure:
 
-## Template Variables
-
-The templates use Go template syntax with the following variables:
-
-- `{{.InstanceID}}` - Unique identifier for the VM
-- `{{.Hostname}}` - Hostname for the VM
-- `{{.Username}}` - Username for the VM account
-- `{{.Password}}` - Password for the VM account
-
-## Customization
-
-You can customize the templates by editing the .tmpl files:
-
-### Adding Packages
-
-To install additional packages, add them to the `packages` section in `cloud-init-user-data.tmpl`:
-
-```yaml
-packages:
-  - openssh-server
-  - curl
-  - wget
-  - htop # Add your packages here
-  - vim
-  - git
-```
-
-### Adding Commands
-
-To run additional commands during setup, add them to the `runcmd` section:
-
-```yaml
-runcmd:
-  - [eval, 'echo $(cat /proc/cmdline) "autoinstall" > /root/cmdline']
-  - [eval, "mount -n --bind -o ro /root/cmdline /proc/cmdline"]
-  - [eval, "snap restart subiquity.subiquity-server"]
-  - [eval, "snap restart subiquity.subiquity-service"]
-  - echo "Custom command executed" # Add your commands here
-  - apt-get update
-```
-
-### Modifying User Configuration
-
-To change user settings, modify the `identity` and `user-data.users` sections:
-
-```yaml
-identity:
-  hostname: { { .Hostname } }
-  username: { { .Username } }
-  password: { { .Password } }
-
-user-data:
-  users:
-    - name: { { .Username } }
-      sudo: ALL=(ALL) NOPASSWD:ALL
-      shell: /bin/bash
-      # Add additional user configuration here
-```
-
-## Template Processing
-
-The templates are processed by the `TemplateManager` in `template.go`, which:
-
-1. Reads the template files
-2. Substitutes variables with VM-specific values
-3. Generates the final cloud-init files
-
-## File Structure
-
-```
-templates/
-├── README.md                    # This file
-├── template.go                  # Template processing logic
-├── template_test.go             # Unit tests
-├── cloud-init-user-data.tmpl    # User data template
-└── cloud-init-meta-data.tmpl    # Meta data template
+```go
+type CloudInitData struct {
+    InstanceID string
+    Hostname   string
+    Username   string
+    Password   string
+}
 ```
 
 ## Usage
 
-Templates are automatically used when creating VMs. Each VM gets its own cloud-init configuration based on these templates with VM-specific values substituted.
+### Regular VM Creation
+
+Regular VMs use the standard templates and are created with full OS installation:
+
+```go
+// Generate cloud-init files for regular VM
+_, _, cloudInitDir, err := vboxExec.GenerateCloudInitFiles(vmName, hostname, username, password)
+```
+
+### Clone VM Creation
+
+Clone VMs use the clone-specific templates and are created by cloning from a template VM:
+
+```go
+// Generate cloud-init files for clone VM
+_, _, cloudInitDir, err := vboxExec.GenerateCloneVMCloudInitFiles(vmName, hostname, username, password)
+```
+
+## Clone VM Workflow
+
+1. **Template Creation**: Create a template VM named `template_sample` with ubuntu/ubuntu credentials
+2. **Clone Creation**: Use `CreateAndStartVM` to clone from template with custom credentials
+3. **Cloud-Init**: Clone VMs use the clone-specific templates for faster setup
+
+### Example
+
+```go
+// Create template VM (one-time setup)
+templateReq := vbtypes.VMCreateRequest{
+    Name:       "template_sample",
+    CPUCores:   2,
+    MemoryMB:   2048,
+    DiskSizeGB: 20,
+    OSType:     "Ubuntu_ARM64",
+    Username:   "ubuntu",
+    Password:   "ubuntu",
+}
+templateVM, err := vboxService.CreateVM(ctx, templateReq)
+
+// Create clone VM with custom credentials
+cloneReq := vbtypes.VMCreateRequest{
+    Name:       "my-cloned-vm",
+    CPUCores:   2,
+    MemoryMB:   4096,
+    DiskSizeGB: 30,
+    OSType:     "Ubuntu_ARM64",
+    Username:   "admin",
+    Password:   "mypassword123",
+}
+clonedVM, err := vboxService.CreateAndStartVM(ctx, cloneReq)
+```
+
+## Template Differences
+
+### Regular VM Templates
+
+- Full cloud-init configuration
+- Complete user setup
+- Network configuration
+- Package installation
+
+### Clone VM Templates
+
+- Simplified user setup (since OS is already installed)
+- Focus on user credentials and basic configuration
+- Faster initialization
+- Optimized for cloned environments
 
 ## Validation
 
-The system validates that all required template files exist during service initialization. If any template files are missing, the service will fail to start with a clear error message.
+The template manager validates all required templates on service startup:
+
+```go
+func (tm *TemplateManager) ValidateTemplates() error {
+    requiredTemplates := []string{
+        "cloud-init-user-data.tmpl",
+        "cloud-init-meta-data.tmpl",
+        "cloud-init-user-data-clone-vm.tmpl",
+        "cloud-init-meta-data-clone-vm.tmpl",
+    }
+    // ... validation logic
+}
+```
+
+## Testing
+
+Use the test script to verify template functionality:
+
+```bash
+cd core/virtualbox/script
+go run vm_template.go
+```
+
+This script demonstrates:
+
+1. Creating a template VM
+2. Cloning a new VM from the template
+3. Using the new clone VM cloud-init templates

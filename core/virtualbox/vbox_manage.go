@@ -178,7 +178,7 @@ func (e *VBoxManageExecutor) ConfigureNetwork(vmName string, networkType string)
 	return nil
 }
 
-// GenerateCloudInitFiles creates meta-data and user-data files for cloud-init
+// GenerateCloudInitFiles generates cloud-init meta-data and user-data files from templates
 func (e *VBoxManageExecutor) GenerateCloudInitFiles(vmName, hostname, username, password string) (metaDataPath, userDataPath, cloudInitDir string, err error) {
 	cloudInitDir = filepath.Join(e.vmDir, vmName, "cloud-init")
 	if err := fsutil.DirWritable(cloudInitDir); err != nil {
@@ -208,6 +208,46 @@ func (e *VBoxManageExecutor) GenerateCloudInitFiles(vmName, hostname, username, 
 	userData, err := e.templateMgr.GenerateUserData(templateData)
 	if err != nil {
 		return "", "", "", fmt.Errorf("failed to generate user-data from template: %w", err)
+	}
+
+	userDataPath = filepath.Join(cloudInitDir, "user-data")
+	if err := ioutil.WriteFile(userDataPath, []byte(userData), 0644); err != nil {
+		return "", "", "", fmt.Errorf("failed to write user-data: %w", err)
+	}
+
+	return metaDataPath, userDataPath, cloudInitDir, nil
+}
+
+// GenerateCloneVMCloudInitFiles generates cloud-init meta-data and user-data files from clone VM templates
+func (e *VBoxManageExecutor) GenerateCloneVMCloudInitFiles(vmName, hostname, username, password string) (metaDataPath, userDataPath, cloudInitDir string, err error) {
+	cloudInitDir = filepath.Join(e.vmDir, vmName, "cloud-init")
+	if err := fsutil.DirWritable(cloudInitDir); err != nil {
+		return "", "", "", fmt.Errorf("failed to create cloud-init dir: %w", err)
+	}
+
+	// Prepare template data
+	templateData := templates.CloudInitData{
+		InstanceID: vmName,
+		Hostname:   hostname,
+		Username:   username,
+		Password:   password,
+	}
+
+	// Generate meta-data from clone VM template
+	metaData, err := e.templateMgr.GenerateCloneVMMetaData(templateData)
+	if err != nil {
+		return "", "", "", fmt.Errorf("failed to generate clone VM meta-data from template: %w", err)
+	}
+
+	metaDataPath = filepath.Join(cloudInitDir, "meta-data")
+	if err := ioutil.WriteFile(metaDataPath, []byte(metaData), 0644); err != nil {
+		return "", "", "", fmt.Errorf("failed to write meta-data: %w", err)
+	}
+
+	// Generate user-data from clone VM template
+	userData, err := e.templateMgr.GenerateCloneVMUserData(templateData)
+	if err != nil {
+		return "", "", "", fmt.Errorf("failed to generate clone VM user-data from template: %w", err)
 	}
 
 	userDataPath = filepath.Join(cloudInitDir, "user-data")
@@ -680,4 +720,68 @@ func (e *VBoxManageExecutor) SetupSSHPortForward(vmName string, hostPort int, gu
 	rule := fmt.Sprintf("ssh,tcp,,%d,,%d", hostPort, guestPort)
 	_, err := e.executeCommand("modifyvm", vmName, "--natpf1", rule)
 	return err
+}
+
+// CreateTemplateVM creates a template VM with ubuntu/ubuntu credentials
+func (e *VBoxManageExecutor) CreateTemplateVM(templateName string, osType string, cpuCount int, memoryMB int, diskSizeGB int) error {
+	vboxLog.Infof("Creating template VM: %s", templateName)
+
+	// Create the base VM
+	if err := e.CreateVM(templateName, osType); err != nil {
+		return fmt.Errorf("failed to create template VM: %w", err)
+	}
+
+	// Configure VM hardware
+	if err := e.ConfigureVMHardware(templateName, cpuCount, memoryMB); err != nil {
+		return fmt.Errorf("failed to configure template VM hardware: %w", err)
+	}
+
+	// Configure network adapter
+	if err := e.ConfigureNetwork(templateName, "nat"); err != nil {
+		return fmt.Errorf("failed to configure template VM network: %w", err)
+	}
+
+	// Generate cloud-init files with ubuntu/ubuntu credentials
+	_, _, cloudInitDir, err := e.GenerateCloudInitFiles(templateName, templateName, "ubuntu", "ubuntu")
+	if err != nil {
+		return fmt.Errorf("failed to generate cloud-init files for template: %w", err)
+	}
+
+	// Generate cloud-init ISO
+	cloudInitISO, err := e.GenerateCloudInitISO(cloudInitDir)
+	if err != nil {
+		return fmt.Errorf("failed to generate cloud-init ISO for template: %w", err)
+	}
+
+	// Create template VM request
+	req := vbtypes.VMCreateRequest{
+		Name:       templateName,
+		CPUCores:   cpuCount,
+		MemoryMB:   memoryMB,
+		DiskSizeGB: diskSizeGB,
+		OSType:     osType,
+		Username:   "ubuntu",
+		Password:   "ubuntu",
+	}
+
+	// Setup storage with cloud-init ISO
+	if err := e.SetupStorage(templateName, req, "", cloudInitISO); err != nil {
+		return fmt.Errorf("failed to setup template VM storage: %w", err)
+	}
+
+	vboxLog.Infof("Template VM created successfully: %s with ubuntu/ubuntu credentials", templateName)
+	return nil
+}
+
+// CloneTemplateVM creates a new VM by cloning an existing template VM
+func (e *VBoxManageExecutor) CloneTemplateVM(templateName, newVMName string) error {
+	vboxLog.Infof("Cloning template VM %s to %s", templateName, newVMName)
+
+	// Clone the VM using VBoxManage
+	_, err := e.executeCommand("clonevm", templateName, "--name", newVMName, "--register")
+	if err != nil {
+		return fmt.Errorf("failed to clone template VM: %w", err)
+	}
+
+	return nil
 }

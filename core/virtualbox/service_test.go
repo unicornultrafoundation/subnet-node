@@ -784,3 +784,54 @@ func TestSimpleCloudInit(t *testing.T) {
 	// To clean up, uncomment the next line:
 	// os.RemoveAll(vmDirPath)
 }
+
+func TestCreateAndStartVM(t *testing.T) {
+	// This test will only work if VirtualBox is installed and template_sample exists
+	ds := sync.MutexWrap(datastore.NewMapDatastore())
+	service, err := NewService(ds)
+	if err != nil {
+		t.Skipf("VirtualBox service creation failed (VirtualBox may not be installed): %v", err)
+		return
+	}
+
+	ctx := context.Background()
+	err = service.Start(ctx)
+	if err != nil {
+		t.Skipf("Failed to start service: %v", err)
+	}
+	defer service.Stop(ctx)
+
+	// Test VM creation and start from template
+	req := vbtypes.VMCreateRequest{
+		Name:       "test-clone-vm",
+		CPUCores:   1,
+		MemoryMB:   1024,
+		DiskSizeGB: 10,
+		OSType:     "Ubuntu_ARM64",
+		Username:   "testuser",
+		Password:   "testpass",
+	}
+
+	vm, err := service.CreateAndStartVM(ctx, req)
+	if err != nil {
+		t.Skipf("Failed to create and start VM (template_sample may not exist): %v", err)
+		return
+	}
+
+	t.Logf("Created and started VM: %s", vm.Name)
+	t.Logf("VM ID: %s", vm.ID)
+	t.Logf("VM Status: %s", vm.Status)
+	t.Logf("CPU Cores: %d", vm.CPUCores)
+	t.Logf("Memory: %d MB", vm.MemoryMB)
+
+	// Verify VM is running
+	if vm.Status != vbtypes.Running {
+		t.Errorf("Expected VM status to be 'running', got: %s", vm.Status)
+	}
+
+	// Clean up - delete the VM
+	err = service.DeleteVM(ctx, vm.ID)
+	if err != nil {
+		t.Errorf("Failed to delete VM: %v", err)
+	}
+}

@@ -153,17 +153,18 @@ func (s *ServiceImpl) CreateVM(ctx context.Context, req vbtypes.VMCreateRequest)
 	}
 	vmInfo := s.parseMachineReadableOutput(output)
 	vmUuid := vmInfo["UUID"]
+	vmName := req.Name
 	if vmUuid == "" {
 		return nil, fmt.Errorf("could not retrieve VM UUID from VBoxManage output")
 	}
 
 	// Configure VM hardware using VBoxManage
 	serviceLog.Infof("Configuring VM hardware...")
-	if err := s.vboxExec.ConfigureVMHardware(vmUuid, req.CPUCores, req.MemoryMB); err != nil {
+	if err := s.vboxExec.ConfigureVMHardware(vmName, req.CPUCores, req.MemoryMB); err != nil {
 		serviceLog.Errorf("Failed to configure VM hardware: %v", err)
 		// Clean up on failure
 		serviceLog.Infof("Cleaning up failed VM...")
-		if delErr := s.vboxExec.DeleteVM(vmUuid); delErr != nil {
+		if delErr := s.vboxExec.DeleteVM(vmName); delErr != nil {
 			serviceLog.Errorf("Failed to delete VM during cleanup: %v", delErr)
 		}
 		return nil, fmt.Errorf("failed to configure VM hardware: %w", err)
@@ -172,11 +173,11 @@ func (s *ServiceImpl) CreateVM(ctx context.Context, req vbtypes.VMCreateRequest)
 
 	// Configure network adapter
 	serviceLog.Infof("Configuring network adapter...")
-	if err := s.vboxExec.ConfigureNetwork(vmUuid, "nat"); err != nil {
+	if err := s.vboxExec.ConfigureNetwork(vmName, "nat"); err != nil {
 		serviceLog.Errorf("Failed to configure network adapter: %v", err)
 		// Clean up on failure
 		serviceLog.Infof("Cleaning up failed VM...")
-		if delErr := s.vboxExec.DeleteVM(vmUuid); delErr != nil {
+		if delErr := s.vboxExec.DeleteVM(vmName); delErr != nil {
 			serviceLog.Errorf("Failed to delete VM during cleanup: %v", delErr)
 		}
 		return nil, fmt.Errorf("failed to configure network adapter: %w", err)
@@ -194,7 +195,7 @@ func (s *ServiceImpl) CreateVM(ctx context.Context, req vbtypes.VMCreateRequest)
 		// Continue without cloud-init ISO - it's not critical for VM creation
 	}
 
-	if err := s.vboxExec.SetupStorage(vmUuid, req, isoPath, cloudInitISO); err != nil {
+	if err := s.vboxExec.SetupStorage(vmName, req, isoPath, cloudInitISO); err != nil {
 		serviceLog.Errorf("Failed to setup VM storage: %v", err)
 		// Clean up on failure
 		serviceLog.Infof("Cleaning up failed VM...")
@@ -225,6 +226,151 @@ func (s *ServiceImpl) CreateVM(ctx context.Context, req vbtypes.VMCreateRequest)
 	}
 
 	serviceLog.Infof("Successfully created VM: %s", req.Name)
+	return vm, nil
+}
+
+// CreateAndStartVM creates a new VM by cloning from template_sample and starts it immediately
+func (s *ServiceImpl) CreateAndStartVM(ctx context.Context, req vbtypes.VMCreateRequest) (*vbtypes.VM, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	serviceLog.Infof("Creating and starting VM from template: %s", req.Name)
+
+	// Validate system resources before creating VM
+	serviceLog.Infof("Validating system resources...")
+	if err := s.validateResources(ctx, req); err != nil {
+		return nil, fmt.Errorf("resource validation failed: %w", err)
+	}
+	serviceLog.Infof("Resource validation passed")
+
+	// Check if template_sample VM exists
+	templateName := "template_sample"
+	serviceLog.Infof("Checking if template VM exists: %s", templateName)
+
+	// List all VMs to check if template exists
+	vms, err := s.vboxExec.ListVMs()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list VMs: %w", err)
+	}
+
+	templateExists := false
+	for _, vm := range vms {
+		if vm == templateName {
+			templateExists = true
+			break
+		}
+	}
+
+	if !templateExists {
+		return nil, fmt.Errorf("template VM '%s' not found. Please create the template VM first", templateName)
+	}
+
+	// Generate unique VM ID
+	vmID := generateVMID(req.Name)
+	serviceLog.Infof("Generated VM ID: %s", vmID)
+
+	// Clone the template VM
+	serviceLog.Infof("Cloning template VM %s to %s", templateName, req.Name)
+	if err := s.vboxExec.CloneTemplateVM(templateName, req.Name); err != nil {
+		return nil, fmt.Errorf("failed to clone template VM: %w", err)
+	}
+	serviceLog.Infof("Template VM cloned successfully")
+
+	// Get the actual UUID from VBoxManage for the cloned VM
+	output, err := s.vboxExec.executeCommand("showvminfo", req.Name, "--machinereadable")
+	if err != nil {
+		return nil, fmt.Errorf("failed to get VM info for UUID: %w", err)
+	}
+	vmInfo := s.parseMachineReadableOutput(output)
+	vmUuid := vmInfo["UUID"]
+	if vmUuid == "" {
+		return nil, fmt.Errorf("could not retrieve VM UUID from VBoxManage output")
+	}
+
+	// Update VM hardware configuration to match the request
+	serviceLog.Infof("Updating VM hardware configuration...")
+	if err := s.vboxExec.UpdateCPUCores(req.Name, req.CPUCores); err != nil {
+		serviceLog.Errorf("Failed to update CPU cores: %v", err)
+		// Clean up on failure
+		serviceLog.Infof("Cleaning up failed VM...")
+		if delErr := s.vboxExec.DeleteVM(req.Name); delErr != nil {
+			serviceLog.Errorf("Failed to delete VM during cleanup: %v", delErr)
+		}
+		return nil, fmt.Errorf("failed to update CPU cores: %w", err)
+	}
+
+	if err := s.vboxExec.UpdateMemory(req.Name, req.MemoryMB); err != nil {
+		serviceLog.Errorf("Failed to update memory: %v", err)
+		// Clean up on failure
+		serviceLog.Infof("Cleaning up failed VM...")
+		if delErr := s.vboxExec.DeleteVM(req.Name); delErr != nil {
+			serviceLog.Errorf("Failed to delete VM during cleanup: %v", delErr)
+		}
+		return nil, fmt.Errorf("failed to update memory: %w", err)
+	}
+
+	// Generate new cloud-init ISO for the cloned VM
+	serviceLog.Infof("Generating cloud-init ISO for cloned VM...")
+	fmt.Println("username", req.Username)
+	fmt.Println("password", req.Password)
+
+	cloudInitISO, err := s.generateCloneVMCloudInitISO(req.Name, req.Username, req.Password)
+	if err != nil {
+		serviceLog.Errorf("Failed to generate cloud-init ISO: %v", err)
+		// Continue without cloud-init ISO - it's not critical for VM creation
+	}
+
+	// Attach the new cloud-init ISO to the cloned VM
+	if cloudInitISO != "" {
+		serviceLog.Infof("Attaching cloud-init ISO to cloned VM...")
+		if err := s.vboxExec.AttachCloudInitISO(req.Name, cloudInitISO); err != nil {
+			serviceLog.Warnf("Failed to attach cloud-init ISO: %v", err)
+			// Continue without cloud-init ISO - it's not critical for VM operation
+		}
+	}
+
+	// Create VM directory
+	vmFolder := filepath.Join(s.vmDir, req.Name)
+	serviceLog.Infof("VM directory: %s", vmFolder)
+
+	// Create VM object
+	vm := &vbtypes.VM{
+		ID:         vmUuid,
+		Name:       req.Name,
+		Status:     vbtypes.Stopped, // Will be updated after starting
+		CPUCores:   req.CPUCores,
+		MemoryMB:   req.MemoryMB,
+		DiskSizeGB: req.DiskSizeGB,
+		VBoxPath:   "VBoxManage",
+		VMFolder:   vmFolder,
+	}
+
+	// Store VM metadata in datastore
+	if err := s.storeVMMetadata(ctx, vm); err != nil {
+		serviceLog.Warnf("Failed to store VM metadata in datastore: %v", err)
+	}
+
+	// Start the VM
+	serviceLog.Infof("Starting cloned VM: %s", req.Name)
+	if err := s.vboxExec.StartVM(req.Name, true); err != nil { // Start in headless mode
+		serviceLog.Errorf("Failed to start VM: %v", err)
+		// Clean up on failure
+		serviceLog.Infof("Cleaning up failed VM...")
+		if delErr := s.vboxExec.DeleteVM(req.Name); delErr != nil {
+			serviceLog.Errorf("Failed to delete VM during cleanup: %v", delErr)
+		}
+		return nil, fmt.Errorf("failed to start VM: %w", err)
+	}
+
+	// Update VM status to Running
+	vm.Status = vbtypes.Running
+
+	// Update stored metadata with running status
+	if err := s.storeVMMetadata(ctx, vm); err != nil {
+		serviceLog.Warnf("Failed to update VM metadata with running status: %v", err)
+	}
+
+	serviceLog.Infof("Successfully created and started VM: %s", req.Name)
 	return vm, nil
 }
 
@@ -1023,47 +1169,6 @@ func (s *ServiceImpl) configureVMHardwareWithVBoxManageFallback(vmName string, r
 	return nil
 }
 
-// setupVMStorageWithVBoxManage sets up VM storage including disk and ISO attachment
-func (s *ServiceImpl) setupVMStorageWithVBoxManage(vmName string, req vbtypes.VMCreateRequest, isoPath string) error {
-	serviceLog.Infof("Starting VM storage setup with VBoxManage...")
-
-	// Create virtual disk using VBoxManage
-	serviceLog.Infof("Creating virtual disk...")
-	diskPath := filepath.Join(s.vmDir, req.Name, fmt.Sprintf("%s.vdi", req.Name))
-	serviceLog.Infof("Disk path: %s", diskPath)
-
-	if _, err := s.vboxExec.createVirtualDisk(vmName, diskPath, req.DiskSizeGB); err != nil {
-		return fmt.Errorf("failed to create virtual disk: %w", err)
-	}
-	serviceLog.Infof("Virtual disk created successfully")
-
-	// Add VirtioSCSI controller using VBoxManage (better for ARM64)
-	serviceLog.Infof("Adding VirtioSCSI controller...")
-	if err := s.vboxExec.addVirtioSCSIController(vmName); err != nil {
-		return fmt.Errorf("failed to add VirtioSCSI controller: %w", err)
-	}
-	serviceLog.Infof("VirtioSCSI controller added successfully")
-
-	// Attach disk to VirtioSCSI controller
-	serviceLog.Infof("Attaching disk to VirtioSCSI controller...")
-	if err := s.vboxExec.attachDisk(vmName, diskPath); err != nil {
-		return fmt.Errorf("failed to attach disk: %w", err)
-	}
-	serviceLog.Infof("Disk attached successfully")
-
-	// Attach ISO to VirtioSCSI controller if available
-	if isoPath != "" {
-		serviceLog.Infof("Attaching ISO to VirtioSCSI controller...")
-		if err := s.vboxExec.attachISO(vmName, isoPath); err != nil {
-			return fmt.Errorf("failed to attach ISO: %w", err)
-		}
-		serviceLog.Infof("ISO attached successfully")
-	}
-
-	serviceLog.Infof("VM storage setup completed successfully")
-	return nil
-}
-
 // generateCloudInitISO generates cloud-init files and ISO for a VM
 func (s *ServiceImpl) generateCloudInitISO(vmName string, username string, password string) (string, error) {
 	serviceLog.Infof("Generating cloud-init ISO for VM: %s", vmName)
@@ -1089,6 +1194,33 @@ func (s *ServiceImpl) generateCloudInitISO(vmName string, username string, passw
 
 	serviceLog.Infof("Successfully generated cloud-init ISO for VM %s: %s", vmName, cloudInitISO)
 	serviceLog.Infof("VM %s cloud-init credentials - Username: %s, Password: %s", vmName, username, password)
+	return cloudInitISO, nil
+}
+
+func (s *ServiceImpl) generateCloneVMCloudInitISO(vmName string, username string, password string) (string, error) {
+	serviceLog.Infof("Generating clone VM cloud-init ISO for VM: %s", vmName)
+
+	// Generate VM-specific cloud-init configuration
+	hostname := vmName
+
+	hashedPassword, err := hashPassword(password)
+	if err != nil {
+		return "", fmt.Errorf("failed to hash password: %w", err)
+	}
+
+	// Create VM-specific cloud-init configuration using clone VM templates
+	_, _, cloudInitDir, err := s.vboxExec.GenerateCloneVMCloudInitFiles(vmName, hostname, username, hashedPassword)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate clone VM cloud-init files: %w", err)
+	}
+
+	cloudInitISO, err := s.vboxExec.GenerateCloudInitISO(cloudInitDir)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate clone VM cloud-init ISO: %w", err)
+	}
+
+	serviceLog.Infof("Successfully generated clone VM cloud-init ISO for VM %s: %s", vmName, cloudInitISO)
+	serviceLog.Infof("Clone VM %s cloud-init credentials - Username: %s, Password: %s", vmName, username, password)
 	return cloudInitISO, nil
 }
 

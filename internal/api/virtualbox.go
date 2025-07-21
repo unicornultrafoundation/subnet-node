@@ -161,6 +161,25 @@ func (api *VirtualBoxAPI) CreateVM(ctx context.Context, name string, cpuCores in
 	return convertToVMResult(vm), nil
 }
 
+func (api *VirtualBoxAPI) CreateAndStartVM(ctx context.Context, name string, cpuCores int, memoryMB int, diskSizeGB int, osType string, username string, password string) (*vmResult, error) {
+	vbReq := vbtypes.VMCreateRequest{
+		Name:       name,
+		CPUCores:   cpuCores,
+		MemoryMB:   memoryMB,
+		DiskSizeGB: diskSizeGB,
+		OSType:     osType,
+		Username:   username,
+		Password:   password,
+	}
+
+	vm, err := api.vboxService.CreateAndStartVM(ctx, vbReq)
+	if err != nil {
+		return nil, err
+	}
+
+	return convertToVMResult(vm), nil
+}
+
 func (api *VirtualBoxAPI) UpdateVM(ctx context.Context, vmID string, name string, cpuCores int, memoryMB int, diskSizeGB int) (*vmResult, error) {
 	vbReq := vbtypes.VMUpdateRequest{
 		Name:       name,

@@ -60,6 +60,34 @@ func (tm *TemplateManager) GenerateMetaData(data CloudInitData) (string, error) 
 	return content, nil
 }
 
+// GenerateCloneVMUserData generates user-data content from clone VM template
+func (tm *TemplateManager) GenerateCloneVMUserData(data CloudInitData) (string, error) {
+	templateLog.Infof("Generating clone VM user-data for VM: %s", data.Hostname)
+
+	templatePath := filepath.Join(tm.templateDir, "cloud-init-user-data-clone-vm.tmpl")
+	content, err := tm.processTemplate(templatePath, data)
+	if err != nil {
+		return "", fmt.Errorf("failed to process clone VM user-data template: %w", err)
+	}
+
+	templateLog.Infof("Successfully generated clone VM user-data for VM: %s", data.Hostname)
+	return content, nil
+}
+
+// GenerateCloneVMMetaData generates meta-data content from clone VM template
+func (tm *TemplateManager) GenerateCloneVMMetaData(data CloudInitData) (string, error) {
+	templateLog.Infof("Generating clone VM meta-data for VM: %s", data.Hostname)
+
+	templatePath := filepath.Join(tm.templateDir, "cloud-init-meta-data-clone-vm.tmpl")
+	content, err := tm.processTemplate(templatePath, data)
+	if err != nil {
+		return "", fmt.Errorf("failed to process clone VM meta-data template: %w", err)
+	}
+
+	templateLog.Infof("Successfully generated clone VM meta-data for VM: %s", data.Hostname)
+	return content, nil
+}
+
 // processTemplate processes a template file with the given data
 func (tm *TemplateManager) processTemplate(templatePath string, data CloudInitData) (string, error) {
 	// Read template file
@@ -88,6 +116,8 @@ func (tm *TemplateManager) ValidateTemplates() error {
 	requiredTemplates := []string{
 		"cloud-init-user-data.tmpl",
 		"cloud-init-meta-data.tmpl",
+		"cloud-init-user-data-clone-vm.tmpl",
+		"cloud-init-meta-data-clone-vm.tmpl",
 	}
 
 	for _, templateName := range requiredTemplates {
