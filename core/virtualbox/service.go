@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -12,7 +13,6 @@ import (
 	"time"
 
 	"encoding/json"
-	"os/exec"
 
 	"github.com/ipfs/go-datastore"
 	"github.com/ipfs/go-datastore/query"
@@ -229,12 +229,12 @@ func (s *ServiceImpl) CreateVM(ctx context.Context, req vbtypes.VMCreateRequest)
 	return vm, nil
 }
 
-// CreateAndStartVM creates a new VM by cloning from template_sample and starts it immediately
+// CreateAndStartVM creates a new VM by importing from an OVA template and starts it immediately
 func (s *ServiceImpl) CreateAndStartVM(ctx context.Context, req vbtypes.VMCreateRequest) (*vbtypes.VM, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	serviceLog.Infof("Creating and starting VM from template: %s", req.Name)
+	serviceLog.Infof("Creating and starting VM from OVA template: %s", req.Name)
 
 	// Validate system resources before creating VM
 	serviceLog.Infof("Validating system resources...")
@@ -243,40 +243,37 @@ func (s *ServiceImpl) CreateAndStartVM(ctx context.Context, req vbtypes.VMCreate
 	}
 	serviceLog.Infof("Resource validation passed")
 
-	// Check if template_sample VM exists
-	templateName := "template_sample"
-	serviceLog.Infof("Checking if template VM exists: %s", templateName)
-
-	// List all VMs to check if template exists
-	vms, err := s.vboxExec.ListVMs()
+	// Find the OVA file in ~/VirtualBox VMs/Templates/
+	ovaPathRaw := "~/VirtualBox VMs/Templates/template_sample_" + req.OSType + ".ova"
+	ovaPath, err := fsutil.ExpandHome(ovaPathRaw)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list VMs: %w", err)
+		return nil, fmt.Errorf("failed to expand home in OVA path: %w", err)
 	}
-
-	templateExists := false
-	for _, vm := range vms {
-		if vm == templateName {
-			templateExists = true
-			break
+	if !fsutil.FileExists(ovaPath) {
+		templatesDir, _ := fsutil.ExpandHome("~/VirtualBox VMs/Templates")
+		if err := fsutil.DirWritable(templatesDir); err != nil {
+			return nil, fmt.Errorf("failed to ensure Templates dir: %w", err)
 		}
+		// Fetch OVA index and get URL for this OS type
+		ovaURL, err := getOVAURLForOSType(req.OSType)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get OVA URL for OS type %s: %w", req.OSType, err)
+		}
+		serviceLog.Infof("Downloading OVA template from %s to %s", ovaURL, ovaPath)
+		if err := DownloadFile(ovaPath, ovaURL); err != nil {
+			return nil, fmt.Errorf("failed to download OVA: %w", err)
+		}
+		serviceLog.Infof("OVA template downloaded successfully")
 	}
 
-	if !templateExists {
-		return nil, fmt.Errorf("template VM '%s' not found. Please create the template VM first", templateName)
+	// Import the OVA as the new VM
+	serviceLog.Infof("Importing OVA template: %s", ovaPath)
+	if err := s.vboxExec.ImportOVA(ovaPath, req.Name); err != nil {
+		return nil, fmt.Errorf("failed to import OVA template: %w", err)
 	}
+	serviceLog.Infof("OVA template imported successfully")
 
-	// Generate unique VM ID
-	vmID := generateVMID(req.Name)
-	serviceLog.Infof("Generated VM ID: %s", vmID)
-
-	// Clone the template VM
-	serviceLog.Infof("Cloning template VM %s to %s", templateName, req.Name)
-	if err := s.vboxExec.CloneTemplateVM(templateName, req.Name); err != nil {
-		return nil, fmt.Errorf("failed to clone template VM: %w", err)
-	}
-	serviceLog.Infof("Template VM cloned successfully")
-
-	// Get the actual UUID from VBoxManage for the cloned VM
+	// Get the actual UUID from VBoxManage for the imported VM
 	output, err := s.vboxExec.executeCommand("showvminfo", req.Name, "--machinereadable")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get VM info for UUID: %w", err)
@@ -309,20 +306,17 @@ func (s *ServiceImpl) CreateAndStartVM(ctx context.Context, req vbtypes.VMCreate
 		return nil, fmt.Errorf("failed to update memory: %w", err)
 	}
 
-	// Generate new cloud-init ISO for the cloned VM
-	serviceLog.Infof("Generating cloud-init ISO for cloned VM...")
-	fmt.Println("username", req.Username)
-	fmt.Println("password", req.Password)
-
+	// Generate new cloud-init ISO for the imported VM
+	serviceLog.Infof("Generating cloud-init ISO for imported VM...")
 	cloudInitISO, err := s.generateCloneVMCloudInitISO(req.Name, req.Username, req.Password)
 	if err != nil {
 		serviceLog.Errorf("Failed to generate cloud-init ISO: %v", err)
 		// Continue without cloud-init ISO - it's not critical for VM creation
 	}
 
-	// Attach the new cloud-init ISO to the cloned VM
+	// Attach the new cloud-init ISO to the imported VM
 	if cloudInitISO != "" {
-		serviceLog.Infof("Attaching cloud-init ISO to cloned VM...")
+		serviceLog.Infof("Attaching cloud-init ISO to imported VM...")
 		if err := s.vboxExec.AttachCloudInitISO(req.Name, cloudInitISO); err != nil {
 			serviceLog.Warnf("Failed to attach cloud-init ISO: %v", err)
 			// Continue without cloud-init ISO - it's not critical for VM operation
@@ -350,8 +344,24 @@ func (s *ServiceImpl) CreateAndStartVM(ctx context.Context, req vbtypes.VMCreate
 		serviceLog.Warnf("Failed to store VM metadata in datastore: %v", err)
 	}
 
+	// Set up SSH port forwarding BEFORE starting the VM
+	serviceLog.Infof("Setting up SSH port forwarding for VM: %s", req.Name)
+	hostPort, err := getAvailablePort()
+	if err != nil {
+		serviceLog.Errorf("Failed to find available port for SSH forwarding: %v", err)
+		// Continue without port forwarding - it's not critical for VM operation
+	} else {
+		if err := s.vboxExec.SetupSSHPortForward(req.Name, hostPort, 22); err != nil {
+			serviceLog.Errorf("Failed to set up SSH port forwarding: %v", err)
+			// Continue without port forwarding - it's not critical for VM operation
+		} else {
+			serviceLog.Infof("Successfully set up SSH port forwarding: host port %d -> guest port 22", hostPort)
+			vm.SSHPort = hostPort
+		}
+	}
+
 	// Start the VM
-	serviceLog.Infof("Starting cloned VM: %s", req.Name)
+	serviceLog.Infof("Starting imported VM: %s", req.Name)
 	if err := s.vboxExec.StartVM(req.Name, true); err != nil { // Start in headless mode
 		serviceLog.Errorf("Failed to start VM: %v", err)
 		// Clean up on failure
@@ -365,7 +375,7 @@ func (s *ServiceImpl) CreateAndStartVM(ctx context.Context, req vbtypes.VMCreate
 	// Update VM status to Running
 	vm.Status = vbtypes.Running
 
-	// Update stored metadata with running status
+	// Update stored metadata with running status and SSH port
 	if err := s.storeVMMetadata(ctx, vm); err != nil {
 		serviceLog.Warnf("Failed to update VM metadata with running status: %v", err)
 	}

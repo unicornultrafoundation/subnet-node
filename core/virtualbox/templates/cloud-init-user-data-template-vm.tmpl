@@ -4,6 +4,7 @@ runcmd:
   - [eval, 'mount -n --bind -o ro /root/cmdline /proc/cmdline']
   - [eval, 'snap restart subiquity.subiquity-server']
   - [eval, 'snap restart subiquity.subiquity-service']
+
 autoinstall:
   version: 1
   locale: en_US
@@ -28,3 +29,4 @@ autoinstall:
       - name: {{.Username}}
         sudo: ALL=(ALL) NOPASSWD:ALL
         shell: /bin/bash
+

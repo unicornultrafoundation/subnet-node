@@ -36,7 +36,7 @@ func NewTemplateManager(templateDir string) *TemplateManager {
 func (tm *TemplateManager) GenerateUserData(data CloudInitData) (string, error) {
 	templateLog.Infof("Generating user-data for VM: %s", data.Hostname)
 
-	templatePath := filepath.Join(tm.templateDir, "cloud-init-user-data.tmpl")
+	templatePath := filepath.Join(tm.templateDir, "cloud-init-user-data-template-vm.tmpl")
 	content, err := tm.processTemplate(templatePath, data)
 	if err != nil {
 		return "", fmt.Errorf("failed to process user-data template: %w", err)
@@ -114,8 +114,8 @@ func (tm *TemplateManager) processTemplate(templatePath string, data CloudInitDa
 // ValidateTemplates checks if all required template files exist
 func (tm *TemplateManager) ValidateTemplates() error {
 	requiredTemplates := []string{
-		"cloud-init-user-data.tmpl",
-		"cloud-init-meta-data.tmpl",
+		"cloud-init-user-data-template-vm.tmpl",
+		"cloud-init-meta-data-template-vm.tmpl",
 		"cloud-init-user-data-clone-vm.tmpl",
 		"cloud-init-meta-data-clone-vm.tmpl",
 	}

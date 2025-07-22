@@ -773,15 +773,17 @@ func (e *VBoxManageExecutor) CreateTemplateVM(templateName string, osType string
 	return nil
 }
 
-// CloneTemplateVM creates a new VM by cloning an existing template VM
-func (e *VBoxManageExecutor) CloneTemplateVM(templateName, newVMName string) error {
-	vboxLog.Infof("Cloning template VM %s to %s", templateName, newVMName)
+// ImportOVA imports a VM from an OVA file and registers it with the given name
+func (e *VBoxManageExecutor) ImportOVA(ovaPath string, vmName string) error {
+	vboxLog.Infof("Importing OVA: %s as VM: %s", ovaPath, vmName)
 
-	// Clone the VM using VBoxManage
-	_, err := e.executeCommand("clonevm", templateName, "--name", newVMName, "--register")
+	// VBoxManage import <ovaPath> --vsys 0 --vmname <vmName>
+	cmd := exec.Command("VBoxManage", "import", ovaPath, "--vsys", "0", "--vmname", vmName)
+	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("failed to clone template VM: %w", err)
+		return fmt.Errorf("failed to import OVA: %w, output: %s", err, string(output))
 	}
 
+	vboxLog.Infof("OVA imported successfully: %s as VM: %s", ovaPath, vmName)
 	return nil
 }
