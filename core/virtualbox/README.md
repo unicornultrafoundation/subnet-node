@@ -1,364 +1,605 @@
-# VirtualBox Service
+# VirtualBox Package - Comprehensive Documentation
+
+## Table of Contents
+
+- [Overview](#overview)
+- [Architecture](#architecture)
+- [File Structure](#file-structure)
+- [Core Components](#core-components)
+- [Resource Validation System](#resource-validation-system)
+- [Storage Manager](#storage-manager)
+- [Hardware Detection System](#hardware-detection-system)
+- [OVA Management](#ova-management)
+- [Cloud-Init Template System](#cloud-init-template-system)
+- [VM Creation Flows](#vm-creation-flows)
+- [API Reference](#api-reference)
+- [Directory Structure](#directory-structure)
+- [Best Practices](#best-practices)
 
 ## Overview
 
-The VirtualBox service provides a comprehensive API for managing Virtual Machines through VirtualBox. It allows you to create, manage, and control VMs programmatically with support for ARM64 architecture, automatic ISO downloads, and resource management.
+The `virtualbox` package provides a comprehensive, production-ready interface for managing VirtualBox virtual machines (VMs) programmatically. It's designed as a high-level service layer that abstracts VirtualBox complexity while providing enterprise-grade features including:
 
-## Features
-
-- **VM Management**: Create, update, delete, and list Virtual Machines
-- **VM Control**: Start, stop, pause, resume, and reset VMs
-- **ISO Management**: Automatic download and management of ISO files
-- **OS Type Management**: Intelligent OS type and ISO URL determination
-- **Resource Monitoring**: Track VM resource usage and system information
-- **Resource Validation**: Check system resources before VM creation to prevent failures
-- **ARM64 Support**: Optimized for ARM64 architecture (Apple Silicon, etc.)
-- **Multi-OS Support**: Support for Ubuntu, Debian, Fedora, CentOS, RedHat, Oracle Linux, Windows, FreeBSD, and more
+- **Dual VM Creation Modes**: Traditional ISO-based installation and fast OVA-based cloning
+- **Dynamic Hardware Detection**: Automatic host hardware analysis for optimal VM configuration
+- **Resource Validation**: Comprehensive system resource checking and allocation management
+- **Cloud-Init Integration**: Automated VM provisioning with user credentials and configuration
+- **Storage Management**: ISO downloading, caching, and OVA template management
+- **Metadata Persistence**: VM state and configuration storage using IPFS datastore
+- **SSH Integration**: Automatic port forwarding setup for VM access
 
 ## Architecture
 
-The VirtualBox service is organized into several components:
-
-### Core Components
-
-1. **Service (`service.go`)**: Main service that coordinates all VirtualBox operations
-2. **Client (`client.go`)**: Handles VBoxManage command execution
-3. **Storage (`storage.go`)**: Manages ISO downloads and file operations
-4. **Types (`types/types.go`)**: Defines data structures and interfaces
-5. **API (`internal/api/virtualbox.go`)**: HTTP API layer for external access
-
-### Key Interfaces
-
-- `Service`: Main service interface for VM operations
-- `VBoxClient`: Interface for VirtualBox CLI operations
-- `StorageManager`: Interface for file storage operations
-- `ISOOSTypeManager`: Interface for OS type and ISO URL determination
-
-## Installation
-
-### Prerequisites
-
-1. **VirtualBox**: Install VirtualBox on your system
-
-   - macOS: `brew install virtualbox`
-   - Linux: `sudo apt-get install virtualbox`
-   - Windows: Download from Oracle website
-
-2. **Go**: Ensure Go 1.24+ is installed
-
-### Validation
-
-The VirtualBox service validates the installation once during service creation. This includes:
-
-- Checking if VBoxManage is available in the PATH
-- Verifying VirtualBox version
-- Testing basic VirtualBox functionality
-
-If validation fails, the service creation will return an error immediately.
-
-### Setup
-
-1. Clone the repository
-2. Install dependencies: `go mod tidy`
-3. Build the service: `go build ./cmd/subnet`
-
-## Usage
-
-### Basic VM Creation
-
-```go
-package main
-
-import (
-    "context"
-    "log"
-
-    "github.com/unicornultrafoundation/subnet-node/core/node/resource"
-    "github.com/unicornultrafoundation/subnet-node/core/virtualbox"
-    vbtypes "github.com/unicornultrafoundation/subnet-node/core/virtualbox/types"
-)
-
-func main() {
-    // Create VirtualBox service
-    service, err := virtualbox.NewService(config)
-    if err != nil {
-        log.Fatal(err)
-    }
-
-    // Start the service
-    ctx := context.Background()
-    err = service.Start(ctx)
-    if err != nil {
-        log.Fatal(err)
-    }
-    defer service.Stop(ctx)
-
-    // Create a new VM
-    req := vbtypes.VMCreateRequest{
-        Name:       "my-ubuntu-vm",
-        CPUCores:   2,
-        MemoryMB:   4096,
-        DiskSizeGB: 20,
-        ISOURL:     "https://cdimage.ubuntu.com/releases/24.04/release/ubuntu-24.04.2-live-server-arm64.iso",
-    }
-
-    vm, err := service.CreateVM(ctx, req)
-    if err != nil {
-        log.Fatal(err)
-    }
-
-    log.Printf("Created VM: %s", vm.Name)
-
-    // Start the VM
-    vm, err = service.StartVM(ctx, vm.ID)
-    if err != nil {
-        log.Fatal(err)
-    }
-
-    log.Printf("VM started: %s", vm.Name)
-}
 ```
-
-### API Usage
-
-The service provides a REST API for external access:
-
-```bash
-# Create a VM
-curl -X POST http://localhost:8080/api/virtualbox/vms \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "test-vm",
-    "cpu_cores": 2,
-    "memory_mb": 4096,
-    "disk_size_gb": 20
-  }'
-
-# List VMs
-curl http://localhost:8080/api/virtualbox/vms
-
-# Start a VM
-curl -X POST http://localhost:8080/api/virtualbox/vms/{vm-id}/start
-
-# Stop a VM
-curl -X POST http://localhost:8080/api/virtualbox/vms/{vm-id}/stop
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   HTTP API      │    │   RPC API       │    │   Internal API  │
+│ (REST endpoints)│    │ (JSON-RPC)      │    │ (Go interface)  │
+└─────────┬───────┘    └─────────┬───────┘    └─────────┬───────┘
+          │                      │                      │
+          └──────────────────────┼──────────────────────┘
+                                 │
+                    ┌─────────────▼─────────────┐
+                    │     VirtualBox Service    │
+                    │   (service.go)            │
+                    └─────────────┬─────────────┘
+                                  │
+          ┌───────────────────────┼───────────────────────┐
+          │                       │                       │
+┌─────────▼─────────┐    ┌─────────▼─────────┐    ┌─────────▼─────────┐
+│  Storage Manager  │    │  VBoxManage       │    │  Hardware         │
+│  (storage.go)     │    │  Executor         │    │  Detector         │
+│                   │    │  (vbox_manage.go) │    │  (hardware_       │
+│ - ISO Management  │    │                   │    │   detector.go)    │
+│ - File Operations │    │ - VM Operations   │    │                   │
+│ - OS Type Logic   │    │ - Cloud-Init      │    │ - CPU Detection   │
+└───────────────────┘    │ - Storage Setup   │    │ - Memory Info     │
+                         └───────────────────┘    │ - GPU Detection   │
+                                                  └───────────────────┘
 ```
-
-## Configuration
-
-### Default Settings
-
-The service uses sensible defaults for ARM64 systems:
-
-- **OS Type**: Ubuntu_ARM64
-- **Chipset**: armv8virtual
-- **Firmware**: EFI
-- **Graphics**: VMSVGA
-- **Storage**: VirtioSCSI
-- **Network**: NAT
-
-### Customization
-
-You can customize VM settings by modifying the `configureVMHardware` function in `service.go`:
-
-```go
-params := map[string]string{
-    "memory":              strconv.Itoa(req.MemoryMB),
-    "vram":                "16",
-    "cpus":                strconv.Itoa(req.CPUCores),
-    "chipset":             "armv8virtual",
-    "firmware":            "efi",
-    "graphicscontroller":  "vmsvga",
-    // Add custom parameters here
-}
-```
-
-### Resource Integration
-
-The VirtualBox service integrates with the resource system for comprehensive resource management:
-
-- **Direct Resource Access**: Uses the resource package directly for system resource information
-- **Real-time Resource Detection**: Gets current system resources on demand
-- **Comprehensive Resource Info**: CPU, memory, disk, and network information
-- **Cross-platform Support**: Works on multiple operating systems
-- **Error Handling**: Graceful fallback if resource detection fails
-
-### Resource Validation
-
-The service includes comprehensive resource validation before VM creation to prevent failures due to insufficient system resources:
-
-- **CPU Validation**: Checks available CPU cores against VM requirements
-- **Memory Validation**: Validates available RAM with 20% buffer for system overhead
-- **Disk Space Validation**: Ensures sufficient disk space with 10% buffer
-- **Resource Aggregation**: Considers resources used by existing VMs
-- **Graceful Degradation**: Continues with VM creation if resource detection fails
-
-```go
-// Resource validation is automatically performed during VM creation
-req := vbtypes.VMCreateRequest{
-    Name:       "my-vm",
-    CPUCores:   4,
-    MemoryMB:   8192,
-    DiskSizeGB: 50,
-}
-
-// This will automatically validate resources before creating the VM
-vm, err := service.CreateVM(ctx, req)
-if err != nil {
-    // Error will include resource validation details if validation fails
-    log.Printf("VM creation failed: %v", err)
-}
-```
-
-### Storage Manager with ISO OS Type Management
-
-The service includes an enhanced Storage Manager that handles both file storage operations and ISO OS type management:
-
-- **File Storage**: Download, manage, and validate ISO files
-- **Automatic OS Type Detection**: Determines the appropriate OS type based on system architecture
-- **ISO URL Resolution**: Maps OS types to their corresponding ISO download URLs
-- **Architecture Compatibility**: Validates OS type compatibility with the current system architecture
-- **Configuration Integration**: Uses service configuration defaults when available
-
-```go
-// The storage manager is automatically created with the service
-// Determine OS type and ISO URL for a VM request
-osType, isoURL, err := service.storageMgr.DetermineOSTypeAndISO(ctx, req)
-
-// Get supported OS types for current architecture
-supportedTypes := service.storageMgr.GetSupportedOSTypes()
-
-// Download and manage ISO files
-err = service.storageMgr.DownloadFile(ctx, isoURL, destPath)
-isoInfo, err := service.storageMgr.GetFileInfo(isoPath)
-```
-
-**Supported OS Types:**
-
-- Ubuntu (64-bit, ARM64)
-- Debian (64-bit, ARM64)
-- Fedora (64-bit, ARM64)
-- CentOS (64-bit, ARM64)
-- RedHat (64-bit, ARM64)
-- Oracle Linux (64-bit, ARM64)
-- Windows (64-bit, ARM64)
-- FreeBSD (64-bit, ARM64)
-- NetBSD (64-bit, ARM64)
 
 ## File Structure
 
 ```
 core/virtualbox/
+├── README.md                           # This comprehensive documentation
+├── interfaces.go                       # Service and StorageManager interfaces
+├── service.go                          # Main service implementation (ServiceImpl)
+├── vbox_manage.go                     # VBoxManage CLI wrapper (VBoxManageExecutor)
+├── storage.go                         # File and ISO management (StorageManagerImpl)
+├── hardware_detector.go               # System hardware detection and analysis
+├── ova_manage.go                      # OVA file management and download functions
+├── service_test.go                    # Comprehensive service tests
+├── storage_test.go                    # Storage manager tests
+├── hardware_detector_test.go          # Hardware detection tests
 ├── types/
-│   └── types.go          # Data structures and types
-├── interfaces.go         # Service interfaces
-├── client.go            # VirtualBox CLI client
-├── storage.go           # File storage manager with ISO OS type management
-├── service.go           # Main service implementation
-├── service_test.go      # Service unit tests
-├── storage_test.go      # Storage manager unit tests
-└── README.md           # This file
+│   └── types.go                       # Core data structures and types
+├── templates/
+│   ├── README.md                      # Cloud-init template documentation
+│   ├── template.go                    # Template processing engine
+│   ├── cloud-init-user-data-template-vm.tmpl      # Full OS install user-data
+│   ├── cloud-init-meta-data-template-vm.tmpl      # Full OS install meta-data
+│   ├── cloud-init-user-data-clone-vm.tmpl         # Clone VM user-data
+│   └── cloud-init-meta-data-clone-vm.tmpl         # Clone VM meta-data
+└── script/
+    └── download_ovas.go               # OVA pre-download utility script
 ```
 
-## API Endpoints
+## Core Components
 
-### VM Management
+### 1. Service Layer (`service.go`)
 
-- `POST /api/virtualbox/vms` - Create a new VM
-- `GET /api/virtualbox/vms` - List VMs
-- `GET /api/virtualbox/vms/{id}` - Get VM details
-- `PUT /api/virtualbox/vms/{id}` - Update VM
-- `DELETE /api/virtualbox/vms/{id}` - Delete VM
+The `ServiceImpl` is the main orchestrator that:
 
-### VM Control
+- Implements the `Service` interface
+- Manages VM lifecycle operations
+- Coordinates between storage, hardware detection, and VBoxManage
+- Handles resource validation and system checks
+- Manages metadata persistence in IPFS datastore
+- Provides thread-safe operations with mutex locks
 
-- `POST /api/virtualbox/vms/{id}/start` - Start VM
-- `POST /api/virtualbox/vms/{id}/stop` - Stop VM
-- `POST /api/virtualbox/vms/{id}/pause` - Pause VM
-- `POST /api/virtualbox/vms/{id}/resume` - Resume VM
-- `POST /api/virtualbox/vms/{id}/reset` - Reset VM
+**Key Features:**
 
-### Resource Management
+- Resource validation before VM creation
+- Hardware compatibility checking
+- Automatic cleanup on operation failures
+- SSH port forwarding setup
+- Cloud-init ISO generation and attachment
 
-- `GET /api/virtualbox/vms/{id}/usage` - Get VM usage
-- `GET /api/virtualbox/usage` - Get all VM usage
-- `GET /api/virtualbox/system` - Get system info
+### 2. VBoxManage Executor (`vbox_manage.go`)
 
-### ISO Management
+The `VBoxManageExecutor` provides a type-safe wrapper around VirtualBox CLI:
 
-- `POST /api/virtualbox/isos` - Download ISO
-- `GET /api/virtualbox/isos` - List ISOs
-- `GET /api/virtualbox/isos/{path}` - Get ISO info
-- `DELETE /api/virtualbox/isos/{path}` - Delete ISO
+- Executes all VBoxManage commands
+- Handles VM creation, configuration, and control
+- Manages storage attachment (disks, ISOs, cloud-init)
+- Provides hardware-aware configuration
+- Supports both template and clone VM scenarios
 
-## Testing
+**Key Operations:**
 
-Run the tests to verify the service works:
+- VM creation and registration
+- Hardware configuration (CPU, memory, chipset, firmware)
+- Storage setup (VirtioSCSI controller, disk attachment)
+- Network configuration (NAT with port forwarding)
+- Cloud-init file generation and ISO creation
 
-```bash
-# Run all tests
-go test ./core/virtualbox/...
+### 3. Storage Manager (`storage.go`)
 
-# Run service tests
-go test -v ./core/virtualbox/ -run TestService
+The `StorageManagerImpl` handles all file operations:
 
-# Run storage manager tests
-go test -v ./core/virtualbox/ -run TestStorageManager
+- ISO downloading with progress reporting
+- File existence checking and metadata extraction
+- OS type determination based on hardware
+- Checksum calculation for integrity verification
+- Directory management for ISOs and OVAs
 
-# Run specific test
-go test -v ./core/virtualbox/ -run TestCreateVM
+**Supported OS Types:**
 
-# Run tests with verbose output
-go test -v ./core/virtualbox/...
-```
+- Ubuntu (64-bit, ARM64, generic)
+- Debian (64-bit, ARM64, generic)
+- Architecture-specific automatic selection
 
-Note: Service tests require VirtualBox to be installed and will be skipped if not available. Storage manager tests can run without VirtualBox.
+### 4. Hardware Detector (`hardware_detector.go`)
 
-## Troubleshooting
+The `HardwareDetector` provides intelligent hardware analysis:
 
-### Common Issues
+- CPU detection (count, architecture, model)
+- Memory analysis (total, available)
+- GPU detection (macOS, Linux, Windows)
+- Platform-specific optimizations (Apple Silicon, Intel, etc.)
+- VirtualBox settings generation based on hardware
 
-1. **VBoxManage not found**
+**Hardware-Specific Configurations:**
 
-   - Ensure VirtualBox is installed
-   - Check PATH environment variable
-   - Verify installation on macOS ARM: `/opt/homebrew/bin/VBoxManage`
+- Chipset selection (ICH9 vs ARMv8Virtual)
+- Firmware choice (EFI vs BIOS)
+- Graphics controller (vmsvga vs vboxsvga)
+- IOAPIC enablement based on architecture
+- USB controller selection (xHCI, EHCI, OHCI)
 
-2. **Permission denied**
+## Resource Validation System
 
-   - Run with appropriate permissions
-   - Check VirtualBox installation
-   - Verify user has access to VirtualBox
+The resource validation system ensures system stability and prevents overcommitment:
 
-3. **ISO download fails**
-
-   - Check internet connection
-   - Verify ISO URL is accessible
-   - Check disk space for downloads
-
-4. **VM creation fails**
-   - Verify VirtualBox version compatibility
-   - Check available system resources
-   - Ensure proper ARM64 support
-
-### Debug Mode
-
-Enable debug logging by setting the log level:
+### 1. Multi-Level Validation
 
 ```go
-import "github.com/sirupsen/logrus"
+func (s *ServiceImpl) validateResources(ctx context.Context, req vbtypes.VMCreateRequest) error {
+    // 1. System resource detection
+    resourceInfo, err := resource.GetResource()
 
-logrus.SetLevel(logrus.DebugLevel)
+    // 2. Existing VM resource calculation
+    runningVMs := s.calculateRunningVMResources(ctx)
+
+    // 3. Resource requirement validation
+    return s.validateResourceRequirements(req, resourceInfo, runningVMs)
+}
 ```
 
-## Contributing
+### 2. Resource Categories
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests
-5. Submit a pull request
+- **CPU Validation**: Prevents oversubscription beyond physical cores
+- **Memory Validation**: Ensures sufficient RAM with 20% system buffer
+- **Disk Validation**: Checks available storage with 10% overhead buffer
+- **Overcommit Protection**: Considers only actually running VMs
 
-## License
+### 3. Validation Thresholds
 
-This project is licensed under the same license as the main subnet-node project.
+- CPU: Maximum 100% of physical cores (with warnings at 80%)
+- Memory: Maximum 80% of total RAM (with system buffer)
+- Disk: Maximum 90% of available storage (with overhead buffer)
+
+## Storage Manager
+
+The storage management system provides robust file operations:
+
+### 1. ISO Management
+
+```go
+type StorageManager interface {
+    DownloadFile(ctx context.Context, url, destPath string) error
+    GetFileInfo(filePath string) (*vbtypes.ISOInfo, error)
+    ListFiles(dirPath string) ([]string, error)
+    FileExists(filePath string) bool
+    CalculateChecksum(filePath string) (string, error)
+}
+```
+
+### 2. OS Type Determination
+
+The storage manager automatically determines appropriate OS types:
+
+- **Hardware-Based**: Uses hardware detection for optimal compatibility
+- **Architecture-Based**: Falls back to runtime.GOARCH analysis
+- **Request-Based**: Honors explicit OS type specifications
+
+### 3. File Operations
+
+- **Download Management**: HTTP client with 30-minute timeout for large ISOs
+- **Integrity Checking**: SHA256 checksum calculation
+- **Directory Management**: Automatic creation of required directories
+- **Metadata Extraction**: File size, modification time, checksum storage
+
+## Hardware Detection System
+
+### 1. Multi-Platform Detection
+
+```go
+type HardwareInfo struct {
+    Architecture      string  `json:"architecture"`
+    OSType           string  `json:"os_type"`
+    CPUCount         int     `json:"cpu_count"`
+    TotalMemoryMB    int     `json:"total_memory_mb"`
+    AvailableMemoryMB int    `json:"available_memory_mb"`
+    GPUType          string  `json:"gpu_type"`
+    GPUCount         int     `json:"gpu_count"`
+    IsAppleSilicon   bool    `json:"is_apple_silicon"`
+    IsIntelMac       bool    `json:"is_intel_mac"`
+    IsLinux          bool    `json:"is_linux"`
+    IsWindows        bool    `json:"is_windows"`
+}
+```
+
+### 2. Platform-Specific Detection
+
+- **macOS**: System Profiler integration, Apple Silicon detection
+- **Linux**: /proc filesystem analysis, lscpu integration
+- **Windows**: WMI queries, DirectX detection
+
+### 3. VirtualBox Settings Generation
+
+```go
+type VirtualBoxSettings struct {
+    OSType             string `json:"os_type"`
+    Chipset            string `json:"chipset"`
+    Firmware           string `json:"firmware"`
+    GraphicsController string `json:"graphics_controller"`
+    VRAMMB             int    `json:"vram_mb"`
+    IOAPICEnabled      bool   `json:"ioapic_enabled"`
+    USBController      string `json:"usb_controller"`
+    AudioController    string `json:"audio_controller"`
+}
+```
+
+## OVA Management
+
+### 1. OVA Template System
+
+OVA (Open Virtualization Archive) files contain pre-installed VMs for rapid deployment:
+
+```go
+var defaultOVAURLs = map[string]string{
+    "Ubuntu_64":    "https://my-server.com/ovas/template_sample_Ubuntu_64.ova",
+    "Ubuntu_ARM64": "https://www.sendgb.com/src/download_one.php?...",
+}
+```
+
+### 2. Pre-Download Script
+
+**Location**: `core/virtualbox/script/download_ovas.go`
+
+**Usage**:
+
+```bash
+# Download all supported OVA templates
+go run core/virtualbox/script/download_ovas.go
+
+# Download specific OS types
+go run core/virtualbox/script/download_ovas.go Ubuntu_64 Ubuntu_ARM64
+```
+
+**Features**:
+
+- Progress reporting during download
+- Automatic directory creation (`~/VirtualBox VMs/Templates/`)
+- Skip existing files
+- Parallel downloads support
+
+### 3. OVA Import Process
+
+```go
+func (s *ServiceImpl) CreateAndStartVM(ctx context.Context, req vbtypes.VMCreateRequest) (*vbtypes.VM, error) {
+    // 1. Check for pre-downloaded OVA
+    ovaPath := "~/VirtualBox VMs/Templates/template_sample_" + req.OSType + ".ova"
+
+    // 2. Download if missing (slow)
+    if !fileExists(ovaPath) {
+        downloadOVA(req.OSType, ovaPath)
+    }
+
+    // 3. Import OVA as new VM
+    s.vboxExec.ImportOVA(ovaPath, req.Name)
+
+    // 4. Customize hardware configuration
+    // 5. Generate and attach cloud-init ISO
+    // 6. Start VM
+}
+```
+
+## Cloud-Init Template System
+
+### 1. Template Types
+
+The system supports two distinct cloud-init scenarios:
+
+#### Template VM (Full OS Installation)
+
+- **Purpose**: New VMs created from ISO with full OS installation
+- **Templates**:
+  - `cloud-init-user-data-template-vm.tmpl`
+  - `cloud-init-meta-data-template-vm.tmpl`
+- **Features**: Complete autoinstall configuration, user creation, package installation
+
+#### Clone VM (From OVA Template)
+
+- **Purpose**: VMs created by importing pre-installed OVA templates
+- **Templates**:
+  - `cloud-init-user-data-clone-vm.tmpl`
+  - `cloud-init-meta-data-clone-vm.tmpl`
+- **Features**: User credential setup, minimal configuration for fast boot
+
+### 2. Template Processing
+
+```go
+type CloudInitData struct {
+    InstanceID string
+    Hostname   string
+    Username   string
+    Password   string
+}
+
+func (tm *TemplateManager) GenerateUserData(data CloudInitData) (string, error) {
+    templatePath := filepath.Join(tm.templateDir, "cloud-init-user-data-template-vm.tmpl")
+    return tm.processTemplate(templatePath, data)
+}
+```
+
+### 3. ISO Generation Process
+
+```bash
+# Cloud-init files are generated in: ~/VirtualBox VMs/<vmName>/cloud-init/
+# ISO creation command:
+mkisofs -o cloud-init.iso -V cidata -r -J user-data meta-data
+# Fallback:
+genisoimage -output cloud-init.iso -volid cidata -joliet -rock user-data meta-data
+```
+
+## VM Creation Flows
+
+### 1. Standard VM Creation (ISO-Based)
+
+```mermaid
+graph TD
+    A[API Request] --> B[Resource Validation]
+    B --> C[OS Type & ISO Determination]
+    C --> D[ISO Download/Verification]
+    D --> E[VM Creation with VBoxManage]
+    E --> F[Hardware Configuration]
+    F --> G[Network Setup]
+    G --> H[Storage Setup]
+    H --> I[Cloud-Init Generation]
+    I --> J[Storage Attachment]
+    J --> K[Metadata Storage]
+    K --> L[VM Ready for Start]
+```
+
+**Detailed Steps:**
+
+1. **Request Validation**: Check required parameters
+2. **Resource Validation**: Ensure sufficient system resources
+3. **OS Compatibility**: Validate OS type against hardware
+4. **ISO Management**: Download or verify ISO availability
+5. **VM Creation**: Register VM with VirtualBox
+6. **Hardware Configuration**: Set CPU, memory, chipset, firmware
+7. **Network Setup**: Configure NAT adapter
+8. **Storage Creation**: Create VDI disk, attach ISO
+9. **Cloud-Init Setup**: Generate user-data, meta-data, create ISO
+10. **Final Assembly**: Attach all storage components
+11. **Metadata Persistence**: Store VM info in datastore
+
+### 2. OVA-Based VM Creation (Fast Clone)
+
+```mermaid
+graph TD
+    A[API Request] --> B[Resource Validation]
+    B --> C[OVA Availability Check]
+    C --> D{OVA Exists?}
+    D -->|No| E[Download OVA]
+    D -->|Yes| F[Import OVA]
+    E --> F
+    F --> G[Hardware Update]
+    G --> H[Clone Cloud-Init Generation]
+    H --> I[Cloud-Init Attachment]
+    I --> J[SSH Port Setup]
+    J --> K[VM Start]
+    K --> L[Running VM]
+```
+
+**Detailed Steps:**
+
+1. **Request Validation**: Check required parameters
+2. **Resource Validation**: Ensure sufficient system resources
+3. **OVA Check**: Look for pre-downloaded OVA template
+4. **OVA Download**: Download if missing (can be slow)
+5. **OVA Import**: Import as new VM with custom name
+6. **Hardware Update**: Adjust CPU/memory to match request
+7. **Clone Cloud-Init**: Generate minimal cloud-init for credentials
+8. **Cloud-Init Attachment**: Attach cloud-init ISO
+9. **SSH Setup**: Configure port forwarding
+10. **VM Start**: Start in headless mode
+11. **Ready State**: VM running and accessible
+
+## API Reference
+
+### Core VM Operations
+
+#### `CreateVM(ctx, name, cpuCores, memoryMB, diskSizeGB, osType, username, password) (*vmResult, error)`
+
+Creates a new VM using ISO-based installation.
+
+- **Use Case**: Custom OS installations, full control over setup
+- **Time**: 15-45 minutes (depends on OS installation)
+- **Storage**: ISO + VDI disk + cloud-init ISO
+
+#### `CreateAndStartVM(ctx, name, cpuCores, memoryMB, diskSizeGB, osType, username, password) (*vmResult, error)`
+
+Creates and starts a VM using OVA template import.
+
+- **Use Case**: Rapid VM provisioning, testing, development
+- **Time**: 2-5 minutes (if OVA pre-downloaded)
+- **Storage**: OVA import + cloud-init ISO
+
+#### `GetVMs(ctx) ([]vmResult, error)`
+
+Lists all registered VMs with current status.
+
+- **Data Source**: IPFS datastore + VBoxManage status refresh
+- **Performance**: Optimized with caching
+
+#### `GetVM(ctx, vmID) (*vmResult, error)`
+
+Retrieves detailed information about a specific VM.
+
+- **Status Refresh**: Real-time status from VBoxManage
+- **SSH Port**: Extracted from NAT forwarding rules
+
+### VM Control Operations
+
+#### `StartVM(ctx, vmID) (*vmResult, error)`
+
+Starts a stopped VM with automatic SSH port forwarding setup.
+
+#### `StopVM(ctx, vmID) (*vmResult, error)`
+
+Gracefully stops a running VM using ACPI power button.
+
+#### `PauseVM(ctx, vmID) (*vmResult, error)`
+
+Pauses VM execution while maintaining memory state.
+
+#### `ResumeVM(ctx, vmID) (*vmResult, error)`
+
+Resumes a paused VM from its previous state.
+
+#### `ResetVM(ctx, vmID) (*vmResult, error)`
+
+Performs hard reset (equivalent to power cycle).
+
+### Management Operations
+
+#### `UpdateVM(ctx, vmID, name, cpuCores, memoryMB, diskSizeGB) (*vmResult, error)`
+
+Updates VM configuration (requires VM to be stopped).
+
+#### `DeleteVM(ctx, vmID) error`
+
+Completely removes VM and all associated files.
+
+### Resource and System Information
+
+#### `GetVMUsage(ctx, vmID) (*vmUsageResult, error)`
+
+Retrieves resource usage statistics for a specific VM.
+
+#### `GetAllVMUsage(ctx) (*vmUsageResult, error)`
+
+Gets aggregate resource usage across all VMs.
+
+#### `ListISOs(ctx) ([]isoInfoResult, error)`
+
+Lists all available ISO files with metadata.
+
+#### `DeleteISO(ctx, isoPath) error`
+
+Removes an ISO file from storage.
+
+#### `ListOSTypes(ctx) ([]string, error)`
+
+Returns supported OS types for the current hardware.
+
+## Directory Structure
+
+### Runtime Directory Layout
+
+```
+~/VirtualBox VMs/
+├── ISOs/                              # Downloaded ISO files
+│   ├── ubuntu-24.04.2-live-server-amd64.iso
+│   ├── ubuntu-24.04.2-live-server-arm64.iso
+│   └── debian-12.11.0-amd64-netinst.iso
+├── Templates/                         # Pre-downloaded OVA templates
+│   ├── template_sample_Ubuntu_64.ova
+│   └── template_sample_Ubuntu_ARM64.ova
+├── <vm-name-1>/                      # Individual VM directories
+│   ├── <vm-name-1>.vdi              # Virtual disk file
+│   └── cloud-init/                   # Cloud-init files
+│       ├── meta-data                 # Cloud-init metadata
+│       ├── user-data                 # Cloud-init configuration
+│       └── cloud-init.iso           # Generated cloud-init ISO
+├── <vm-name-2>/
+│   ├── <vm-name-2>.vdi
+│   └── cloud-init/
+│       ├── meta-data
+│       ├── user-data
+│       └── cloud-init.iso
+└── ...
+```
+
+### Generated Files per VM
+
+Each VM creates several files during its lifecycle:
+
+- **VDI File**: Primary virtual disk (`<vmname>.vdi`)
+- **Cloud-Init Directory**: Contains initialization files
+- **Meta-Data**: VM instance information for cloud-init
+- **User-Data**: User configuration and credentials
+- **Cloud-Init ISO**: Bootable ISO containing cloud-init files
+
+## Best Practices
+
+### 1. Pre-Setup Requirements
+
+```bash
+# Essential: Download OVA templates before first use
+go run core/virtualbox/script/download_ovas.go
+
+# Verify VirtualBox installation
+VBoxManage --version
+
+# Ensure sufficient disk space (10GB+ per VM)
+df -h ~/
+```
+
+### 2. VM Creation Strategy
+
+- **Development/Testing**: Use `CreateAndStartVM` with OVA templates for speed
+- **Production/Custom**: Use `CreateVM` with ISO for full control
+- **Resource Planning**: Always validate system resources before creation
+
+### 3. Monitoring and Maintenance
+
+- **Resource Monitoring**: Regularly check `GetAllVMUsage` for system health
+- **Storage Management**: Clean up unused ISOs and old VMs
+- **Template Updates**: Periodically refresh OVA templates
+
+### 4. Error Handling
+
+- **Automatic Cleanup**: Failed VM creation automatically cleans up partial resources
+- **Resource Validation**: Always validates before creation to prevent failures
+- **Status Verification**: Check VM status after operations
+
+### 5. Security Considerations
+
+- **SSH Access**: VMs automatically get SSH port forwarding for management
+- **User Credentials**: Cloud-init handles secure user setup
+- **Network Isolation**: VMs use NAT networking by default for security
+
+---
+
+For implementation details and source code examination, refer to the individual files:
+
+- `service.go`: Main service implementation
+- `vbox_manage.go`: VBoxManage command execution
+- `storage.go`: File and ISO management
+- `hardware_detector.go`: System hardware analysis
+- `templates/`: Cloud-init template system

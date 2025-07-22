@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -92,17 +93,17 @@ func (s *ServiceImpl) Stop(ctx context.Context) error {
 
 // CreateVM creates a new VM with the specified configuration using VBoxManage
 func (s *ServiceImpl) CreateVM(ctx context.Context, req vbtypes.VMCreateRequest) (*vbtypes.VM, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	serviceLog.Infof("Creating VM: %s", req.Name)
-
 	// Validate system resources before creating VM
 	serviceLog.Infof("Validating system resources...")
 	if err := s.validateResources(ctx, req); err != nil {
 		return nil, fmt.Errorf("resource validation failed: %w", err)
 	}
 	serviceLog.Infof("Resource validation passed")
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	serviceLog.Infof("Creating VM: %s", req.Name)
 
 	// Validate OS type compatibility with hardware if provided
 	if req.OSType != "" {
@@ -214,9 +215,6 @@ func (s *ServiceImpl) CreateVM(ctx context.Context, req vbtypes.VMCreateRequest)
 		CPUCores:   req.CPUCores,
 		MemoryMB:   req.MemoryMB,
 		DiskSizeGB: req.DiskSizeGB,
-		ISOURL:     isoURL,
-		ISOPath:    isoPath,
-		VBoxPath:   "VBoxManage",
 		VMFolder:   vmFolder,
 	}
 
@@ -231,10 +229,6 @@ func (s *ServiceImpl) CreateVM(ctx context.Context, req vbtypes.VMCreateRequest)
 
 // CreateAndStartVM creates a new VM by importing from an OVA template and starts it immediately
 func (s *ServiceImpl) CreateAndStartVM(ctx context.Context, req vbtypes.VMCreateRequest) (*vbtypes.VM, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	serviceLog.Infof("Creating and starting VM from OVA template: %s", req.Name)
 
 	// Validate system resources before creating VM
 	serviceLog.Infof("Validating system resources...")
@@ -242,6 +236,11 @@ func (s *ServiceImpl) CreateAndStartVM(ctx context.Context, req vbtypes.VMCreate
 		return nil, fmt.Errorf("resource validation failed: %w", err)
 	}
 	serviceLog.Infof("Resource validation passed")
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	serviceLog.Infof("Creating and starting VM from OVA template: %s", req.Name)
 
 	// Find the OVA file in ~/VirtualBox VMs/Templates/
 	ovaPathRaw := "~/VirtualBox VMs/Templates/template_sample_" + req.OSType + ".ova"
@@ -335,7 +334,6 @@ func (s *ServiceImpl) CreateAndStartVM(ctx context.Context, req vbtypes.VMCreate
 		CPUCores:   req.CPUCores,
 		MemoryMB:   req.MemoryMB,
 		DiskSizeGB: req.DiskSizeGB,
-		VBoxPath:   "VBoxManage",
 		VMFolder:   vmFolder,
 	}
 
@@ -393,50 +391,49 @@ func (s *ServiceImpl) validateResources(ctx context.Context, req vbtypes.VMCreat
 		serviceLog.Warnf("Failed to get system resources, skipping validation: %v", err)
 		return nil // Skip validation if we can't get resource info
 	}
-
 	// Sum resources of all actually running VMs
-	// vms, _, err := s.GetVMs(ctx)
-	// if err != nil {
-	// 	serviceLog.Warnf("Failed to get existing VMs, skipping overcommit check: %v", err)
-	// } else {
-	// 	totalCPUs := 0
-	// 	totalMem := 0
-	// 	totalDisk := 0
-	// 	for _, vm := range vms {
-	// 		status := vm.Status
-	// 		if status != vbtypes.Running {
-	// 			// Refresh status from VBoxManage for accuracy
-	// 			output, err := s.vboxExec.executeCommand("showvminfo", vm.ID, "--machinereadable")
-	// 			if err == nil {
-	// 				vmInfo := s.parseMachineReadableOutput(output)
-	// 				status = s.parseVMStatus(vmInfo["VMState"])
-	// 			}
-	// 		}
-	// 		if status == vbtypes.Running {
-	// 			totalCPUs += vm.CPUCores
-	// 			totalMem += vm.MemoryMB
-	// 			totalDisk += vm.DiskSizeGB
-	// 		}
-	// 	}
-	// 	// Add the new VM's requirements
-	// 	totalCPUs += req.CPUCores
-	// 	totalMem += req.MemoryMB
-	// 	totalDisk += req.DiskSizeGB
+	vms, _, err := s.GetVMs(ctx)
+	if err != nil {
+		serviceLog.Warnf("Failed to get existing VMs, skipping overcommit check: %v", err)
+	} else {
+		totalCPUs := 0
+		totalMem := 0
+		totalDisk := 0
+		for _, vm := range vms {
+			status := vm.Status
+			if status != vbtypes.Running {
+				// Refresh status from VBoxManage for accuracy
+				output, err := s.vboxExec.executeCommand("showvminfo", vm.ID, "--machinereadable")
+				if err == nil {
+					vmInfo := s.parseMachineReadableOutput(output)
+					status = s.parseVMStatus(vmInfo["VMState"])
+				}
+			}
+			if status == vbtypes.Running {
+				totalCPUs += vm.CPUCores
+				totalMem += vm.MemoryMB
+				totalDisk += vm.DiskSizeGB
+			}
+		}
+		// Add the new VM's requirements
+		totalCPUs += req.CPUCores
+		totalMem += req.MemoryMB
+		totalDisk += req.DiskSizeGB
 
-	// 	availableCPUs := resourceInfo.CPU.Count
-	// 	availableMem := int(resourceInfo.Memory.Total / (1024 * 1024))
-	// 	availableDisk := int(resourceInfo.Storage.Total / (1024 * 1024 * 1024))
+		availableCPUs := resourceInfo.CPU.Count
+		availableMem := int(resourceInfo.Memory.Total / (1024 * 1024))
+		availableDisk := int(resourceInfo.Storage.Total / (1024 * 1024 * 1024))
 
-	// 	if totalCPUs > availableCPUs {
-	// 		return fmt.Errorf("insufficient CPU cores: total required %d, available %d", totalCPUs, availableCPUs)
-	// 	}
-	// 	if totalMem > availableMem {
-	// 		return fmt.Errorf("insufficient memory: total required %d MB, available %d MB", totalMem, availableMem)
-	// 	}
-	// 	if totalDisk > availableDisk {
-	// 		return fmt.Errorf("insufficient disk space: total required %d GB, available %d GB", totalDisk, availableDisk)
-	// 	}
-	// }
+		if totalCPUs > availableCPUs {
+			return fmt.Errorf("insufficient CPU cores: total required %d, available %d", totalCPUs, availableCPUs)
+		}
+		if totalMem > availableMem {
+			return fmt.Errorf("insufficient memory: total required %d MB, available %d MB", totalMem, availableMem)
+		}
+		if totalDisk > availableDisk {
+			return fmt.Errorf("insufficient disk space: total required %d GB, available %d GB", totalDisk, availableDisk)
+		}
+	}
 
 	serviceLog.Infof("Validating VM requirements against system resources...")
 	serviceLog.Infof("VM Requirements: CPU=%d cores, Memory=%d MB, Disk=%d GB", req.CPUCores, req.MemoryMB, req.DiskSizeGB)
@@ -631,9 +628,6 @@ func (s *ServiceImpl) GetVM(ctx context.Context, uuid string) (*vbtypes.VM, erro
 		CPUCores:   s.parseIntOrDefault(vmInfo["cpus"], 1),
 		MemoryMB:   s.parseIntOrDefault(vmInfo["memory"], 1024),
 		DiskSizeGB: 0, // Not available from VBoxManage output
-		ISOURL:     "",
-		ISOPath:    "",
-		VBoxPath:   "VBoxManage",
 		VMFolder:   filepath.Join(s.vmDir, name),
 	}
 	// Store in datastore for next time
@@ -729,21 +723,20 @@ func (s *ServiceImpl) UpdateVM(ctx context.Context, uuid string, req vbtypes.VMU
 
 // DeleteVM deletes a VM using VBoxManage
 func (s *ServiceImpl) DeleteVM(ctx context.Context, uuid string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	fmt.Println(1111)
-	serviceLog.Infof("Deleting VM: %s", uuid)
 	vm, err := s.GetVM(ctx, uuid)
-	fmt.Println(2222)
 
+	// Stop the VM if running, before acquiring the write lock
 	if err == nil && vm.Status == vbtypes.Running {
 		if _, stopErr := s.StopVM(ctx, uuid); stopErr != nil {
 			serviceLog.Warnf("Failed to stop VM before deletion: %v", stopErr)
 		}
 	}
 
-	fmt.Println(3333)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	serviceLog.Infof("Deleting VM: %s", uuid)
+
 	if err := s.vboxExec.DeleteVM(uuid); err != nil {
 		return fmt.Errorf("failed to delete VM: %w", err)
 	}
@@ -753,15 +746,21 @@ func (s *ServiceImpl) DeleteVM(ctx context.Context, uuid string) error {
 		serviceLog.Warnf("Failed to delete VM metadata from datastore: %v", err)
 	}
 
-	fmt.Println(4444)
+	// Recursively delete the VM's folder (including cloud-init files)
+	if vm != nil && vm.VMFolder != "" {
+		if removeErr := os.RemoveAll(vm.VMFolder); removeErr != nil {
+			serviceLog.Warnf("Failed to delete VM folder %s: %v", vm.VMFolder, removeErr)
+		} else {
+			serviceLog.Infof("Deleted VM folder: %s", vm.VMFolder)
+		}
+	}
+
 	serviceLog.Infof("Successfully deleted VM: %s", uuid)
 	return nil
 }
 
 // StartVM starts a VM using VBoxManage
 func (s *ServiceImpl) StartVM(ctx context.Context, uuid string) (*vbtypes.VM, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	serviceLog.Infof("Starting VM: %s", uuid)
 	// 1. Set up SSH port forwarding BEFORE starting the VM
 	hostPort, err := getAvailablePort()
@@ -776,11 +775,17 @@ func (s *ServiceImpl) StartVM(ctx context.Context, uuid string) (*vbtypes.VM, er
 	if err := s.vboxExec.StartVM(uuid, true); err != nil {
 		return nil, fmt.Errorf("failed to start VM: %w", err)
 	}
+
+	// Get the VM after starting, before acquiring the write lock
 	vm, err := s.GetVM(ctx, uuid)
 	if err != nil {
 		return nil, err
 	}
 	vm.SSHPort = hostPort
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	if err := s.storeVMMetadata(ctx, vm); err != nil {
 		serviceLog.Warnf("Failed to store updated VM metadata in datastore: %v", err)
 	}
@@ -790,16 +795,21 @@ func (s *ServiceImpl) StartVM(ctx context.Context, uuid string) (*vbtypes.VM, er
 
 // StopVM stops a VM using VBoxManage
 func (s *ServiceImpl) StopVM(ctx context.Context, uuid string) (*vbtypes.VM, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	serviceLog.Infof("Stopping VM: %s", uuid)
+	// Stop the VM before acquiring the write lock
 	if err := s.vboxExec.StopVM(uuid); err != nil {
 		return nil, fmt.Errorf("failed to stop VM: %w", err)
 	}
+
+	// Get the VM after stopping, before acquiring the write lock
 	vm, err := s.GetVM(ctx, uuid)
 	if err != nil {
 		return nil, err
 	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	serviceLog.Infof("Successfully stopped VM: %s", uuid)
 	return vm, nil
 }

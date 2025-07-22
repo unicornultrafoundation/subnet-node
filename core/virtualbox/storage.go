@@ -500,10 +500,10 @@ func (s *StorageManagerImpl) GetSupportedOSTypes() []string {
 	currentArch := runtime.GOARCH
 
 	compatibilityMap := map[string][]string{
-		"arm64": {"Ubuntu_ARM64", "Debian_ARM64", "Windows_ARM64", "Other_ARM64"},
-		"amd64": {"Ubuntu_64", "Debian_64", "Windows_64", "Other_64"},
-		"arm":   {"Ubuntu", "Debian", "Windows", "Other"},
-		"386":   {"Ubuntu", "Debian", "Windows", "Other"},
+		"arm64": {"Ubuntu_ARM64"}, //"Debian_ARM64", "Windows_ARM64", "Other_ARM64"},
+		"amd64": {"Ubuntu_64"},    //"Debian_64", "Windows_64", "Other_64"},
+		"arm":   {"Ubuntu"},       //"Debian", "Windows", "Other"},
+		"386":   {"Ubuntu"},       //"Debian", "Windows", "Other"},
 	}
 
 	if compatibleTypes, exists := compatibilityMap[currentArch]; exists {
@@ -513,8 +513,8 @@ func (s *StorageManagerImpl) GetSupportedOSTypes() []string {
 	// Return all types if architecture not found
 	return []string{
 		"Ubuntu", "Ubuntu_64", "Ubuntu_ARM64",
-		"Debian", "Debian_64", "Debian_ARM64",
-		"Windows", "Windows_64", "Windows_ARM64",
-		"Other", "Other_64", "Other_ARM64",
+		// "Debian", "Debian_64", "Debian_ARM64",
+		// "Windows", "Windows_64", "Windows_ARM64",
+		// "Other", "Other_64", "Other_ARM64",
 	}
 }

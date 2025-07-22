@@ -14,11 +14,8 @@ type vmResult struct {
 	CPUCores   int              `json:"cpu_cores,omitempty"`
 	MemoryMB   int              `json:"memory_mb,omitempty"`
 	DiskSizeGB int              `json:"disk_size_gb,omitempty"`
-	ISOURL     string           `json:"iso_url,omitempty"`
-	ISOPath    string           `json:"iso_path,omitempty"`
 	IPAddress  string           `json:"ip_address,omitempty"`
 	SSHPort    int              `json:"ssh_port,omitempty"`
-	VBoxPath   string           `json:"vbox_path,omitempty"`
 	VMFolder   string           `json:"vm_folder,omitempty"`
 }
 
@@ -61,11 +58,8 @@ func convertToVMResult(vm *vbtypes.VM) *vmResult {
 		CPUCores:   vm.CPUCores,
 		MemoryMB:   vm.MemoryMB,
 		DiskSizeGB: vm.DiskSizeGB,
-		ISOURL:     vm.ISOURL,
-		ISOPath:    vm.ISOPath,
 		IPAddress:  vm.IPAddress,
 		SSHPort:    vm.SSHPort,
-		VBoxPath:   vm.VBoxPath,
 		VMFolder:   vm.VMFolder,
 	}
 }
