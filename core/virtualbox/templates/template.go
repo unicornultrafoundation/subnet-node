@@ -50,7 +50,7 @@ func (tm *TemplateManager) GenerateUserData(data CloudInitData) (string, error) 
 func (tm *TemplateManager) GenerateMetaData(data CloudInitData) (string, error) {
 	templateLog.Infof("Generating meta-data for VM: %s", data.Hostname)
 
-	templatePath := filepath.Join(tm.templateDir, "cloud-init-meta-data.tmpl")
+	templatePath := filepath.Join(tm.templateDir, "cloud-init-meta-data-template-vm.tmpl")
 	content, err := tm.processTemplate(templatePath, data)
 	if err != nil {
 		return "", fmt.Errorf("failed to process meta-data template: %w", err)

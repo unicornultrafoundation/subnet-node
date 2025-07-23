@@ -23,18 +23,10 @@ type Service interface {
 	ResumeVM(ctx context.Context, vmID string) (*vbtypes.VM, error)
 	ResetVM(ctx context.Context, vmID string) (*vbtypes.VM, error)
 
-	// Resource Management
-	GetVMUsage(ctx context.Context, vmID string) (*vbtypes.VMUsage, error)
-	GetAllVMUsage(ctx context.Context) (*vbtypes.VMUsage, error)
 	GetSystemInfo(ctx context.Context) (*vbtypes.VMSystemInfo, error)
 
 	// ISO Management
 	DownloadISO(ctx context.Context, isoURL string) (*vbtypes.ISOInfo, error)
-	GetISOInfo(ctx context.Context, isoPath string) (*vbtypes.ISOInfo, error)
-	ListISOs(ctx context.Context) ([]*vbtypes.ISOInfo, error)
-	DeleteISO(ctx context.Context, isoPath string) error
-
-	// System Information
 	ListOSTypes(ctx context.Context) ([]string, error)
 
 	// Service Lifecycle

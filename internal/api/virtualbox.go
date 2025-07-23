@@ -136,7 +136,7 @@ func (api *VirtualBoxAPI) GetVM(ctx context.Context, vmID string) (*vmResult, er
 	return convertToVMResult(vm), nil
 }
 
-func (api *VirtualBoxAPI) CreateVM(ctx context.Context, name string, cpuCores int, memoryMB int, diskSizeGB int, osType string, username string, password string) (*vmResult, error) {
+func (api *VirtualBoxAPI) CreateTemplateVM(ctx context.Context, name string, cpuCores int, memoryMB int, diskSizeGB int, osType string, username string, password string) (*vmResult, error) {
 	vbReq := vbtypes.VMCreateRequest{
 		Name:       name,
 		CPUCores:   cpuCores,
@@ -232,39 +232,6 @@ func (api *VirtualBoxAPI) ResetVM(ctx context.Context, vmID string) (*vmResult, 
 		return nil, err
 	}
 	return convertToVMResult(vm), nil
-}
-
-func (api *VirtualBoxAPI) GetVMUsage(ctx context.Context, vmID string) (*vmUsageResult, error) {
-	usage, err := api.vboxService.GetVMUsage(ctx, vmID)
-	if err != nil {
-		return nil, err
-	}
-	return convertToVMUsageResult(usage), nil
-}
-
-func (api *VirtualBoxAPI) GetAllVMUsage(ctx context.Context) (*vmUsageResult, error) {
-	usage, err := api.vboxService.GetAllVMUsage(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return convertToVMUsageResult(usage), nil
-}
-
-func (api *VirtualBoxAPI) ListISOs(ctx context.Context) ([]isoInfoResult, error) {
-	isos, err := api.vboxService.ListISOs(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	result := make([]isoInfoResult, len(isos))
-	for i, iso := range isos {
-		result[i] = *convertToISOInfoResult(iso)
-	}
-	return result, nil
-}
-
-func (api *VirtualBoxAPI) DeleteISO(ctx context.Context, isoPath string) error {
-	return api.vboxService.DeleteISO(ctx, isoPath)
 }
 
 func (api *VirtualBoxAPI) ListOSTypes(ctx context.Context) ([]string, error) {

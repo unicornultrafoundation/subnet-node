@@ -810,14 +810,17 @@ func (s *ServiceImpl) StopVM(ctx context.Context, uuid string) (*vbtypes.VM, err
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	if err := s.storeVMMetadata(ctx, vm); err != nil {
+		serviceLog.Warnf("Failed to store updated VM metadata in datastore: %v", err)
+	}
+
 	serviceLog.Infof("Successfully stopped VM: %s", uuid)
 	return vm, nil
 }
 
 // PauseVM pauses a VM using VBoxManage
 func (s *ServiceImpl) PauseVM(ctx context.Context, uuid string) (*vbtypes.VM, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+
 	serviceLog.Infof("Pausing VM: %s", uuid)
 	if err := s.vboxExec.PauseVM(uuid); err != nil {
 		return nil, fmt.Errorf("failed to pause VM: %w", err)
@@ -826,14 +829,20 @@ func (s *ServiceImpl) PauseVM(ctx context.Context, uuid string) (*vbtypes.VM, er
 	if err != nil {
 		return nil, err
 	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.storeVMMetadata(ctx, vm); err != nil {
+		serviceLog.Warnf("Failed to store updated VM metadata in datastore: %v", err)
+	}
+
 	serviceLog.Infof("Successfully paused VM: %s", uuid)
 	return vm, nil
 }
 
 // ResumeVM resumes a VM using VBoxManage
 func (s *ServiceImpl) ResumeVM(ctx context.Context, uuid string) (*vbtypes.VM, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+
 	serviceLog.Infof("Resuming VM: %s", uuid)
 	if err := s.vboxExec.ResumeVM(uuid); err != nil {
 		return nil, fmt.Errorf("failed to resume VM: %w", err)
@@ -842,55 +851,39 @@ func (s *ServiceImpl) ResumeVM(ctx context.Context, uuid string) (*vbtypes.VM, e
 	if err != nil {
 		return nil, err
 	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if err := s.storeVMMetadata(ctx, vm); err != nil {
+		serviceLog.Warnf("Failed to store updated VM metadata in datastore: %v", err)
+	}
 	serviceLog.Infof("Successfully resumed VM: %s", uuid)
 	return vm, nil
 }
 
 // ResetVM resets a VM using VBoxManage
 func (s *ServiceImpl) ResetVM(ctx context.Context, uuid string) (*vbtypes.VM, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+
 	serviceLog.Infof("Resetting VM: %s", uuid)
 	if err := s.vboxExec.ResetVM(uuid); err != nil {
 		return nil, fmt.Errorf("failed to reset VM: %w", err)
 	}
+
 	vm, err := s.GetVM(ctx, uuid)
 	if err != nil {
 		return nil, err
 	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if err := s.storeVMMetadata(ctx, vm); err != nil {
+		serviceLog.Warnf("Failed to store updated VM metadata in datastore: %v", err)
+	}
+
 	serviceLog.Infof("Successfully reset VM: %s", uuid)
 	return vm, nil
-}
-
-// GetVMUsage gets resource usage for a specific VM
-func (s *ServiceImpl) GetVMUsage(ctx context.Context, vmID string) (*vbtypes.VMUsage, error) {
-	// This is a placeholder implementation
-	// In a real implementation, you would collect actual resource usage data
-	return &vbtypes.VMUsage{
-		VMID:          vmID,
-		CPUPerc:       0.0,
-		MemoryMB:      0,
-		DiskUsageGB:   0.0,
-		NetworkRxMB:   0.0,
-		NetworkTxMB:   0.0,
-		UptimeSeconds: 0,
-		Timestamp:     time.Now(),
-	}, nil
-}
-
-// GetAllVMUsage gets resource usage for all VMs
-func (s *ServiceImpl) GetAllVMUsage(ctx context.Context) (*vbtypes.VMUsage, error) {
-	// This is a placeholder implementation
-	return &vbtypes.VMUsage{
-		VMID:          "all",
-		CPUPerc:       0.0,
-		MemoryMB:      0,
-		DiskUsageGB:   0.0,
-		NetworkRxMB:   0.0,
-		NetworkTxMB:   0.0,
-		UptimeSeconds: 0,
-		Timestamp:     time.Now(),
-	}, nil
 }
 
 // GetSystemInfo gets system information
@@ -940,37 +933,6 @@ func (s *ServiceImpl) DownloadISO(ctx context.Context, isoURL string) (*vbtypes.
 	}
 
 	return s.storageMgr.GetFileInfo(isoPath)
-}
-
-// GetISOInfo gets information about an ISO file
-func (s *ServiceImpl) GetISOInfo(ctx context.Context, isoPath string) (*vbtypes.ISOInfo, error) {
-	return s.storageMgr.GetFileInfo(isoPath)
-}
-
-// ListISOs lists all available ISO files
-func (s *ServiceImpl) ListISOs(ctx context.Context) ([]*vbtypes.ISOInfo, error) {
-	isoDir := filepath.Join(s.vmDir, "ISOs")
-	files, err := s.storageMgr.ListFiles(isoDir)
-	if err != nil {
-		return nil, err
-	}
-
-	var isos []*vbtypes.ISOInfo
-	for _, file := range files {
-		if strings.HasSuffix(file, ".iso") {
-			isoInfo, err := s.storageMgr.GetFileInfo(file)
-			if err == nil {
-				isos = append(isos, isoInfo)
-			}
-		}
-	}
-
-	return isos, nil
-}
-
-// DeleteISO deletes an ISO file
-func (s *ServiceImpl) DeleteISO(ctx context.Context, isoPath string) error {
-	return s.storageMgr.DeleteFile(isoPath)
 }
 
 // ListOSTypes lists all available OS types that can run on the current machine

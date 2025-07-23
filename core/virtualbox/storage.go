@@ -425,10 +425,8 @@ func (s *StorageManagerImpl) validateArchitectureCompatibility(osType string) er
 func (s *StorageManagerImpl) getISOURLForOSType(osType string) string {
 	switch osType {
 	case "Ubuntu_64":
-		// Use a working Ubuntu 24.04 LTS server ISO URL
 		return "https://releases.ubuntu.com/24.04/ubuntu-24.04.2-live-server-amd64.iso"
 	case "Ubuntu_ARM64":
-		// Use Ubuntu 24.04 LTS server ARM64 ISO
 		return "https://cdimage.ubuntu.com/releases/24.04/release/ubuntu-24.04.2-live-server-arm64.iso"
 	case "Ubuntu":
 		// Use appropriate Ubuntu ISO based on architecture
