@@ -1,0 +1,78 @@
+# Subnet Node Configuration Template
+# This is a sample configuration file for subnet node deployment
+
+account:
+  chainid: 2484
+  private_key: ""  # Will be set from Kubernetes secret
+  rpc: https://rpc-nebulas-testnet.u2u.xyz
+
+addresses:
+  api:
+    - /ip4/127.0.0.1/tcp/8170
+  gateway:
+    - /ip4/0.0.0.0/tcp/8080
+  swarm:
+    - /ip4/0.0.0.0/tcp/4001/ws
+    - /ip4/0.0.0.0/tcp/4001
+    - /ip6/::/tcp/4001
+    - /ip4/0.0.0.0/udp/4001/webrtc-direct
+    - /ip4/0.0.0.0/udp/4001/quic-v1
+    - /ip4/0.0.0.0/udp/4001/quic-v1/webtransport
+    - /ip6/::/udp/4001/webrtc-direct
+    - /ip6/::/udp/4001/quic-v1
+    - /ip6/::/udp/4001/quic-v1/webtransport
+
+apps:
+  subnet_app_store: 0x2c35C80173dB005D15E41FBa3d36b4A8892E6c3c
+  subnet_provider: 0x1D0650286FB79513c3f7fD388F1EA832b8EFc258
+
+autotls:
+  enabled: true
+
+bootstrap:
+  - /ip4/47.129.250.9/tcp/4001/p2p/12D3KooWDK63y6sxFi3dNqrS8yRetgbB81Tzszvs2yLoEtWtPCDa
+  - /dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN
+  - /dnsaddr/bootstrap.libp2p.io/p2p/QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa
+  - /dnsaddr/bootstrap.libp2p.io/p2p/QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb
+  - /dnsaddr/bootstrap.libp2p.io/p2p/QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt
+  - /ip4/104.131.131.82/tcp/4001/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ
+
+identity:
+  peer_id: 12D3KooWRpm2AqfRPLap3ht9JTYXAEeBXEKrsAfL1FgGKeLvdvGa
+  privkey: ""  # Will be set from Kubernetes secret
+
+bidengine:
+  enable: true
+
+provider:
+  enable: true
+  id: 1
+  machine_id: 0
+
+deployer:
+  enable: true
+
+# Additional configuration for Kubernetes deployment
+logging:
+  level: info
+  format: json
+
+metrics:
+  enabled: true
+  port: 9090
+
+network:
+  bind_address: "0.0.0.0"
+  max_connections: 1000
+  timeout: 30s
+
+database:
+  host: postgres
+  port: 5432
+  name: subnet
+  ssl_mode: disable
+
+redis:
+  host: redis
+  port: 6379
+  db: 0 

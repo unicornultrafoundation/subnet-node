@@ -1,0 +1,42 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: subnet-provider
+  namespace: subnet-provider
+
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - secret.yaml
+  - service.yaml
+  - deployment.yaml
+  - hpa.yaml
+  - ingress.yaml
+
+commonLabels:
+  app: subnet-provider
+  version: v1.0.0
+  environment: production
+
+namespace: subnet-provider
+
+# Uncomment to enable image replacement
+# images:
+# - name: subnet-node
+#   newTag: latest
+#   newName: your-registry/subnet-node
+
+# Uncomment to enable configMapGenerator for environment-specific configs
+# configMapGenerator:
+# - name: subnet-provider-config
+#   literals:
+#   - environment=production
+#   - log_level=info
+
+# Uncomment to enable secretGenerator for environment-specific secrets
+# secretGenerator:
+# - name: subnet-provider-secret
+#   literals:
+#   - api-key=your-production-api-key
+#   - database-url=your-production-database-url 

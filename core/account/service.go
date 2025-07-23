@@ -2,19 +2,22 @@ package account
 
 import (
 	"context"
-	"crypto/ecdsa"
 	"fmt"
 	"math/big"
+	"os"
+	"path/filepath"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/sirupsen/logrus"
+	sinit "github.com/unicornultrafoundation/subnet-node/cmd/init"
 	signer "github.com/unicornultrafoundation/subnet-node/common/signer"
 	"github.com/unicornultrafoundation/subnet-node/config"
 	"github.com/unicornultrafoundation/subnet-node/core/contracts"
+	"github.com/unicornultrafoundation/subnet-node/repo"
 	"go.uber.org/fx"
 )
 
@@ -22,27 +25,19 @@ var log = logrus.WithField("service", "account")
 
 // AccountService is a service to handle Ethereum transactions
 type AccountService struct {
-	privateKey           *ecdsa.PrivateKey
+	ks                   *keystore.KeyStore
 	client               *ethclient.Client
 	chainID              *big.Int
 	subnetProvider       *contracts.SubnetProvider
 	subnetProviderAddr   string
-	subnetAppStore       *contracts.SubnetAppStore
-	subnetAppStoreAddr   string
 	subnetIPRegistry     IPRegistry
 	subnetIPRegistryAddr string
-	providerID           int64
 }
 
 // NewAccountService initializes a new AccountService
-func NewAccountService(cfg *config.C) (*AccountService, error) {
-	privateKeyHex := cfg.GetString("account.private_key", "")
+func NewAccountService(cfg *config.C, ks *keystore.KeyStore) (*AccountService, error) {
 	rpcURL := cfg.GetString("account.rpc", config.DefaultRPC)
 	chainID := big.NewInt(int64(cfg.GetInt("account.chainid", config.DefaultChainID)))
-	privateKey, err := crypto.HexToECDSA(privateKeyHex)
-	if err != nil {
-		return nil, err
-	}
 
 	client, err := ethclient.Dial(rpcURL)
 	if err != nil {
@@ -54,45 +49,37 @@ func NewAccountService(cfg *config.C) (*AccountService, error) {
 		common.HexToAddress(subnetIPRegistryAddr),
 		client,
 	)
-
 	if err != nil {
 		return nil, err
 	}
 
 	var ipRegistry IPRegistry = subnetIPRegistry
 
+	accounts := ks.Accounts()
+	password := cfg.GetString("account.password", os.Getenv("ACCOUNT_PASSWORD"))
+	if len(accounts) == 0 {
+		account, _, _ := sinit.CreateKeystoreAccount(ks, password, "Enter keystore password: ")
+		accounts = append(accounts, account)
+	}
+	if err := ks.Unlock(accounts[0], password); err != nil {
+		return nil, fmt.Errorf("failed to unlock keystore: %w", err)
+	}
+
 	s := &AccountService{
-		privateKey:           privateKey,
+		ks:                   ks,
 		client:               client,
 		chainID:              chainID,
 		subnetIPRegistry:     ipRegistry,
 		subnetIPRegistryAddr: subnetIPRegistryAddr,
 	}
-	s.updateProviderID(cfg)
 	s.registerReloadCallback(cfg)
 	return s, nil
 }
 
 func (s *AccountService) registerReloadCallback(cfg *config.C) {
 	cfg.RegisterReloadCallback(func(cfg *config.C) {
-		if cfg.HasChanged("account.private_key") {
-			privateKeyHex := cfg.GetString("account.private_key", "")
-			privateKey, err := crypto.HexToECDSA(privateKeyHex)
-			if err != nil {
-				log.WithError(err).Error("failed to reload private key")
-				return
-			}
-			s.privateKey = privateKey
-		}
-
-		if cfg.HasChanged("provider.id") {
-			s.updateProviderID(cfg)
-		}
+		// No reload for keystore password from config; password is from env
 	})
-}
-
-func (s *AccountService) updateProviderID(cfg *config.C) {
-
 }
 
 // GetClient retrieves the ethclient instance
@@ -104,20 +91,12 @@ func (s *AccountService) Provider() *contracts.SubnetProvider {
 	return s.subnetProvider
 }
 
-func (s *AccountService) AppStore() *contracts.SubnetAppStore {
-	return s.subnetAppStore
-}
-
 func (s *AccountService) IPRegistry() IPRegistry {
 	return s.subnetIPRegistry
 }
 
 func (s *AccountService) GetChainID() *big.Int {
 	return s.chainID
-}
-
-func (s *AccountService) AppStoreAddr() string {
-	return s.subnetAppStoreAddr
 }
 
 func (s *AccountService) ProviderAddr() string {
@@ -130,8 +109,12 @@ func (s *AccountService) IPRegistryAddr() string {
 
 // GetAddress retrieves the Ethereum address from the private key
 func (s *AccountService) GetAddress() common.Address {
-	publicKey := s.privateKey.Public().(*ecdsa.PublicKey)
-	return crypto.PubkeyToAddress(*publicKey)
+	accounts := s.ks.Accounts()
+	if len(accounts) == 0 {
+		return common.Address{}
+	}
+
+	return accounts[0].Address
 }
 
 // GetBalance retrieves the Ether balance of the account
@@ -144,20 +127,40 @@ func (s *AccountService) GetBalance(address common.Address) (*big.Int, error) {
 }
 
 func (s *AccountService) NewKeyedTransactor() (*bind.TransactOpts, error) {
-	return bind.NewKeyedTransactorWithChainID(s.privateKey, s.chainID)
-}
+	accounts := s.ks.Accounts()
+	if len(accounts) == 0 {
+		return nil, fmt.Errorf("no accounts found")
+	}
 
-func (s *AccountService) ProviderID() int64 {
-	return s.providerID
+	keyAddr := accounts[0].Address
+
+	signer := types.LatestSignerForChainID(s.chainID)
+	return &bind.TransactOpts{
+		From: accounts[0].Address,
+		Signer: func(address common.Address, tx *types.Transaction) (*types.Transaction, error) {
+			if address != keyAddr {
+				return nil, fmt.Errorf("not authorized to sign transaction from address %s", address.Hex())
+			}
+			signature, err := s.ks.SignHash(accounts[0], signer.Hash(tx).Bytes())
+			if err != nil {
+				return nil, err
+			}
+			return tx.WithSignature(signer, signature)
+		},
+		Context: context.Background(),
+	}, nil
 }
 
 // SignAndSendTransaction creates, signs, and sends a transaction
 func (s *AccountService) SignAndSendTransaction(toAddress string, value *big.Int, gasLimit uint64, gasPrice *big.Int, data []byte) (string, error) {
-	// Derive the sender address from the private key
-	publicKey := s.privateKey.Public().(*ecdsa.PublicKey)
-	senderAddress := crypto.PubkeyToAddress(*publicKey)
+	accounts := s.ks.Accounts()
+	if len(accounts) == 0 {
+		return "", fmt.Errorf("no accounts found")
+	}
 
-	nonce, err := s.client.PendingNonceAt(context.Background(), senderAddress)
+	account := accounts[0]
+
+	nonce, err := s.client.PendingNonceAt(context.Background(), account.Address)
 	if err != nil {
 		return "", err
 	}
@@ -165,11 +168,7 @@ func (s *AccountService) SignAndSendTransaction(toAddress string, value *big.Int
 	// Create a new transaction
 	tx := types.NewTransaction(nonce, common.HexToAddress(toAddress), value, gasLimit, gasPrice, data)
 
-	// Sign the transaction
-	signedTx, err := types.SignTx(tx, types.NewEIP155Signer(s.chainID), s.privateKey)
-	if err != nil {
-		return "", err
-	}
+	signedTx, err := s.ks.SignTx(account, tx, s.chainID)
 
 	// Send the transaction
 	err = s.client.SendTransaction(context.Background(), signedTx)
@@ -181,8 +180,12 @@ func (s *AccountService) SignAndSendTransaction(toAddress string, value *big.Int
 }
 
 // EthereumService provides a lifecycle-managed Ethereum service
-func EthereumService(lc fx.Lifecycle, cfg *config.C) (*AccountService, error) {
-	service, err := NewAccountService(cfg)
+func EthereumService(lc fx.Lifecycle, cfg *config.C, rp repo.Repo) (*AccountService, error) {
+	repoPath := filepath.Clean(rp.Path())
+	ksDir := filepath.Join(repoPath, "keystore")
+	ks := keystore.NewKeyStore(ksDir, keystore.StandardScryptN, keystore.StandardScryptP)
+
+	service, err := NewAccountService(cfg, ks)
 	if err != nil {
 		return nil, err
 	}
@@ -203,7 +206,14 @@ func EthereumService(lc fx.Lifecycle, cfg *config.C) (*AccountService, error) {
 
 // Sign the hash using ECDSA
 func (account *AccountService) Sign(hash []byte) ([]byte, error) {
-	signature, err := crypto.Sign(hash, account.privateKey)
+
+	accounts := account.ks.Accounts()
+	if len(accounts) == 0 {
+		return nil, fmt.Errorf("no accounts found")
+	}
+	acc := accounts[0]
+
+	signature, err := account.ks.SignHash(acc, hash)
 	if err != nil {
 		return nil, err
 	}

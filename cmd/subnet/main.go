@@ -1,13 +1,12 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"os"
 
 	logging "github.com/ipfs/go-log/v2"
-
 	"github.com/sirupsen/logrus"
+	"github.com/spf13/cobra"
 	ninit "github.com/unicornultrafoundation/subnet-node/cmd/init"
 	"github.com/unicornultrafoundation/subnet-node/cmd/subnet/config"
 	"github.com/unicornultrafoundation/subnet-node/subnet"
@@ -21,58 +20,68 @@ import (
 var Build string
 
 func main() {
-	configPath := flag.String("config", "", "Path to either a file or directory to load configuration from")
-	dataPath := flag.String("datadir", "~/.subnet-node", "Path to either a file or directory to load configuration from")
-	initFlag := flag.Bool("init", false, "Init")
-	debugFlag := flag.Bool("debug", false, "Debug")
+	var (
+		configPath string
+		dataPath   string
+		debug      bool
+	)
 
-	printVersion := flag.Bool("version", false, "Print version")
-	printUsage := flag.Bool("help", false, "Print command line usage")
-
-	flag.Parse()
-
-	if *debugFlag {
-		logrus.SetLevel(logrus.DebugLevel)
-		logging.SetAllLoggers(logging.LevelDebug)
+	rootCmd := &cobra.Command{
+		Use:   "subnet-node",
+		Short: "Subnet Node",
+		Long:  "Subnet Node - U2U Subnet Node Service",
+		PersistentPreRun: func(cmd *cobra.Command, args []string) {
+			if debug {
+				logrus.SetLevel(logrus.DebugLevel)
+				logging.SetAllLoggers(logging.LevelDebug)
+			}
+		},
+		Run: func(cmd *cobra.Command, args []string) {
+			subnet.Main(dataPath, &configPath)
+		},
 	}
 
-	if *printVersion {
-		fmt.Printf("Version: %s\n", Build)
-		os.Exit(0)
+	rootCmd.PersistentFlags().StringVarP(&configPath, "config", "c", "", "Path to config file or directory")
+	rootCmd.PersistentFlags().StringVarP(&dataPath, "datadir", "d", "~/.subnet-node", "Path to data directory")
+	rootCmd.PersistentFlags().BoolVarP(&debug, "debug", "", false, "Enable debug logging")
+
+	versionCmd := &cobra.Command{
+		Use:   "version",
+		Short: "Print version",
+		Run: func(cmd *cobra.Command, args []string) {
+			fmt.Printf("Version: %s\n", Build)
+		},
 	}
 
-	if *printUsage {
-		flag.Usage()
-		os.Exit(0)
+	initCmd := &cobra.Command{
+		Use:   "init",
+		Short: "Initialize node data directory",
+		Run: func(cmd *cobra.Command, args []string) {
+			_, err := ninit.Init(dataPath, os.Stdout)
+			if err != nil {
+				fmt.Printf("init err :%v\n", err)
+				os.Exit(1)
+			}
+		},
 	}
 
-	if *dataPath == "" {
-		fmt.Println("-datadir flag must be set")
-		flag.Usage()
-		os.Exit(1)
-	}
-
-	// Check for subcommand
-	if len(flag.Args()) > 0 {
-		subcommand := flag.Args()[0]
-
-		if subcommand == "edit-config" {
-			if err := config.EditConfig(*dataPath, flag.Args()[1:]); err != nil {
+	editConfigCmd := &cobra.Command{
+		Use:   "edit-config",
+		Short: "Edit node configuration",
+		Run: func(cmd *cobra.Command, args []string) {
+			if err := config.EditConfig(dataPath, args); err != nil {
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 				os.Exit(1)
 			}
-			os.Exit(0)
-		}
+		},
 	}
 
-	if *initFlag {
-		_, err := ninit.Init(*dataPath, os.Stdout)
-		if err != nil {
-			fmt.Printf("init err :%v", err)
-			os.Exit(1)
-		}
-		os.Exit(0)
-	}
+	rootCmd.AddCommand(versionCmd)
+	rootCmd.AddCommand(initCmd)
+	rootCmd.AddCommand(editConfigCmd)
 
-	subnet.Main(*dataPath, configPath)
+	if err := rootCmd.Execute(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
 }

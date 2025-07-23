@@ -1,13 +1,15 @@
 package init
 
 import (
-	"encoding/hex"
+	"bufio"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
-	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/accounts"
+	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/unicornultrafoundation/subnet-node/common/fsutil"
 	"gopkg.in/yaml.v2"
 )
@@ -33,15 +35,14 @@ func Init(repoPath string, out io.Writer) (map[interface{}]interface{}, error) {
 		return nil, err
 	}
 
-	accountPrivateKey, err := createPrivateKey()
-
-	if err != nil {
-		return nil, err
+	// Generate a new private key and keystore
+	ksDir := filepath.Join(expPath, "keystore")
+	if err := os.MkdirAll(ksDir, 0700); err != nil {
+		return nil, fmt.Errorf("failed to create keystore dir: %w", err)
 	}
-
-	config["account"] = map[interface{}]interface{}{
-		"private_key": accountPrivateKey,
-	}
+	ks := keystore.NewKeyStore(ksDir, keystore.StandardScryptN, keystore.StandardScryptP)
+	account, _, _ := CreateKeystoreAccount(ks, "", "Enter keystore password: ")
+	fmt.Fprintf(out, "Keystore created at %s\n", account.URL.Path)
 
 	// Save config to file
 	configPath := filepath.Join(expPath, "config.yaml")
@@ -100,17 +101,29 @@ func saveConfigToFile(config map[interface{}]interface{}, path string) error {
 	return nil
 }
 
-// createPrivateKey generates a new private key and returns its hex representation
-func createPrivateKey() (string, error) {
-	privateKey, err := crypto.GenerateKey()
+// PromptPassword prompts the user for a password with the given message.
+func PromptPassword(message string) (string, error) {
+	fmt.Print(message)
+	reader := bufio.NewReader(os.Stdin)
+	pw, err := reader.ReadString('\n')
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to read password: %w", err)
 	}
+	return strings.TrimSpace(pw), nil
+}
 
-	// Convert the private key to bytes
-	privateKeyBytes := crypto.FromECDSA(privateKey)
-	// Encode the bytes to a hexadecimal string
-	privateKeyHex := hex.EncodeToString(privateKeyBytes)
-
-	return privateKeyHex, nil
+// CreateKeystoreAccount prompts for password if needed and creates a new keystore account
+func CreateKeystoreAccount(ks *keystore.KeyStore, password string, promptMsg string) (accounts.Account, string, error) {
+	var err error
+	if password == "" {
+		password, err = PromptPassword(promptMsg)
+		if err != nil {
+			return accounts.Account{}, "", err
+		}
+	}
+	acc, err := ks.NewAccount(password)
+	if err != nil {
+		return accounts.Account{}, "", fmt.Errorf("failed to create new keystore account: %w", err)
+	}
+	return acc, password, nil
 }
