@@ -26,6 +26,17 @@ type StorageManagerImpl struct {
 
 // NewStorageManager creates a new storage manager
 func NewStorageManager() (*StorageManagerImpl, error) {
+	// Ensure VirtualBox VMs directory exists
+	vmDir, err := fsutil.ExpandHome("~/VirtualBox VMs")
+	if err != nil {
+		return nil, fmt.Errorf("failed to expand VirtualBox VMs directory path: %w", err)
+	}
+
+	if err := fsutil.DirWritable(vmDir); err != nil {
+		return nil, fmt.Errorf("failed to create VirtualBox VMs directory: %w", err)
+	}
+
+	// Ensure ISOs directory exists
 	isoDir, err := fsutil.ExpandHome("~/VirtualBox VMs/ISOs")
 	if err != nil {
 		return nil, fmt.Errorf("failed to expand ISO directory path: %w", err)
@@ -34,6 +45,8 @@ func NewStorageManager() (*StorageManagerImpl, error) {
 	if err := fsutil.DirWritable(isoDir); err != nil {
 		return nil, fmt.Errorf("failed to create ISO directory: %w", err)
 	}
+
+	storageLog.Infof("Ensured ISOs directory exists at: %s", isoDir)
 
 	return &StorageManagerImpl{
 		isoDir: isoDir,

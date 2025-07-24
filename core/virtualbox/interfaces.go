@@ -15,6 +15,7 @@ type Service interface {
 	GetVMs(ctx context.Context) ([]*vbtypes.VM, int, error)
 	UpdateVM(ctx context.Context, vmID string, req vbtypes.VMUpdateRequest) (*vbtypes.VM, error)
 	DeleteVM(ctx context.Context, vmID string) error
+	SyncVMs(ctx context.Context) error
 
 	// VM Control
 	StartVM(ctx context.Context, vmID string) (*vbtypes.VM, error)

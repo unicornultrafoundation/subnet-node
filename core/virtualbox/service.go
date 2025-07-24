@@ -35,6 +35,7 @@ type ServiceImpl struct {
 	stopChan   chan struct{}
 	vboxExec   *VBoxManageExecutor
 	datastore  datastore.Datastore
+	syncTicker *time.Ticker
 }
 
 // NewService creates a new VirtualBox service
@@ -50,6 +51,18 @@ func NewService(ds datastore.Datastore) (*ServiceImpl, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to expand VM directory path: %w", err)
 	}
+
+	// Ensure the VM directory exists
+	if err := fsutil.DirWritable(vmDir); err != nil {
+		return nil, fmt.Errorf("failed to create VM directory: %w", err)
+	}
+
+	// Ensure the ISOs directory exists
+	isosDir := filepath.Join(vmDir, "ISOs")
+	if err := fsutil.DirWritable(isosDir); err != nil {
+		return nil, fmt.Errorf("failed to create ISOs directory: %w", err)
+	}
+	serviceLog.Infof("Ensured ISOs directory exists at: %s", isosDir)
 
 	service := &ServiceImpl{
 		storageMgr: storageMgr,
@@ -80,6 +93,18 @@ func IsVirtualBoxEnabled(cfg *config.C) bool {
 // Start starts the VirtualBox service
 func (s *ServiceImpl) Start(ctx context.Context) error {
 	serviceLog.Info("Starting VirtualBox service")
+
+	// Ensure the ISOs directory exists
+	isoDir, err := s.ensureISOsDirectory()
+	if err != nil {
+		return fmt.Errorf("failed to ensure ISOs directory exists: %w", err)
+	}
+	serviceLog.Infof("Ensured ISOs directory exists at: %s", isoDir)
+
+	// Start the synchronization ticker to run every 15 seconds
+	s.syncTicker = time.NewTicker(15 * time.Second)
+	go s.syncVMsWithDatastore(ctx)
+
 	serviceLog.Info("VirtualBox service started successfully")
 	return nil
 }
@@ -87,6 +112,12 @@ func (s *ServiceImpl) Start(ctx context.Context) error {
 // Stop stops the VirtualBox service
 func (s *ServiceImpl) Stop(ctx context.Context) error {
 	serviceLog.Info("Stopping VirtualBox service")
+
+	// Stop the synchronization ticker
+	if s.syncTicker != nil {
+		s.syncTicker.Stop()
+	}
+
 	close(s.stopChan)
 	return nil
 }
@@ -597,6 +628,7 @@ func (s *ServiceImpl) GetVM(ctx context.Context, uuid string) (*vbtypes.VM, erro
 
 	// Try datastore first
 	if vm, err := s.getVMMetadata(ctx, uuid); err == nil && vm != nil {
+		// Always get the latest status from VBoxManage
 		output, err := s.vboxExec.executeCommand("showvminfo", uuid, "--machinereadable")
 		if err == nil {
 			vmInfo := s.parseMachineReadableOutput(output)
@@ -605,6 +637,12 @@ func (s *ServiceImpl) GetVM(ctx context.Context, uuid string) (*vbtypes.VM, erro
 			if vm.SSHPort == 0 {
 				if port := parseSSHPortFromNAT(vmInfo); port > 0 {
 					vm.SSHPort = port
+					// Update the metadata with the new SSH port
+					go func(vmCopy *vbtypes.VM) {
+						if err := s.storeVMMetadata(context.Background(), vmCopy); err != nil {
+							serviceLog.Warnf("Failed to update VM metadata with SSH port: %v", err)
+						}
+					}(vm)
 				}
 			}
 		}
@@ -630,9 +668,26 @@ func (s *ServiceImpl) GetVM(ctx context.Context, uuid string) (*vbtypes.VM, erro
 		DiskSizeGB: 0, // Not available from VBoxManage output
 		VMFolder:   filepath.Join(s.vmDir, name),
 	}
+
+	// Set SSH port if available
+	if port := parseSSHPortFromNAT(vmInfo); port > 0 {
+		vm.SSHPort = port
+	}
+
 	// Store in datastore for next time
-	_ = s.storeVMMetadata(ctx, vm)
+	go func(vmCopy *vbtypes.VM) {
+		if err := s.storeVMMetadata(context.Background(), vmCopy); err != nil {
+			serviceLog.Warnf("Failed to store VM metadata: %v", err)
+		}
+	}(vm)
+
 	return vm, nil
+}
+
+// SyncVMs manually triggers synchronization between VirtualBox and datastore
+func (s *ServiceImpl) SyncVMs(ctx context.Context) error {
+	serviceLog.Info("Manually triggering VM synchronization")
+	return s.performVMSync(ctx)
 }
 
 // GetVMs gets a list of all VMs
@@ -655,10 +710,10 @@ func (s *ServiceImpl) GetVMs(ctx context.Context) ([]*vbtypes.VM, int, error) {
 			}
 		}
 		_ = results.Close()
-		logrus.Infof("GetVMs: fetched %d VMs from datastore in %s", len(vms), time.Since(start))
+		serviceLog.Infof("GetVMs: fetched %d VMs from datastore in %s", len(vms), time.Since(start))
 		return vms, len(vms), nil
 	}
-	logrus.Warnf("GetVMs: datastore query failed (%v), falling back to VBoxManage", err)
+	serviceLog.Warnf("GetVMs: datastore query failed (%v), falling back to VBoxManage", err)
 
 	// Fallback: Get all VMs using VBoxManageExecutor (legacy/first run)
 	output, err := s.vboxExec.executeCommand("list", "vms")
@@ -686,6 +741,14 @@ func (s *ServiceImpl) GetVMs(ctx context.Context) ([]*vbtypes.VM, int, error) {
 			vms = append(vms, vm)
 		}
 	}
+
+	// Trigger a background sync to update the datastore for future calls
+	go func() {
+		if err := s.SyncVMs(context.Background()); err != nil {
+			serviceLog.Warnf("Failed to sync VMs after fallback query: %v", err)
+		}
+	}()
+
 	return vms, len(vms), nil
 }
 
@@ -693,31 +756,52 @@ func (s *ServiceImpl) GetVMs(ctx context.Context) ([]*vbtypes.VM, int, error) {
 func (s *ServiceImpl) UpdateVM(ctx context.Context, uuid string, req vbtypes.VMUpdateRequest) (*vbtypes.VM, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	serviceLog.Infof("Updating VM: %s", uuid)
+
 	vm, err := s.GetVM(ctx, uuid)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get VM for update: %w", err)
 	}
+
+	updated := false
+
 	if req.CPUCores > 0 && req.CPUCores != vm.CPUCores {
+		serviceLog.Infof("Updating CPU cores from %d to %d", vm.CPUCores, req.CPUCores)
 		if err := s.vboxExec.UpdateCPUCores(uuid, req.CPUCores); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to update CPU cores: %w", err)
 		}
 		vm.CPUCores = req.CPUCores
+		updated = true
 	}
+
 	if req.MemoryMB > 0 && req.MemoryMB != vm.MemoryMB {
+		serviceLog.Infof("Updating memory from %d MB to %d MB", vm.MemoryMB, req.MemoryMB)
 		if err := s.vboxExec.UpdateMemory(uuid, req.MemoryMB); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to update memory: %w", err)
 		}
 		vm.MemoryMB = req.MemoryMB
+		updated = true
 	}
+
 	if req.DiskSizeGB > 0 && req.DiskSizeGB != vm.DiskSizeGB {
-		vm.DiskSizeGB = req.DiskSizeGB // (actual disk resize not implemented here)
+		serviceLog.Infof("Updating disk size from %d GB to %d GB", vm.DiskSizeGB, req.DiskSizeGB)
+		// Note: actual disk resize not implemented here
+		vm.DiskSizeGB = req.DiskSizeGB
+		updated = true
 	}
 
 	// Store updated VM metadata in datastore
-	if err := s.storeVMMetadata(ctx, vm); err != nil {
-		serviceLog.Warnf("Failed to store updated VM metadata in datastore: %v", err)
+	if updated {
+		serviceLog.Infof("Storing updated VM metadata in datastore")
+		if err := s.storeVMMetadata(ctx, vm); err != nil {
+			serviceLog.Warnf("Failed to store updated VM metadata in datastore: %v", err)
+		}
+	} else {
+		serviceLog.Infof("No changes detected, VM not updated")
 	}
 
+	serviceLog.Infof("Successfully updated VM: %s", uuid)
 	return vm, nil
 }
 
@@ -744,6 +828,8 @@ func (s *ServiceImpl) DeleteVM(ctx context.Context, uuid string) error {
 	// Delete VM metadata from datastore
 	if err := s.deleteVMMetadata(ctx, uuid); err != nil {
 		serviceLog.Warnf("Failed to delete VM metadata from datastore: %v", err)
+	} else {
+		serviceLog.Infof("Successfully removed VM metadata from datastore")
 	}
 
 	// Recursively delete the VM's folder (including cloud-init files)
@@ -782,6 +868,7 @@ func (s *ServiceImpl) StartVM(ctx context.Context, uuid string) (*vbtypes.VM, er
 		return nil, err
 	}
 	vm.SSHPort = hostPort
+	vm.Status = vbtypes.Running // Explicitly set status to Running
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -807,6 +894,9 @@ func (s *ServiceImpl) StopVM(ctx context.Context, uuid string) (*vbtypes.VM, err
 		return nil, err
 	}
 
+	// Explicitly set status to Stopped
+	vm.Status = vbtypes.Stopped
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -825,13 +915,19 @@ func (s *ServiceImpl) PauseVM(ctx context.Context, uuid string) (*vbtypes.VM, er
 	if err := s.vboxExec.PauseVM(uuid); err != nil {
 		return nil, fmt.Errorf("failed to pause VM: %w", err)
 	}
+
+	// Get the VM after pausing
 	vm, err := s.GetVM(ctx, uuid)
 	if err != nil {
 		return nil, err
 	}
 
+	// Explicitly set status to Paused
+	vm.Status = vbtypes.Paused
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	if err := s.storeVMMetadata(ctx, vm); err != nil {
 		serviceLog.Warnf("Failed to store updated VM metadata in datastore: %v", err)
 	}
@@ -847,10 +943,15 @@ func (s *ServiceImpl) ResumeVM(ctx context.Context, uuid string) (*vbtypes.VM, e
 	if err := s.vboxExec.ResumeVM(uuid); err != nil {
 		return nil, fmt.Errorf("failed to resume VM: %w", err)
 	}
+
+	// Get the VM after resuming
 	vm, err := s.GetVM(ctx, uuid)
 	if err != nil {
 		return nil, err
 	}
+
+	// Explicitly set status to Running
+	vm.Status = vbtypes.Running
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -858,6 +959,7 @@ func (s *ServiceImpl) ResumeVM(ctx context.Context, uuid string) (*vbtypes.VM, e
 	if err := s.storeVMMetadata(ctx, vm); err != nil {
 		serviceLog.Warnf("Failed to store updated VM metadata in datastore: %v", err)
 	}
+
 	serviceLog.Infof("Successfully resumed VM: %s", uuid)
 	return vm, nil
 }
@@ -870,10 +972,14 @@ func (s *ServiceImpl) ResetVM(ctx context.Context, uuid string) (*vbtypes.VM, er
 		return nil, fmt.Errorf("failed to reset VM: %w", err)
 	}
 
+	// Get the VM after resetting
 	vm, err := s.GetVM(ctx, uuid)
 	if err != nil {
 		return nil, err
 	}
+
+	// Explicitly set status to Running
+	vm.Status = vbtypes.Running
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -920,7 +1026,13 @@ func (s *ServiceImpl) GetSystemInfo(ctx context.Context) (*vbtypes.VMSystemInfo,
 
 // DownloadISO downloads an ISO file
 func (s *ServiceImpl) DownloadISO(ctx context.Context, isoURL string) (*vbtypes.ISOInfo, error) {
-	isoPath := filepath.Join(s.vmDir, "ISOs", filepath.Base(isoURL))
+	// Ensure ISOs directory exists
+	isoDir, err := s.ensureISOsDirectory()
+	if err != nil {
+		return nil, err
+	}
+
+	isoPath := filepath.Join(isoDir, filepath.Base(isoURL))
 
 	// Check if already exists
 	if s.storageMgr.FileExists(isoPath) {
@@ -946,8 +1058,12 @@ func (s *ServiceImpl) ensureISO(ctx context.Context, isoURL string) (string, err
 		return "", nil
 	}
 
-	// Check if ISO already exists
-	isoDir := filepath.Join(s.vmDir, "ISOs")
+	// Ensure ISOs directory exists
+	isoDir, err := s.ensureISOsDirectory()
+	if err != nil {
+		return "", err
+	}
+
 	isoName := filepath.Base(isoURL)
 	isoPath := filepath.Join(isoDir, isoName)
 
@@ -963,6 +1079,15 @@ func (s *ServiceImpl) ensureISO(ctx context.Context, isoURL string) (string, err
 	}
 
 	return isoPath, nil
+}
+
+// ensureISOsDirectory ensures that the ISOs directory exists
+func (s *ServiceImpl) ensureISOsDirectory() (string, error) {
+	isoDir := filepath.Join(s.vmDir, "ISOs")
+	if err := fsutil.DirWritable(isoDir); err != nil {
+		return "", fmt.Errorf("failed to create ISOs directory: %w", err)
+	}
+	return isoDir, nil
 }
 
 // configureVMHardwareWithVBoxManage configures VM hardware using VBoxManage with dynamic hardware detection
@@ -1326,6 +1451,158 @@ func (s *ServiceImpl) getVMMetadata(ctx context.Context, uuid string) (*vbtypes.
 func (s *ServiceImpl) deleteVMMetadata(ctx context.Context, uuid string) error {
 	key := datastore.NewKey("virtualbox/vm/" + uuid)
 	return s.datastore.Delete(ctx, key)
+}
+
+// syncVMsWithDatastore periodically synchronizes the VirtualBox VM data with the datastore
+func (s *ServiceImpl) syncVMsWithDatastore(ctx context.Context) {
+	serviceLog.Info("Starting VM synchronization with datastore")
+
+	for {
+		select {
+		case <-s.syncTicker.C:
+			if err := s.performVMSync(ctx); err != nil {
+				serviceLog.Errorf("Error during VM synchronization: %v", err)
+			}
+		case <-s.stopChan:
+			serviceLog.Info("Stopping VM synchronization")
+			return
+		case <-ctx.Done():
+			serviceLog.Info("Context cancelled, stopping VM synchronization")
+			return
+		}
+	}
+}
+
+// performVMSync does the actual synchronization between VirtualBox and the datastore
+func (s *ServiceImpl) performVMSync(ctx context.Context) error {
+	serviceLog.Debug("Synchronizing VirtualBox VMs with datastore")
+
+	// Get all VMs directly from VBoxManage
+	output, err := s.vboxExec.executeCommand("list", "vms")
+	if err != nil {
+		return fmt.Errorf("failed to list VMs from VBoxManage: %w", err)
+	}
+
+	lines := strings.Split(output, "\n")
+	vboxVMs := make(map[string]string) // Map of UUID -> Name
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		// Parse VM name and UUID from line like: "VM Name" {uuid}
+		nameStart := strings.Index(line, "\"")
+		nameEnd := strings.LastIndex(line, "\"")
+		uuidStart := strings.LastIndex(line, "{")
+		uuidEnd := strings.LastIndex(line, "}")
+
+		if nameStart != -1 && nameEnd != -1 && uuidStart != -1 && uuidEnd != -1 && nameStart < nameEnd && uuidStart < uuidEnd {
+			name := line[nameStart+1 : nameEnd]
+			uuid := line[uuidStart+1 : uuidEnd]
+			vboxVMs[uuid] = name
+		}
+	}
+
+	// Get all VMs from datastore
+	q := query.Query{Prefix: "virtualbox/vm/"}
+	results, err := s.datastore.Query(ctx, q)
+	if err != nil {
+		return fmt.Errorf("failed to query datastore: %w", err)
+	}
+
+	datastoreVMs := make(map[string]*vbtypes.VM)
+	for result := range results.Next() {
+		if result.Error != nil {
+			continue
+		}
+
+		var vm vbtypes.VM
+		if err := json.Unmarshal(result.Value, &vm); err == nil {
+			datastoreVMs[vm.ID] = &vm
+		}
+	}
+	_ = results.Close()
+
+	// Lock for writing to datastore
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Update existing VMs in datastore with current status
+	for uuid, name := range vboxVMs {
+		// Get detailed VM info from VBoxManage
+		vmOutput, err := s.vboxExec.executeCommand("showvminfo", uuid, "--machinereadable")
+		if err != nil {
+			serviceLog.Warnf("Failed to get info for VM %s: %v", uuid, err)
+			continue
+		}
+
+		vmInfo := s.parseMachineReadableOutput(vmOutput)
+		vmStatus := s.parseVMStatus(vmInfo["VMState"])
+
+		// Check if VM exists in datastore
+		if existingVM, exists := datastoreVMs[uuid]; exists {
+			// Update VM status and other dynamic properties
+			existingVM.Status = vmStatus
+
+			// Update SSH port if available
+			if port := parseSSHPortFromNAT(vmInfo); port > 0 && existingVM.SSHPort != port {
+				existingVM.SSHPort = port
+				serviceLog.Debugf("Updated SSH port for VM %s: %d", uuid, port)
+			}
+
+			// Store updated VM
+			if err := s.storeVMMetadata(ctx, existingVM); err != nil {
+				serviceLog.Warnf("Failed to update VM in datastore: %v", err)
+			} else {
+				serviceLog.Debugf("Updated VM in datastore: %s (%s)", existingVM.Name, existingVM.ID)
+			}
+
+			// Remove from datastoreVMs map to track processed VMs
+			delete(datastoreVMs, uuid)
+		} else {
+			// VM exists in VirtualBox but not in datastore, create new entry
+			cpuCores := s.parseIntOrDefault(vmInfo["cpus"], 1)
+			memoryMB := s.parseIntOrDefault(vmInfo["memory"], 1024)
+
+			newVM := &vbtypes.VM{
+				ID:       uuid,
+				Name:     name,
+				Status:   vmStatus,
+				CPUCores: cpuCores,
+				MemoryMB: memoryMB,
+				VMFolder: filepath.Join(s.vmDir, name),
+			}
+
+			// Set SSH port if available
+			if port := parseSSHPortFromNAT(vmInfo); port > 0 {
+				newVM.SSHPort = port
+			}
+
+			// Store new VM
+			if err := s.storeVMMetadata(ctx, newVM); err != nil {
+				serviceLog.Warnf("Failed to store new VM in datastore: %v", err)
+			} else {
+				serviceLog.Infof("Added new VM to datastore: %s (%s)", newVM.Name, newVM.ID)
+			}
+		}
+	}
+
+	// Remove VMs from datastore that no longer exist in VirtualBox
+	for uuid, vm := range datastoreVMs {
+		if _, exists := vboxVMs[uuid]; !exists {
+			key := datastore.NewKey("virtualbox/vm/" + uuid)
+			if err := s.datastore.Delete(ctx, key); err != nil {
+				serviceLog.Warnf("Failed to remove VM %s from datastore: %v", uuid, err)
+			} else {
+				serviceLog.Infof("Removed non-existent VM from datastore: %s (%s)", vm.Name, vm.ID)
+			}
+		}
+	}
+
+	serviceLog.Debug("VM synchronization completed")
+	return nil
 }
 
 // getAvailablePort finds an available TCP port on the host

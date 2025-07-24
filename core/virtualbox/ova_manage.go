@@ -10,7 +10,7 @@ import (
 
 // FIX the link later
 var defaultOVAURLs = map[string]string{
-	"Ubuntu_64":    "https://my-server.com/ovas/template_sample_Ubuntu_64.ova",
+	"Ubuntu_64":    "https://www.sendgb.com/src/download_one.php?uploadId=QbC28risRfG&sc=ababb9417e3bb2e7617724b68c881df6&file=template_sample_Ubuntu_64.ova&private_id=",
 	"Ubuntu_ARM64": "https://www.sendgb.com/src/download_one.php?uploadId=AGHUcYp37x2&sc=a4e01fb96cc851b6ef31eaf07807ec0c&file=template_sample_Ubuntu_ARM64.ova&private_id=",
 }
 

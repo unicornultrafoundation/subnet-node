@@ -102,6 +102,93 @@ go run download_ovas.go
 
 This will download OS templates to `~/VirtualBox VMs/Templates/`.
 
+## Template VM Creation Flow
+
+The service uses pre-built OVA templates to create new VMs quickly. The flow for template VM creation is:
+
+1. **Template Preparation**: Pre-configured OVA templates are stored in `~/VirtualBox VMs/Templates/`
+2. **Template Download**: If a template doesn't exist locally, it's automatically downloaded from the configured URL
+3. **OVA Import**: The template is imported to create a new VM
+4. **Configuration Customization**: The VM is customized with requested CPU, memory, and disk settings
+5. **Cloud-Init Setup**: A cloud-init ISO is generated to configure the VM on first boot
+6. **Network Configuration**: SSH port forwarding is set up for remote access
+
+### OVA Template URLs
+
+The OVA template URLs are defined in `ova_manage.go` and currently include:
+
+- **Ubuntu_64**: For x86_64/AMD64 architectures
+- **Ubuntu_ARM64**: For ARM64/AArch64 architectures (e.g., Apple Silicon)
+
+These URLs are defined in the `defaultOVAURLs` map and can be accessed using the `getOVAURLForOSType` function.
+
+To add or update template URLs, modify the `defaultOVAURLs` map in `ova_manage.go`:
+
+```go
+var defaultOVAURLs = map[string]string{
+    "Ubuntu_64":    "https://example.com/path/to/ubuntu_64.ova",
+    "Ubuntu_ARM64": "https://example.com/path/to/ubuntu_arm64.ova",
+    // Add more templates here
+}
+```
+
+### Creating Your Own Templates
+
+To create your own template OVA:
+
+1. Use the `createTemplateVM` API to create a base VM:
+
+   ```go
+   req := vbtypes.VMCreateRequest{
+       Name:       "template-base",
+       OSType:     "Ubuntu_64",
+       CPUCores:   2,
+       MemoryMB:   2048,
+       DiskSizeGB: 20,
+       Username:   "admin",
+       Password:   "template-password",
+   }
+
+   vm, err := service.CreateVM(ctx, req)
+   ```
+
+2. Start the VM and install any necessary software and configurations
+
+   ```go
+   vm, err = service.StartVM(ctx, vm.ID)
+   ```
+
+3. Connect to the VM via SSH (using the assigned SSH port)
+
+   ```
+   ssh admin@localhost -p <vm.SSHPort>
+   ```
+
+4. Clean the cloud-init data to ensure the template is pristine:
+
+   ```
+   sudo cloud-init clean
+   sudo rm -rf /var/lib/cloud/*
+   ```
+
+5. Shut down the VM:
+
+   ```go
+   vm, err = service.StopVM(ctx, vm.ID)
+   ```
+
+6. Export the VM as an OVA file:
+
+   ```
+   VBoxManage export <vm-name> -o template_sample_<OSType>.ova
+   ```
+
+7. Place the OVA in `~/VirtualBox VMs/Templates/`
+
+8. Update the `defaultOVAURLs` map in `ova_manage.go` if you want to distribute it
+
+This process ensures that when new VMs are created from your template, they will get fresh cloud-init initialization without any remnants from the template creation process.
+
 ## VM Creation Strategy
 
 The service follows a streamlined approach to VM creation:
