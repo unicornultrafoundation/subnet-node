@@ -330,15 +330,15 @@ func (is *inventoryService) handleRequest(req inventoryRequest, state *inventory
 			req.ch <- inventoryResponse{err: errNoLeasedIPsAvailable}
 			return
 		}
-		numIPUnused := state.ipAddrUsage.Available - state.ipAddrUsage.InUse
-		pending := countPendingIPs(state)
-		if reservation.endpointQuantity > (numIPUnused - pending) {
-			is.log.Info("insufficient number of IP addresses available", "order", req.order)
-			req.ch <- inventoryResponse{err: fmt.Errorf("%w: unable to reserve %d", errInsufficientIPs, reservation.endpointQuantity)}
-			return
-		}
+		// numIPUnused := state.ipAddrUsage.Available - state.ipAddrUsage.InUse
+		// pending := countPendingIPs(state)
+		// if reservation.endpointQuantity > (numIPUnused - pending) {
+		// 	is.log.Info("insufficient number of IP addresses available", "order", req.order)
+		// 	req.ch <- inventoryResponse{err: fmt.Errorf("%w: unable to reserve %d", errInsufficientIPs, reservation.endpointQuantity)}
+		// 	return
+		// }
 
-		is.log.Info("reservation used leased IPs", "used", reservation.endpointQuantity, "available", state.ipAddrUsage.Available, "in-use", state.ipAddrUsage.InUse, "pending", pending)
+		// is.log.Info("reservation used leased IPs", "used", reservation.endpointQuantity, "available", state.ipAddrUsage.Available, "in-use", state.ipAddrUsage.InUse, "pending", pending)
 	} else {
 		reservation.ipsConfirmed = true // No IPs, just mark it as confirmed implicitly
 	}

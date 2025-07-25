@@ -96,6 +96,8 @@ type Client interface {
 	DeclareIP(ctx context.Context, lID mtypes.LeaseID, serviceName string, port uint32, externalPort uint32, proto mani.ServiceProtocol, sharingKey string, overwrite bool) error
 	PurgeDeclaredIP(ctx context.Context, lID mtypes.LeaseID, serviceName string, externalPort uint32, proto mani.ServiceProtocol) error
 	PurgeDeclaredIPs(ctx context.Context, lID mtypes.LeaseID) error
+
+	ForwardedPortStatus(ctx context.Context, leaseID mtypes.LeaseID) (map[string][]apclient.ForwardedPortStatus, error)
 }
 
 func ErrorIsOkToSendToClient(err error) bool {
@@ -325,5 +327,9 @@ func (c *nullClient) PurgeDeclaredIP(_ context.Context, _ mtypes.LeaseID, _ stri
 }
 
 func (c *nullClient) GetDeclaredIPs(_ context.Context, _ mtypes.LeaseID) ([]crd.ProviderLeasedIPSpec, error) {
+	return nil, errNotImplemented
+}
+
+func (c *nullClient) ForwardedPortStatus(_ context.Context, _ mtypes.LeaseID) (map[string][]apclient.ForwardedPortStatus, error) {
 	return nil, errNotImplemented
 }

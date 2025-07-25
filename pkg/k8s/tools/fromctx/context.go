@@ -51,7 +51,7 @@ func CmdSetContextValue(cmd *cobra.Command, key, val interface{}) {
 // WithLogc add logger object to the context
 // key defaults to the "log"
 // use WithLogName("<custom name>") to set custom key
-func WithLogc(ctx context.Context, lg logrus.Logger, opts ...LogcOption) context.Context {
+func WithLogc(ctx context.Context, lg *logrus.Logger, opts ...LogcOption) context.Context {
 	opt, _ := applyOptions(opts...)
 
 	ctx = context.WithValue(ctx, opt.logName, lg)
@@ -59,11 +59,11 @@ func WithLogc(ctx context.Context, lg logrus.Logger, opts ...LogcOption) context
 	return ctx
 }
 
-func LogcFromCtx(ctx context.Context, opts ...LogcOption) logrus.Logger {
+func LogcFromCtx(ctx context.Context, opts ...LogcOption) *logrus.Logger {
 	opt, _ := applyOptions(opts...)
 
-	var logger logrus.Logger
-	if lg, valid := ctx.Value(opt.logName).(logrus.Logger); valid {
+	var logger *logrus.Logger
+	if lg, valid := ctx.Value(opt.logName).(*logrus.Logger); valid {
 		logger = lg
 	}
 

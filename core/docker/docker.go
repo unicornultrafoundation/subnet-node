@@ -22,7 +22,7 @@ type DockerClient interface {
 	ContainerRemove(ctx context.Context, containerID string, options ctypes.RemoveOptions) error
 	ContainerList(ctx context.Context, options ctypes.ListOptions) ([]dtypes.Container, error)
 	ImagePull(ctx context.Context, ref string, options itypes.PullOptions) (io.ReadCloser, error)
-	ContainerStats(ctx context.Context, containerID string, stream bool) (dtypes.ContainerStats, error)
+	ContainerStats(ctx context.Context, containerID string, stream bool) (ctypes.StatsResponseReader, error)
 	VolumeCreate(ctx context.Context, options vtypes.CreateOptions) (vtypes.Volume, error)
 	VolumeRemove(ctx context.Context, volumeID string, force bool) error
 	DiskUsage(ctx context.Context, options dtypes.DiskUsageOptions) (dtypes.DiskUsage, error)
@@ -76,7 +76,7 @@ func (r *RealDockerClient) ImagePull(ctx context.Context, ref string, options it
 	return r.client.ImagePull(ctx, ref, options)
 }
 
-func (r *RealDockerClient) ContainerStats(ctx context.Context, containerID string, stream bool) (dtypes.ContainerStats, error) {
+func (r *RealDockerClient) ContainerStats(ctx context.Context, containerID string, stream bool) (ctypes.StatsResponseReader, error) {
 	return r.client.ContainerStats(ctx, containerID, stream)
 }
 
@@ -109,7 +109,7 @@ type MockDockerClient struct {
 	ListError         error
 	PullResponse      io.ReadCloser
 	PullError         error
-	StatsResponse     dtypes.ContainerStats
+	StatsResponse     ctypes.StatsResponseReader
 	VolumeResponse    vtypes.Volume
 	VolumeError       error
 	StatsError        error
@@ -154,7 +154,7 @@ func (m *MockDockerClient) ImagePull(ctx context.Context, ref string, options it
 }
 
 // ContainerStats mocks getting container stats.
-func (m *MockDockerClient) ContainerStats(ctx context.Context, containerID string, stream bool) (dtypes.ContainerStats, error) {
+func (m *MockDockerClient) ContainerStats(ctx context.Context, containerID string, stream bool) (ctypes.StatsResponseReader, error) {
 	return m.StatsResponse, m.StatsError
 }
 

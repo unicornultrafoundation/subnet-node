@@ -111,6 +111,8 @@ func (c *client) DeclareIP(ctx context.Context, lID mtypes.LeaseID, serviceName 
 	if exists {
 		obj.ObjectMeta.ResourceVersion = foundEntry.ResourceVersion
 		_, err = c.ac.SubnetV1().ProviderLeasedIPs(c.ns).Update(ctx, &obj, metav1.UpdateOptions{})
+	} else {
+		_, err = c.ac.SubnetV1().ProviderLeasedIPs(c.ns).Create(ctx, &obj, metav1.CreateOptions{})
 	}
 
 	return err

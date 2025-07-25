@@ -12,24 +12,21 @@ type Session interface {
 	Client() aclient.Client
 	Provider() *ptypes.Provider
 	ForModule(string) Session
-	CreatedAtBlockHeight() int64
 }
 
 // New returns new session instance with provided details
 func New(log *logrus.Logger, client aclient.Client, provider *ptypes.Provider, createdAtBlockHeight int64) Session {
 	return session{
-		client:               client,
-		provider:             provider,
-		log:                  log,
-		createdAtBlockHeight: createdAtBlockHeight,
+		client:   client,
+		provider: provider,
+		log:      log,
 	}
 }
 
 type session struct {
-	client               aclient.Client
-	provider             *ptypes.Provider
-	log                  *logrus.Logger
-	createdAtBlockHeight int64
+	client   aclient.Client
+	provider *ptypes.Provider
+	log      *logrus.Logger
 }
 
 func (s session) Log() *logrus.Logger {
@@ -47,8 +44,4 @@ func (s session) Provider() *ptypes.Provider {
 func (s session) ForModule(name string) Session {
 	s.log = s.log.WithField("module", name).Logger
 	return s
-}
-
-func (s session) CreatedAtBlockHeight() int64 {
-	return s.createdAtBlockHeight
 }

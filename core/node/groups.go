@@ -243,6 +243,7 @@ func Core(cfg *config.C) fx.Option {
 		fx.Provide(DockerService),
 		fx.Provide(account.EthereumService),
 		fx.Provide(DeployerService),
+		fx.Provide(K8sService),
 	)
 }
 

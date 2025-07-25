@@ -15,8 +15,11 @@ import (
 	mtypes "github.com/unicornultrafoundation/subnet-node/proto/subnet/k8s/market/v1"
 	provider "github.com/unicornultrafoundation/subnet-node/proto/subnet/k8s/provider/v1"
 
+	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/apitypes"
 	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/pubsub"
+	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/sdl"
 
+	"github.com/unicornultrafoundation/subnet-node/core/k8s/manifest"
 	ctypes "github.com/unicornultrafoundation/subnet-node/core/k8s/types/v1"
 	crd "github.com/unicornultrafoundation/subnet-node/pkg/k8s/apis/subnet.node/v1"
 	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/event"
@@ -55,6 +58,8 @@ type service struct {
 	waiter waiter.OperatorWaiter
 
 	config Config
+
+	manifestService *manifest.Service
 }
 
 type checkDeploymentExistsRequest struct {
@@ -91,6 +96,18 @@ type Service interface {
 	Done() <-chan struct{}
 	HostnameService() ctypes.HostnameServiceClient
 	TransferHostname(ctx context.Context, leaseID mtypes.LeaseID, hostname string, serviceName string, externalPort uint32) error
+
+	// RequestDeployment requests a deployment to be created
+	RequestDeployment(ctx context.Context, deploymentID dtypes.DeploymentID, sdlManifest sdl.SDL) error
+
+	// GetAllLeaseStatus returns the status of all leases
+	GetAllLeaseStatus(ctx context.Context) ([]apitypes.DeploymentStatus, error)
+
+	// DeleteDeployment deletes a deployment
+	DeleteDeployment(lid mtypes.LeaseID) error
+
+	// GetLeaseStatus returns the status of a lease
+	GetLeaseStatus(ctx context.Context, leaseID mtypes.LeaseID) (apclient.LeaseStatus, error)
 }
 
 // NewService returns new Service instance
@@ -141,6 +158,8 @@ func NewService(
 		return nil, err
 	}
 
+	manifestService := manifest.NewService(bus, log, session.Provider().Address())
+
 	s := &service{
 		session:                        session,
 		client:                         client,
@@ -157,6 +176,7 @@ func NewService(
 		lc:                             lc,
 		config:                         cfg,
 		waiter:                         waiter,
+		manifestService:                manifestService,
 	}
 
 	go s.lc.WatchContext(ctx)
@@ -341,7 +361,13 @@ loop:
 					break
 				}
 
-				reservation, err := s.inventory.lookup(ev.LeaseID.OrderID(), mgroup)
+				reservation, err := s.Reserve(ev.LeaseID.OrderID(), mgroup)
+				if err != nil {
+					s.log.Error("error reserving inventory", "err", err, "lease", ev.LeaseID, "group-name", mgroup.Name)
+					break
+				}
+
+				reservation, err = s.inventory.lookup(ev.LeaseID.OrderID(), mgroup)
 				if err != nil {
 					s.log.Error("error looking up manifest", "err", err, "lease", ev.LeaseID, "group-name", mgroup.Name)
 					break

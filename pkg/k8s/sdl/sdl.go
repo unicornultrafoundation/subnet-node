@@ -7,6 +7,7 @@ import (
 
 	"github.com/blang/semver/v4"
 	"gopkg.in/yaml.v3"
+	syaml "sigs.k8s.io/yaml"
 
 	dtypes "github.com/unicornultrafoundation/subnet-node/proto/subnet/k8s/deployment/v1"
 	manifest "github.com/unicornultrafoundation/subnet-node/proto/subnet/k8s/manifest/v1"
@@ -123,6 +124,15 @@ func Read(buf []byte) (SDL, error) {
 	}
 
 	return obj, nil
+}
+
+func ReadJSON(buf []byte) (SDL, error) {
+	yamlBuf, err := syaml.JSONToYAML(buf)
+	if err != nil {
+		return nil, fmt.Errorf("the manifest is not a valid JSON: %w", err)
+	}
+
+	return Read(yamlBuf)
 }
 
 // Version creates the deterministic Deployment Version hash from the SDL.

@@ -366,6 +366,7 @@ func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, []string, 
 	// clear this out so it gets repopulated
 	dm.currentHostnames = make(map[string]struct{})
 	// Iterate over each entry, extracting the ingress services & leased IPs
+	// TODO: Update the hostnames to use the virtual IPs of the provider
 	for _, service := range dm.deployment.ManifestGroup().Services {
 		for _, expose := range service.Expose {
 			if expose.IsIngress() {
@@ -522,27 +523,32 @@ func (dm *deploymentManager) doTeardown(ctx context.Context) error {
 }
 
 func (dm *deploymentManager) checkLeaseActive(ctx context.Context) error {
-	var lease *mtypes.QueryLeaseResponse
-
-	err := retry.Do(func() error {
-		var err error
-		// lease, err = dm.session.Client().Query().Lease(ctx, &mtypes.QueryLeaseRequest{
-		// 	ID: dm.deployment.LeaseID(),
-		// })
-		if err != nil {
-			dm.log.Error("lease query failed", "err")
-		}
-		return err
-	},
-		retry.Attempts(50),
-		retry.Delay(100*time.Millisecond),
-		retry.MaxDelay(3000*time.Millisecond),
-		retry.DelayType(retry.BackOffDelay),
-		retry.LastErrorOnly(true))
-
-	if err != nil {
-		return err
+	// TODO - remove this once we have a way to check if the lease is active
+	lease := mtypes.QueryLeaseResponse{
+		Lease: mtypes.Lease{
+			State: mtypes.LeaseActive,
+		},
 	}
+
+	// err := retry.Do(func() error {
+	// 	var err error
+	// 	lease, err = dm.session.Client().Query().Lease(ctx, &mtypes.QueryLeaseRequest{
+	// 		ID: dm.deployment.LeaseID(),
+	// 	})
+	// 	if err != nil {
+	// 		dm.log.Error("lease query failed", "err")
+	// 	}
+	// 	return err
+	// },
+	// 	retry.Attempts(50),
+	// 	retry.Delay(100*time.Millisecond),
+	// 	retry.MaxDelay(3000*time.Millisecond),
+	// 	retry.DelayType(retry.BackOffDelay),
+	// 	retry.LastErrorOnly(true))
+
+	// if err != nil {
+	// 	return err
+	// }
 
 	if lease.GetLease().State != mtypes.LeaseActive {
 		dm.log.Error("lease not active, not deploying")
