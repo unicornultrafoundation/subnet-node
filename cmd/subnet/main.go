@@ -8,6 +8,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	ninit "github.com/unicornultrafoundation/subnet-node/cmd/init"
+	accountcmd "github.com/unicornultrafoundation/subnet-node/cmd/subnet/account"
 	"github.com/unicornultrafoundation/subnet-node/cmd/subnet/config"
 	"github.com/unicornultrafoundation/subnet-node/subnet"
 )
@@ -79,6 +80,7 @@ func main() {
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(initCmd)
 	rootCmd.AddCommand(editConfigCmd)
+	rootCmd.AddCommand(accountcmd.AccountCmd())
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
