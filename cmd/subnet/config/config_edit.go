@@ -2,17 +2,18 @@ package config
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/spf13/cobra"
 	"github.com/unicornultrafoundation/subnet-node/common/fsutil"
 	"github.com/unicornultrafoundation/subnet-node/internal/api"
 	"github.com/unicornultrafoundation/subnet-node/repo/snrepo"
-	"gopkg.in/yaml.v2"
 )
+
+var dataPath string
 
 type configValue struct {
 	key   string
@@ -51,18 +52,7 @@ func backupConfig(expPath string) error {
 	return nil
 }
 
-func EditConfig(dataPath string, args []string) error {
-	// Create a new flagset for edit-config subcommand
-	editFlags := flag.NewFlagSet("edit-config", flag.ExitOnError)
-
-	var setFlags configSetFlag
-	showFlag := editFlags.Bool("show", false, "Show current configuration")
-	editFlags.Var(&setFlags, "set", "Set configuration value (format: key=value, can be used multiple times)")
-
-	if err := editFlags.Parse(args); err != nil {
-		return err
-	}
-
+func EditConfig(dataPath string, setFlags configSetFlag) error {
 	// Check if repo is initialized
 	if !snrepo.IsInitialized(dataPath) {
 		return fmt.Errorf("subnet node is not initialized. Please run 'subnet --datadir %s init' first", dataPath)
@@ -84,58 +74,27 @@ func EditConfig(dataPath string, args []string) error {
 	// Create config API instance
 	configAPI := api.NewConfigAPI(r)
 
-	// Handle show configuration
-	if *showFlag {
-		yamlBytes, err := yaml.Marshal(r.Config().Settings)
-		if err != nil {
-			return fmt.Errorf("failed to marshal config: %v", err)
-		}
-
-		fmt.Println("Current configuration:")
-		fmt.Println(string(yamlBytes))
-		return nil
+	// Only handle set configuration values
+	if len(setFlags) == 0 {
+		return fmt.Errorf("no configuration values provided to set")
 	}
 
-	// Handle set configuration values
-	if len(setFlags) > 0 {
-		// Create backup before modification
-		if err := backupConfig(expPath); err != nil {
-			return err
-		}
-
-		updates := make(map[string]interface{})
-		for _, setValue := range setFlags {
-			updates[setValue.key] = parseValue(setValue.value)
-		}
-
-		if err := configAPI.Update(context.Background(), updates); err != nil {
-			return fmt.Errorf("failed to update config: %v", err)
-		}
-
-		fmt.Println("Configuration updated successfully")
-		fmt.Printf("Previous configuration backed up to: %s\n", filepath.Join(expPath, "config_backup.yaml"))
-
-		// Show the updated configuration
-		yamlBytes, err := yaml.Marshal(r.Config().Settings)
-		if err != nil {
-			return fmt.Errorf("failed to marshal config: %v", err)
-		}
-
-		fmt.Println("\nUpdated configuration:")
-		fmt.Println(string(yamlBytes))
+	// Create backup before modification
+	if err := backupConfig(expPath); err != nil {
+		return err
 	}
 
-	// If no flags specified, print usage
-	if !*showFlag && len(setFlags) == 0 {
-		fmt.Println("Usage of edit-config:")
-		fmt.Println("  Show current configuration:")
-		fmt.Println("    subnet --datadir ./.data edit-config --show")
-		fmt.Println("\n  Update configuration values:")
-		fmt.Println("    subnet --datadir ./.data edit-config --set key=value [--set key2=value2 ...]")
-		fmt.Println("\n  Examples:")
-		fmt.Println("    subnet --datadir ./.data edit-config --set addresses.api=/ip4/0.0.0.0/tcp/8080")
-		fmt.Println("    subnet --datadir ./.data edit-config --set server.port=9090 --set debug=true")
+	updates := make(map[string]interface{})
+	for _, setValue := range setFlags {
+		updates[setValue.key] = parseValue(setValue.value)
 	}
+
+	if err := configAPI.Update(context.Background(), updates); err != nil {
+		return fmt.Errorf("failed to update config: %v", err)
+	}
+
+	fmt.Println("Configuration updated successfully")
+	fmt.Printf("Previous configuration backed up to: %s\n", filepath.Join(expPath, "config_backup.yaml"))
 
 	return nil
 }
@@ -151,4 +110,62 @@ func parseValue(value string) interface{} {
 
 	// Return as string
 	return value
+}
+
+var editConfigCmd = &cobra.Command{
+	Use:   "set",
+	Short: "Edit node configuration",
+	Long:  "Edit the node configuration by setting key-value pairs or showing the current configuration.",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		var setFlags configSetFlag
+		for _, arg := range args {
+			if err := setFlags.Set(arg); err != nil {
+				return err
+			}
+		}
+		return EditConfig(dataPath, setFlags)
+	},
+}
+
+var showConfigCmd = &cobra.Command{
+	Use:   "show",
+	Short: "Show current configuration",
+	Long:  "Display the current node configuration in YAML format.",
+	Args:  cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		expPath, err := fsutil.ExpandHome(filepath.Clean(dataPath))
+		if err != nil {
+			return fmt.Errorf("failed to expand data path: %v", err)
+		}
+
+		configFile := filepath.Join(expPath, "config.yaml")
+		if _, err := os.Stat(configFile); os.IsNotExist(err) {
+			return fmt.Errorf("configuration file does not exist at %s", configFile)
+		}
+
+		content, err := os.ReadFile(configFile)
+		if err != nil {
+			return fmt.Errorf("failed to read config file: %v", err)
+		}
+
+		fmt.Println("Current configuration:")
+		fmt.Println(string(content))
+		return nil
+	},
+}
+
+func ConfigCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "config",
+		Short: "Manage node configuration",
+		Long:  "Commands to manage and edit the node configuration.",
+	}
+
+	cmd.PersistentFlags().StringVar(&dataPath, "datadir", "~/.subnet-node", "Path to data directory")
+
+	cmd.AddCommand(editConfigCmd)
+	cmd.AddCommand(showConfigCmd)
+
+	cmd.Flags().StringVar(&dataPath, "datadir", "~/.subnet-node", "Path to data directory")
+	return cmd
 }

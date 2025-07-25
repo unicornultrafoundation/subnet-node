@@ -66,20 +66,9 @@ func main() {
 		},
 	}
 
-	editConfigCmd := &cobra.Command{
-		Use:   "edit-config",
-		Short: "Edit node configuration",
-		Run: func(cmd *cobra.Command, args []string) {
-			if err := config.EditConfig(dataPath, args); err != nil {
-				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-				os.Exit(1)
-			}
-		},
-	}
-
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(initCmd)
-	rootCmd.AddCommand(editConfigCmd)
+	rootCmd.AddCommand(config.ConfigCmd())
 	rootCmd.AddCommand(accountcmd.AccountCmd())
 
 	if err := rootCmd.Execute(); err != nil {
