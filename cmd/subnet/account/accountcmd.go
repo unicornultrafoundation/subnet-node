@@ -1,11 +1,14 @@
 package account
 
 import (
+	"crypto/ecdsa"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
 
 	"github.com/ethereum/go-ethereum/accounts/keystore"
+	ethcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/spf13/cobra"
 	"github.com/unicornultrafoundation/subnet-node/common/fsutil"
 )
@@ -113,6 +116,51 @@ var importCmd = &cobra.Command{
 	},
 }
 
+var importHexCmd = &cobra.Command{
+	Use:   "import-hex",
+	Short: "Import a private key in hex format",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		keystoreDir, err := getKeyStoreDir()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			return
+		}
+		hexkey := args[0]
+		fmt.Print("Password: ")
+		var password string
+		fmt.Scanln(&password)
+		privBytes, err := decodeHexKey(hexkey)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Invalid hex key: %v\n", err)
+			return
+		}
+		privKey, err := toECDSA(privBytes)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Invalid private key: %v\n", err)
+			return
+		}
+		ks := keystore.NewKeyStore(keystoreDir, keystore.StandardScryptN, keystore.StandardScryptP)
+		account, err := ks.ImportECDSA(privKey, password)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Import failed: %v\n", err)
+			return
+		}
+		fmt.Printf("Account imported: %s\n", account.Address.Hex())
+	},
+}
+
+func decodeHexKey(hexkey string) ([]byte, error) {
+	if len(hexkey) >= 2 && hexkey[:2] == "0x" {
+		hexkey = hexkey[2:]
+	}
+	return hex.DecodeString(hexkey)
+}
+
+func toECDSA(privBytes []byte) (*ecdsa.PrivateKey, error) {
+	return ethcrypto.ToECDSA(privBytes)
+}
+
 func AccountCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "account",
@@ -127,6 +175,7 @@ func AccountCmd() *cobra.Command {
 	cmd.AddCommand(listCmd)
 	cmd.AddCommand(updateCmd)
 	cmd.AddCommand(importCmd)
+	cmd.AddCommand(importHexCmd)
 
 	return cmd
 }
