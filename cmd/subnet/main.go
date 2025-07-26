@@ -21,13 +21,21 @@ import (
 var Build string
 
 func main() {
+	cmd := rootCmd()
+	if err := cmd.Execute(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func rootCmd() *cobra.Command {
 	var (
 		configPath string
 		dataPath   string
 		debug      bool
 	)
 
-	rootCmd := &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "subnet-node",
 		Short: "Subnet Node",
 		Long:  "Subnet Node - U2U Subnet Node Service",
@@ -42,25 +50,24 @@ func main() {
 		},
 	}
 
-	rootCmd.PersistentFlags().StringVarP(&configPath, "config", "c", "", "Path to config file or directory")
-	rootCmd.PersistentFlags().StringVarP(&dataPath, "datadir", "d", "~/.subnet-node", "Path to data directory")
-	rootCmd.PersistentFlags().BoolVarP(&debug, "debug", "", false, "Enable debug logging")
+	cmd.PersistentFlags().StringVarP(&configPath, "config", "c", "", "Path to config file or directory")
+	cmd.PersistentFlags().StringVarP(&dataPath, "datadir", "d", "~/.subnet-node", "Path to data directory")
+	cmd.PersistentFlags().BoolVarP(&debug, "debug", "", false, "Enable debug logging")
 
-	versionCmd := &cobra.Command{
+	cmd.AddCommand(versionCmd())
+	cmd.AddCommand(ninit.InitCmd())
+	cmd.AddCommand(config.ConfigCmd())
+	cmd.AddCommand(accountcmd.AccountCmd())
+
+	return cmd
+}
+
+func versionCmd() *cobra.Command {
+	return &cobra.Command{
 		Use:   "version",
-		Short: "Print version",
+		Short: "Print the version of the subnet node",
 		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Printf("Version: %s\n", Build)
+			fmt.Printf("Subnet Node Version: %s\n", Build)
 		},
-	}
-
-	rootCmd.AddCommand(versionCmd)
-	rootCmd.AddCommand(ninit.InitCmd())
-	rootCmd.AddCommand(config.ConfigCmd())
-	rootCmd.AddCommand(accountcmd.AccountCmd())
-
-	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
 	}
 }
