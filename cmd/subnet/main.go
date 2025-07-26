@@ -54,20 +54,8 @@ func main() {
 		},
 	}
 
-	initCmd := &cobra.Command{
-		Use:   "init",
-		Short: "Initialize node data directory",
-		Run: func(cmd *cobra.Command, args []string) {
-			_, err := ninit.Init(dataPath, os.Stdout)
-			if err != nil {
-				fmt.Printf("init err :%v\n", err)
-				os.Exit(1)
-			}
-		},
-	}
-
 	rootCmd.AddCommand(versionCmd)
-	rootCmd.AddCommand(initCmd)
+	rootCmd.AddCommand(ninit.InitCmd())
 	rootCmd.AddCommand(config.ConfigCmd())
 	rootCmd.AddCommand(accountcmd.AccountCmd())
 

@@ -10,6 +10,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
+	"github.com/spf13/cobra"
 	"github.com/unicornultrafoundation/subnet-node/common/fsutil"
 	"gopkg.in/yaml.v2"
 )
@@ -126,4 +127,22 @@ func CreateKeystoreAccount(ks *keystore.KeyStore, password string, promptMsg str
 		return accounts.Account{}, "", fmt.Errorf("failed to create new keystore account: %w", err)
 	}
 	return acc, password, nil
+}
+
+func InitCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "init",
+		Short: "Initialize the subnet node data directory",
+		Run: func(cmd *cobra.Command, args []string) {
+			dataPath, _ := cmd.Flags().GetString("datadir")
+			out := cmd.OutOrStdout()
+			if _, err := Init(dataPath, out); err != nil {
+				fmt.Fprintf(out, "Error initializing: %v\n", err)
+				os.Exit(1)
+			}
+		},
+	}
+
+	cmd.Flags().StringP("datadir", "d", "~/.subnet-node", "Path to data directory")
+	return cmd
 }
