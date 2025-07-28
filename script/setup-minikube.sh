@@ -98,7 +98,7 @@ check_requirements() {
 install_kubectl() {
     if command_exists kubectl; then
         print_status "kubectl is already installed"
-        kubectl version --client --short
+        kubectl version --client
         return 0
     fi
     
@@ -213,9 +213,6 @@ start_minikube() {
     # Start minikube with recommended settings
     minikube start \
         --driver=docker \
-        --cpus=2 \
-        --memory=4096 \
-        --disk-size=20g \
         --addons=ingress \
         --addons=metrics-server \
         --addons=dashboard
@@ -259,27 +256,6 @@ install_additional_tools() {
     else
         print_status "Helm is already installed"
     fi
-    
-    # Install kubectx and kubens if not present
-    if ! command_exists kubectx; then
-        print_status "Installing kubectx and kubens..."
-        if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-            sudo git clone https://github.com/ahmetb/kubectx /opt/kubectx
-            sudo ln -s /opt/kubectx/kubectx /usr/local/bin/kubectx
-            sudo ln -s /opt/kubectx/kubens /usr/local/bin/kubens
-        elif [[ "$OSTYPE" == "darwin"* ]]; then
-            if command_exists brew; then
-                brew install kubectx
-            else
-                sudo git clone https://github.com/ahmetb/kubectx /opt/kubectx
-                sudo ln -s /opt/kubectx/kubectx /usr/local/bin/kubectx
-                sudo ln -s /opt/kubectx/kubens /usr/local/bin/kubens
-            fi
-        fi
-        print_success "kubectx and kubens installed successfully"
-    else
-        print_status "kubectx and kubens are already installed"
-    fi
 }
 
 # Function to verify installation
@@ -292,7 +268,7 @@ verify_installation() {
     # Check kubectl
     if command_exists kubectl; then
         print_success "✓ kubectl is installed"
-        kubectl version --client --short
+        kubectl version --client
     else
         print_error "✗ kubectl is not installed"
     fi
@@ -324,7 +300,7 @@ verify_installation() {
     # Check helm
     if command_exists helm; then
         print_success "✓ helm is installed"
-        helm version --short
+        helm version
     else
         print_warning "⚠ helm is not installed"
     fi
