@@ -15,6 +15,28 @@ import (
 
 var dataPath string
 
+var createCmd = &cobra.Command{
+	Use:   "create",
+	Short: "Create a new account",
+	Run: func(cmd *cobra.Command, args []string) {
+		keystoreDir, err := getKeyStoreDir()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			return
+		}
+		fmt.Print("Password: ")
+		var password string
+		fmt.Scanln(&password)
+		ks := keystore.NewKeyStore(keystoreDir, keystore.StandardScryptN, keystore.StandardScryptP)
+		account, err := ks.NewAccount(password)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to create account: %v\n", err)
+			return
+		}
+		fmt.Printf("New account created: %s\n", account.Address.Hex())
+	},
+}
+
 func getKeyStoreDir() (string, error) {
 	expPath, err := fsutil.ExpandHome(filepath.Clean(dataPath))
 	if err != nil {
@@ -172,10 +194,12 @@ func AccountCmd() *cobra.Command {
 	}
 
 	cmd.PersistentFlags().StringVarP(&dataPath, "datadir", "d", "~/.subnet-node", "Path to data directory")
+
 	cmd.AddCommand(listCmd)
 	cmd.AddCommand(updateCmd)
 	cmd.AddCommand(importCmd)
 	cmd.AddCommand(importHexCmd)
+	cmd.AddCommand(createCmd)
 
 	return cmd
 }
