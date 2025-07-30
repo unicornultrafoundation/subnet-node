@@ -22,8 +22,6 @@ import (
 	mtypes "github.com/unicornultrafoundation/subnet-node/proto/subnet/k8s/market/v1"
 
 	ctypes "github.com/unicornultrafoundation/subnet-node/core/k8s/types/v1"
-	chostname "github.com/unicornultrafoundation/subnet-node/core/k8s/types/v1/clients/hostname"
-	cip "github.com/unicornultrafoundation/subnet-node/core/k8s/types/v1/clients/ip"
 	crd "github.com/unicornultrafoundation/subnet-node/pkg/k8s/apis/subnet.node/v1"
 )
 
@@ -49,14 +47,7 @@ type ReadClient interface {
 	LeaseLogs(context.Context, mtypes.LeaseID, string, bool, *int64) ([]*ctypes.ServiceLog, error)
 	ServiceStatus(context.Context, mtypes.LeaseID, string) (*apclient.ServiceStatus, error)
 
-	AllHostnames(context.Context) ([]chostname.ActiveHostname, error)
 	GetManifestGroup(context.Context, mtypes.LeaseID) (bool, crd.ManifestGroup, error)
-
-	ObserveHostnameState(ctx context.Context) (<-chan chostname.ResourceEvent, error)
-	GetHostnameDeploymentConnections(ctx context.Context) ([]chostname.LeaseIDConnection, error)
-
-	ObserveIPState(ctx context.Context) (<-chan cip.ResourceEvent, error)
-	GetDeclaredIPs(ctx context.Context, leaseID mtypes.LeaseID) ([]crd.ProviderLeasedIPSpec, error)
 }
 
 // Client interface lease and deployment methods
@@ -78,24 +69,8 @@ type Client interface {
 		tty bool,
 		tsq remotecommand.TerminalSizeQueue) (ctypes.ExecResult, error)
 
-	// ConnectHostnameToDeployment Connect a given hostname to a deployment
-	ConnectHostnameToDeployment(ctx context.Context, directive chostname.ConnectToDeploymentDirective) error
-	// RemoveHostnameFromDeployment Remove a given hostname from a deployment
-	RemoveHostnameFromDeployment(ctx context.Context, hostname string, leaseID mtypes.LeaseID, allowMissing bool) error
-
-	// DeclareHostname Declare that a given deployment should be connected to a given hostname
-	DeclareHostname(ctx context.Context, lID mtypes.LeaseID, host string, serviceName string, externalPort uint32) error
-	// PurgeDeclaredHostnames Purge any hostnames associated with a given deployment
-	PurgeDeclaredHostnames(ctx context.Context, lID mtypes.LeaseID) error
-
-	PurgeDeclaredHostname(ctx context.Context, lID mtypes.LeaseID, hostname string) error
-
 	// KubeVersion returns the version information of kubernetes running in the cluster
 	KubeVersion() (*version.Info, error)
-
-	DeclareIP(ctx context.Context, lID mtypes.LeaseID, serviceName string, port uint32, externalPort uint32, proto mani.ServiceProtocol, sharingKey string, overwrite bool) error
-	PurgeDeclaredIP(ctx context.Context, lID mtypes.LeaseID, serviceName string, externalPort uint32, proto mani.ServiceProtocol) error
-	PurgeDeclaredIPs(ctx context.Context, lID mtypes.LeaseID) error
 
 	ForwardedPortStatus(ctx context.Context, leaseID mtypes.LeaseID) (map[string][]apclient.ForwardedPortStatus, error)
 }
@@ -132,35 +107,8 @@ func NullClient() Client {
 	}
 }
 
-func (c *nullClient) RemoveHostnameFromDeployment(_ context.Context, _ string, _ mtypes.LeaseID, _ bool) error {
-	return errNotImplemented
-}
-
-func (c *nullClient) ObserveHostnameState(_ context.Context) (<-chan chostname.ResourceEvent, error) {
-	return nil, errNotImplemented
-}
 func (c *nullClient) GetDeployments(_ context.Context, _ dtypes.DeploymentID) ([]ctypes.IDeployment, error) {
 	return nil, errNotImplemented
-}
-
-func (c *nullClient) GetHostnameDeploymentConnections(_ context.Context) ([]chostname.LeaseIDConnection, error) {
-	return nil, errNotImplemented
-}
-
-func (c *nullClient) ConnectHostnameToDeployment(_ context.Context, _ chostname.ConnectToDeploymentDirective) error {
-	return errNotImplemented
-}
-
-func (c *nullClient) DeclareHostname(_ context.Context, _ mtypes.LeaseID, _ string, _ string, _ uint32) error {
-	return errNotImplemented
-}
-
-func (c *nullClient) PurgeDeclaredHostnames(_ context.Context, _ mtypes.LeaseID) error {
-	return errNotImplemented
-}
-
-func (c *nullClient) PurgeDeclaredHostname(_ context.Context, _ mtypes.LeaseID, _ string) error {
-	return errNotImplemented
 }
 
 func (c *nullClient) Deploy(ctx context.Context, deployment ctypes.IDeployment) error {
@@ -294,40 +242,8 @@ func (c *nullClient) GetManifestGroup(context.Context, mtypes.LeaseID) (bool, cr
 	return false, crd.ManifestGroup{}, nil
 }
 
-func (c *nullClient) AllHostnames(context.Context) ([]chostname.ActiveHostname, error) {
-	return nil, nil
-}
-
 func (c *nullClient) KubeVersion() (*version.Info, error) {
 	return nil, nil
-}
-
-func (c *nullClient) DeclareIP(_ context.Context, _ mtypes.LeaseID, _ string, _ uint32, _ uint32, _ mani.ServiceProtocol, _ string, _ bool) error {
-	return errNotImplemented
-}
-
-func (c *nullClient) PurgeDeclaredIPs(_ context.Context, _ mtypes.LeaseID) error {
-	return errNotImplemented
-}
-
-func (c *nullClient) ObserveIPState(_ context.Context) (<-chan cip.ResourceEvent, error) {
-	return nil, errNotImplemented
-}
-
-func (c *nullClient) CreateIPPassthrough(_ context.Context, _ mtypes.LeaseID, _ cip.ClusterIPPassthroughDirective) error {
-	return errNotImplemented
-}
-
-func (c *nullClient) PurgeIPPassthrough(_ context.Context, _ mtypes.LeaseID, _ cip.ClusterIPPassthroughDirective) error {
-	return errNotImplemented
-}
-
-func (c *nullClient) PurgeDeclaredIP(_ context.Context, _ mtypes.LeaseID, _ string, _ uint32, _ mani.ServiceProtocol) error {
-	return errNotImplemented
-}
-
-func (c *nullClient) GetDeclaredIPs(_ context.Context, _ mtypes.LeaseID) ([]crd.ProviderLeasedIPSpec, error) {
-	return nil, errNotImplemented
 }
 
 func (c *nullClient) ForwardedPortStatus(_ context.Context, _ mtypes.LeaseID) (map[string][]apclient.ForwardedPortStatus, error) {

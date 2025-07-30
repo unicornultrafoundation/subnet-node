@@ -2,4 +2,7 @@ version: v1
 plugins:
   - name: gogo
     out: .
+    opt: paths=source_relative
+  - name: go-grpc
+    out: .
     opt: paths=source_relative 

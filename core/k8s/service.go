@@ -23,7 +23,6 @@ import (
 	ctypes "github.com/unicornultrafoundation/subnet-node/core/k8s/types/v1"
 	crd "github.com/unicornultrafoundation/subnet-node/pkg/k8s/apis/subnet.node/v1"
 	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/event"
-	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/operator/waiter"
 	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/session"
 	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/tools/fromctx"
 	ptypes "github.com/unicornultrafoundation/subnet-node/pkg/k8s/types"
@@ -43,7 +42,7 @@ type service struct {
 	sub     pubsub.Subscriber
 
 	inventory *inventoryService
-	hostnames *hostnameService
+	// hostnames *hostnameService
 
 	checkDeploymentExistsRequestCh chan checkDeploymentExistsRequest
 	statusch                       chan chan<- *apclient.ClusterStatus
@@ -54,8 +53,6 @@ type service struct {
 
 	log *logrus.Logger
 	lc  lifecycle.Lifecycle
-
-	waiter waiter.OperatorWaiter
 
 	config Config
 
@@ -94,8 +91,6 @@ type Service interface {
 	Close() error
 	Ready() <-chan struct{}
 	Done() <-chan struct{}
-	HostnameService() ctypes.HostnameServiceClient
-	TransferHostname(ctx context.Context, leaseID mtypes.LeaseID, hostname string, serviceName string, externalPort uint32) error
 
 	// RequestDeployment requests a deployment to be created
 	RequestDeployment(ctx context.Context, deploymentID dtypes.DeploymentID, sdlManifest sdl.SDL) error
@@ -116,7 +111,6 @@ func NewService(
 	session session.Session,
 	bus pubsub.Bus,
 	client Client,
-	waiter waiter.OperatorWaiter,
 	cfg Config,
 ) (Service, error) {
 	log := session.Log().WithField("module", "provider-cluster").WithField("cmp", "service").Logger
@@ -134,36 +128,18 @@ func NewService(
 		return nil, err
 	}
 
-	inventory, err := newInventoryService(ctx, cfg, log, sub, client, waiter, deployments)
+	inventory, err := newInventoryService(ctx, cfg, log, sub, client, deployments)
 	if err != nil {
 		sub.Close()
-		return nil, err
-	}
-
-	allHostnames, err := client.AllHostnames(ctx)
-	if err != nil {
-		sub.Close()
-		return nil, err
-	}
-
-	// Note: one side effect of this code is to add reservations for auto generated hostnames
-	// This is not normally done, but also doesn't cause any problems
-	activeHostnames := make(map[string]mtypes.LeaseID, len(allHostnames))
-	for _, v := range allHostnames {
-		activeHostnames[v.Hostname] = v.ID
-		log.Debug("found existing hostname", "hostname", v.Hostname, "id", v.ID)
-	}
-	hostnames, err := newHostnameService(ctx, cfg, activeHostnames)
-	if err != nil {
 		return nil, err
 	}
 
 	manifestService := manifest.NewService(bus, log, session.Provider().Address())
 
 	s := &service{
-		session:                        session,
-		client:                         client,
-		hostnames:                      hostnames,
+		session: session,
+		client:  client,
+		// hostnames:                      hostnames,
 		bus:                            bus,
 		sub:                            sub,
 		inventory:                      inventory,
@@ -172,10 +148,9 @@ func NewService(
 		managers:                       make(map[mtypes.LeaseIDKey]*deploymentManager),
 		managerch:                      make(chan *deploymentManager),
 		checkDeploymentExistsRequestCh: make(chan checkDeploymentExistsRequest),
-		log:                            log,
+		log:                            log.WithField("service", "k8s").Logger,
 		lc:                             lc,
 		config:                         cfg,
-		waiter:                         waiter,
 		manifestService:                manifestService,
 	}
 
@@ -244,14 +219,6 @@ func (s *service) Unreserve(order mtypes.OrderID) error {
 	return s.inventory.unreserve(order)
 }
 
-func (s *service) HostnameService() ctypes.HostnameServiceClient {
-	return s.hostnames
-}
-
-func (s *service) TransferHostname(ctx context.Context, leaseID mtypes.LeaseID, hostname string, serviceName string, externalPort uint32) error {
-	return s.client.DeclareHostname(ctx, leaseID, hostname, serviceName, externalPort)
-}
-
 func (s *service) Status(ctx context.Context) (*apclient.ClusterStatus, error) {
 	istatus, err := s.inventory.status(ctx)
 	if err != nil {
@@ -316,13 +283,6 @@ func (s *service) run(ctx context.Context, deployments []ctypes.IDeployment) {
 	defer s.lc.ShutdownCompleted()
 	defer s.sub.Close()
 
-	// wait for configured operators to be online & responsive before proceeding
-	err := s.waiter.WaitForAll(ctx)
-	if err != nil {
-		s.lc.ShutdownInitiated(err)
-		return
-	}
-
 	bus := fromctx.MustPubSubFromCtx(ctx)
 
 	inventorych := bus.Sub(ptypes.PubSubTopicInventoryStatus)
@@ -353,23 +313,23 @@ loop:
 		case ev := <-s.sub.Events():
 			switch ev := ev.(type) {
 			case event.ManifestReceived:
-				s.log.Info("manifest received", "lease", ev.LeaseID)
+				s.log.WithField("lease", ev.LeaseID).Info("Manifest received")
 
 				mgroup := ev.ManifestGroup()
 				if mgroup == nil {
-					s.log.Error("indeterminate manifest group", "lease", ev.LeaseID, "group-name", ev.Group.GroupSpec.Name)
+					s.log.WithField("lease", ev.LeaseID).WithField("group-name", ev.Group.GroupSpec.Name).Error("Indeterminate manifest group")
 					break
 				}
 
-				reservation, err := s.Reserve(ev.LeaseID.OrderID(), mgroup)
+				_, err := s.Reserve(ev.LeaseID.OrderID(), mgroup)
 				if err != nil {
-					s.log.Error("error reserving inventory", "err", err, "lease", ev.LeaseID, "group-name", mgroup.Name)
+					s.log.WithField("lease", ev.LeaseID).WithField("group-name", mgroup.Name).WithField("err", err).Error("Error reserving inventory")
 					break
 				}
 
-				reservation, err = s.inventory.lookup(ev.LeaseID.OrderID(), mgroup)
+				reservation, err := s.inventory.lookup(ev.LeaseID.OrderID(), mgroup)
 				if err != nil {
-					s.log.Error("error looking up manifest", "err", err, "lease", ev.LeaseID, "group-name", mgroup.Name)
+					s.log.WithField("lease", ev.LeaseID).WithField("group-name", mgroup.Name).WithField("err", err).Error("Error looking up manifest")
 					break
 				}
 
@@ -382,7 +342,7 @@ loop:
 				key := mtypes.LeaseIDToKey(ev.LeaseID)
 				if manager := s.managers[key]; manager != nil {
 					if err := manager.update(deployment); err != nil {
-						s.log.Error("updating deployment", "err", err, "lease", ev.LeaseID, "group-name", mgroup.Name)
+						s.log.WithField("lease", ev.LeaseID).WithField("group-name", mgroup.Name).WithField("err", err).Error("Error updating deployment")
 					}
 					break
 				}
@@ -428,9 +388,7 @@ loop:
 
 			// unreserve resources
 			if err := s.inventory.unreserve(dm.deployment.LeaseID().OrderID()); err != nil {
-				s.log.Error("unreserving inventory",
-					"err", err,
-					"lease", dm.deployment.LeaseID())
+				s.log.WithField("lease", dm.deployment.LeaseID()).WithField("err", err).Error("Error unreserving inventory")
 			}
 
 			delete(s.managers, mtypes.LeaseIDToKey(dm.deployment.LeaseID()))

@@ -17,14 +17,10 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/core/k8s/kube"
 	"github.com/unicornultrafoundation/subnet-node/core/k8s/kube/builder"
 
-	// kubeip "github.com/unicornultrafoundation/subnet-node/core/k8s/kube/operators/clients/ip"
 	kubeinventory "github.com/unicornultrafoundation/subnet-node/core/k8s/types/v1/clients/inventory"
-	kubeip "github.com/unicornultrafoundation/subnet-node/core/k8s/types/v1/clients/ip"
 	cfromctx "github.com/unicornultrafoundation/subnet-node/core/k8s/types/v1/fromctx"
 	subnetclientset "github.com/unicornultrafoundation/subnet-node/pkg/k8s/client/clientset/versioned"
 
-	// "github.com/unicornultrafoundation/subnet-node/pkg/k8s/operator/common"
-	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/operator/waiter"
 	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/pubsub"
 	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/session"
 	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/tools/fromctx"
@@ -64,17 +60,6 @@ func K8sService(lc fx.Lifecycle, cfg *config.C, account *account.AccountService)
 	inventory := kubeinventory.NewNull(ctx, "nodeA")
 	ctx = context.WithValue(ctx, cfromctx.CtxKeyClientInventory, inventory)
 
-	// metalLbEndpoint, err := common.GetServiceEndpointFlagValue(logger, "metal-lb")
-	// if err != nil {
-	// 	return nil, err
-	// }
-	// ip, err := kubeip.NewClient(ctx, logger, metalLbEndpoint)
-	// if err != nil {
-	// 	return nil, err
-	// }
-	ip := kubeip.NewNullClient()
-	ctx = context.WithValue(ctx, cfromctx.CtxKeyClientIP, ip)
-
 	group, ctx := errgroup.WithContext(ctx)
 
 	startupch := make(chan struct{}, 1)
@@ -108,8 +93,6 @@ func K8sService(lc fx.Lifecycle, cfg *config.C, account *account.AccountService)
 		Owner: strings.ToLower(providerID.Hex()),
 	}
 
-	waitClients := make([]waiter.Waitable, 0)
-	waiter := waiter.NewOperatorWaiter(ctx, logger, waitClients...)
 	session := session.New(logger, nil, provider, 0)
 	bus := pubsub.NewBus()
 	k8sCfg := k8s.NewDefaultConfig()
@@ -118,7 +101,7 @@ func K8sService(lc fx.Lifecycle, cfg *config.C, account *account.AccountService)
 		builder.SettingsKey: kubeSettings,
 	}
 
-	service, err := k8s.NewService(ctx, session, bus, client, waiter, k8sCfg)
+	service, err := k8s.NewService(ctx, session, bus, client, k8sCfg)
 	if err != nil {
 		return nil, err
 	}

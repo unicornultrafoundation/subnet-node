@@ -67,7 +67,7 @@ func (s *service) GetLeaseStatus(ctx context.Context, leaseID mtypes.LeaseID) (a
 portManifestGroupSearchLoop:
 	for _, service := range manifestGroup.Services {
 		for _, expose := range service.Expose {
-			if expose.Global && expose.ExternalPort != 80 {
+			if expose.Global {
 				hasForwardedPorts = true
 				break portManifestGroupSearchLoop
 			}
@@ -108,7 +108,7 @@ func (s *service) DeleteDeployment(lid mtypes.LeaseID) error {
 
 	// unreserve resources if no manager present yet.
 	if strings.EqualFold(lid.Provider, s.session.Provider().Address().Hex()) {
-		s.log.Info("unreserving unmanaged order", "lease", lid)
+		s.log.WithField("lease", lid).Info("Unreserving unmanaged order")
 		err := s.inventory.unreserve(lid.OrderID())
 		if err != nil && !errors.Is(errReservationNotFound, err) {
 			return fmt.Errorf("unreserve failed: %w", err)

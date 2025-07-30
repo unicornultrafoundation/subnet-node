@@ -633,14 +633,14 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 }
 
 func (c *client) TeardownLease(ctx context.Context, lid mtypes.LeaseID) error {
-	c.log.Info("tearing down lease", "lease", lid)
+	c.log.WithField("lease", lid).Info("Tearing down lease")
 
 	_, result := wrapKubeCall("namespaces-delete", func() (interface{}, error) {
 		return nil, c.kc.CoreV1().Namespaces().Delete(ctx, builder.LidNS(lid), metav1.DeleteOptions{})
 	})
 
 	if result != nil {
-		c.log.Error("teardown lease: unable to delete namespace", "ns", builder.LidNS(lid), "error", result)
+		c.log.WithField("lease", lid).WithError(result).Error("teardown lease: unable to delete namespace")
 		if kerrors.IsNotFound(result) {
 			result = nil
 		}
@@ -650,7 +650,7 @@ func (c *client) TeardownLease(ctx context.Context, lid mtypes.LeaseID) error {
 	})
 
 	if err != nil {
-		c.log.Error("teardown lease: unable to delete manifest", "ns", builder.LidNS(lid), "error", err)
+		c.log.WithField("lease", lid).WithError(err).Error("Teardown lease: unable to delete manifest")
 	}
 
 	return result

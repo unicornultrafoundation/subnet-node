@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	tpubsub "github.com/troian/pubsub"
 	"k8s.io/client-go/kubernetes"
@@ -23,15 +22,12 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/core/k8s/mocks"
 	ctypes "github.com/unicornultrafoundation/subnet-node/core/k8s/types/v1"
 	cinventory "github.com/unicornultrafoundation/subnet-node/core/k8s/types/v1/clients/inventory"
-	cip "github.com/unicornultrafoundation/subnet-node/core/k8s/types/v1/clients/ip"
-	cipmocks "github.com/unicornultrafoundation/subnet-node/core/k8s/types/v1/clients/ip/mocks"
 	cfromctx "github.com/unicornultrafoundation/subnet-node/core/k8s/types/v1/fromctx"
 	cmocks "github.com/unicornultrafoundation/subnet-node/core/k8s/types/v1/mocks"
 	crd "github.com/unicornultrafoundation/subnet-node/pkg/k8s/apis/subnet.node/v1"
 	aclient "github.com/unicornultrafoundation/subnet-node/pkg/k8s/client/clientset/versioned"
 	afake "github.com/unicornultrafoundation/subnet-node/pkg/k8s/client/clientset/versioned/fake"
 	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/event"
-	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/operator/waiter"
 	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/tools/fromctx"
 )
 
@@ -118,7 +114,6 @@ func TestInventory_ClusterDeploymentNotDeployed(t *testing.T) {
 		myLog,
 		subscriber,
 		clusterClient,
-		waiter.NewNullWaiter(), // Do not need to wait in test
 		deployments)
 	require.NoError(t, err)
 	require.NotNil(t, inv)
@@ -216,7 +211,6 @@ func TestInventory_ClusterDeploymentDeployed(t *testing.T) {
 		myLog,
 		subscriber,
 		clusterClient,
-		waiter.NewNullWaiter(), // Do not need to wait in test
 		deployments)
 	require.NoError(t, err)
 	require.NotNil(t, inv)
@@ -401,204 +395,6 @@ func makeGroupForInventoryTest(sharedHTTP, nodePort, leasedIP bool) manifest.Gro
 	return group
 }
 
-func TestInventory_ReserveIPNoIPOperator(t *testing.T) {
-	config := Config{
-		InventoryResourcePollPeriod:     5 * time.Second,
-		InventoryResourceDebugFrequency: 1,
-		InventoryExternalPortQuantity:   1000,
-	}
-	scaffold := makeInventoryScaffold(t, 10)
-	defer scaffold.bus.Close()
-
-	myLog := testutil.Logger(t)
-
-	subscriber, err := scaffold.bus.Subscribe()
-	require.NoError(t, err)
-
-	kc := kfake.NewSimpleClientset()
-	ac := afake.NewSimpleClientset()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	ctx = context.WithValue(ctx, fromctx.CtxKeyPubSub, tpubsub.New(ctx, 1000))
-	ctx = context.WithValue(ctx, fromctx.CtxKeyKubeClientSet, kubernetes.Interface(kc))
-	ctx = context.WithValue(ctx, fromctx.CtxKeySubnetClientSet, aclient.Interface(ac))
-	ctx = context.WithValue(ctx, cfromctx.CtxKeyClientInventory, cinventory.NewNull(ctx, "nodeA"))
-
-	inv, err := newInventoryService(
-		ctx,
-		config,
-		myLog,
-		subscriber,
-		scaffold.clusterClient,
-		waiter.NewNullWaiter(), // Do not need to wait in test
-		make([]ctypes.IDeployment, 0))
-	require.NoError(t, err)
-	require.NotNil(t, inv)
-
-	group := makeGroupForInventoryTest(false, false, true)
-	reservation, err := inv.reserve(scaffold.leaseIDs[0].OrderID(), group)
-	require.ErrorIs(t, err, errNoLeasedIPsAvailable)
-	require.Nil(t, reservation)
-
-	// Shut everything down
-	cancel()
-	close(scaffold.donech)
-	<-inv.lc.Done()
-}
-
-func TestInventory_ReserveIPUnavailableWithIPOperator(t *testing.T) {
-	config := Config{
-		InventoryResourcePollPeriod:     5 * time.Second,
-		InventoryResourceDebugFrequency: 1,
-		InventoryExternalPortQuantity:   1000,
-	}
-	scaffold := makeInventoryScaffold(t, 10)
-	defer scaffold.bus.Close()
-
-	myLog := testutil.Logger(t)
-
-	subscriber, err := scaffold.bus.Subscribe()
-	require.NoError(t, err)
-
-	mockIP := &cipmocks.Client{}
-
-	ipQty := testutil.RandRangeInt(1, 100)
-	mockIP.On("GetIPAddressUsage", mock.Anything).Return(cip.AddressUsage{
-		Available: uint(ipQty), // nolint: gosec
-		InUse:     uint(ipQty), // nolint: gosec
-	}, nil)
-	mockIP.On("Stop")
-
-	kc := kfake.NewSimpleClientset()
-	ac := afake.NewSimpleClientset()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	ctx = context.WithValue(ctx, fromctx.CtxKeyPubSub, tpubsub.New(ctx, 1000))
-	ctx = context.WithValue(ctx, fromctx.CtxKeyKubeClientSet, kubernetes.Interface(kc))
-	ctx = context.WithValue(ctx, fromctx.CtxKeySubnetClientSet, aclient.Interface(ac))
-	ctx = context.WithValue(ctx, cfromctx.CtxKeyClientInventory, cinventory.NewNull(ctx, "nodeA"))
-	ctx = context.WithValue(ctx, cfromctx.CtxKeyClientIP, cip.Client(mockIP))
-
-	inv, err := newInventoryService(
-		ctx,
-		config,
-		myLog,
-		subscriber,
-		scaffold.clusterClient,
-		waiter.NewNullWaiter(), // Do not need to wait in test
-		make([]ctypes.IDeployment, 0))
-	require.NoError(t, err)
-	require.NotNil(t, inv)
-
-	group := makeGroupForInventoryTest(false, false, true)
-	reservation, err := inv.reserve(scaffold.leaseIDs[0].OrderID(), group)
-	require.ErrorIs(t, err, errInsufficientIPs)
-	require.Nil(t, reservation)
-
-	// Shut everything down
-	cancel()
-	close(scaffold.donech)
-	<-inv.lc.Done()
-}
-
-func TestInventory_ReserveIPAvailableWithIPOperator(t *testing.T) {
-	config := Config{
-		InventoryResourcePollPeriod:     4 * time.Second,
-		InventoryResourceDebugFrequency: 1,
-		InventoryExternalPortQuantity:   1000,
-	}
-
-	scaffold := makeInventoryScaffold(t, 2)
-	defer scaffold.bus.Close()
-
-	myLog := testutil.Logger(t)
-
-	subscriber, err := scaffold.bus.Subscribe()
-	require.NoError(t, err)
-
-	mockIP := &cipmocks.Client{}
-
-	ipQty := testutil.RandRangeInt(5, 10)
-	mockIP.On("GetIPAddressUsage", mock.Anything).Return(cip.AddressUsage{
-		Available: uint(ipQty),     // nolint: gosec
-		InUse:     uint(ipQty - 1), // nolint: gosec
-	}, nil)
-
-	ipAddrStatusCalled := make(chan struct{}, 2)
-	// First call indicates no data
-	mockIP.On("GetIPAddressStatus", mock.Anything, scaffold.leaseIDs[0].OrderID()).Run(func(_ mock.Arguments) {
-		ipAddrStatusCalled <- struct{}{}
-	}).Return([]cip.LeaseIPStatus{}, nil).Once()
-	// Second call indicates the IP is there and can be confirmed
-	mockIP.On("GetIPAddressStatus", mock.Anything, scaffold.leaseIDs[0].OrderID()).Run(func(_ mock.Arguments) {
-		ipAddrStatusCalled <- struct{}{}
-	}).Return([]cip.LeaseIPStatus{
-		{
-			Port:         1234,
-			ExternalPort: 1234,
-			ServiceName:  "foobar",
-			IP:           "24.1.2.3",
-			Protocol:     "TCP",
-		},
-	}, nil).Once()
-
-	mockIP.On("Stop")
-
-	kc := kfake.NewSimpleClientset()
-	ac := afake.NewSimpleClientset()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	ctx = context.WithValue(ctx, fromctx.CtxKeyPubSub, tpubsub.New(ctx, 1000))
-	ctx = context.WithValue(ctx, fromctx.CtxKeyKubeClientSet, kubernetes.Interface(kc))
-	ctx = context.WithValue(ctx, fromctx.CtxKeySubnetClientSet, aclient.Interface(ac))
-	ctx = context.WithValue(ctx, cfromctx.CtxKeyClientInventory, cinventory.NewNull(ctx, "nodeA", "nodeB"))
-	ctx = context.WithValue(ctx, cfromctx.CtxKeyClientIP, cip.Client(mockIP))
-
-	inv, err := newInventoryService(
-		ctx,
-		config,
-		myLog,
-		subscriber,
-		scaffold.clusterClient,
-		waiter.NewNullWaiter(), // Do not need to wait in test
-		make([]ctypes.IDeployment, 0))
-	require.NoError(t, err)
-	require.NotNil(t, inv)
-
-	group := makeGroupForInventoryTest(false, false, true)
-	reservation, err := inv.reserve(scaffold.leaseIDs[0].OrderID(), group)
-	require.NoError(t, err)
-	require.NotNil(t, reservation)
-	require.False(t, reservation.Allocated())
-
-	// next reservation fails
-	reservation, err = inv.reserve(scaffold.leaseIDs[1].OrderID(), group)
-	require.ErrorIs(t, err, errInsufficientIPs)
-	require.Nil(t, reservation)
-
-	err = scaffold.bus.Publish(event.ClusterDeployment{
-		LeaseID: scaffold.leaseIDs[0],
-		Group:   &group,
-		Status:  event.ClusterDeploymentDeployed,
-	})
-	require.NoError(t, err)
-
-	testutil.ChannelWaitForValueUpTo(t, ipAddrStatusCalled, 30*time.Second)
-	testutil.ChannelWaitForValueUpTo(t, ipAddrStatusCalled, 30*time.Second)
-
-	// with the 1st reservation confirmed, this one passes now
-	reservation, err = inv.reserve(scaffold.leaseIDs[1].OrderID(), group)
-	require.NoError(t, err)
-	require.NotNil(t, reservation)
-
-	// Shut everything down
-	cancel()
-	close(scaffold.donech)
-	<-inv.lc.Done()
-
-	mockIP.AssertNumberOfCalls(t, "GetIPAddressStatus", 2)
-}
-
 // following test needs refactoring it reports incorrect inventory
 func TestInventory_OverReservations(t *testing.T) {
 	scaffold := makeInventoryScaffold(t, 10)
@@ -676,7 +472,6 @@ func TestInventory_OverReservations(t *testing.T) {
 		myLog,
 		subscriber,
 		scaffold.clusterClient,
-		waiter.NewNullWaiter(), // Do not need to wait in test
 		make([]ctypes.IDeployment, 0))
 	require.NoError(t, err)
 	require.NotNil(t, inv)

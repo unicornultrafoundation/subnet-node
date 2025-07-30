@@ -46,23 +46,17 @@ func (dch *deployCleanupHelper) addIP(serviceName string, port uint32, proto v2b
 }
 
 func (dch *deployCleanupHelper) purgeAll(ctx context.Context) {
-	for _, hostname := range dch.hostnamesToPurge {
-		err := dch.client.PurgeDeclaredHostname(ctx, dch.lease, hostname)
-		if err != nil {
-			dch.log.Error("could not purge hostname",
-				"lease", dch.lease, "hsotname", hostname, "error", err)
-		}
-	}
+	// for _, hostname := range dch.hostnamesToPurge {
+	// 	err := dch.client.PurgeDeclaredHostname(ctx, dch.lease, hostname)
+	// 	if err != nil {
+	// 		dch.log.WithField("lease", dch.lease).WithField("hostname", hostname).WithError(err).Error("could not purge hostname")
+	// 	}
+	// }
 
-	for _, ipEntry := range dch.ipsToPurge {
-		err := dch.client.PurgeDeclaredIP(ctx, dch.lease, ipEntry.serviceName, ipEntry.port, ipEntry.proto)
-		if err != nil {
-			dch.log.Error("could not purge IP",
-				"lease", dch.lease,
-				"serviceName", ipEntry.serviceName,
-				"port", ipEntry.port,
-				"proto", ipEntry.proto,
-				"error", err)
-		}
-	}
+	// for _, ipEntry := range dch.ipsToPurge {
+	// 	err := dch.client.PurgeDeclaredIP(ctx, dch.lease, ipEntry.serviceName, ipEntry.port, ipEntry.proto)
+	// 	if err != nil {
+	// 		dch.log.WithField("lease", dch.lease).WithField("serviceName", ipEntry.serviceName).WithField("port", ipEntry.port).WithField("proto", ipEntry.proto).WithError(err).Error("could not purge IP")
+	// 	}
+	// }
 }
