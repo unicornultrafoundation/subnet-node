@@ -1,0 +1,41 @@
+# Stage 1: Build the k8s-services binary
+FROM golang:1.24 AS builder
+
+# Set the working directory inside the container
+WORKDIR /app
+
+# Copy the Go modules manifests
+COPY go.mod go.sum ./
+
+# Download the dependencies
+RUN go mod download
+
+# Copy the source code
+COPY . .
+
+# Build the k8s-services binary
+RUN go build -o k8s-services -buildvcs=false ./pkg/k8s/cmd/k8s-services
+
+# Stage 2: Create a minimal runtime container
+FROM ubuntu:22.04
+
+# Set the working directory inside the container
+WORKDIR /app
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    ca-certificates hwdata && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy the binary from the builder stage
+COPY --from=builder /app/k8s-services ./k8s-services
+
+# Make the binary executable
+RUN chmod +x ./k8s-services
+
+
+
+# Set the default command to run k8s-services
+# You can override this with specific commands like:
+# docker run image-name tools psutil serve
+CMD ["./k8s-services"] 

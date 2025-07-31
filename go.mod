@@ -358,6 +358,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.20.5
 	github.com/rcrowley/go-metrics v0.0.0-20250401214520-65e299d6c5c9
+	github.com/regen-network/cosmos-proto v0.3.1
 	github.com/rook/rook v1.14.12
 	github.com/rook/rook/pkg/apis v0.0.0-20231204200402-5287527732f7
 	github.com/sasha-s/go-deadlock v0.3.5

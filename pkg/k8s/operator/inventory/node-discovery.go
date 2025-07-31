@@ -192,7 +192,7 @@ func (dp *nodeDiscovery) apiConnector() error {
 					Image:           dp.image,
 					ImagePullPolicy: corev1.PullIfNotPresent, // or corev1.PullNever for local-only
 					Args: []string{
-						"provider-services",
+						"k8s-services",
 						"tools",
 						"psutil",
 						"serve",

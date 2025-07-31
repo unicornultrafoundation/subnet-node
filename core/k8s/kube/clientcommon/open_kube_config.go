@@ -5,6 +5,9 @@ import (
 	"os"
 
 	"github.com/sirupsen/logrus"
+	"github.com/spf13/cobra"
+	providerflags "github.com/unicornultrafoundation/subnet-node/pkg/k8s/operator/common"
+	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/tools/fromctx"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/flowcontrol"
@@ -39,4 +42,17 @@ func OpenKubeConfig(cfgPath string, log *logrus.Logger) (*rest.Config, error) {
 	cfg.RateLimiter = rateLimiter
 
 	return cfg, err
+}
+
+func SetKubeConfigToCmd(c *cobra.Command) error {
+	configPath, _ := c.Flags().GetString(providerflags.FlagKubeConfig)
+
+	config, err := OpenKubeConfig(configPath, logrus.New().WithField("cmp", "provider").Logger)
+	if err != nil {
+		return err
+	}
+
+	fromctx.CmdSetContextValue(c, fromctx.CtxKeyKubeConfig, config)
+
+	return nil
 }
