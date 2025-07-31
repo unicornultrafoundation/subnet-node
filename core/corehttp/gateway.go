@@ -32,6 +32,12 @@ func GatewayOption() ServeOption {
 			mux.Handle("/", deploymentHandler.Router())
 		}
 
+		// Add VirtualBox API routes if VirtualBox is enabled
+		if n.VirtualBox != nil {
+			virtualBoxAPI := api.NewVirtualBoxAPI(n.VirtualBox)
+			mux.Handle("/", virtualBoxAPI.Router())
+		}
+
 		return mux, nil
 	}
 }

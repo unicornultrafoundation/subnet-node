@@ -50,13 +50,13 @@ type SubnetNode struct {
 	// Services
 	Peerstore       pstore.Peerstore `optional:"true"` // storage for other Peer instances
 	RecordValidator record.Validator
-	Resource        *resource.Service          `optional:"true"`
-	Apps            *apps.Service              `optional:"true"`
-	Verifier        *verifier.Verifier         `optional:"true"`
-	VPN             *vpn.Service               `optional:"true"`
-	Firewall        firewall.FirewallInterface `optional:"true"`
-	Deployer        *deployer.Service          `optional:"true"`
-	VirtualBox      *virtualbox.ServiceImpl    `optional:"true"`
+	Resource        *resource.Service             `optional:"true"`
+	Apps            *apps.Service                 `optional:"true"`
+	Verifier        *verifier.Verifier            `optional:"true"`
+	VPN             *vpn.Service                  `optional:"true"`
+	Firewall        firewall.FirewallInterface    `optional:"true"`
+	Deployer        *deployer.Service             `optional:"true"`
+	VirtualBox      *virtualbox.VirtualboxService `optional:"true"`
 
 	Account *account.AccountService `optional:"true"`
 	Peers   *peers.Service          `optional:"true"`

@@ -51,6 +51,19 @@ func SetupWebSocket(w http.ResponseWriter, r *http.Request, logger *logrus.Entry
 	return conn, nil
 }
 
+// Add a helper to setup the websocket connection
+func SetupWebSocketForVirtualBox(w http.ResponseWriter, r *http.Request, logger *logrus.Entry) (*websocket.Conn, error) {
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		logger.WithError(err).Error("Failed to upgrade WebSocket connection")
+		// Return a proper error response instead of letting the handler continue
+		http.Error(w, fmt.Sprintf("WebSocket upgrade failed: %v", err), http.StatusBadRequest)
+		return nil, err
+	}
+
+	return conn, nil
+}
+
 // SetupWebSocketWithPingHandler sets up a WebSocket connection with ping handling
 func SetupWebSocketWithPingHandler(w http.ResponseWriter, r *http.Request, logger *logrus.Entry) (*websocket.Conn, error) {
 	conn, err := SetupWebSocket(w, r, logger)

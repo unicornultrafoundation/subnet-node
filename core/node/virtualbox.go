@@ -10,7 +10,7 @@ import (
 )
 
 // VirtualBoxService provides a lifecycle-managed VirtualBox service
-func VirtualBoxService(lc fx.Lifecycle, cfg *config.C, ds datastore.Datastore) (*virtualbox.ServiceImpl, error) {
+func VirtualBoxService(lc fx.Lifecycle, cfg *config.C, ds datastore.Datastore) (*virtualbox.VirtualboxService, error) {
 	if !cfg.GetBool("virtualbox.enable", false) {
 		return nil, nil
 	}

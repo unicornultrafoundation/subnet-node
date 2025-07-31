@@ -19,7 +19,7 @@ import (
 
 var storageLog = logrus.WithField("service", "virtualbox-storage")
 
-// StorageManagerImpl implements the StorageManager interface
+// StorageManagerImpl handles file storage operations
 type StorageManagerImpl struct {
 	isoDir string
 }

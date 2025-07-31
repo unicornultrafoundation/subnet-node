@@ -2,10 +2,39 @@ package api
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"time"
 
+	"github.com/go-chi/chi/v5"
+	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/core/virtualbox"
 	vbtypes "github.com/unicornultrafoundation/subnet-node/core/virtualbox/types"
+	"github.com/unicornultrafoundation/subnet-node/internal/api/ws"
 )
+
+// WebSocket message codes for VM SSH
+const (
+	VMSSHCodeStdin   = 0
+	VMSSHCodeStdout  = 1
+	VMSSHCodeStderr  = 2
+	VMSSHCodeResult  = 3
+	VMSSHCodeFailure = 4
+	VMSSHCodeResize  = 5
+)
+
+// VMSSHRequest represents the request body for SSH connection
+type VMSSHRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+// VMSSHResponse represents the response from SSH connection
+type VMSSHResponse struct {
+	ExitCode int    `json:"exit_code"`
+	Message  string `json:"message,omitempty"`
+}
 
 type vmResult struct {
 	ID         string           `json:"id,omitempty"`
@@ -107,11 +136,11 @@ func convertToISOInfoResult(iso *vbtypes.ISOInfo) *isoInfoResult {
 }
 
 type VirtualBoxAPI struct {
-	vboxService virtualbox.Service
+	vboxService *virtualbox.VirtualboxService
 }
 
 // NewVirtualBoxAPI creates a new instance of VirtualBoxAPI.
-func NewVirtualBoxAPI(vboxService virtualbox.Service) *VirtualBoxAPI {
+func NewVirtualBoxAPI(vboxService *virtualbox.VirtualboxService) *VirtualBoxAPI {
 	return &VirtualBoxAPI{vboxService: vboxService}
 }
 
@@ -234,6 +263,127 @@ func (api *VirtualBoxAPI) ResetVM(ctx context.Context, vmID string) (*vmResult, 
 	return convertToVMResult(vm), nil
 }
 
+// Get current sshserver to know the port
+func (api *VirtualBoxAPI) GetSSHServer() *virtualbox.SSHServer {
+	return api.vboxService.GetSSHServer()
+}
+
 func (api *VirtualBoxAPI) ListOSTypes(ctx context.Context) ([]string, error) {
 	return api.vboxService.ListOSTypes(ctx)
+}
+
+// Router returns the chi router with all VirtualBox routes
+func (api *VirtualBoxAPI) Router() *chi.Mux {
+
+	r := chi.NewRouter()
+
+	// WebSocket route for SSH connection
+	r.Get("/api/v1/vms/{vmID}/ssh", api.vmSSHWebSocketHandler)
+
+	return r
+}
+
+// vmSSHWebSocketHandler handles WebSocket connections for VM SSH
+func (api *VirtualBoxAPI) vmSSHWebSocketHandler(w http.ResponseWriter, r *http.Request) {
+	vmID := chi.URLParam(r, "vmID")
+
+	if vmID == "" {
+		api.sendErrorResponse(w, "vmID is required", http.StatusBadRequest)
+		return
+	}
+
+	// Create context BEFORE any WebSocket operations
+	ctx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+
+	// Get VM to verify it exists and is running
+	vm, err := api.vboxService.GetVM(ctx, vmID)
+	if err != nil {
+		api.sendErrorResponse(w, fmt.Sprintf("VM not found: %v", err), http.StatusNotFound)
+		return
+	}
+
+	if vm.Status != vbtypes.Running {
+		api.sendErrorResponse(w, "VM is not running", http.StatusBadRequest)
+		return
+	}
+
+	if vm.SSHPort == 0 {
+		api.sendErrorResponse(w, "SSH port not configured for VM", http.StatusBadRequest)
+		return
+	}
+
+	logger := logrus.WithField("vmID", vmID)
+
+	username := r.URL.Query().Get("username")
+	password := r.URL.Query().Get("password")
+
+	// Validate credentials
+	if username == "" || password == "" {
+		logger.Error("Missing SSH credentials in query parameters")
+		api.sendErrorResponse(w, "Username and password are required as query parameters", http.StatusBadRequest)
+		return
+	}
+
+	conn, err := ws.SetupWebSocketForVirtualBox(w, r, logger)
+	if err != nil {
+		logger.WithError(err).Error("Failed to upgrade WebSocket connection")
+		return
+	}
+
+	defer conn.Close()
+
+	// Send a simple message
+	err = conn.WriteJSON(map[string]string{"message": "WebSocket connected successfully"})
+	if err != nil {
+		logger.WithError(err).Error("Failed to send message")
+		return
+	}
+
+	// Keep connection alive for a bit
+	time.Sleep(5 * time.Second)
+
+	// Create SSH connection
+	sshServer := api.vboxService.GetSSHServer()
+	sshConn := virtualbox.NewSSHConnection(vmID, conn, sshServer)
+
+	// Verify VM exists in SSHServer configs
+	_, exists := sshServer.GetVMConfig(vmID)
+
+	if !exists {
+		logger.Error("VM not found in SSHServer configs")
+		api.sendErrorResponse(w, "VM SSH configuration not found", http.StatusInternalServerError)
+		return
+	}
+
+	// Connect to SSH
+	if err := sshConn.Connect(username, password); err != nil {
+		logger.WithError(err).Error("Failed to establish SSH connection")
+		if err := ws.SendErrorResponse(conn, fmt.Sprintf("SSH connection failed: %v", err)); err != nil {
+			logger.WithError(err).Error("Failed to send error response")
+		}
+		return
+	}
+
+	logger.Info("SSH connection established successfully")
+
+	//  Start SSH connection handling
+	sshConn.Start()
+
+	// Wait for context cancellation (client disconnect or error)
+	<-ctx.Done()
+	logger.Info("SSH WebSocket connection closed")
+}
+
+// sendErrorResponse sends a standardized error response
+func (api *VirtualBoxAPI) sendErrorResponse(w http.ResponseWriter, message string, statusCode int) {
+	response := map[string]interface{}{
+		"error":   message,
+		"status":  statusCode,
+		"message": http.StatusText(statusCode),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	json.NewEncoder(w).Encode(response)
 }

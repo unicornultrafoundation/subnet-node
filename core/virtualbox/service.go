@@ -27,8 +27,8 @@ import (
 
 var serviceLog = logrus.WithField("service", "virtualbox")
 
-// ServiceImpl implements the Service interface
-type ServiceImpl struct {
+// VirtualboxService implements the Service interface
+type VirtualboxService struct {
 	mu         sync.RWMutex
 	storageMgr StorageManager
 	vmDir      string
@@ -36,10 +36,11 @@ type ServiceImpl struct {
 	vboxExec   *VBoxManageExecutor
 	datastore  datastore.Datastore
 	syncTicker *time.Ticker
+	sshServer  *SSHServer
 }
 
 // NewService creates a new VirtualBox service
-func NewService(ds datastore.Datastore) (*ServiceImpl, error) {
+func NewService(ds datastore.Datastore) (*VirtualboxService, error) {
 	// Create storage manager
 	storageMgr, err := NewStorageManager()
 	if err != nil {
@@ -64,12 +65,13 @@ func NewService(ds datastore.Datastore) (*ServiceImpl, error) {
 	}
 	serviceLog.Infof("Ensured ISOs directory exists at: %s", isosDir)
 
-	service := &ServiceImpl{
+	service := &VirtualboxService{
 		storageMgr: storageMgr,
 		vmDir:      vmDir,
 		stopChan:   make(chan struct{}),
 		vboxExec:   NewVBoxManageExecutor(vmDir),
 		datastore:  ds,
+		sshServer:  NewSSHServer(),
 	}
 
 	// Validate VirtualBox installation once during service creation
@@ -91,7 +93,7 @@ func IsVirtualBoxEnabled(cfg *config.C) bool {
 }
 
 // Start starts the VirtualBox service
-func (s *ServiceImpl) Start(ctx context.Context) error {
+func (s *VirtualboxService) Start(ctx context.Context) error {
 	serviceLog.Info("Starting VirtualBox service")
 
 	// Ensure the ISOs directory exists
@@ -105,12 +107,17 @@ func (s *ServiceImpl) Start(ctx context.Context) error {
 	s.syncTicker = time.NewTicker(15 * time.Second)
 	go s.syncVMsWithDatastore(ctx)
 
+	// Sync existing running VMs with SSHServer
+	if err := s.syncSSHServerWithRunningVMs(ctx); err != nil {
+		serviceLog.Warnf("Failed to sync SSHServer with running VMs: %v", err)
+	}
+
 	serviceLog.Info("VirtualBox service started successfully")
 	return nil
 }
 
 // Stop stops the VirtualBox service
-func (s *ServiceImpl) Stop(ctx context.Context) error {
+func (s *VirtualboxService) Stop(ctx context.Context) error {
 	serviceLog.Info("Stopping VirtualBox service")
 
 	// Stop the synchronization ticker
@@ -123,7 +130,7 @@ func (s *ServiceImpl) Stop(ctx context.Context) error {
 }
 
 // CreateVM creates a new VM with the specified configuration using VBoxManage
-func (s *ServiceImpl) CreateVM(ctx context.Context, req vbtypes.VMCreateRequest) (*vbtypes.VM, error) {
+func (s *VirtualboxService) CreateVM(ctx context.Context, req vbtypes.VMCreateRequest) (*vbtypes.VM, error) {
 	// Validate system resources before creating VM
 	serviceLog.Infof("Validating system resources...")
 	if err := s.validateResources(ctx, req); err != nil {
@@ -259,7 +266,7 @@ func (s *ServiceImpl) CreateVM(ctx context.Context, req vbtypes.VMCreateRequest)
 }
 
 // CreateAndStartVM creates a new VM by importing from an OVA template and starts it immediately
-func (s *ServiceImpl) CreateAndStartVM(ctx context.Context, req vbtypes.VMCreateRequest) (*vbtypes.VM, error) {
+func (s *VirtualboxService) CreateAndStartVM(ctx context.Context, req vbtypes.VMCreateRequest) (*vbtypes.VM, error) {
 
 	// Validate system resources before creating VM
 	serviceLog.Infof("Validating system resources...")
@@ -404,6 +411,12 @@ func (s *ServiceImpl) CreateAndStartVM(ctx context.Context, req vbtypes.VMCreate
 	// Update VM status to Running
 	vm.Status = vbtypes.Running
 
+	// Register VM with SSHServer for SSH access
+	if vm.SSHPort > 0 {
+		s.sshServer.AddVMConfig(vm.ID, "localhost", strconv.Itoa(vm.SSHPort))
+		serviceLog.Infof("Registered VM %s with SSHServer: localhost:%d", vm.ID, vm.SSHPort)
+	}
+
 	// Update stored metadata with running status and SSH port
 	if err := s.storeVMMetadata(ctx, vm); err != nil {
 		serviceLog.Warnf("Failed to update VM metadata with running status: %v", err)
@@ -414,7 +427,7 @@ func (s *ServiceImpl) CreateAndStartVM(ctx context.Context, req vbtypes.VMCreate
 }
 
 // validateResources checks if the system has sufficient resources to create the VM
-func (s *ServiceImpl) validateResources(ctx context.Context, req vbtypes.VMCreateRequest) error {
+func (s *VirtualboxService) validateResources(ctx context.Context, req vbtypes.VMCreateRequest) error {
 	serviceLog.Infof("Checking system resources for VM requirements...")
 
 	resourceInfo, err := resource.GetResource()
@@ -493,7 +506,7 @@ func (s *ServiceImpl) validateResources(ctx context.Context, req vbtypes.VMCreat
 }
 
 // validateCPUResources validates CPU requirements
-func (s *ServiceImpl) validateCPUResources(req vbtypes.VMCreateRequest, resourceInfo *resource.ResourceInfo) error {
+func (s *VirtualboxService) validateCPUResources(req vbtypes.VMCreateRequest, resourceInfo *resource.ResourceInfo) error {
 	// Check if requested CPU cores exceed available cores
 	if req.CPUCores > resourceInfo.CPU.Count {
 		return fmt.Errorf("insufficient CPU cores: requested %d, available %d", req.CPUCores, resourceInfo.CPU.Count)
@@ -510,7 +523,7 @@ func (s *ServiceImpl) validateCPUResources(req vbtypes.VMCreateRequest, resource
 }
 
 // validateMemoryResources validates memory requirements
-func (s *ServiceImpl) validateMemoryResources(req vbtypes.VMCreateRequest, resourceInfo *resource.ResourceInfo) error {
+func (s *VirtualboxService) validateMemoryResources(req vbtypes.VMCreateRequest, resourceInfo *resource.ResourceInfo) error {
 	// Convert memory from bytes to MB
 	availableMemoryMB := int(resourceInfo.Memory.Total / (1024 * 1024))
 
@@ -536,7 +549,7 @@ func (s *ServiceImpl) validateMemoryResources(req vbtypes.VMCreateRequest, resou
 }
 
 // validateDiskResources validates disk space requirements
-func (s *ServiceImpl) validateDiskResources(req vbtypes.VMCreateRequest, resourceInfo *resource.ResourceInfo) error {
+func (s *VirtualboxService) validateDiskResources(req vbtypes.VMCreateRequest, resourceInfo *resource.ResourceInfo) error {
 	// Convert storage from bytes to GB
 	availableDiskGB := int(resourceInfo.Storage.Total / (1024 * 1024 * 1024))
 
@@ -562,7 +575,7 @@ func (s *ServiceImpl) validateDiskResources(req vbtypes.VMCreateRequest, resourc
 }
 
 // validateOSTypeCompatibility validates if the provided OS type is compatible with the detected hardware
-func (s *ServiceImpl) validateOSTypeCompatibility(requestedOSType string) error {
+func (s *VirtualboxService) validateOSTypeCompatibility(requestedOSType string) error {
 	serviceLog.Infof("Validating OS type compatibility for: %s", requestedOSType)
 
 	// Detect hardware to determine appropriate OS type
@@ -590,7 +603,7 @@ func (s *ServiceImpl) validateOSTypeCompatibility(requestedOSType string) error 
 }
 
 // isOSTypeCompatible checks if an OS type is compatible with a given architecture
-func (s *ServiceImpl) isOSTypeCompatible(osType, architecture string) bool {
+func (s *VirtualboxService) isOSTypeCompatible(osType, architecture string) bool {
 	// Define compatibility matrix
 	compatibilityMap := map[string][]string{
 		"Ubuntu_ARM64": {"arm64", "aarch64"},
@@ -622,7 +635,7 @@ func (s *ServiceImpl) isOSTypeCompatible(osType, architecture string) bool {
 }
 
 // GetVM gets a VM by ID using VBoxManage
-func (s *ServiceImpl) GetVM(ctx context.Context, uuid string) (*vbtypes.VM, error) {
+func (s *VirtualboxService) GetVM(ctx context.Context, uuid string) (*vbtypes.VM, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -685,13 +698,13 @@ func (s *ServiceImpl) GetVM(ctx context.Context, uuid string) (*vbtypes.VM, erro
 }
 
 // SyncVMs manually triggers synchronization between VirtualBox and datastore
-func (s *ServiceImpl) SyncVMs(ctx context.Context) error {
+func (s *VirtualboxService) SyncVMs(ctx context.Context) error {
 	serviceLog.Info("Manually triggering VM synchronization")
 	return s.performVMSync(ctx)
 }
 
 // GetVMs gets a list of all VMs
-func (s *ServiceImpl) GetVMs(ctx context.Context) ([]*vbtypes.VM, int, error) {
+func (s *VirtualboxService) GetVMs(ctx context.Context) ([]*vbtypes.VM, int, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -753,7 +766,7 @@ func (s *ServiceImpl) GetVMs(ctx context.Context) ([]*vbtypes.VM, int, error) {
 }
 
 // UpdateVM updates an existing VM using VBoxManage
-func (s *ServiceImpl) UpdateVM(ctx context.Context, uuid string, req vbtypes.VMUpdateRequest) (*vbtypes.VM, error) {
+func (s *VirtualboxService) UpdateVM(ctx context.Context, uuid string, req vbtypes.VMUpdateRequest) (*vbtypes.VM, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -806,7 +819,7 @@ func (s *ServiceImpl) UpdateVM(ctx context.Context, uuid string, req vbtypes.VMU
 }
 
 // DeleteVM deletes a VM using VBoxManage
-func (s *ServiceImpl) DeleteVM(ctx context.Context, uuid string) error {
+func (s *VirtualboxService) DeleteVM(ctx context.Context, uuid string) error {
 	vm, err := s.GetVM(ctx, uuid)
 
 	// Stop the VM if running, before acquiring the write lock
@@ -824,6 +837,10 @@ func (s *ServiceImpl) DeleteVM(ctx context.Context, uuid string) error {
 	if err := s.vboxExec.DeleteVM(uuid); err != nil {
 		return fmt.Errorf("failed to delete VM: %w", err)
 	}
+
+	// Remove VM from SSHServer
+	s.sshServer.RemoveVMConfig(uuid)
+	serviceLog.Infof("Removed VM %s from SSHServer", uuid)
 
 	// Delete VM metadata from datastore
 	if err := s.deleteVMMetadata(ctx, uuid); err != nil {
@@ -845,8 +862,44 @@ func (s *ServiceImpl) DeleteVM(ctx context.Context, uuid string) error {
 	return nil
 }
 
+// syncSSHServerWithRunningVMs syncs the SSHServer with currently running VMs
+func (s *VirtualboxService) syncSSHServerWithRunningVMs(ctx context.Context) error {
+	serviceLog.Info("Syncing SSHServer with running VMs...")
+
+	// Get all VMs
+	vms, _, err := s.GetVMs(ctx)
+
+	fmt.Println("vms", vms)
+
+	if err != nil {
+		return fmt.Errorf("failed to get VMs for SSHServer sync: %w", err)
+	}
+
+	// Clear existing configurations
+	existingConfigs := s.sshServer.GetAllVMConfigs()
+	for vmID := range existingConfigs {
+		s.sshServer.RemoveVMConfig(vmID)
+	}
+
+	fmt.Println("existingConfigs", existingConfigs)
+
+	// Add configurations for running VMs
+	for _, vm := range vms {
+		if vm.Status == vbtypes.Running && vm.SSHPort > 0 {
+			s.sshServer.AddVMConfig(vm.ID, "127.0.0.1", strconv.Itoa(vm.SSHPort))
+			serviceLog.Infof("Synced running VM %s with SSHServer: localhost:%d", vm.ID, vm.SSHPort)
+		}
+	}
+
+	existingConfigs = s.sshServer.GetAllVMConfigs()
+	fmt.Println("existingConfigs", existingConfigs)
+
+	serviceLog.Infof("SSHServer sync completed. Registered %d running VMs", len(vms))
+	return nil
+}
+
 // StartVM starts a VM using VBoxManage
-func (s *ServiceImpl) StartVM(ctx context.Context, uuid string) (*vbtypes.VM, error) {
+func (s *VirtualboxService) StartVM(ctx context.Context, uuid string) (*vbtypes.VM, error) {
 	serviceLog.Infof("Starting VM: %s", uuid)
 	// 1. Set up SSH port forwarding BEFORE starting the VM
 	hostPort, err := getAvailablePort()
@@ -870,6 +923,10 @@ func (s *ServiceImpl) StartVM(ctx context.Context, uuid string) (*vbtypes.VM, er
 	vm.SSHPort = hostPort
 	vm.Status = vbtypes.Running // Explicitly set status to Running
 
+	// Register VM with SSHServer for SSH access
+	s.sshServer.AddVMConfig(vm.ID, "localhost", strconv.Itoa(hostPort))
+	serviceLog.Infof("Registered VM %s with SSHServer: localhost:%d", vm.ID, hostPort)
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -881,7 +938,7 @@ func (s *ServiceImpl) StartVM(ctx context.Context, uuid string) (*vbtypes.VM, er
 }
 
 // StopVM stops a VM using VBoxManage
-func (s *ServiceImpl) StopVM(ctx context.Context, uuid string) (*vbtypes.VM, error) {
+func (s *VirtualboxService) StopVM(ctx context.Context, uuid string) (*vbtypes.VM, error) {
 	serviceLog.Infof("Stopping VM: %s", uuid)
 	// Stop the VM before acquiring the write lock
 	if err := s.vboxExec.StopVM(uuid); err != nil {
@@ -897,6 +954,10 @@ func (s *ServiceImpl) StopVM(ctx context.Context, uuid string) (*vbtypes.VM, err
 	// Explicitly set status to Stopped
 	vm.Status = vbtypes.Stopped
 
+	// Remove VM from SSHServer when stopped
+	s.sshServer.RemoveVMConfig(vm.ID)
+	serviceLog.Infof("Removed VM %s from SSHServer", vm.ID)
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -909,7 +970,7 @@ func (s *ServiceImpl) StopVM(ctx context.Context, uuid string) (*vbtypes.VM, err
 }
 
 // PauseVM pauses a VM using VBoxManage
-func (s *ServiceImpl) PauseVM(ctx context.Context, uuid string) (*vbtypes.VM, error) {
+func (s *VirtualboxService) PauseVM(ctx context.Context, uuid string) (*vbtypes.VM, error) {
 
 	serviceLog.Infof("Pausing VM: %s", uuid)
 	if err := s.vboxExec.PauseVM(uuid); err != nil {
@@ -937,7 +998,7 @@ func (s *ServiceImpl) PauseVM(ctx context.Context, uuid string) (*vbtypes.VM, er
 }
 
 // ResumeVM resumes a VM using VBoxManage
-func (s *ServiceImpl) ResumeVM(ctx context.Context, uuid string) (*vbtypes.VM, error) {
+func (s *VirtualboxService) ResumeVM(ctx context.Context, uuid string) (*vbtypes.VM, error) {
 
 	serviceLog.Infof("Resuming VM: %s", uuid)
 	if err := s.vboxExec.ResumeVM(uuid); err != nil {
@@ -965,7 +1026,7 @@ func (s *ServiceImpl) ResumeVM(ctx context.Context, uuid string) (*vbtypes.VM, e
 }
 
 // ResetVM resets a VM using VBoxManage
-func (s *ServiceImpl) ResetVM(ctx context.Context, uuid string) (*vbtypes.VM, error) {
+func (s *VirtualboxService) ResetVM(ctx context.Context, uuid string) (*vbtypes.VM, error) {
 
 	serviceLog.Infof("Resetting VM: %s", uuid)
 	if err := s.vboxExec.ResetVM(uuid); err != nil {
@@ -993,7 +1054,7 @@ func (s *ServiceImpl) ResetVM(ctx context.Context, uuid string) (*vbtypes.VM, er
 }
 
 // GetSystemInfo gets system information
-func (s *ServiceImpl) GetSystemInfo(ctx context.Context) (*vbtypes.VMSystemInfo, error) {
+func (s *VirtualboxService) GetSystemInfo(ctx context.Context) (*vbtypes.VMSystemInfo, error) {
 	// Get system resources using the direct resource function
 	resourceInfo, err := resource.GetResource()
 	if err != nil {
@@ -1025,7 +1086,7 @@ func (s *ServiceImpl) GetSystemInfo(ctx context.Context) (*vbtypes.VMSystemInfo,
 }
 
 // DownloadISO downloads an ISO file
-func (s *ServiceImpl) DownloadISO(ctx context.Context, isoURL string) (*vbtypes.ISOInfo, error) {
+func (s *VirtualboxService) DownloadISO(ctx context.Context, isoURL string) (*vbtypes.ISOInfo, error) {
 	// Ensure ISOs directory exists
 	isoDir, err := s.ensureISOsDirectory()
 	if err != nil {
@@ -1048,12 +1109,17 @@ func (s *ServiceImpl) DownloadISO(ctx context.Context, isoURL string) (*vbtypes.
 }
 
 // ListOSTypes lists all available OS types that can run on the current machine
-func (s *ServiceImpl) ListOSTypes(ctx context.Context) ([]string, error) {
+func (s *VirtualboxService) ListOSTypes(ctx context.Context) ([]string, error) {
 	return s.storageMgr.GetSupportedOSTypes(), nil
 }
 
+// GetSSHServer returns the SSH server instance
+func (s *VirtualboxService) GetSSHServer() *SSHServer {
+	return s.sshServer
+}
+
 // ensureISO ensures an ISO file is available locally
-func (s *ServiceImpl) ensureISO(ctx context.Context, isoURL string) (string, error) {
+func (s *VirtualboxService) ensureISO(ctx context.Context, isoURL string) (string, error) {
 	if isoURL == "" {
 		return "", nil
 	}
@@ -1082,7 +1148,7 @@ func (s *ServiceImpl) ensureISO(ctx context.Context, isoURL string) (string, err
 }
 
 // ensureISOsDirectory ensures that the ISOs directory exists
-func (s *ServiceImpl) ensureISOsDirectory() (string, error) {
+func (s *VirtualboxService) ensureISOsDirectory() (string, error) {
 	isoDir := filepath.Join(s.vmDir, "ISOs")
 	if err := fsutil.DirWritable(isoDir); err != nil {
 		return "", fmt.Errorf("failed to create ISOs directory: %w", err)
@@ -1091,7 +1157,7 @@ func (s *ServiceImpl) ensureISOsDirectory() (string, error) {
 }
 
 // configureVMHardwareWithVBoxManage configures VM hardware using VBoxManage with dynamic hardware detection
-func (s *ServiceImpl) configureVMHardwareWithVBoxManage(vmName string, req vbtypes.VMCreateRequest, osType string) error {
+func (s *VirtualboxService) configureVMHardwareWithVBoxManage(vmName string, req vbtypes.VMCreateRequest, osType string) error {
 	serviceLog.Infof("Starting VM hardware configuration with VBoxManage...")
 
 	// Detect hardware and get appropriate settings
@@ -1184,7 +1250,7 @@ func (s *ServiceImpl) configureVMHardwareWithVBoxManage(vmName string, req vbtyp
 }
 
 // configureVMHardwareWithVBoxManageFallback provides fallback hardware configuration when detection fails
-func (s *ServiceImpl) configureVMHardwareWithVBoxManageFallback(vmName string, req vbtypes.VMCreateRequest, osType string) error {
+func (s *VirtualboxService) configureVMHardwareWithVBoxManageFallback(vmName string, req vbtypes.VMCreateRequest, osType string) error {
 	serviceLog.Infof("Using fallback hardware configuration for: %s", vmName)
 
 	// Set OS type
@@ -1277,7 +1343,7 @@ func (s *ServiceImpl) configureVMHardwareWithVBoxManageFallback(vmName string, r
 }
 
 // generateCloudInitISO generates cloud-init files and ISO for a VM
-func (s *ServiceImpl) generateCloudInitISO(vmName string, username string, password string) (string, error) {
+func (s *VirtualboxService) generateCloudInitISO(vmName string, username string, password string) (string, error) {
 	serviceLog.Infof("Generating cloud-init ISO for VM: %s", vmName)
 
 	// Generate VM-specific cloud-init configuration
@@ -1304,7 +1370,7 @@ func (s *ServiceImpl) generateCloudInitISO(vmName string, username string, passw
 	return cloudInitISO, nil
 }
 
-func (s *ServiceImpl) generateCloneVMCloudInitISO(vmName string, username string, password string) (string, error) {
+func (s *VirtualboxService) generateCloneVMCloudInitISO(vmName string, username string, password string) (string, error) {
 	serviceLog.Infof("Generating clone VM cloud-init ISO for VM: %s", vmName)
 
 	// Generate VM-specific cloud-init configuration
@@ -1347,7 +1413,7 @@ func generateVMID(name string) string {
 }
 
 // validateVirtualBoxInstallation checks if VirtualBox is properly installed
-func (s *ServiceImpl) validateVirtualBoxInstallation() error {
+func (s *VirtualboxService) validateVirtualBoxInstallation() error {
 	serviceLog.Infof("Validating VirtualBox installation...")
 
 	// Check if VBoxManage is available
@@ -1373,7 +1439,7 @@ func (s *ServiceImpl) validateVirtualBoxInstallation() error {
 }
 
 // Helper functions for parsing VBoxManage output
-func (s *ServiceImpl) parseMachineReadableOutput(output string) map[string]string {
+func (s *VirtualboxService) parseMachineReadableOutput(output string) map[string]string {
 	result := make(map[string]string)
 	lines := strings.Split(output, "\n")
 
@@ -1397,7 +1463,7 @@ func (s *ServiceImpl) parseMachineReadableOutput(output string) map[string]strin
 	return result
 }
 
-func (s *ServiceImpl) parseVMStatus(vmState string) vbtypes.VMStatus {
+func (s *VirtualboxService) parseVMStatus(vmState string) vbtypes.VMStatus {
 	switch strings.ToLower(vmState) {
 	case "running":
 		return vbtypes.Running
@@ -1410,7 +1476,7 @@ func (s *ServiceImpl) parseVMStatus(vmState string) vbtypes.VMStatus {
 	}
 }
 
-func (s *ServiceImpl) parseIntOrDefault(value string, defaultValue int) int {
+func (s *VirtualboxService) parseIntOrDefault(value string, defaultValue int) int {
 	if value == "" {
 		return defaultValue
 	}
@@ -1424,7 +1490,7 @@ func (s *ServiceImpl) parseIntOrDefault(value string, defaultValue int) int {
 }
 
 // Store VM metadata in datastore
-func (s *ServiceImpl) storeVMMetadata(ctx context.Context, vm *vbtypes.VM) error {
+func (s *VirtualboxService) storeVMMetadata(ctx context.Context, vm *vbtypes.VM) error {
 	data, err := json.Marshal(vm)
 	if err != nil {
 		return err
@@ -1434,7 +1500,7 @@ func (s *ServiceImpl) storeVMMetadata(ctx context.Context, vm *vbtypes.VM) error
 }
 
 // Retrieve VM metadata from datastore
-func (s *ServiceImpl) getVMMetadata(ctx context.Context, uuid string) (*vbtypes.VM, error) {
+func (s *VirtualboxService) getVMMetadata(ctx context.Context, uuid string) (*vbtypes.VM, error) {
 	key := datastore.NewKey("virtualbox/vm/" + uuid)
 	data, err := s.datastore.Get(ctx, key)
 	if err != nil {
@@ -1448,13 +1514,13 @@ func (s *ServiceImpl) getVMMetadata(ctx context.Context, uuid string) (*vbtypes.
 }
 
 // Delete VM metadata from datastore
-func (s *ServiceImpl) deleteVMMetadata(ctx context.Context, uuid string) error {
+func (s *VirtualboxService) deleteVMMetadata(ctx context.Context, uuid string) error {
 	key := datastore.NewKey("virtualbox/vm/" + uuid)
 	return s.datastore.Delete(ctx, key)
 }
 
 // syncVMsWithDatastore periodically synchronizes the VirtualBox VM data with the datastore
-func (s *ServiceImpl) syncVMsWithDatastore(ctx context.Context) {
+func (s *VirtualboxService) syncVMsWithDatastore(ctx context.Context) {
 	serviceLog.Info("Starting VM synchronization with datastore")
 
 	for {
@@ -1474,7 +1540,7 @@ func (s *ServiceImpl) syncVMsWithDatastore(ctx context.Context) {
 }
 
 // performVMSync does the actual synchronization between VirtualBox and the datastore
-func (s *ServiceImpl) performVMSync(ctx context.Context) error {
+func (s *VirtualboxService) performVMSync(ctx context.Context) error {
 	serviceLog.Debug("Synchronizing VirtualBox VMs with datastore")
 
 	// Get all VMs directly from VBoxManage
