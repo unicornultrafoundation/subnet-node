@@ -99,15 +99,12 @@ func (sc *SSHConnection) Connect(user, pass string) error {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
 
-	// config, exists := sc.SSHServer.GetVMConfig(sc.VMID)
-	// if !exists {
-	// 	return fmt.Errorf("VM config not found for ID: %s", sc.VMID)
-	// }
+	config, exists := sc.SSHServer.GetVMConfig(sc.VMID)
+	if !exists {
+		return fmt.Errorf("VM config not found for ID: %s", sc.VMID)
+	}
 
-	// hostport := fmt.Sprintf("%s:%s", config.Host, config.Port)
-	// fmt.Println("hostport", hostport)
-
-	hostport := "127.0.0.1:58431"
+	hostport := fmt.Sprintf("%s:%s", config.Host, config.Port)
 
 	sshConfig := &ssh.ClientConfig{
 		User: user,
@@ -142,7 +139,12 @@ func (sc *SSHConnection) Connect(user, pass string) error {
 		return fmt.Errorf("STDIN pipe error: %v", err)
 	}
 
-	if err := session.RequestPty("xterm", 80, 40, ssh.TerminalModes{}); err != nil {
+	if err := session.RequestPty("xterm", 80, 40, ssh.TerminalModes{
+		ssh.ECHO:          1,
+		ssh.ECHOCTL:       0,
+		ssh.TTY_OP_ISPEED: 14400,
+		ssh.TTY_OP_OSPEED: 14400,
+	}); err != nil {
 		session.Close()
 		sshConn.Close()
 		return fmt.Errorf("Request PTY error: %v", err)
