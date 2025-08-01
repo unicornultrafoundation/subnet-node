@@ -10,8 +10,8 @@ import (
 
 // FIX the link later
 var defaultOVAURLs = map[string]string{
-	"Ubuntu_64":    "https://www.sendgb.com/src/download_one.php?uploadId=QbC28risRfG&sc=ababb9417e3bb2e7617724b68c881df6&file=template_sample_Ubuntu_64.ova&private_id=",
-	"Ubuntu_ARM64": "https://www.sendgb.com/src/download_one.php?uploadId=AGHUcYp37x2&sc=a4e01fb96cc851b6ef31eaf07807ec0c&file=template_sample_Ubuntu_ARM64.ova&private_id=",
+	"Ubuntu_64":    "https://www.sendgb.com/src/download_one.php?uploadId=BaAL4Ps2QIh&sc=e7f64b9b60816b0ebebd2d294dd4ee7d&file=template_sample_Ubuntu_64.ova&private_id=",
+	"Ubuntu_ARM64": "https://www.sendgb.com/src/download_one.php?uploadId=BaAL4Ps2QIh&sc=e7f64b9b60816b0ebebd2d294dd4ee7d&file=template_sample_Ubuntu_ARM64.ova&private_id=",
 }
 
 // getOVAURLForOSType returns the OVA URL for the given OS type from the hardcoded map

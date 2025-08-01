@@ -55,6 +55,37 @@ The `HardwareDetector` automatically detects system hardware capabilities and co
 - **NAT Configuration**: Set up NAT rules for SSH access
 - **Port Management**: Track and manage forwarded ports
 
+### SSH Connection Management
+
+The package provides a comprehensive SSH connection system that enables secure terminal access to VMs through WebSocket connections:
+
+- **SSHServer**: Manages VM SSH configurations and port mappings
+- **SSHConnection**: Handles active SSH sessions with bidirectional data flow
+- **WebSocket Integration**: Provides real-time terminal access through web browsers
+- **Terminal Emulation**: Full PTY support with xterm terminal emulation
+- **Concurrent Connections**: Thread-safe handling of multiple SSH sessions
+- **Automatic Cleanup**: Proper resource management and connection cleanup
+
+#### SSH Connection Components
+
+**SSHServer**
+
+- Manages VM SSH configurations (host, port mappings)
+- Thread-safe configuration storage and retrieval
+- Supports adding, removing, and querying VM configurations
+
+**SSHConnection**
+
+- Establishes and maintains SSH connections to VMs
+- Handles bidirectional data flow between SSH and WebSocket
+- Provides terminal emulation with proper PTY configuration
+- Manages connection lifecycle and cleanup
+
+**VMPort**
+
+- Represents VM port configuration with host and port information
+- Used for SSH connection targeting and management
+
 ### Resource Management
 
 - **Resource Validation**: Check system resources before VM creation
@@ -241,6 +272,155 @@ vm, err = service.StopVM(ctx, vmID)
 // Delete VM
 err = service.DeleteVM(ctx, vmID)
 ```
+
+### SSH Connection Examples
+
+#### Setting up SSH Server
+
+```go
+// Create SSH server instance
+sshServer := virtualbox.NewSSHServer()
+
+// Add VM configurations
+sshServer.AddVMConfig("vm-123", "localhost", "2222")
+sshServer.AddVMConfig("vm-456", "192.168.1.100", "2223")
+
+// Get VM configuration
+config, exists := sshServer.GetVMConfig("vm-123")
+if exists {
+    fmt.Printf("VM SSH: %s:%s\n", config.Host, config.Port)
+}
+
+// Get all configurations
+allConfigs := sshServer.GetAllVMConfigs()
+for vmID, config := range allConfigs {
+    fmt.Printf("VM %s: %s:%s\n", vmID, config.Host, config.Port)
+}
+```
+
+#### Creating SSH Connection
+
+```go
+// Create WebSocket connection (from your web server)
+wsConn := // ... your WebSocket connection
+
+// Create SSH connection
+sshConn := virtualbox.NewSSHConnection("vm-123", wsConn, sshServer)
+
+// Establish SSH connection with credentials
+err := sshConn.Connect("admin", "password")
+if err != nil {
+    log.Fatalf("SSH connection failed: %v", err)
+}
+
+// Start handling the connection
+sshConn.Start()
+
+// The connection will now handle bidirectional data flow:
+// - SSH output → WebSocket (for display in browser)
+// - WebSocket input → SSH (for user commands)
+```
+
+#### WebSocket Integration
+
+The SSH connection system is designed to work with WebSocket connections for web-based terminal access:
+
+```go
+// Example WebSocket handler
+func handleWebSocket(w http.ResponseWriter, r *http.Request) {
+    upgrader := websocket.Upgrader{
+        CheckOrigin: func(r *http.Request) bool { return true },
+    }
+
+    wsConn, err := upgrader.Upgrade(w, r, nil)
+    if err != nil {
+        return
+    }
+    defer wsConn.Close()
+
+    // Get VM ID from query parameters
+    vmID := r.URL.Query().Get("vm_id")
+
+    // Create and start SSH connection
+    sshConn := virtualbox.NewSSHConnection(vmID, wsConn, sshServer)
+    if err := sshConn.Connect("admin", "password"); err != nil {
+        wsConn.WriteMessage(websocket.TextMessage, []byte("Connection failed: "+err.Error()))
+        return
+    }
+
+    sshConn.Start()
+
+    // Connection will remain active until WebSocket closes
+    // or SSH connection is terminated
+}
+```
+
+#### Connection Management
+
+```go
+// Check connection status
+if sshConn.IsActive {
+    fmt.Println("SSH connection is active")
+}
+
+// Close connection
+sshConn.Close()
+
+// Remove VM configuration when VM is deleted
+sshServer.RemoveVMConfig("vm-123")
+```
+
+#### Terminal Configuration
+
+The SSH connection automatically configures a full-featured terminal with:
+
+- **Terminal Type**: xterm
+- **Window Size**: 80x40 characters
+- **Terminal Modes**:
+  - Echo enabled
+  - Echo control disabled
+  - Input/Output speed: 14400 baud
+- **Shell**: Interactive shell session
+
+This configuration provides a complete terminal experience suitable for most command-line applications and development work.
+
+#### Security Considerations
+
+When using the SSH connection feature, consider the following security best practices:
+
+- **Credential Management**: Store SSH credentials securely and avoid hardcoding them
+- **Host Key Verification**: The current implementation uses `ssh.InsecureIgnoreHostKey()` for development. In production, implement proper host key verification
+- **Connection Timeout**: Implement appropriate timeout mechanisms for idle connections
+- **Access Control**: Implement proper authentication and authorization before allowing SSH connections
+- **Network Security**: Ensure WebSocket connections are properly secured (WSS) in production environments
+- **Resource Limits**: Monitor and limit the number of concurrent SSH connections to prevent resource exhaustion
+
+#### Error Handling
+
+The SSH connection system provides comprehensive error handling:
+
+```go
+// Handle connection errors
+if err := sshConn.Connect("admin", "password"); err != nil {
+    switch {
+    case strings.Contains(err.Error(), "VM config not found"):
+        // Handle missing VM configuration
+    case strings.Contains(err.Error(), "SSH dial error"):
+        // Handle network connectivity issues
+    case strings.Contains(err.Error(), "Request PTY error"):
+        // Handle terminal configuration issues
+    default:
+        // Handle other SSH-related errors
+    }
+}
+```
+
+#### Performance Considerations
+
+- **Buffer Management**: The system uses 1KB buffers for data transfer, suitable for most terminal applications
+- **Concurrent Connections**: Multiple SSH connections can run simultaneously with thread-safe operations
+- **Memory Usage**: Each connection maintains minimal state and properly cleans up resources
+- **Network Efficiency**: Binary WebSocket messages are used for optimal data transfer
 
 ## Architecture-Specific Considerations
 
