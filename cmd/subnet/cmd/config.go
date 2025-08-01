@@ -1,10 +1,11 @@
-package config
+package cmd
 
 import (
 	"context"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -102,10 +103,20 @@ func EditConfig(dataPath string, setFlags configSetFlag) error {
 func parseValue(value string) interface{} {
 	// Try to parse as boolean
 	switch strings.ToLower(value) {
-	case "true", "yes", "1":
+	case "true", "yes":
 		return true
-	case "false", "no", "0":
+	case "false", "no":
 		return false
+	}
+
+	// Try to parse as integer
+	if i, err := strconv.Atoi(value); err == nil {
+		return i
+	}
+
+	// Try to parse as float
+	if f, err := strconv.ParseFloat(value, 64); err == nil {
+		return f
 	}
 
 	// Return as string
@@ -154,7 +165,7 @@ var showConfigCmd = &cobra.Command{
 	},
 }
 
-func ConfigCmd() *cobra.Command {
+func configCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "config",
 		Short: "Manage node configuration",

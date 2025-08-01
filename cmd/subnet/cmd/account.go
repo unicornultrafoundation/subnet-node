@@ -1,4 +1,4 @@
-package account
+package cmd
 
 import (
 	"crypto/ecdsa"
@@ -13,9 +13,7 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/common/fsutil"
 )
 
-var dataPath string
-
-var createCmd = &cobra.Command{
+var accountCreateCmd = &cobra.Command{
 	Use:   "create",
 	Short: "Create a new account",
 	Run: func(cmd *cobra.Command, args []string) {
@@ -53,7 +51,7 @@ func getKeyStoreDir() (string, error) {
 	return keystoreDir, nil
 }
 
-var listCmd = &cobra.Command{
+var accountListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List all accounts in keystore",
 	Run: func(cmd *cobra.Command, args []string) {
@@ -76,7 +74,7 @@ var listCmd = &cobra.Command{
 	},
 }
 
-var updateCmd = &cobra.Command{
+var accountUpdateCmd = &cobra.Command{
 	Use:   "update",
 	Short: "Update password for an account",
 	Args:  cobra.ExactArgs(1),
@@ -109,7 +107,7 @@ var updateCmd = &cobra.Command{
 	},
 }
 
-var importCmd = &cobra.Command{
+var accountImportCmd = &cobra.Command{
 	Use:   "import",
 	Short: "Import a keystore file",
 	Args:  cobra.ExactArgs(1),
@@ -138,7 +136,7 @@ var importCmd = &cobra.Command{
 	},
 }
 
-var importHexCmd = &cobra.Command{
+var accountImportHexCmd = &cobra.Command{
 	Use:   "import-hex",
 	Short: "Import a private key in hex format",
 	Args:  cobra.ExactArgs(1),
@@ -183,7 +181,7 @@ func toECDSA(privBytes []byte) (*ecdsa.PrivateKey, error) {
 	return ethcrypto.ToECDSA(privBytes)
 }
 
-func AccountCmd() *cobra.Command {
+func accountCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "account",
 		Short: "Account management commands",
@@ -195,11 +193,11 @@ func AccountCmd() *cobra.Command {
 
 	cmd.PersistentFlags().StringVarP(&dataPath, "datadir", "d", "~/.subnet-node", "Path to data directory")
 
-	cmd.AddCommand(listCmd)
-	cmd.AddCommand(updateCmd)
-	cmd.AddCommand(importCmd)
-	cmd.AddCommand(importHexCmd)
-	cmd.AddCommand(createCmd)
+	cmd.AddCommand(accountListCmd)
+	cmd.AddCommand(accountUpdateCmd)
+	cmd.AddCommand(accountImportCmd)
+	cmd.AddCommand(accountImportHexCmd)
+	cmd.AddCommand(accountCreateCmd)
 
 	return cmd
 }
