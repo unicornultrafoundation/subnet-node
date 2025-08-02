@@ -64,8 +64,12 @@ func run(repoPath string, configPath *string) error {
 
 	defer node.Close()
 
+	node.IsOnline = node.VPN != nil
+
 	log.Printf("Peer ID: %s", node.Identity.String())
-	log.Printf("Provider Address: %s", node.Account.GetAddress())
+	if node.Account != nil {
+		log.Printf("Provider Address: %s", node.Account.GetAddress())
+	}
 	printLibp2pPorts(node)
 
 	// construct api endpoint - every time
@@ -209,7 +213,6 @@ func serveHTTPApi(cfg *config.C, node *core.SubnetNode) (<-chan error, error) {
 
 // serveHTTPGateway creates a listener for the gateway and starts serving requests.
 func serveHTTPGateway(cfg *config.C, node *core.SubnetNode) (<-chan error, error) {
-
 	listeners, err := sockets.TakeListeners("io.subnet.gateway")
 	if err != nil {
 		return nil, fmt.Errorf("serveHTTPGateway: socket activation failed: %s", err)

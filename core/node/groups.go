@@ -10,7 +10,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/config"
-	"github.com/unicornultrafoundation/subnet-node/core/account"
 	"github.com/unicornultrafoundation/subnet-node/core/node/libp2p"
 	"github.com/unicornultrafoundation/subnet-node/p2p"
 	"go.uber.org/fx"
@@ -235,15 +234,7 @@ func Storage(bcfg *BuildCfg) fx.Option {
 }
 
 func Core(cfg *config.C) fx.Option {
-	return fx.Options(
-		fx.Provide(VPNService),
-		fx.Provide(FirewallService),
-		fx.Provide(PeerService),
-		fx.Provide(BidengineService),
-		fx.Provide(DockerService),
-		fx.Provide(account.EthereumService),
-		fx.Provide(DeployerService),
-	)
+	return fx.Options()
 }
 
 // IPFS builds a group of fx Options based on the passed BuildCfg
@@ -256,10 +247,24 @@ func Subnet(ctx context.Context, bcfg *BuildCfg) fx.Option {
 	return fx.Options(
 		bcfgOpts,
 		fx.Provide(baseProcess),
-		Identity(cfg),
 		Storage(bcfg),
+		Core(cfg),
+		maybeProvide(SubnetBidEngine(bcfg, cfg), cfg.GetBool("bidengine.enabled", false)),
+		maybeProvide(SubnetVPN(bcfg, cfg), cfg.GetBool("vpn.enabled", false)),
+	)
+}
+
+func SubnetBidEngine(bcfg *BuildCfg, cfg *config.C) fx.Option {
+	return fx.Options(
+		fx.Provide(BidengineService),
+	)
+}
+
+func SubnetVPN(bcfg *BuildCfg, cfg *config.C) fx.Option {
+	return fx.Options(
+		Identity(cfg),
 		IPNS,
 		Online(bcfg, cfg),
-		Core(cfg),
+		fx.Provide(VPNService),
 	)
 }
