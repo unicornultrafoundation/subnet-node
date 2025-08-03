@@ -2,7 +2,9 @@ package virtualbox
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
+	"math/big"
 	"net"
 	"os"
 	"os/exec"
@@ -37,6 +39,11 @@ type VirtualboxService struct {
 	datastore  datastore.Datastore
 	syncTicker *time.Ticker
 	sshServer  *SSHServer
+
+	// Token management for SSH access
+	tokenMu            sync.RWMutex
+	tokens             map[string]*vbtypes.SSHAccessToken
+	tokenCleanupTicker *time.Ticker
 }
 
 // NewService creates a new VirtualBox service
@@ -72,6 +79,10 @@ func NewService(ds datastore.Datastore) (*VirtualboxService, error) {
 		vboxExec:   NewVBoxManageExecutor(vmDir),
 		datastore:  ds,
 		sshServer:  NewSSHServer(),
+
+		// Initialize token management
+		tokens:             make(map[string]*vbtypes.SSHAccessToken),
+		tokenCleanupTicker: time.NewTicker(5 * time.Minute), // Clean up expired tokens every 5 minutes
 	}
 
 	// Validate VirtualBox installation once during service creation
@@ -107,6 +118,9 @@ func (s *VirtualboxService) Start(ctx context.Context) error {
 	s.syncTicker = time.NewTicker(15 * time.Second)
 	go s.syncVMsWithDatastore(ctx)
 
+	// Start token cleanup routine
+	s.startTokenCleanup()
+
 	// Sync existing running VMs with SSHServer
 	if err := s.syncSSHServerWithRunningVMs(ctx); err != nil {
 		serviceLog.Warnf("Failed to sync SSHServer with running VMs: %v", err)
@@ -124,6 +138,9 @@ func (s *VirtualboxService) Stop(ctx context.Context) error {
 	if s.syncTicker != nil {
 		s.syncTicker.Stop()
 	}
+
+	// Stop token cleanup routine
+	s.stopTokenCleanup()
 
 	close(s.stopChan)
 	return nil
@@ -391,7 +408,7 @@ func (s *VirtualboxService) CreateAndStartVM(ctx context.Context, req vbtypes.VM
 			serviceLog.Errorf("Failed to set up SSH port forwarding: %v", err)
 			// Continue without port forwarding - it's not critical for VM operation
 		} else {
-			serviceLog.Infof("Successfully set up SSH port forwarding: host port %d -> guest port 22", hostPort)
+			serviceLog.Infof("Successfully set up SSH port forwarding: host port %d -> guest port 22", hostPort, hostPort)
 			vm.SSHPort = hostPort
 		}
 	}
@@ -1118,6 +1135,113 @@ func (s *VirtualboxService) GetSSHServer() *SSHServer {
 	return s.sshServer
 }
 
+// GenerateSSHToken generates a one-time access token for SSH connections
+func (s *VirtualboxService) GenerateSSHToken(ctx context.Context, vmID string, username string, password string) (*vbtypes.SSHTokenResponse, error) {
+	// Validate VM exists and is running
+	vm, err := s.GetVM(ctx, vmID)
+	if err != nil {
+		return nil, fmt.Errorf("VM not found: %w", err)
+	}
+
+	if vm.Status != vbtypes.Running {
+		return nil, fmt.Errorf("VM is not running")
+	}
+
+	if vm.SSHPort == 0 {
+		return nil, fmt.Errorf("SSH port not configured for VM")
+	}
+
+	// Generate a secure random token
+	token := generateSecureToken()
+
+	// Set expiration time (15 minutes from now)
+	expiresAt := time.Now().Add(15 * time.Minute)
+
+	// Store the token
+	s.tokenMu.Lock()
+	s.tokens[token] = &vbtypes.SSHAccessToken{
+		Token:     token,
+		VMID:      vmID,
+		Username:  username,
+		Password:  password,
+		CreatedAt: time.Now(),
+		ExpiresAt: expiresAt,
+		Used:      false,
+	}
+	s.tokenMu.Unlock()
+
+	serviceLog.WithField("vmID", vmID).WithField("token", token[:8]+"...").Info("Generated SSH access token")
+
+	return &vbtypes.SSHTokenResponse{
+		Token:     token,
+		ExpiresAt: expiresAt,
+	}, nil
+}
+
+// ValidateAndConsumeSSHToken validates a token and returns the credentials if valid
+func (s *VirtualboxService) ValidateAndConsumeSSHToken(token string) (*vbtypes.SSHAccessToken, error) {
+	s.tokenMu.Lock()
+	defer s.tokenMu.Unlock()
+
+	accessToken, exists := s.tokens[token]
+	if !exists {
+		return nil, fmt.Errorf("invalid token")
+	}
+
+	if accessToken.Used {
+		return nil, fmt.Errorf("token already used")
+	}
+
+	if time.Now().After(accessToken.ExpiresAt) {
+		// Remove expired token
+		delete(s.tokens, token)
+		return nil, fmt.Errorf("token expired")
+	}
+
+	// Mark token as used and remove it
+	accessToken.Used = true
+	delete(s.tokens, token)
+
+	serviceLog.WithField("vmID", accessToken.VMID).WithField("token", token[:8]+"...").Info("SSH access token consumed")
+
+	return accessToken, nil
+}
+
+// cleanupExpiredTokens removes expired tokens from memory
+func (s *VirtualboxService) cleanupExpiredTokens() {
+	s.tokenMu.Lock()
+	defer s.tokenMu.Unlock()
+
+	now := time.Now()
+	for token, accessToken := range s.tokens {
+		if now.After(accessToken.ExpiresAt) {
+			delete(s.tokens, token)
+			serviceLog.WithField("token", token[:8]+"...").Debug("Cleaned up expired SSH access token")
+		}
+	}
+}
+
+// startTokenCleanup starts the background token cleanup routine
+func (s *VirtualboxService) startTokenCleanup() {
+	go func() {
+		for {
+			select {
+			case <-s.tokenCleanupTicker.C:
+				s.cleanupExpiredTokens()
+			case <-s.stopChan:
+				return
+			}
+		}
+	}()
+}
+
+// stopTokenCleanup stops the token cleanup routine
+func (s *VirtualboxService) stopTokenCleanup() {
+	if s.tokenCleanupTicker != nil {
+		s.tokenCleanupTicker.Stop()
+	}
+}
+
 // ensureISO ensures an ISO file is available locally
 func (s *VirtualboxService) ensureISO(ctx context.Context, isoURL string) (string, error) {
 	if isoURL == "" {
@@ -1705,4 +1829,21 @@ func parseSSHPortFromNAT(vmInfo map[string]string) int {
 		}
 	}
 	return 0
+}
+
+// generateSecureToken generates a secure random token for SSH access
+func generateSecureToken() string {
+	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	const tokenLength = 32
+
+	b := make([]byte, tokenLength)
+	for i := range b {
+		// Generate a random index into the charset
+		idx, err := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
+		if err != nil {
+			return ""
+		}
+		b[i] = charset[idx.Int64()]
+	}
+	return string(b)
 }

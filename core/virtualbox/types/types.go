@@ -96,3 +96,27 @@ type ISOInfo struct {
 	Checksum     string    `json:"checksum"`
 	DownloadedAt time.Time `json:"downloaded_at"`
 }
+
+// SSHAccessToken represents a one-time access token for SSH connections
+type SSHAccessToken struct {
+	Token     string    `json:"token"`
+	VMID      string    `json:"vm_id"`
+	Username  string    `json:"username"`
+	Password  string    `json:"password"`
+	CreatedAt time.Time `json:"created_at"`
+	ExpiresAt time.Time `json:"expires_at"`
+	Used      bool      `json:"used"`
+}
+
+// SSHTokenRequest represents a request to generate an SSH access token
+type SSHTokenRequest struct {
+	VMID     string `json:"vm_id"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+// SSHTokenResponse represents the response for SSH token generation
+type SSHTokenResponse struct {
+	Token     string    `json:"token"`
+	ExpiresAt time.Time `json:"expires_at"`
+}

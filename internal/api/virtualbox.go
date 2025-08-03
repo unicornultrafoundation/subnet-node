@@ -263,13 +263,12 @@ func (api *VirtualBoxAPI) ResetVM(ctx context.Context, vmID string) (*vmResult, 
 	return convertToVMResult(vm), nil
 }
 
-// Get current sshserver to know the port
-func (api *VirtualBoxAPI) GetSSHServer() *virtualbox.SSHServer {
-	return api.vboxService.GetSSHServer()
-}
-
 func (api *VirtualBoxAPI) ListOSTypes(ctx context.Context) ([]string, error) {
 	return api.vboxService.ListOSTypes(ctx)
+}
+
+func (api *VirtualBoxAPI) GenerateSSHToken(ctx context.Context, vmID string, username string, password string) (*vbtypes.SSHTokenResponse, error) {
+	return api.vboxService.GenerateSSHToken(ctx, vmID, username, password)
 }
 
 // Router returns the chi router with all VirtualBox routes
@@ -315,15 +314,31 @@ func (api *VirtualBoxAPI) vmSSHWebSocketHandler(w http.ResponseWriter, r *http.R
 
 	logger := logrus.WithField("vmID", vmID)
 
-	username := r.URL.Query().Get("username")
-	password := r.URL.Query().Get("password")
-
-	// Validate credentials
-	if username == "" || password == "" {
-		logger.Error("Missing SSH credentials in query parameters")
-		api.sendErrorResponse(w, "Username and password are required as query parameters", http.StatusBadRequest)
+	// Get token from query parameter
+	token := r.URL.Query().Get("token")
+	if token == "" {
+		logger.Error("Missing SSH access token")
+		api.sendErrorResponse(w, "SSH access token is required as query parameter", http.StatusBadRequest)
 		return
 	}
+
+	// Validate and consume the token
+	vmPayload, err := api.vboxService.ValidateAndConsumeSSHToken(token)
+	if err != nil {
+		logger.WithError(err).Error("Invalid or expired SSH access token")
+		api.sendErrorResponse(w, fmt.Sprintf("Invalid or expired token: %v", err), http.StatusUnauthorized)
+		return
+	}
+
+	// Verify the token is for the correct VM
+	if vmPayload.VMID != vmID {
+		logger.Error("Token is for a different VM")
+		api.sendErrorResponse(w, "Token is not valid for this VM", http.StatusUnauthorized)
+		return
+	}
+
+	username := vmPayload.Username
+	password := vmPayload.Password
 
 	conn, err := ws.SetupWebSocketForVirtualBox(w, r, logger)
 	if err != nil {

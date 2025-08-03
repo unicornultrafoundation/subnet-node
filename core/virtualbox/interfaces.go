@@ -30,6 +30,10 @@ type Service interface {
 	DownloadISO(ctx context.Context, isoURL string) (*vbtypes.ISOInfo, error)
 	ListOSTypes(ctx context.Context) ([]string, error)
 
+	// SSH Token Management
+	GenerateSSHToken(ctx context.Context, vmID string, username string, password string) (*vbtypes.SSHTokenResponse, error)
+	ValidateAndConsumeSSHToken(token string) (*vbtypes.SSHAccessToken, error)
+
 	// Service Lifecycle
 	Start(ctx context.Context) error
 	Stop(ctx context.Context) error
