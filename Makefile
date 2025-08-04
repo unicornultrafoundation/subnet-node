@@ -21,7 +21,7 @@ proto-gen: check-proto-deps
 
 proto-gen-k8s: check-proto-deps
 	@echo "Generating Protobuf files (k8s only)"
-	cd proto/subnet/k8s && go run github.com/bufbuild/buf/cmd/buf generate --exclude-path k8s.io
+	cd proto/subnet/k8s && buf generate --exclude-path k8s.io
 	@echo "Cleaning up unused imports in generated Go files"
 	@goimports -w proto/subnet/k8s/
 .PHONY: proto-gen-k8s

@@ -5,7 +5,9 @@ package v1
 
 import (
 	fmt "fmt"
+	io "io"
 	math "math"
+	math_bits "math/bits"
 
 	_ "github.com/cosmos/gogoproto/gogoproto"
 	proto "github.com/gogo/protobuf/proto"
@@ -24,10 +26,7 @@ const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
 // MsgCloseGroup defines SDK message to close a single Group within a Deployment.
 type MsgCloseGroup struct {
-	ID                   GroupID  `protobuf:"bytes,1,opt,name=id,proto3" json:"id" yaml:"id"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
+	ID GroupID `protobuf:"bytes,1,opt,name=id,proto3" json:"id" yaml:"id"`
 }
 
 func (m *MsgCloseGroup) Reset()         { *m = MsgCloseGroup{} }
@@ -37,16 +36,25 @@ func (*MsgCloseGroup) Descriptor() ([]byte, []int) {
 	return fileDescriptor_8bef1704e1c97197, []int{0}
 }
 func (m *MsgCloseGroup) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_MsgCloseGroup.Unmarshal(m, b)
+	return m.Unmarshal(b)
 }
 func (m *MsgCloseGroup) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_MsgCloseGroup.Marshal(b, m, deterministic)
+	if deterministic {
+		return xxx_messageInfo_MsgCloseGroup.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
 }
 func (m *MsgCloseGroup) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_MsgCloseGroup.Merge(m, src)
 }
 func (m *MsgCloseGroup) XXX_Size() int {
-	return xxx_messageInfo_MsgCloseGroup.Size(m)
+	return m.Size()
 }
 func (m *MsgCloseGroup) XXX_DiscardUnknown() {
 	xxx_messageInfo_MsgCloseGroup.DiscardUnknown(m)
@@ -63,9 +71,6 @@ func (m *MsgCloseGroup) GetID() GroupID {
 
 // MsgCloseGroupResponse defines the Msg/CloseGroup response type.
 type MsgCloseGroupResponse struct {
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *MsgCloseGroupResponse) Reset()         { *m = MsgCloseGroupResponse{} }
@@ -75,16 +80,25 @@ func (*MsgCloseGroupResponse) Descriptor() ([]byte, []int) {
 	return fileDescriptor_8bef1704e1c97197, []int{1}
 }
 func (m *MsgCloseGroupResponse) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_MsgCloseGroupResponse.Unmarshal(m, b)
+	return m.Unmarshal(b)
 }
 func (m *MsgCloseGroupResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_MsgCloseGroupResponse.Marshal(b, m, deterministic)
+	if deterministic {
+		return xxx_messageInfo_MsgCloseGroupResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
 }
 func (m *MsgCloseGroupResponse) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_MsgCloseGroupResponse.Merge(m, src)
 }
 func (m *MsgCloseGroupResponse) XXX_Size() int {
-	return xxx_messageInfo_MsgCloseGroupResponse.Size(m)
+	return m.Size()
 }
 func (m *MsgCloseGroupResponse) XXX_DiscardUnknown() {
 	xxx_messageInfo_MsgCloseGroupResponse.DiscardUnknown(m)
@@ -94,10 +108,7 @@ var xxx_messageInfo_MsgCloseGroupResponse proto.InternalMessageInfo
 
 // MsgPauseGroup defines SDK message to close a single Group within a Deployment.
 type MsgPauseGroup struct {
-	ID                   GroupID  `protobuf:"bytes,1,opt,name=id,proto3" json:"id" yaml:"id"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
+	ID GroupID `protobuf:"bytes,1,opt,name=id,proto3" json:"id" yaml:"id"`
 }
 
 func (m *MsgPauseGroup) Reset()         { *m = MsgPauseGroup{} }
@@ -107,16 +118,25 @@ func (*MsgPauseGroup) Descriptor() ([]byte, []int) {
 	return fileDescriptor_8bef1704e1c97197, []int{2}
 }
 func (m *MsgPauseGroup) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_MsgPauseGroup.Unmarshal(m, b)
+	return m.Unmarshal(b)
 }
 func (m *MsgPauseGroup) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_MsgPauseGroup.Marshal(b, m, deterministic)
+	if deterministic {
+		return xxx_messageInfo_MsgPauseGroup.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
 }
 func (m *MsgPauseGroup) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_MsgPauseGroup.Merge(m, src)
 }
 func (m *MsgPauseGroup) XXX_Size() int {
-	return xxx_messageInfo_MsgPauseGroup.Size(m)
+	return m.Size()
 }
 func (m *MsgPauseGroup) XXX_DiscardUnknown() {
 	xxx_messageInfo_MsgPauseGroup.DiscardUnknown(m)
@@ -133,9 +153,6 @@ func (m *MsgPauseGroup) GetID() GroupID {
 
 // MsgPauseGroupResponse defines the Msg/PauseGroup response type.
 type MsgPauseGroupResponse struct {
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *MsgPauseGroupResponse) Reset()         { *m = MsgPauseGroupResponse{} }
@@ -145,16 +162,25 @@ func (*MsgPauseGroupResponse) Descriptor() ([]byte, []int) {
 	return fileDescriptor_8bef1704e1c97197, []int{3}
 }
 func (m *MsgPauseGroupResponse) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_MsgPauseGroupResponse.Unmarshal(m, b)
+	return m.Unmarshal(b)
 }
 func (m *MsgPauseGroupResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_MsgPauseGroupResponse.Marshal(b, m, deterministic)
+	if deterministic {
+		return xxx_messageInfo_MsgPauseGroupResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
 }
 func (m *MsgPauseGroupResponse) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_MsgPauseGroupResponse.Merge(m, src)
 }
 func (m *MsgPauseGroupResponse) XXX_Size() int {
-	return xxx_messageInfo_MsgPauseGroupResponse.Size(m)
+	return m.Size()
 }
 func (m *MsgPauseGroupResponse) XXX_DiscardUnknown() {
 	xxx_messageInfo_MsgPauseGroupResponse.DiscardUnknown(m)
@@ -164,10 +190,7 @@ var xxx_messageInfo_MsgPauseGroupResponse proto.InternalMessageInfo
 
 // MsgStartGroup defines SDK message to close a single Group within a Deployment.
 type MsgStartGroup struct {
-	ID                   GroupID  `protobuf:"bytes,1,opt,name=id,proto3" json:"id" yaml:"id"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
+	ID GroupID `protobuf:"bytes,1,opt,name=id,proto3" json:"id" yaml:"id"`
 }
 
 func (m *MsgStartGroup) Reset()         { *m = MsgStartGroup{} }
@@ -177,16 +200,25 @@ func (*MsgStartGroup) Descriptor() ([]byte, []int) {
 	return fileDescriptor_8bef1704e1c97197, []int{4}
 }
 func (m *MsgStartGroup) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_MsgStartGroup.Unmarshal(m, b)
+	return m.Unmarshal(b)
 }
 func (m *MsgStartGroup) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_MsgStartGroup.Marshal(b, m, deterministic)
+	if deterministic {
+		return xxx_messageInfo_MsgStartGroup.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
 }
 func (m *MsgStartGroup) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_MsgStartGroup.Merge(m, src)
 }
 func (m *MsgStartGroup) XXX_Size() int {
-	return xxx_messageInfo_MsgStartGroup.Size(m)
+	return m.Size()
 }
 func (m *MsgStartGroup) XXX_DiscardUnknown() {
 	xxx_messageInfo_MsgStartGroup.DiscardUnknown(m)
@@ -203,9 +235,6 @@ func (m *MsgStartGroup) GetID() GroupID {
 
 // MsgStartGroupResponse defines the Msg/StartGroup response type.
 type MsgStartGroupResponse struct {
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *MsgStartGroupResponse) Reset()         { *m = MsgStartGroupResponse{} }
@@ -215,16 +244,25 @@ func (*MsgStartGroupResponse) Descriptor() ([]byte, []int) {
 	return fileDescriptor_8bef1704e1c97197, []int{5}
 }
 func (m *MsgStartGroupResponse) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_MsgStartGroupResponse.Unmarshal(m, b)
+	return m.Unmarshal(b)
 }
 func (m *MsgStartGroupResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_MsgStartGroupResponse.Marshal(b, m, deterministic)
+	if deterministic {
+		return xxx_messageInfo_MsgStartGroupResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
 }
 func (m *MsgStartGroupResponse) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_MsgStartGroupResponse.Merge(m, src)
 }
 func (m *MsgStartGroupResponse) XXX_Size() int {
-	return xxx_messageInfo_MsgStartGroupResponse.Size(m)
+	return m.Size()
 }
 func (m *MsgStartGroupResponse) XXX_DiscardUnknown() {
 	xxx_messageInfo_MsgStartGroupResponse.DiscardUnknown(m)
@@ -244,7 +282,7 @@ func init() {
 func init() { proto.RegisterFile("deployment/v1/groupmsg.proto", fileDescriptor_8bef1704e1c97197) }
 
 var fileDescriptor_8bef1704e1c97197 = []byte{
-	// 274 bytes of a gzipped FileDescriptorProto
+	// 300 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x92, 0x49, 0x49, 0x2d, 0xc8,
 	0xc9, 0xaf, 0xcc, 0x4d, 0xcd, 0x2b, 0xd1, 0x2f, 0x33, 0xd4, 0x4f, 0x2f, 0xca, 0x2f, 0x2d, 0xc8,
 	0x2d, 0x4e, 0xd7, 0x2b, 0x28, 0xca, 0x2f, 0xc9, 0x17, 0x92, 0x28, 0x2e, 0x4d, 0xca, 0x4b, 0x2d,
@@ -257,10 +295,740 @@ var fileDescriptor_8bef1704e1c97197 = []byte{
 	0x4a, 0x29, 0x33, 0x45, 0x29, 0x88, 0x29, 0x33, 0xc5, 0x8a, 0xe5, 0xc5, 0x02, 0x79, 0x06, 0x25,
 	0x71, 0x2e, 0x51, 0x14, 0x8b, 0x82, 0x52, 0x8b, 0x0b, 0xf2, 0xf3, 0x8a, 0x53, 0xa1, 0x2e, 0x08,
 	0x48, 0x2c, 0xa5, 0x8f, 0x0b, 0x10, 0x16, 0xa1, 0xb9, 0x20, 0xb8, 0x24, 0xb1, 0xa8, 0x84, 0x1e,
-	0x2e, 0x40, 0x58, 0x04, 0x73, 0x81, 0x93, 0x5f, 0x94, 0x4f, 0x7a, 0x66, 0x49, 0x46, 0x69, 0x92,
-	0x5e, 0x72, 0x7e, 0xae, 0x7e, 0x69, 0x5e, 0x66, 0x72, 0x7e, 0x51, 0x5e, 0x69, 0x4e, 0x49, 0x51,
-	0x62, 0x5a, 0x7e, 0x69, 0x5e, 0x4a, 0x62, 0x49, 0x66, 0x7e, 0x9e, 0x3e, 0xc4, 0x1d, 0xba, 0x79,
-	0xf9, 0x29, 0xa9, 0xfa, 0x90, 0x48, 0x86, 0x88, 0xe8, 0x67, 0x5b, 0x14, 0xeb, 0xa3, 0xc4, 0x71,
-	0x12, 0x1b, 0x58, 0xde, 0x18, 0x10, 0x00, 0x00, 0xff, 0xff, 0x1a, 0xde, 0xe8, 0x97, 0x49, 0x02,
-	0x00, 0x00,
+	0x2e, 0x40, 0x58, 0x04, 0x73, 0x81, 0x53, 0xda, 0x89, 0x47, 0x72, 0x8c, 0x17, 0x1e, 0xc9, 0x31,
+	0x3e, 0x78, 0x24, 0xc7, 0x38, 0xe1, 0xb1, 0x1c, 0xc3, 0x85, 0xc7, 0x72, 0x0c, 0x37, 0x1e, 0xcb,
+	0x31, 0x44, 0xf9, 0xa4, 0x67, 0x96, 0x64, 0x94, 0x26, 0xe9, 0x25, 0xe7, 0xe7, 0xea, 0x97, 0xe6,
+	0x65, 0x26, 0xe7, 0x17, 0xe5, 0x95, 0xe6, 0x94, 0x14, 0x25, 0xa6, 0xe5, 0x97, 0xe6, 0xa5, 0x24,
+	0x96, 0x64, 0xe6, 0xe7, 0xe9, 0x43, 0xdc, 0xa7, 0x9b, 0x97, 0x9f, 0x92, 0xaa, 0x0f, 0x89, 0x7c,
+	0x88, 0x88, 0x7e, 0xb6, 0x45, 0xb1, 0x3e, 0x4a, 0xdc, 0x27, 0xb1, 0x81, 0xe5, 0x8d, 0x01, 0x01,
+	0x00, 0x00, 0xff, 0xff, 0x60, 0x57, 0x33, 0x88, 0x61, 0x02, 0x00, 0x00,
 }
+
+func (m *MsgCloseGroup) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *MsgCloseGroup) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *MsgCloseGroup) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	{
+		size, err := m.ID.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintGroupmsg(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
+}
+
+func (m *MsgCloseGroupResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *MsgCloseGroupResponse) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *MsgCloseGroupResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	return len(dAtA) - i, nil
+}
+
+func (m *MsgPauseGroup) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *MsgPauseGroup) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *MsgPauseGroup) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	{
+		size, err := m.ID.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintGroupmsg(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
+}
+
+func (m *MsgPauseGroupResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *MsgPauseGroupResponse) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *MsgPauseGroupResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	return len(dAtA) - i, nil
+}
+
+func (m *MsgStartGroup) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *MsgStartGroup) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *MsgStartGroup) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	{
+		size, err := m.ID.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintGroupmsg(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
+}
+
+func (m *MsgStartGroupResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *MsgStartGroupResponse) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *MsgStartGroupResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	return len(dAtA) - i, nil
+}
+
+func encodeVarintGroupmsg(dAtA []byte, offset int, v uint64) int {
+	offset -= sovGroupmsg(v)
+	base := offset
+	for v >= 1<<7 {
+		dAtA[offset] = uint8(v&0x7f | 0x80)
+		v >>= 7
+		offset++
+	}
+	dAtA[offset] = uint8(v)
+	return base
+}
+func (m *MsgCloseGroup) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = m.ID.Size()
+	n += 1 + l + sovGroupmsg(uint64(l))
+	return n
+}
+
+func (m *MsgCloseGroupResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	return n
+}
+
+func (m *MsgPauseGroup) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = m.ID.Size()
+	n += 1 + l + sovGroupmsg(uint64(l))
+	return n
+}
+
+func (m *MsgPauseGroupResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	return n
+}
+
+func (m *MsgStartGroup) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = m.ID.Size()
+	n += 1 + l + sovGroupmsg(uint64(l))
+	return n
+}
+
+func (m *MsgStartGroupResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	return n
+}
+
+func sovGroupmsg(x uint64) (n int) {
+	return (math_bits.Len64(x|1) + 6) / 7
+}
+func sozGroupmsg(x uint64) (n int) {
+	return sovGroupmsg(uint64((x << 1) ^ uint64((int64(x) >> 63))))
+}
+func (m *MsgCloseGroup) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowGroupmsg
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: MsgCloseGroup: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: MsgCloseGroup: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ID", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowGroupmsg
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthGroupmsg
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthGroupmsg
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.ID.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipGroupmsg(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthGroupmsg
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *MsgCloseGroupResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowGroupmsg
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: MsgCloseGroupResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: MsgCloseGroupResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		default:
+			iNdEx = preIndex
+			skippy, err := skipGroupmsg(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthGroupmsg
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *MsgPauseGroup) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowGroupmsg
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: MsgPauseGroup: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: MsgPauseGroup: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ID", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowGroupmsg
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthGroupmsg
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthGroupmsg
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.ID.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipGroupmsg(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthGroupmsg
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *MsgPauseGroupResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowGroupmsg
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: MsgPauseGroupResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: MsgPauseGroupResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		default:
+			iNdEx = preIndex
+			skippy, err := skipGroupmsg(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthGroupmsg
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *MsgStartGroup) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowGroupmsg
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: MsgStartGroup: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: MsgStartGroup: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ID", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowGroupmsg
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthGroupmsg
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthGroupmsg
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.ID.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipGroupmsg(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthGroupmsg
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *MsgStartGroupResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowGroupmsg
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: MsgStartGroupResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: MsgStartGroupResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		default:
+			iNdEx = preIndex
+			skippy, err := skipGroupmsg(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthGroupmsg
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func skipGroupmsg(dAtA []byte) (n int, err error) {
+	l := len(dAtA)
+	iNdEx := 0
+	depth := 0
+	for iNdEx < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return 0, ErrIntOverflowGroupmsg
+			}
+			if iNdEx >= l {
+				return 0, io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		wireType := int(wire & 0x7)
+		switch wireType {
+		case 0:
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return 0, ErrIntOverflowGroupmsg
+				}
+				if iNdEx >= l {
+					return 0, io.ErrUnexpectedEOF
+				}
+				iNdEx++
+				if dAtA[iNdEx-1] < 0x80 {
+					break
+				}
+			}
+		case 1:
+			iNdEx += 8
+		case 2:
+			var length int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return 0, ErrIntOverflowGroupmsg
+				}
+				if iNdEx >= l {
+					return 0, io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				length |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if length < 0 {
+				return 0, ErrInvalidLengthGroupmsg
+			}
+			iNdEx += length
+		case 3:
+			depth++
+		case 4:
+			if depth == 0 {
+				return 0, ErrUnexpectedEndOfGroupGroupmsg
+			}
+			depth--
+		case 5:
+			iNdEx += 4
+		default:
+			return 0, fmt.Errorf("proto: illegal wireType %d", wireType)
+		}
+		if iNdEx < 0 {
+			return 0, ErrInvalidLengthGroupmsg
+		}
+		if depth == 0 {
+			return iNdEx, nil
+		}
+	}
+	return 0, io.ErrUnexpectedEOF
+}
+
+var (
+	ErrInvalidLengthGroupmsg        = fmt.Errorf("proto: negative length found during unmarshaling")
+	ErrIntOverflowGroupmsg          = fmt.Errorf("proto: integer overflow")
+	ErrUnexpectedEndOfGroupGroupmsg = fmt.Errorf("proto: unexpected end of group")
+)

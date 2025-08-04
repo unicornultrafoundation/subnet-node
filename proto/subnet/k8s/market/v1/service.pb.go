@@ -4,10 +4,15 @@
 package v1
 
 import (
+	context "context"
 	fmt "fmt"
 	math "math"
 
+	grpc1 "github.com/gogo/protobuf/grpc"
 	proto "github.com/gogo/protobuf/proto"
+	grpc "google.golang.org/grpc"
+	codes "google.golang.org/grpc/codes"
+	status "google.golang.org/grpc/status"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -24,22 +29,258 @@ const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 func init() { proto.RegisterFile("market/v1/service.proto", fileDescriptor_b1db3e332779840b) }
 
 var fileDescriptor_b1db3e332779840b = []byte{
-	// 272 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x92, 0x4d, 0x4b, 0x03, 0x31,
-	0x10, 0x86, 0x0f, 0x05, 0xd1, 0x88, 0x97, 0xa8, 0x08, 0xb9, 0xf9, 0x81, 0xe0, 0x57, 0x42, 0xf5,
-	0xd2, 0x73, 0x7b, 0x11, 0xb1, 0x17, 0x2f, 0x8a, 0x82, 0x90, 0xdd, 0x8c, 0xdb, 0xb0, 0xdb, 0xa4,
-	0x64, 0x92, 0xf5, 0x2f, 0xfb, 0x33, 0xc4, 0xcd, 0x9a, 0x22, 0xb8, 0xdd, 0xbd, 0x4e, 0x9e, 0x79,
-	0x1f, 0xde, 0x30, 0xe4, 0x68, 0x29, 0x5d, 0x09, 0x5e, 0xd4, 0x63, 0x81, 0xe0, 0x6a, 0x9d, 0x03,
-	0x5f, 0x39, 0xeb, 0x2d, 0x3d, 0xc0, 0x90, 0x19, 0xf0, 0xbc, 0x9c, 0x20, 0x8f, 0x0c, 0xaf, 0xc7,
-	0x6c, 0x7f, 0x8d, 0x67, 0x5a, 0x45, 0x94, 0x1d, 0xae, 0x87, 0x15, 0x48, 0x6c, 0x13, 0x6e, 0xbf,
-	0x46, 0x64, 0x34, 0xc7, 0x82, 0xbe, 0x91, 0x9d, 0x99, 0x03, 0xe9, 0x61, 0xaa, 0x15, 0x3d, 0xe1,
-	0xff, 0xe5, 0xf2, 0x39, 0x16, 0x89, 0x61, 0x97, 0xfd, 0xcc, 0x13, 0xe0, 0xca, 0x1a, 0x04, 0xfa,
-	0x42, 0xb6, 0x67, 0x95, 0xc5, 0x26, 0xfb, 0xb8, 0x7b, 0xaf, 0x45, 0xd8, 0x45, 0x2f, 0x92, 0x92,
-	0x0b, 0xb2, 0xf7, 0xac, 0xfd, 0x42, 0x39, 0xf9, 0xf9, 0xf8, 0xd3, 0x8a, 0x9e, 0x77, 0xee, 0xfe,
-	0xe1, 0x18, 0x1f, 0xc6, 0x25, 0x91, 0x24, 0xbb, 0xb1, 0x57, 0xd4, 0x9c, 0xf5, 0xb4, 0x8f, 0x92,
-	0xeb, 0x21, 0x54, 0x52, 0xbc, 0x13, 0xd2, 0xf4, 0x8b, 0x86, 0xd3, 0xcd, 0x9f, 0x10, 0x05, 0x57,
-	0x03, 0xa0, 0xdf, 0xfc, 0xe9, 0xc3, 0xeb, 0x7d, 0xa1, 0xfd, 0x22, 0x64, 0x3c, 0xb7, 0x4b, 0x11,
-	0x8c, 0xce, 0xad, 0x33, 0xa1, 0xf2, 0x4e, 0x7e, 0xd8, 0x60, 0x94, 0xf4, 0xda, 0x1a, 0x11, 0xf3,
-	0x6e, 0x8c, 0x55, 0x20, 0x9a, 0x0b, 0x69, 0x27, 0xa2, 0x9c, 0xa0, 0x48, 0x27, 0x94, 0x6d, 0x35,
-	0x6f, 0x77, 0xdf, 0x01, 0x00, 0x00, 0xff, 0xff, 0x48, 0x8d, 0x01, 0x10, 0x9a, 0x02, 0x00, 0x00,
+	// 303 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x92, 0x3d, 0x4b, 0xc4, 0x30,
+	0x18, 0xc7, 0xaf, 0x1c, 0x88, 0x46, 0x5c, 0xaa, 0x22, 0x74, 0x08, 0xf8, 0x82, 0xe0, 0x5b, 0xc2,
+	0xe9, 0x72, 0xf3, 0xdd, 0xe2, 0xe0, 0x2d, 0x2e, 0x8a, 0x82, 0x90, 0xb6, 0xb1, 0x17, 0xda, 0x4b,
+	0x8e, 0x3c, 0x69, 0xfd, 0x1a, 0x7e, 0x2c, 0xc7, 0x1b, 0x1d, 0xa5, 0x5d, 0xfc, 0x18, 0x62, 0x53,
+	0x73, 0x08, 0x9e, 0xed, 0xfa, 0xe4, 0xf7, 0xfc, 0x7f, 0xfc, 0xc3, 0x83, 0xf6, 0x66, 0x4c, 0xa7,
+	0xdc, 0xd0, 0x62, 0x40, 0x81, 0xeb, 0x42, 0x44, 0x9c, 0xcc, 0xb5, 0x32, 0xca, 0xdf, 0x81, 0x3c,
+	0x94, 0xdc, 0x90, 0x74, 0x08, 0xc4, 0x32, 0xa4, 0x18, 0x04, 0xdb, 0x4b, 0x3c, 0x14, 0xb1, 0x45,
+	0x83, 0xdd, 0xe5, 0x30, 0xe3, 0x0c, 0x9a, 0x84, 0xcb, 0xcf, 0x3e, 0xea, 0x4f, 0x20, 0xf1, 0x1f,
+	0xd1, 0xc6, 0x58, 0x73, 0x66, 0xf8, 0x48, 0xc4, 0xfe, 0x01, 0xf9, 0x2b, 0x97, 0x4c, 0x20, 0x71,
+	0x4c, 0x70, 0xda, 0xce, 0xdc, 0x72, 0x98, 0x2b, 0x09, 0xdc, 0xbf, 0x47, 0xeb, 0xe3, 0x4c, 0x41,
+	0x9d, 0xbd, 0xbf, 0x7a, 0xaf, 0x41, 0x82, 0x93, 0x56, 0xc4, 0x25, 0x27, 0x68, 0xeb, 0x4e, 0x98,
+	0x69, 0xac, 0xd9, 0xcb, 0xcd, 0x77, 0x2b, 0xff, 0x78, 0xe5, 0xee, 0x2f, 0x2e, 0x20, 0xdd, 0x38,
+	0x27, 0x62, 0x68, 0xd3, 0xf6, 0xb2, 0x9a, 0xa3, 0x96, 0xf6, 0x56, 0x72, 0xde, 0x85, 0x72, 0x8a,
+	0x27, 0x84, 0xea, 0x7e, 0xd6, 0x70, 0xf8, 0xff, 0x27, 0x58, 0xc1, 0x59, 0x07, 0xe8, 0x27, 0x7f,
+	0x14, 0xbe, 0x95, 0xd8, 0x5b, 0x94, 0xd8, 0xfb, 0x28, 0xb1, 0xf7, 0x5a, 0xe1, 0xde, 0xa2, 0xc2,
+	0xbd, 0xf7, 0x0a, 0xf7, 0x1e, 0xae, 0x13, 0x61, 0xa6, 0x79, 0x48, 0x22, 0x35, 0xa3, 0xb9, 0x14,
+	0x91, 0xd2, 0x32, 0xcf, 0x8c, 0x66, 0xcf, 0x2a, 0x97, 0x31, 0x33, 0x42, 0x49, 0x6a, 0x3d, 0x17,
+	0x52, 0xc5, 0x9c, 0xd6, 0x97, 0xd3, 0x4c, 0x68, 0x3a, 0x04, 0xea, 0x4e, 0x2b, 0x5c, 0xab, 0xdf,
+	0xae, 0xbe, 0x02, 0x00, 0x00, 0xff, 0xff, 0x24, 0x0c, 0x4a, 0xc8, 0xb2, 0x02, 0x00, 0x00,
+}
+
+// Reference imports to suppress errors if they are not otherwise used.
+var _ context.Context
+var _ grpc.ClientConn
+
+// This is a compile-time assertion to ensure that this generated file
+// is compatible with the grpc package it is being compiled against.
+const _ = grpc.SupportPackageIsVersion4
+
+// MsgClient is the client API for Msg service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
+type MsgClient interface {
+	// CreateBid defines a method to create a bid given proper inputs.
+	CreateBid(ctx context.Context, in *MsgCreateBid, opts ...grpc.CallOption) (*MsgCreateBidResponse, error)
+	// CloseBid defines a method to close a bid given proper inputs.
+	CloseBid(ctx context.Context, in *MsgCloseBid, opts ...grpc.CallOption) (*MsgCloseBidResponse, error)
+	// WithdrawLease withdraws accrued funds from the lease payment
+	WithdrawLease(ctx context.Context, in *MsgWithdrawLease, opts ...grpc.CallOption) (*MsgWithdrawLeaseResponse, error)
+	// CreateLease creates a new lease
+	CreateLease(ctx context.Context, in *MsgCreateLease, opts ...grpc.CallOption) (*MsgCreateLeaseResponse, error)
+	// CloseLease defines a method to close an order given proper inputs.
+	CloseLease(ctx context.Context, in *MsgCloseLease, opts ...grpc.CallOption) (*MsgCloseLeaseResponse, error)
+}
+
+type msgClient struct {
+	cc grpc1.ClientConn
+}
+
+func NewMsgClient(cc grpc1.ClientConn) MsgClient {
+	return &msgClient{cc}
+}
+
+func (c *msgClient) CreateBid(ctx context.Context, in *MsgCreateBid, opts ...grpc.CallOption) (*MsgCreateBidResponse, error) {
+	out := new(MsgCreateBidResponse)
+	err := c.cc.Invoke(ctx, "/subnet.k8s.market.v1.Msg/CreateBid", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *msgClient) CloseBid(ctx context.Context, in *MsgCloseBid, opts ...grpc.CallOption) (*MsgCloseBidResponse, error) {
+	out := new(MsgCloseBidResponse)
+	err := c.cc.Invoke(ctx, "/subnet.k8s.market.v1.Msg/CloseBid", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *msgClient) WithdrawLease(ctx context.Context, in *MsgWithdrawLease, opts ...grpc.CallOption) (*MsgWithdrawLeaseResponse, error) {
+	out := new(MsgWithdrawLeaseResponse)
+	err := c.cc.Invoke(ctx, "/subnet.k8s.market.v1.Msg/WithdrawLease", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *msgClient) CreateLease(ctx context.Context, in *MsgCreateLease, opts ...grpc.CallOption) (*MsgCreateLeaseResponse, error) {
+	out := new(MsgCreateLeaseResponse)
+	err := c.cc.Invoke(ctx, "/subnet.k8s.market.v1.Msg/CreateLease", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *msgClient) CloseLease(ctx context.Context, in *MsgCloseLease, opts ...grpc.CallOption) (*MsgCloseLeaseResponse, error) {
+	out := new(MsgCloseLeaseResponse)
+	err := c.cc.Invoke(ctx, "/subnet.k8s.market.v1.Msg/CloseLease", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// MsgServer is the server API for Msg service.
+type MsgServer interface {
+	// CreateBid defines a method to create a bid given proper inputs.
+	CreateBid(context.Context, *MsgCreateBid) (*MsgCreateBidResponse, error)
+	// CloseBid defines a method to close a bid given proper inputs.
+	CloseBid(context.Context, *MsgCloseBid) (*MsgCloseBidResponse, error)
+	// WithdrawLease withdraws accrued funds from the lease payment
+	WithdrawLease(context.Context, *MsgWithdrawLease) (*MsgWithdrawLeaseResponse, error)
+	// CreateLease creates a new lease
+	CreateLease(context.Context, *MsgCreateLease) (*MsgCreateLeaseResponse, error)
+	// CloseLease defines a method to close an order given proper inputs.
+	CloseLease(context.Context, *MsgCloseLease) (*MsgCloseLeaseResponse, error)
+}
+
+// UnimplementedMsgServer can be embedded to have forward compatible implementations.
+type UnimplementedMsgServer struct {
+}
+
+func (*UnimplementedMsgServer) CreateBid(ctx context.Context, req *MsgCreateBid) (*MsgCreateBidResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreateBid not implemented")
+}
+func (*UnimplementedMsgServer) CloseBid(ctx context.Context, req *MsgCloseBid) (*MsgCloseBidResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CloseBid not implemented")
+}
+func (*UnimplementedMsgServer) WithdrawLease(ctx context.Context, req *MsgWithdrawLease) (*MsgWithdrawLeaseResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method WithdrawLease not implemented")
+}
+func (*UnimplementedMsgServer) CreateLease(ctx context.Context, req *MsgCreateLease) (*MsgCreateLeaseResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreateLease not implemented")
+}
+func (*UnimplementedMsgServer) CloseLease(ctx context.Context, req *MsgCloseLease) (*MsgCloseLeaseResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CloseLease not implemented")
+}
+
+func RegisterMsgServer(s grpc1.Server, srv MsgServer) {
+	s.RegisterService(&_Msg_serviceDesc, srv)
+}
+
+func _Msg_CreateBid_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MsgCreateBid)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MsgServer).CreateBid(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/subnet.k8s.market.v1.Msg/CreateBid",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MsgServer).CreateBid(ctx, req.(*MsgCreateBid))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Msg_CloseBid_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MsgCloseBid)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MsgServer).CloseBid(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/subnet.k8s.market.v1.Msg/CloseBid",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MsgServer).CloseBid(ctx, req.(*MsgCloseBid))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Msg_WithdrawLease_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MsgWithdrawLease)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MsgServer).WithdrawLease(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/subnet.k8s.market.v1.Msg/WithdrawLease",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MsgServer).WithdrawLease(ctx, req.(*MsgWithdrawLease))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Msg_CreateLease_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MsgCreateLease)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MsgServer).CreateLease(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/subnet.k8s.market.v1.Msg/CreateLease",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MsgServer).CreateLease(ctx, req.(*MsgCreateLease))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Msg_CloseLease_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MsgCloseLease)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MsgServer).CloseLease(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/subnet.k8s.market.v1.Msg/CloseLease",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MsgServer).CloseLease(ctx, req.(*MsgCloseLease))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+var _Msg_serviceDesc = grpc.ServiceDesc{
+	ServiceName: "subnet.k8s.market.v1.Msg",
+	HandlerType: (*MsgServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "CreateBid",
+			Handler:    _Msg_CreateBid_Handler,
+		},
+		{
+			MethodName: "CloseBid",
+			Handler:    _Msg_CloseBid_Handler,
+		},
+		{
+			MethodName: "WithdrawLease",
+			Handler:    _Msg_WithdrawLease_Handler,
+		},
+		{
+			MethodName: "CreateLease",
+			Handler:    _Msg_CreateLease_Handler,
+		},
+		{
+			MethodName: "CloseLease",
+			Handler:    _Msg_CloseLease_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "market/v1/service.proto",
 }

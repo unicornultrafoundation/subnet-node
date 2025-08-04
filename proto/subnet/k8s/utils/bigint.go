@@ -20,6 +20,42 @@ func (i *BigInt) Equal(that interface{}) bool {
 	}
 }
 
+func (i *BigInt) Size() int {
+	bz, _ := i.Marshal()
+	return len(bz)
+}
+
+// Marshal implements the gogo proto custom type interface.
+func (i *BigInt) Marshal() ([]byte, error) {
+	if i == nil {
+		i = new(BigInt)
+	}
+	return i.Int.MarshalText()
+}
+
+// MarshalTo implements the gogo proto custom type interface.
+func (i *BigInt) MarshalTo(data []byte) (n int, err error) {
+	if i == nil {
+		i = new(BigInt)
+	}
+	if i.Int.BitLen() == 0 { // The value 0
+		copy(data, []byte{0x30})
+		return 1, nil
+	}
+
+	bz, err := i.Marshal()
+	if err != nil {
+		return 0, err
+	}
+
+	copy(data, bz)
+	return len(bz), nil
+}
+
+func (i *BigInt) Unmarshal(data []byte) error {
+	return i.Int.UnmarshalText(data)
+}
+
 // GT returns true if i is greater than j
 func (i *BigInt) GT(j *BigInt) bool {
 	return i.Int.Cmp(&j.Int) > 0

@@ -4,13 +4,20 @@
 package v1
 
 import (
+	context "context"
 	fmt "fmt"
+	io "io"
 	math "math"
+	math_bits "math/bits"
 
 	_ "github.com/cosmos/gogoproto/gogoproto"
+	grpc1 "github.com/gogo/protobuf/grpc"
 	proto "github.com/gogo/protobuf/proto"
 	v11 "github.com/unicornultrafoundation/subnet-node/proto/subnet/k8s/manifest/v1"
 	v1 "github.com/unicornultrafoundation/subnet-node/proto/subnet/k8s/market/v1"
+	grpc "google.golang.org/grpc"
+	codes "google.golang.org/grpc/codes"
+	status "google.golang.org/grpc/status"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -26,17 +33,14 @@ const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
 // LeaseServiceStatus
 type LeaseServiceStatus struct {
-	Available            int32    `protobuf:"varint,1,opt,name=available,proto3" json:"available,omitempty"`
-	Total                int32    `protobuf:"varint,2,opt,name=total,proto3" json:"total,omitempty"`
-	Uris                 []string `protobuf:"bytes,3,rep,name=uris,proto3" json:"uris,omitempty"`
-	ObservedGeneration   int64    `protobuf:"varint,4,opt,name=observed_generation,json=observedGeneration,proto3" json:"observed_generation,omitempty"`
-	Replicas             int32    `protobuf:"varint,5,opt,name=replicas,proto3" json:"replicas,omitempty"`
-	UpdatedReplicas      int32    `protobuf:"varint,6,opt,name=updated_replicas,json=updatedReplicas,proto3" json:"updated_replicas,omitempty"`
-	ReadyReplicas        int32    `protobuf:"varint,7,opt,name=ready_replicas,json=readyReplicas,proto3" json:"ready_replicas,omitempty"`
-	AvailableReplicas    int32    `protobuf:"varint,8,opt,name=available_replicas,json=availableReplicas,proto3" json:"available_replicas,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
+	Available          int32    `protobuf:"varint,1,opt,name=available,proto3" json:"available,omitempty"`
+	Total              int32    `protobuf:"varint,2,opt,name=total,proto3" json:"total,omitempty"`
+	Uris               []string `protobuf:"bytes,3,rep,name=uris,proto3" json:"uris,omitempty"`
+	ObservedGeneration int64    `protobuf:"varint,4,opt,name=observed_generation,json=observedGeneration,proto3" json:"observed_generation,omitempty"`
+	Replicas           int32    `protobuf:"varint,5,opt,name=replicas,proto3" json:"replicas,omitempty"`
+	UpdatedReplicas    int32    `protobuf:"varint,6,opt,name=updated_replicas,json=updatedReplicas,proto3" json:"updated_replicas,omitempty"`
+	ReadyReplicas      int32    `protobuf:"varint,7,opt,name=ready_replicas,json=readyReplicas,proto3" json:"ready_replicas,omitempty"`
+	AvailableReplicas  int32    `protobuf:"varint,8,opt,name=available_replicas,json=availableReplicas,proto3" json:"available_replicas,omitempty"`
 }
 
 func (m *LeaseServiceStatus) Reset()         { *m = LeaseServiceStatus{} }
@@ -46,16 +50,25 @@ func (*LeaseServiceStatus) Descriptor() ([]byte, []int) {
 	return fileDescriptor_061192e9db8657c7, []int{0}
 }
 func (m *LeaseServiceStatus) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_LeaseServiceStatus.Unmarshal(m, b)
+	return m.Unmarshal(b)
 }
 func (m *LeaseServiceStatus) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_LeaseServiceStatus.Marshal(b, m, deterministic)
+	if deterministic {
+		return xxx_messageInfo_LeaseServiceStatus.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
 }
 func (m *LeaseServiceStatus) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_LeaseServiceStatus.Merge(m, src)
 }
 func (m *LeaseServiceStatus) XXX_Size() int {
-	return xxx_messageInfo_LeaseServiceStatus.Size(m)
+	return m.Size()
 }
 func (m *LeaseServiceStatus) XXX_DiscardUnknown() {
 	xxx_messageInfo_LeaseServiceStatus.DiscardUnknown(m)
@@ -121,13 +134,10 @@ func (m *LeaseServiceStatus) GetAvailableReplicas() int32 {
 
 // LeaseIPStatus
 type LeaseIPStatus struct {
-	Port                 uint32   `protobuf:"varint,1,opt,name=port,proto3" json:"port" yaml:"port"`
-	ExternalPort         uint32   `protobuf:"varint,2,opt,name=external_port,json=externalPort,proto3" json:"external_port" yaml:"external_port"`
-	Protocol             string   `protobuf:"bytes,3,opt,name=protocol,proto3" json:"protocol" yaml:"protocol"`
-	Ip                   string   `protobuf:"bytes,4,opt,name=ip,proto3" json:"ip" yaml:"ip"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
+	Port         uint32 `protobuf:"varint,1,opt,name=port,proto3" json:"port" yaml:"port"`
+	ExternalPort uint32 `protobuf:"varint,2,opt,name=external_port,json=externalPort,proto3" json:"external_port" yaml:"external_port"`
+	Protocol     string `protobuf:"bytes,3,opt,name=protocol,proto3" json:"protocol" yaml:"protocol"`
+	Ip           string `protobuf:"bytes,4,opt,name=ip,proto3" json:"ip" yaml:"ip"`
 }
 
 func (m *LeaseIPStatus) Reset()         { *m = LeaseIPStatus{} }
@@ -137,16 +147,25 @@ func (*LeaseIPStatus) Descriptor() ([]byte, []int) {
 	return fileDescriptor_061192e9db8657c7, []int{1}
 }
 func (m *LeaseIPStatus) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_LeaseIPStatus.Unmarshal(m, b)
+	return m.Unmarshal(b)
 }
 func (m *LeaseIPStatus) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_LeaseIPStatus.Marshal(b, m, deterministic)
+	if deterministic {
+		return xxx_messageInfo_LeaseIPStatus.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
 }
 func (m *LeaseIPStatus) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_LeaseIPStatus.Merge(m, src)
 }
 func (m *LeaseIPStatus) XXX_Size() int {
-	return xxx_messageInfo_LeaseIPStatus.Size(m)
+	return m.Size()
 }
 func (m *LeaseIPStatus) XXX_DiscardUnknown() {
 	xxx_messageInfo_LeaseIPStatus.DiscardUnknown(m)
@@ -184,14 +203,11 @@ func (m *LeaseIPStatus) GetIp() string {
 
 // ForwarderPortStatus
 type ForwarderPortStatus struct {
-	Host                 string   `protobuf:"bytes,1,opt,name=host,proto3" json:"host" yaml:"host"`
-	Port                 uint32   `protobuf:"varint,2,opt,name=port,proto3" json:"port" yaml:"port"`
-	ExternalPort         uint32   `protobuf:"varint,3,opt,name=external_port,json=externalPort,proto3" json:"external_port" yaml:"external_port"`
-	Proto                string   `protobuf:"bytes,4,opt,name=proto,proto3" json:"proto" yaml:"proto"`
-	Name                 string   `protobuf:"bytes,5,opt,name=name,proto3" json:"name" yaml:"name"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
+	Host         string `protobuf:"bytes,1,opt,name=host,proto3" json:"host" yaml:"host"`
+	Port         uint32 `protobuf:"varint,2,opt,name=port,proto3" json:"port" yaml:"port"`
+	ExternalPort uint32 `protobuf:"varint,3,opt,name=external_port,json=externalPort,proto3" json:"external_port" yaml:"external_port"`
+	Proto        string `protobuf:"bytes,4,opt,name=proto,proto3" json:"proto" yaml:"proto"`
+	Name         string `protobuf:"bytes,5,opt,name=name,proto3" json:"name" yaml:"name"`
 }
 
 func (m *ForwarderPortStatus) Reset()         { *m = ForwarderPortStatus{} }
@@ -201,16 +217,25 @@ func (*ForwarderPortStatus) Descriptor() ([]byte, []int) {
 	return fileDescriptor_061192e9db8657c7, []int{2}
 }
 func (m *ForwarderPortStatus) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_ForwarderPortStatus.Unmarshal(m, b)
+	return m.Unmarshal(b)
 }
 func (m *ForwarderPortStatus) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_ForwarderPortStatus.Marshal(b, m, deterministic)
+	if deterministic {
+		return xxx_messageInfo_ForwarderPortStatus.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
 }
 func (m *ForwarderPortStatus) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_ForwarderPortStatus.Merge(m, src)
 }
 func (m *ForwarderPortStatus) XXX_Size() int {
-	return xxx_messageInfo_ForwarderPortStatus.Size(m)
+	return m.Size()
 }
 func (m *ForwarderPortStatus) XXX_DiscardUnknown() {
 	xxx_messageInfo_ForwarderPortStatus.DiscardUnknown(m)
@@ -255,13 +280,10 @@ func (m *ForwarderPortStatus) GetName() string {
 
 // ServiceStatus
 type ServiceStatus struct {
-	Name                 string                `protobuf:"bytes,1,opt,name=name,proto3" json:"name" yaml:"name"`
-	Status               LeaseServiceStatus    `protobuf:"bytes,2,opt,name=status,proto3" json:"status" yaml:"status"`
-	Ports                []ForwarderPortStatus `protobuf:"bytes,3,rep,name=ports,proto3" json:"ports" yaml:"ports"`
-	Ips                  []LeaseIPStatus       `protobuf:"bytes,4,rep,name=ips,proto3" json:"ip" yaml:"ip"`
-	XXX_NoUnkeyedLiteral struct{}              `json:"-"`
-	XXX_unrecognized     []byte                `json:"-"`
-	XXX_sizecache        int32                 `json:"-"`
+	Name   string                `protobuf:"bytes,1,opt,name=name,proto3" json:"name" yaml:"name"`
+	Status LeaseServiceStatus    `protobuf:"bytes,2,opt,name=status,proto3" json:"status" yaml:"status"`
+	Ports  []ForwarderPortStatus `protobuf:"bytes,3,rep,name=ports,proto3" json:"ports" yaml:"ports"`
+	Ips    []LeaseIPStatus       `protobuf:"bytes,4,rep,name=ips,proto3" json:"ip" yaml:"ip"`
 }
 
 func (m *ServiceStatus) Reset()         { *m = ServiceStatus{} }
@@ -271,16 +293,25 @@ func (*ServiceStatus) Descriptor() ([]byte, []int) {
 	return fileDescriptor_061192e9db8657c7, []int{3}
 }
 func (m *ServiceStatus) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_ServiceStatus.Unmarshal(m, b)
+	return m.Unmarshal(b)
 }
 func (m *ServiceStatus) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_ServiceStatus.Marshal(b, m, deterministic)
+	if deterministic {
+		return xxx_messageInfo_ServiceStatus.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
 }
 func (m *ServiceStatus) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_ServiceStatus.Merge(m, src)
 }
 func (m *ServiceStatus) XXX_Size() int {
-	return xxx_messageInfo_ServiceStatus.Size(m)
+	return m.Size()
 }
 func (m *ServiceStatus) XXX_DiscardUnknown() {
 	xxx_messageInfo_ServiceStatus.DiscardUnknown(m)
@@ -318,11 +349,8 @@ func (m *ServiceStatus) GetIps() []LeaseIPStatus {
 
 // SendManifestRequest is request type for the SendManifest Providers RPC method
 type SendManifestRequest struct {
-	LeaseId              v1.LeaseID  `protobuf:"bytes,1,opt,name=lease_id,json=leaseId,proto3" json:"LeaseID" yaml:"LeaseID"`
-	Manifest             []v11.Group `protobuf:"bytes,2,rep,name=manifest,proto3" json:"manifest" yaml:"manifest"`
-	XXX_NoUnkeyedLiteral struct{}    `json:"-"`
-	XXX_unrecognized     []byte      `json:"-"`
-	XXX_sizecache        int32       `json:"-"`
+	LeaseId  v1.LeaseID  `protobuf:"bytes,1,opt,name=lease_id,json=leaseId,proto3" json:"LeaseID" yaml:"LeaseID"`
+	Manifest []v11.Group `protobuf:"bytes,2,rep,name=manifest,proto3" json:"manifest" yaml:"manifest"`
 }
 
 func (m *SendManifestRequest) Reset()         { *m = SendManifestRequest{} }
@@ -332,16 +360,25 @@ func (*SendManifestRequest) Descriptor() ([]byte, []int) {
 	return fileDescriptor_061192e9db8657c7, []int{4}
 }
 func (m *SendManifestRequest) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_SendManifestRequest.Unmarshal(m, b)
+	return m.Unmarshal(b)
 }
 func (m *SendManifestRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_SendManifestRequest.Marshal(b, m, deterministic)
+	if deterministic {
+		return xxx_messageInfo_SendManifestRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
 }
 func (m *SendManifestRequest) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_SendManifestRequest.Merge(m, src)
 }
 func (m *SendManifestRequest) XXX_Size() int {
-	return xxx_messageInfo_SendManifestRequest.Size(m)
+	return m.Size()
 }
 func (m *SendManifestRequest) XXX_DiscardUnknown() {
 	xxx_messageInfo_SendManifestRequest.DiscardUnknown(m)
@@ -365,9 +402,6 @@ func (m *SendManifestRequest) GetManifest() []v11.Group {
 
 // SendManifestResponse is response type for the SendManifest Providers RPC method
 type SendManifestResponse struct {
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *SendManifestResponse) Reset()         { *m = SendManifestResponse{} }
@@ -377,16 +411,25 @@ func (*SendManifestResponse) Descriptor() ([]byte, []int) {
 	return fileDescriptor_061192e9db8657c7, []int{5}
 }
 func (m *SendManifestResponse) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_SendManifestResponse.Unmarshal(m, b)
+	return m.Unmarshal(b)
 }
 func (m *SendManifestResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_SendManifestResponse.Marshal(b, m, deterministic)
+	if deterministic {
+		return xxx_messageInfo_SendManifestResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
 }
 func (m *SendManifestResponse) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_SendManifestResponse.Merge(m, src)
 }
 func (m *SendManifestResponse) XXX_Size() int {
-	return xxx_messageInfo_SendManifestResponse.Size(m)
+	return m.Size()
 }
 func (m *SendManifestResponse) XXX_DiscardUnknown() {
 	xxx_messageInfo_SendManifestResponse.DiscardUnknown(m)
@@ -396,11 +439,8 @@ var xxx_messageInfo_SendManifestResponse proto.InternalMessageInfo
 
 // ServiceLogsRequest
 type ServiceLogsRequest struct {
-	LeaseId              v1.LeaseID `protobuf:"bytes,1,opt,name=lease_id,json=leaseId,proto3" json:"LeaseID" yaml:"LeaseID"`
-	Services             []string   `protobuf:"bytes,2,rep,name=services,proto3" json:"services" yaml:"services"`
-	XXX_NoUnkeyedLiteral struct{}   `json:"-"`
-	XXX_unrecognized     []byte     `json:"-"`
-	XXX_sizecache        int32      `json:"-"`
+	LeaseId  v1.LeaseID `protobuf:"bytes,1,opt,name=lease_id,json=leaseId,proto3" json:"LeaseID" yaml:"LeaseID"`
+	Services []string   `protobuf:"bytes,2,rep,name=services,proto3" json:"services" yaml:"services"`
 }
 
 func (m *ServiceLogsRequest) Reset()         { *m = ServiceLogsRequest{} }
@@ -410,16 +450,25 @@ func (*ServiceLogsRequest) Descriptor() ([]byte, []int) {
 	return fileDescriptor_061192e9db8657c7, []int{6}
 }
 func (m *ServiceLogsRequest) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_ServiceLogsRequest.Unmarshal(m, b)
+	return m.Unmarshal(b)
 }
 func (m *ServiceLogsRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_ServiceLogsRequest.Marshal(b, m, deterministic)
+	if deterministic {
+		return xxx_messageInfo_ServiceLogsRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
 }
 func (m *ServiceLogsRequest) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_ServiceLogsRequest.Merge(m, src)
 }
 func (m *ServiceLogsRequest) XXX_Size() int {
-	return xxx_messageInfo_ServiceLogsRequest.Size(m)
+	return m.Size()
 }
 func (m *ServiceLogsRequest) XXX_DiscardUnknown() {
 	xxx_messageInfo_ServiceLogsRequest.DiscardUnknown(m)
@@ -443,11 +492,8 @@ func (m *ServiceLogsRequest) GetServices() []string {
 
 // ServiceLogs
 type ServiceLogs struct {
-	Name                 string   `protobuf:"bytes,1,opt,name=name,proto3" json:"name" yaml:"name"`
-	Logs                 []byte   `protobuf:"bytes,2,opt,name=logs,proto3" json:"logs" yaml:"logs"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name" yaml:"name"`
+	Logs []byte `protobuf:"bytes,2,opt,name=logs,proto3" json:"logs" yaml:"logs"`
 }
 
 func (m *ServiceLogs) Reset()         { *m = ServiceLogs{} }
@@ -457,16 +503,25 @@ func (*ServiceLogs) Descriptor() ([]byte, []int) {
 	return fileDescriptor_061192e9db8657c7, []int{7}
 }
 func (m *ServiceLogs) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_ServiceLogs.Unmarshal(m, b)
+	return m.Unmarshal(b)
 }
 func (m *ServiceLogs) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_ServiceLogs.Marshal(b, m, deterministic)
+	if deterministic {
+		return xxx_messageInfo_ServiceLogs.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
 }
 func (m *ServiceLogs) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_ServiceLogs.Merge(m, src)
 }
 func (m *ServiceLogs) XXX_Size() int {
-	return xxx_messageInfo_ServiceLogs.Size(m)
+	return m.Size()
 }
 func (m *ServiceLogs) XXX_DiscardUnknown() {
 	xxx_messageInfo_ServiceLogs.DiscardUnknown(m)
@@ -490,10 +545,7 @@ func (m *ServiceLogs) GetLogs() []byte {
 
 // ServiceLogsResponse
 type ServiceLogsResponse struct {
-	Services             []*ServiceLogs `protobuf:"bytes,1,rep,name=services,proto3" json:"LeaseID" yaml:"LeaseID"`
-	XXX_NoUnkeyedLiteral struct{}       `json:"-"`
-	XXX_unrecognized     []byte         `json:"-"`
-	XXX_sizecache        int32          `json:"-"`
+	Services []*ServiceLogs `protobuf:"bytes,1,rep,name=services,proto3" json:"LeaseID" yaml:"LeaseID"`
 }
 
 func (m *ServiceLogsResponse) Reset()         { *m = ServiceLogsResponse{} }
@@ -503,16 +555,25 @@ func (*ServiceLogsResponse) Descriptor() ([]byte, []int) {
 	return fileDescriptor_061192e9db8657c7, []int{8}
 }
 func (m *ServiceLogsResponse) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_ServiceLogsResponse.Unmarshal(m, b)
+	return m.Unmarshal(b)
 }
 func (m *ServiceLogsResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_ServiceLogsResponse.Marshal(b, m, deterministic)
+	if deterministic {
+		return xxx_messageInfo_ServiceLogsResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
 }
 func (m *ServiceLogsResponse) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_ServiceLogsResponse.Merge(m, src)
 }
 func (m *ServiceLogsResponse) XXX_Size() int {
-	return xxx_messageInfo_ServiceLogsResponse.Size(m)
+	return m.Size()
 }
 func (m *ServiceLogsResponse) XXX_DiscardUnknown() {
 	xxx_messageInfo_ServiceLogsResponse.DiscardUnknown(m)
@@ -529,10 +590,7 @@ func (m *ServiceLogsResponse) GetServices() []*ServiceLogs {
 
 // ShellRequest
 type ShellRequest struct {
-	LeaseId              v1.LeaseID `protobuf:"bytes,1,opt,name=lease_id,json=leaseId,proto3" json:"LeaseID" yaml:"LeaseID"`
-	XXX_NoUnkeyedLiteral struct{}   `json:"-"`
-	XXX_unrecognized     []byte     `json:"-"`
-	XXX_sizecache        int32      `json:"-"`
+	LeaseId v1.LeaseID `protobuf:"bytes,1,opt,name=lease_id,json=leaseId,proto3" json:"LeaseID" yaml:"LeaseID"`
 }
 
 func (m *ShellRequest) Reset()         { *m = ShellRequest{} }
@@ -542,16 +600,25 @@ func (*ShellRequest) Descriptor() ([]byte, []int) {
 	return fileDescriptor_061192e9db8657c7, []int{9}
 }
 func (m *ShellRequest) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_ShellRequest.Unmarshal(m, b)
+	return m.Unmarshal(b)
 }
 func (m *ShellRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_ShellRequest.Marshal(b, m, deterministic)
+	if deterministic {
+		return xxx_messageInfo_ShellRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
 }
 func (m *ShellRequest) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_ShellRequest.Merge(m, src)
 }
 func (m *ShellRequest) XXX_Size() int {
-	return xxx_messageInfo_ShellRequest.Size(m)
+	return m.Size()
 }
 func (m *ShellRequest) XXX_DiscardUnknown() {
 	xxx_messageInfo_ShellRequest.DiscardUnknown(m)
@@ -568,11 +635,8 @@ func (m *ShellRequest) GetLeaseId() v1.LeaseID {
 
 // ServiceStatusRequest
 type ServiceStatusRequest struct {
-	LeaseId              v1.LeaseID `protobuf:"bytes,1,opt,name=lease_id,json=leaseId,proto3" json:"LeaseID" yaml:"LeaseID"`
-	Services             []string   `protobuf:"bytes,2,rep,name=services,proto3" json:"services" yaml:"services"`
-	XXX_NoUnkeyedLiteral struct{}   `json:"-"`
-	XXX_unrecognized     []byte     `json:"-"`
-	XXX_sizecache        int32      `json:"-"`
+	LeaseId  v1.LeaseID `protobuf:"bytes,1,opt,name=lease_id,json=leaseId,proto3" json:"LeaseID" yaml:"LeaseID"`
+	Services []string   `protobuf:"bytes,2,rep,name=services,proto3" json:"services" yaml:"services"`
 }
 
 func (m *ServiceStatusRequest) Reset()         { *m = ServiceStatusRequest{} }
@@ -582,16 +646,25 @@ func (*ServiceStatusRequest) Descriptor() ([]byte, []int) {
 	return fileDescriptor_061192e9db8657c7, []int{10}
 }
 func (m *ServiceStatusRequest) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_ServiceStatusRequest.Unmarshal(m, b)
+	return m.Unmarshal(b)
 }
 func (m *ServiceStatusRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_ServiceStatusRequest.Marshal(b, m, deterministic)
+	if deterministic {
+		return xxx_messageInfo_ServiceStatusRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
 }
 func (m *ServiceStatusRequest) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_ServiceStatusRequest.Merge(m, src)
 }
 func (m *ServiceStatusRequest) XXX_Size() int {
-	return xxx_messageInfo_ServiceStatusRequest.Size(m)
+	return m.Size()
 }
 func (m *ServiceStatusRequest) XXX_DiscardUnknown() {
 	xxx_messageInfo_ServiceStatusRequest.DiscardUnknown(m)
@@ -615,10 +688,7 @@ func (m *ServiceStatusRequest) GetServices() []string {
 
 // ServiceStatusResponse
 type ServiceStatusResponse struct {
-	Services             []ServiceStatus `protobuf:"bytes,1,rep,name=services,proto3" json:"services" yaml:"services"`
-	XXX_NoUnkeyedLiteral struct{}        `json:"-"`
-	XXX_unrecognized     []byte          `json:"-"`
-	XXX_sizecache        int32           `json:"-"`
+	Services []ServiceStatus `protobuf:"bytes,1,rep,name=services,proto3" json:"services" yaml:"services"`
 }
 
 func (m *ServiceStatusResponse) Reset()         { *m = ServiceStatusResponse{} }
@@ -628,16 +698,25 @@ func (*ServiceStatusResponse) Descriptor() ([]byte, []int) {
 	return fileDescriptor_061192e9db8657c7, []int{11}
 }
 func (m *ServiceStatusResponse) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_ServiceStatusResponse.Unmarshal(m, b)
+	return m.Unmarshal(b)
 }
 func (m *ServiceStatusResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_ServiceStatusResponse.Marshal(b, m, deterministic)
+	if deterministic {
+		return xxx_messageInfo_ServiceStatusResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
 }
 func (m *ServiceStatusResponse) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_ServiceStatusResponse.Merge(m, src)
 }
 func (m *ServiceStatusResponse) XXX_Size() int {
-	return xxx_messageInfo_ServiceStatusResponse.Size(m)
+	return m.Size()
 }
 func (m *ServiceStatusResponse) XXX_DiscardUnknown() {
 	xxx_messageInfo_ServiceStatusResponse.DiscardUnknown(m)
@@ -670,66 +749,2738 @@ func init() {
 func init() { proto.RegisterFile("provider/lease/v1/service.proto", fileDescriptor_061192e9db8657c7) }
 
 var fileDescriptor_061192e9db8657c7 = []byte{
-	// 975 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xcc, 0x57, 0x4f, 0x6f, 0x1b, 0x45,
-	0x14, 0x67, 0xd7, 0x76, 0x62, 0x8f, 0xed, 0x96, 0x4e, 0x52, 0x62, 0xa2, 0x46, 0x13, 0xa6, 0x42,
-	0x4a, 0x14, 0xd5, 0x1b, 0xbb, 0x97, 0x8a, 0xde, 0x16, 0x44, 0x55, 0xa9, 0xa0, 0x68, 0x22, 0x71,
-	0x80, 0x43, 0x34, 0xf6, 0x4e, 0x9c, 0x25, 0xeb, 0x9d, 0x65, 0x76, 0xd7, 0xb4, 0x70, 0xe1, 0xc2,
-	0xc7, 0xe0, 0x0b, 0x70, 0x40, 0x7c, 0x0c, 0x3e, 0xc5, 0x1e, 0xb8, 0x20, 0xf9, 0xd0, 0x83, 0x3f,
-	0x01, 0x9a, 0x3f, 0xfb, 0xc7, 0x31, 0x0a, 0x36, 0x48, 0x81, 0x53, 0xfc, 0x7e, 0xef, 0xef, 0xef,
-	0xbd, 0x79, 0xcf, 0x0e, 0x40, 0x91, 0xe0, 0x33, 0xdf, 0x63, 0xc2, 0x09, 0x18, 0x8d, 0x99, 0x33,
-	0x1b, 0x38, 0x31, 0x13, 0x33, 0x7f, 0xcc, 0xfa, 0x91, 0xe0, 0x09, 0x87, 0x8f, 0xe2, 0x74, 0x14,
-	0xb2, 0xa4, 0x7f, 0xfd, 0x2c, 0xee, 0xe7, 0xb6, 0x7d, 0x65, 0xdb, 0x9f, 0x0d, 0xf6, 0xf7, 0xa6,
-	0x34, 0xf4, 0x2f, 0x59, 0x9c, 0x48, 0xc7, 0x89, 0xe0, 0x69, 0xa4, 0xdd, 0xf6, 0x1f, 0x4e, 0xa9,
-	0xb8, 0x66, 0x0a, 0xd6, 0xc6, 0x1a, 0xde, 0x9d, 0xf0, 0x09, 0x57, 0x1f, 0x1d, 0xf9, 0x49, 0xa3,
-	0xf8, 0x67, 0x1b, 0xc0, 0x57, 0xd2, 0xea, 0x5c, 0xa7, 0x3e, 0x4f, 0x68, 0x92, 0xc6, 0xf0, 0x11,
-	0x68, 0xd1, 0x19, 0xf5, 0x03, 0x3a, 0x0a, 0x58, 0xcf, 0x3a, 0xb4, 0x8e, 0x1a, 0xa4, 0x04, 0xe0,
-	0x2e, 0x68, 0x24, 0x3c, 0xa1, 0x41, 0xcf, 0x56, 0x1a, 0x2d, 0x40, 0x08, 0xea, 0xa9, 0xf0, 0xe3,
-	0x5e, 0xed, 0xb0, 0x76, 0xd4, 0x22, 0xea, 0x33, 0x74, 0xc0, 0x0e, 0x1f, 0x49, 0x56, 0xcc, 0xbb,
-	0x98, 0xb0, 0x90, 0x09, 0x9a, 0xf8, 0x3c, 0xec, 0xd5, 0x0f, 0xad, 0xa3, 0x1a, 0x81, 0xb9, 0xea,
-	0x45, 0xa1, 0x81, 0xfb, 0xa0, 0x29, 0x58, 0x14, 0xf8, 0x63, 0x1a, 0xf7, 0x1a, 0x2a, 0x7a, 0x21,
-	0xc3, 0x63, 0xf0, 0x6e, 0x1a, 0x79, 0x34, 0x61, 0xde, 0x45, 0x61, 0xb3, 0xa5, 0x6c, 0xee, 0x1b,
-	0x9c, 0xe4, 0xa6, 0x1f, 0x82, 0x7b, 0x82, 0x51, 0xef, 0x4d, 0x69, 0xb8, 0xad, 0x0c, 0xbb, 0x0a,
-	0x2d, 0xcc, 0x9e, 0x00, 0x58, 0xb0, 0x2a, 0x4d, 0x9b, 0xca, 0xf4, 0x41, 0xa1, 0xc9, 0xcd, 0xf1,
-	0x5b, 0x0b, 0x74, 0x55, 0xb3, 0x5e, 0x9e, 0x99, 0x3e, 0x9d, 0x80, 0x7a, 0xc4, 0x45, 0xa2, 0x5a,
-	0xd4, 0x75, 0xf7, 0xe6, 0x19, 0x52, 0xf2, 0x22, 0x43, 0xed, 0x37, 0x74, 0x1a, 0x7c, 0x84, 0xa5,
-	0x84, 0x89, 0x02, 0xe1, 0xe7, 0xa0, 0xcb, 0x5e, 0x27, 0x4c, 0x84, 0x34, 0xb8, 0x50, 0x5e, 0xb6,
-	0xf2, 0x3a, 0x9e, 0x67, 0x68, 0x59, 0xb1, 0xc8, 0xd0, 0xae, 0x76, 0x5f, 0x82, 0x31, 0xe9, 0xe4,
-	0xf2, 0x99, 0x8c, 0xf7, 0x1c, 0x34, 0xd5, 0x10, 0xc7, 0x3c, 0xe8, 0xd5, 0x0e, 0xad, 0xa3, 0x96,
-	0x8b, 0xe6, 0x19, 0x2a, 0xb0, 0x45, 0x86, 0xee, 0x9b, 0x22, 0x0c, 0x82, 0x49, 0xa1, 0x84, 0x8f,
-	0x81, 0xed, 0x47, 0x6a, 0x10, 0x2d, 0x77, 0x67, 0x9e, 0x21, 0xdb, 0x8f, 0x16, 0x19, 0x6a, 0x69,
-	0x07, 0x3f, 0xc2, 0xc4, 0xf6, 0x23, 0xfc, 0x93, 0x0d, 0x76, 0x3e, 0xe5, 0xe2, 0x5b, 0x2a, 0x3c,
-	0x26, 0x64, 0xce, 0x92, 0xf6, 0x15, 0x8f, 0x35, 0xed, 0x96, 0xa6, 0x2d, 0xe5, 0x92, 0xb6, 0x94,
-	0x30, 0x51, 0x60, 0xd1, 0x23, 0xfb, 0x1f, 0xf5, 0xa8, 0xf6, 0xef, 0x7a, 0xe4, 0x80, 0x86, 0xa2,
-	0x6c, 0x98, 0xbe, 0x3f, 0xcf, 0x90, 0x06, 0x16, 0x19, 0xea, 0x54, 0xba, 0x83, 0x89, 0x86, 0x65,
-	0xb5, 0x21, 0x9d, 0x32, 0xf5, 0xf8, 0x0c, 0x35, 0x29, 0x97, 0xd5, 0x4a, 0x09, 0x13, 0x05, 0xe2,
-	0x3f, 0x6c, 0xd0, 0x5d, 0x5e, 0x9c, 0xdc, 0xdd, 0x5a, 0xc3, 0x1d, 0xfa, 0x60, 0x2b, 0x56, 0x6e,
-	0xaa, 0x37, 0xed, 0xe1, 0x69, 0xff, 0xb6, 0x8d, 0xef, 0xaf, 0xee, 0xa9, 0x8b, 0x7e, 0xcb, 0xd0,
-	0x3b, 0xf3, 0x0c, 0x99, 0x38, 0x8b, 0x0c, 0x75, 0x75, 0x1a, 0x2d, 0x63, 0x62, 0x14, 0xf0, 0x12,
-	0x34, 0x64, 0x7b, 0xf4, 0x76, 0xb6, 0x87, 0x83, 0xdb, 0x33, 0xfd, 0xc5, 0xcc, 0xdd, 0x03, 0x93,
-	0x4a, 0xc7, 0xa9, 0xb4, 0x4f, 0x8a, 0xb2, 0x7d, 0xf2, 0x2f, 0xfc, 0x02, 0xd4, 0xfc, 0x28, 0xee,
-	0xd5, 0x55, 0x96, 0x93, 0x35, 0xf8, 0xe4, 0xab, 0xe4, 0xee, 0x99, 0xf8, 0x2b, 0x0f, 0x51, 0x06,
-	0xc4, 0x99, 0x05, 0x76, 0xce, 0x59, 0xe8, 0x7d, 0x66, 0x8e, 0x1e, 0x61, 0xdf, 0xa4, 0x2c, 0x4e,
-	0xe0, 0x57, 0xa0, 0xa9, 0xe2, 0x5d, 0xf8, 0x9e, 0xea, 0x79, 0x7b, 0x78, 0x50, 0x4d, 0xaa, 0x4f,
-	0x61, 0x99, 0xec, 0x13, 0xf7, 0x03, 0x93, 0x66, 0xdb, 0x00, 0x8b, 0x0c, 0xdd, 0xd3, 0xb9, 0x0c,
-	0x80, 0xc9, 0xb6, 0x8a, 0xf8, 0xd2, 0x83, 0x5f, 0x83, 0x66, 0x7e, 0x64, 0x7b, 0xb6, 0x62, 0x74,
-	0x23, 0xb8, 0xd6, 0xc9, 0xf0, 0x2f, 0xe4, 0x01, 0x76, 0x1d, 0x19, 0xfc, 0xf7, 0x0c, 0x35, 0xf3,
-	0x32, 0xe5, 0x3e, 0xe6, 0x66, 0xe5, 0x3e, 0xe6, 0x08, 0x26, 0x85, 0x12, 0xbf, 0x07, 0x76, 0x97,
-	0xf9, 0xc5, 0x11, 0x0f, 0x63, 0x86, 0x7f, 0xb1, 0x00, 0x34, 0x33, 0x7f, 0xc5, 0x27, 0xf1, 0x9d,
-	0xf0, 0x7e, 0x0e, 0x9a, 0xe6, 0x9b, 0x28, 0x56, 0xbc, 0xcd, 0x61, 0xc9, 0xb1, 0x92, 0x48, 0x8e,
-	0x60, 0x52, 0x28, 0xf1, 0x04, 0xb4, 0x2b, 0xf5, 0x6e, 0xb6, 0x10, 0x27, 0xa0, 0x1e, 0xf0, 0x89,
-	0x5e, 0x87, 0x8e, 0x36, 0x96, 0x72, 0x69, 0x2c, 0x25, 0x4c, 0x14, 0x88, 0xbf, 0x97, 0x2f, 0xa2,
-	0xd2, 0x18, 0xdd, 0x30, 0xe8, 0x55, 0x8a, 0xb7, 0xd4, 0xd0, 0x8e, 0x6f, 0x7f, 0x86, 0x95, 0x20,
-	0xee, 0xc1, 0xed, 0x1d, 0x2a, 0x59, 0x5e, 0x83, 0xce, 0xf9, 0x15, 0x0b, 0x82, 0xbb, 0x98, 0x07,
-	0xfe, 0xd5, 0x92, 0x8f, 0xa3, 0xb2, 0xf7, 0xff, 0xff, 0x57, 0xf0, 0xa3, 0x05, 0x1e, 0xde, 0x28,
-	0xd9, 0xcc, 0x27, 0x58, 0x99, 0xcf, 0xc9, 0x5a, 0xf3, 0x31, 0x67, 0xe2, 0xb1, 0x61, 0xb0, 0x5e,
-	0x1d, 0xc3, 0xb7, 0x75, 0xd0, 0x54, 0xd4, 0xc8, 0xd9, 0xc7, 0x30, 0x05, 0x9d, 0xea, 0x8e, 0xc1,
-	0xc1, 0xdf, 0x25, 0x5e, 0xb9, 0x37, 0xfb, 0xc3, 0x4d, 0x5c, 0x0c, 0xe3, 0xd7, 0x37, 0xbf, 0x24,
-	0x86, 0x1b, 0x10, 0xce, 0x13, 0x3f, 0xdd, 0xc8, 0xc7, 0x64, 0xfe, 0x41, 0x5e, 0xcd, 0x44, 0x30,
-	0x3a, 0xfd, 0x6f, 0x0a, 0x38, 0xb5, 0xa0, 0x58, 0x3e, 0x07, 0xa7, 0x6b, 0xef, 0x62, 0x9e, 0x77,
-	0xb0, 0x81, 0x87, 0xa1, 0xfd, 0x1d, 0x78, 0xb0, 0xc4, 0xfa, 0xce, 0x32, 0x9f, 0x5a, 0x2e, 0xf9,
-	0xf2, 0x6c, 0xe2, 0x27, 0x57, 0xe9, 0xa8, 0x3f, 0xe6, 0x53, 0x27, 0x0d, 0xfd, 0x31, 0x17, 0x61,
-	0x1a, 0x24, 0x82, 0x5e, 0xf2, 0x34, 0xf4, 0xd4, 0xaf, 0x5c, 0x47, 0xc7, 0x7d, 0x12, 0x72, 0x8f,
-	0x39, 0xfa, 0x27, 0xb9, 0x46, 0x9c, 0xeb, 0x67, 0xb1, 0xb3, 0xf2, 0x6f, 0xc1, 0x68, 0x4b, 0xd9,
-	0x3c, 0xfd, 0x33, 0x00, 0x00, 0xff, 0xff, 0x30, 0x81, 0x5a, 0x07, 0x32, 0x0c, 0x00, 0x00,
+	// 1008 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xcc, 0x57, 0xcf, 0x6f, 0x1b, 0xc5,
+	0x17, 0xcf, 0xae, 0xed, 0xc4, 0x1e, 0xdb, 0xed, 0xb7, 0x93, 0xf4, 0x1b, 0x13, 0x35, 0xde, 0x30,
+	0x15, 0x52, 0xa2, 0xa8, 0xde, 0xd8, 0xbd, 0x54, 0xf4, 0xb6, 0x20, 0xaa, 0x4a, 0x05, 0x45, 0x13,
+	0x89, 0x03, 0x1c, 0xa2, 0xb1, 0x77, 0xe2, 0x6c, 0xb3, 0xde, 0x59, 0x66, 0x77, 0x4d, 0x0b, 0x17,
+	0x2e, 0xdc, 0xf9, 0x07, 0xf8, 0x07, 0x38, 0x20, 0xfe, 0x8c, 0x1e, 0x7b, 0xe4, 0xb4, 0x42, 0xc9,
+	0x01, 0xc9, 0x87, 0x1e, 0xfc, 0x17, 0xa0, 0xf9, 0xb1, 0xbb, 0x76, 0x8c, 0x82, 0x0d, 0x52, 0xe0,
+	0x14, 0xbf, 0xcf, 0xfb, 0xf9, 0x79, 0x6f, 0xde, 0xb3, 0x03, 0xac, 0x90, 0xb3, 0xb1, 0xe7, 0x52,
+	0x6e, 0xfb, 0x94, 0x44, 0xd4, 0x1e, 0x77, 0xed, 0x88, 0xf2, 0xb1, 0x37, 0xa0, 0x9d, 0x90, 0xb3,
+	0x98, 0xc1, 0x07, 0x51, 0xd2, 0x0f, 0x68, 0xdc, 0xb9, 0x78, 0x12, 0x75, 0x32, 0xdb, 0x8e, 0xb4,
+	0xed, 0x8c, 0xbb, 0x3b, 0xdb, 0x23, 0x12, 0x78, 0x67, 0x34, 0x8a, 0x85, 0xe3, 0x90, 0xb3, 0x24,
+	0x54, 0x6e, 0x3b, 0xf7, 0x47, 0x84, 0x5f, 0x50, 0x09, 0x2b, 0x63, 0x05, 0x6f, 0x0d, 0xd9, 0x90,
+	0xc9, 0x8f, 0xb6, 0xf8, 0xa4, 0x50, 0xf4, 0x93, 0x09, 0xe0, 0x0b, 0x61, 0x75, 0xa2, 0x52, 0x9f,
+	0xc4, 0x24, 0x4e, 0x22, 0xf8, 0x00, 0xd4, 0xc8, 0x98, 0x78, 0x3e, 0xe9, 0xfb, 0xb4, 0x65, 0xec,
+	0x19, 0xfb, 0x15, 0x5c, 0x00, 0x70, 0x0b, 0x54, 0x62, 0x16, 0x13, 0xbf, 0x65, 0x4a, 0x8d, 0x12,
+	0x20, 0x04, 0xe5, 0x84, 0x7b, 0x51, 0xab, 0xb4, 0x57, 0xda, 0xaf, 0x61, 0xf9, 0x19, 0xda, 0x60,
+	0x93, 0xf5, 0x05, 0x2b, 0xea, 0x9e, 0x0e, 0x69, 0x40, 0x39, 0x89, 0x3d, 0x16, 0xb4, 0xca, 0x7b,
+	0xc6, 0x7e, 0x09, 0xc3, 0x4c, 0xf5, 0x2c, 0xd7, 0xc0, 0x1d, 0x50, 0xe5, 0x34, 0xf4, 0xbd, 0x01,
+	0x89, 0x5a, 0x15, 0x19, 0x3d, 0x97, 0xe1, 0x01, 0xf8, 0x5f, 0x12, 0xba, 0x24, 0xa6, 0xee, 0x69,
+	0x6e, 0xb3, 0x2e, 0x6d, 0xee, 0x6a, 0x1c, 0x67, 0xa6, 0x1f, 0x80, 0x3b, 0x9c, 0x12, 0xf7, 0x75,
+	0x61, 0xb8, 0x21, 0x0d, 0x9b, 0x12, 0xcd, 0xcd, 0x1e, 0x01, 0x98, 0xb3, 0x2a, 0x4c, 0xab, 0xd2,
+	0xf4, 0x5e, 0xae, 0xc9, 0xcc, 0xd1, 0x3b, 0x03, 0x34, 0x65, 0xb3, 0x9e, 0x1f, 0xeb, 0x3e, 0x1d,
+	0x82, 0x72, 0xc8, 0x78, 0x2c, 0x5b, 0xd4, 0x74, 0xb6, 0x27, 0xa9, 0x25, 0xe5, 0x69, 0x6a, 0xd5,
+	0x5f, 0x93, 0x91, 0xff, 0x21, 0x12, 0x12, 0xc2, 0x12, 0x84, 0x9f, 0x81, 0x26, 0x7d, 0x15, 0x53,
+	0x1e, 0x10, 0xff, 0x54, 0x7a, 0x99, 0xd2, 0xeb, 0x60, 0x92, 0x5a, 0xf3, 0x8a, 0x69, 0x6a, 0x6d,
+	0x29, 0xf7, 0x39, 0x18, 0xe1, 0x46, 0x26, 0x1f, 0x8b, 0x78, 0x4f, 0x41, 0x55, 0x0e, 0x71, 0xc0,
+	0xfc, 0x56, 0x69, 0xcf, 0xd8, 0xaf, 0x39, 0xd6, 0x24, 0xb5, 0x72, 0x6c, 0x9a, 0x5a, 0x77, 0x75,
+	0x11, 0x1a, 0x41, 0x38, 0x57, 0xc2, 0x87, 0xc0, 0xf4, 0x42, 0x39, 0x88, 0x9a, 0xb3, 0x39, 0x49,
+	0x2d, 0xd3, 0x0b, 0xa7, 0xa9, 0x55, 0x53, 0x0e, 0x5e, 0x88, 0xb0, 0xe9, 0x85, 0xe8, 0x47, 0x13,
+	0x6c, 0x7e, 0xc2, 0xf8, 0xd7, 0x84, 0xbb, 0x94, 0x8b, 0x9c, 0x05, 0xed, 0x73, 0x16, 0x29, 0xda,
+	0x35, 0x45, 0x5b, 0xc8, 0x05, 0x6d, 0x21, 0x21, 0x2c, 0xc1, 0xbc, 0x47, 0xe6, 0xdf, 0xea, 0x51,
+	0xe9, 0x9f, 0xf5, 0xc8, 0x06, 0x15, 0x49, 0x59, 0x33, 0x7d, 0x6f, 0x92, 0x5a, 0x0a, 0x98, 0xa6,
+	0x56, 0x63, 0xa6, 0x3b, 0x08, 0x2b, 0x58, 0x54, 0x1b, 0x90, 0x11, 0x95, 0x8f, 0x4f, 0x53, 0x13,
+	0x72, 0x51, 0xad, 0x90, 0x10, 0x96, 0x20, 0xfa, 0xdd, 0x04, 0xcd, 0xf9, 0xc5, 0xc9, 0xdc, 0x8d,
+	0x25, 0xdc, 0xa1, 0x07, 0xd6, 0x23, 0xe9, 0x26, 0x7b, 0x53, 0xef, 0x1d, 0x75, 0x6e, 0xda, 0xf8,
+	0xce, 0xe2, 0x9e, 0x3a, 0xd6, 0x9b, 0xd4, 0x5a, 0x9b, 0xa4, 0x96, 0x8e, 0x33, 0x4d, 0xad, 0xa6,
+	0x4a, 0xa3, 0x64, 0x84, 0xb5, 0x02, 0x9e, 0x81, 0x8a, 0x68, 0x8f, 0xda, 0xce, 0x7a, 0xaf, 0x7b,
+	0x73, 0xa6, 0x3f, 0x99, 0xb9, 0xb3, 0xab, 0x53, 0xa9, 0x38, 0x33, 0xed, 0x13, 0xa2, 0x68, 0x9f,
+	0xf8, 0x0b, 0x3f, 0x07, 0x25, 0x2f, 0x8c, 0x5a, 0x65, 0x99, 0xe5, 0x70, 0x09, 0x3e, 0xd9, 0x2a,
+	0x39, 0xdb, 0x3a, 0xfe, 0xc2, 0x43, 0x14, 0x01, 0x51, 0x6a, 0x80, 0xcd, 0x13, 0x1a, 0xb8, 0x9f,
+	0xea, 0xa3, 0x87, 0xe9, 0x57, 0x09, 0x8d, 0x62, 0xf8, 0x25, 0xa8, 0xca, 0x78, 0xa7, 0x9e, 0x2b,
+	0x7b, 0x5e, 0xef, 0xed, 0xce, 0x26, 0x55, 0xa7, 0xb0, 0x48, 0xf6, 0xb1, 0xf3, 0xbe, 0x4e, 0xb3,
+	0xa1, 0x81, 0x69, 0x6a, 0xdd, 0x51, 0xb9, 0x34, 0x80, 0xf0, 0x86, 0x8c, 0xf8, 0xdc, 0x85, 0x2f,
+	0x41, 0x35, 0x3b, 0xb2, 0x2d, 0x53, 0x32, 0xba, 0x16, 0x5c, 0xe9, 0x44, 0xf8, 0x67, 0xe2, 0x00,
+	0x3b, 0xb6, 0x08, 0x7e, 0x99, 0x5a, 0xd5, 0xac, 0x4c, 0xb1, 0x8f, 0x99, 0x59, 0xb1, 0x8f, 0x19,
+	0x82, 0x70, 0xae, 0x44, 0xff, 0x07, 0x5b, 0xf3, 0xfc, 0xa2, 0x90, 0x05, 0x11, 0x45, 0x3f, 0x1b,
+	0x00, 0xea, 0x99, 0xbf, 0x60, 0xc3, 0xe8, 0x56, 0x78, 0x3f, 0x05, 0x55, 0xfd, 0x4d, 0x14, 0x49,
+	0xde, 0xfa, 0xb0, 0x64, 0x58, 0x41, 0x24, 0x43, 0x10, 0xce, 0x95, 0x68, 0x08, 0xea, 0x33, 0xf5,
+	0xae, 0xb6, 0x10, 0x87, 0xa0, 0xec, 0xb3, 0xa1, 0x5a, 0x87, 0x86, 0x32, 0x16, 0x72, 0x61, 0x2c,
+	0x24, 0x84, 0x25, 0x88, 0xbe, 0x15, 0x2f, 0x62, 0xa6, 0x31, 0xaa, 0x61, 0xd0, 0x9d, 0x29, 0xde,
+	0x90, 0x43, 0x3b, 0xb8, 0xf9, 0x19, 0xce, 0x04, 0x71, 0x76, 0x6f, 0xee, 0x50, 0xc1, 0xf2, 0x02,
+	0x34, 0x4e, 0xce, 0xa9, 0xef, 0xdf, 0xc6, 0x3c, 0xd0, 0x2f, 0x86, 0x78, 0x1c, 0x33, 0x7b, 0xff,
+	0xdf, 0x7f, 0x05, 0xdf, 0x1b, 0xe0, 0xfe, 0xb5, 0x92, 0xf5, 0x7c, 0xfc, 0x85, 0xf9, 0x1c, 0x2e,
+	0x35, 0x1f, 0x7d, 0x26, 0x1e, 0x6a, 0x06, 0xcb, 0xd5, 0xd1, 0x7b, 0x57, 0x06, 0x55, 0x49, 0x0d,
+	0x1f, 0x7f, 0x04, 0x13, 0xd0, 0x98, 0xdd, 0x31, 0xd8, 0xfd, 0xab, 0xc4, 0x0b, 0xf7, 0x66, 0xa7,
+	0xb7, 0x8a, 0x8b, 0x66, 0xfc, 0xea, 0xfa, 0x97, 0x44, 0x6f, 0x05, 0xc2, 0x59, 0xe2, 0xc7, 0x2b,
+	0xf9, 0xe8, 0xcc, 0xdf, 0x89, 0xab, 0x19, 0x73, 0x4a, 0x46, 0xff, 0x4e, 0x01, 0x47, 0x06, 0xe4,
+	0xf3, 0xe7, 0xe0, 0x68, 0xe9, 0x5d, 0xcc, 0xf2, 0x76, 0x57, 0xf0, 0xd0, 0xb4, 0xbf, 0x01, 0xf7,
+	0xe6, 0x58, 0xdf, 0x5a, 0xe6, 0x23, 0xc3, 0x79, 0xf9, 0xe6, 0xb2, 0x6d, 0xbc, 0xbd, 0x6c, 0x1b,
+	0xbf, 0x5d, 0xb6, 0x8d, 0x1f, 0xae, 0xda, 0x6b, 0x6f, 0xaf, 0xda, 0x6b, 0xbf, 0x5e, 0xb5, 0xd7,
+	0xbe, 0x38, 0x1e, 0x7a, 0xf1, 0x79, 0xd2, 0xef, 0x0c, 0xd8, 0xc8, 0x4e, 0x02, 0x6f, 0xc0, 0x78,
+	0x90, 0xf8, 0x31, 0x27, 0x67, 0x2c, 0x09, 0x5c, 0xf9, 0xeb, 0xd7, 0x56, 0xf9, 0x1e, 0x05, 0xcc,
+	0xa5, 0xb6, 0xfa, 0xa9, 0xae, 0x10, 0xfb, 0xe2, 0x49, 0x64, 0x2f, 0xfc, 0xbb, 0xd0, 0x5f, 0x97,
+	0x36, 0x8f, 0xff, 0x08, 0x00, 0x00, 0xff, 0xff, 0x70, 0xa6, 0x97, 0x75, 0x4a, 0x0c, 0x00, 0x00,
 }
+
+// Reference imports to suppress errors if they are not otherwise used.
+var _ context.Context
+var _ grpc.ClientConn
+
+// This is a compile-time assertion to ensure that this generated file
+// is compatible with the grpc package it is being compiled against.
+const _ = grpc.SupportPackageIsVersion4
+
+// LeaseRPCClient is the client API for LeaseRPC service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
+type LeaseRPCClient interface {
+	// SendManifest sends manifest to the provider
+	SendManifest(ctx context.Context, in *SendManifestRequest, opts ...grpc.CallOption) (*SendManifestResponse, error)
+	// ServiceStatus
+	// buf:lint:ignore RPC_REQUEST_RESPONSE_UNIQUE
+	// buf:lint:ignore RPC_RESPONSE_STANDARD_NAME
+	ServiceStatus(ctx context.Context, in *ServiceStatusRequest, opts ...grpc.CallOption) (*ServiceStatusResponse, error)
+	// StreamServiceStatus
+	// buf:lint:ignore RPC_REQUEST_RESPONSE_UNIQUE
+	// buf:lint:ignore RPC_RESPONSE_STANDARD_NAME
+	StreamServiceStatus(ctx context.Context, in *ServiceStatusRequest, opts ...grpc.CallOption) (LeaseRPC_StreamServiceStatusClient, error)
+	// ServiceLogs
+	// buf:lint:ignore RPC_REQUEST_RESPONSE_UNIQUE
+	// buf:lint:ignore RPC_RESPONSE_STANDARD_NAME
+	ServiceLogs(ctx context.Context, in *ServiceLogsRequest, opts ...grpc.CallOption) (*ServiceLogsResponse, error)
+	// StreamServiceLogs
+	// buf:lint:ignore RPC_REQUEST_RESPONSE_UNIQUE
+	// buf:lint:ignore RPC_RESPONSE_STANDARD_NAME
+	StreamServiceLogs(ctx context.Context, in *ServiceLogsRequest, opts ...grpc.CallOption) (LeaseRPC_StreamServiceLogsClient, error)
+}
+
+type leaseRPCClient struct {
+	cc grpc1.ClientConn
+}
+
+func NewLeaseRPCClient(cc grpc1.ClientConn) LeaseRPCClient {
+	return &leaseRPCClient{cc}
+}
+
+func (c *leaseRPCClient) SendManifest(ctx context.Context, in *SendManifestRequest, opts ...grpc.CallOption) (*SendManifestResponse, error) {
+	out := new(SendManifestResponse)
+	err := c.cc.Invoke(ctx, "/subnet.k8s.provider.lease.v1.LeaseRPC/SendManifest", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *leaseRPCClient) ServiceStatus(ctx context.Context, in *ServiceStatusRequest, opts ...grpc.CallOption) (*ServiceStatusResponse, error) {
+	out := new(ServiceStatusResponse)
+	err := c.cc.Invoke(ctx, "/subnet.k8s.provider.lease.v1.LeaseRPC/ServiceStatus", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *leaseRPCClient) StreamServiceStatus(ctx context.Context, in *ServiceStatusRequest, opts ...grpc.CallOption) (LeaseRPC_StreamServiceStatusClient, error) {
+	stream, err := c.cc.NewStream(ctx, &_LeaseRPC_serviceDesc.Streams[0], "/subnet.k8s.provider.lease.v1.LeaseRPC/StreamServiceStatus", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &leaseRPCStreamServiceStatusClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type LeaseRPC_StreamServiceStatusClient interface {
+	Recv() (*ServiceStatusResponse, error)
+	grpc.ClientStream
+}
+
+type leaseRPCStreamServiceStatusClient struct {
+	grpc.ClientStream
+}
+
+func (x *leaseRPCStreamServiceStatusClient) Recv() (*ServiceStatusResponse, error) {
+	m := new(ServiceStatusResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func (c *leaseRPCClient) ServiceLogs(ctx context.Context, in *ServiceLogsRequest, opts ...grpc.CallOption) (*ServiceLogsResponse, error) {
+	out := new(ServiceLogsResponse)
+	err := c.cc.Invoke(ctx, "/subnet.k8s.provider.lease.v1.LeaseRPC/ServiceLogs", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *leaseRPCClient) StreamServiceLogs(ctx context.Context, in *ServiceLogsRequest, opts ...grpc.CallOption) (LeaseRPC_StreamServiceLogsClient, error) {
+	stream, err := c.cc.NewStream(ctx, &_LeaseRPC_serviceDesc.Streams[1], "/subnet.k8s.provider.lease.v1.LeaseRPC/StreamServiceLogs", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &leaseRPCStreamServiceLogsClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type LeaseRPC_StreamServiceLogsClient interface {
+	Recv() (*ServiceLogsResponse, error)
+	grpc.ClientStream
+}
+
+type leaseRPCStreamServiceLogsClient struct {
+	grpc.ClientStream
+}
+
+func (x *leaseRPCStreamServiceLogsClient) Recv() (*ServiceLogsResponse, error) {
+	m := new(ServiceLogsResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+// LeaseRPCServer is the server API for LeaseRPC service.
+type LeaseRPCServer interface {
+	// SendManifest sends manifest to the provider
+	SendManifest(context.Context, *SendManifestRequest) (*SendManifestResponse, error)
+	// ServiceStatus
+	// buf:lint:ignore RPC_REQUEST_RESPONSE_UNIQUE
+	// buf:lint:ignore RPC_RESPONSE_STANDARD_NAME
+	ServiceStatus(context.Context, *ServiceStatusRequest) (*ServiceStatusResponse, error)
+	// StreamServiceStatus
+	// buf:lint:ignore RPC_REQUEST_RESPONSE_UNIQUE
+	// buf:lint:ignore RPC_RESPONSE_STANDARD_NAME
+	StreamServiceStatus(*ServiceStatusRequest, LeaseRPC_StreamServiceStatusServer) error
+	// ServiceLogs
+	// buf:lint:ignore RPC_REQUEST_RESPONSE_UNIQUE
+	// buf:lint:ignore RPC_RESPONSE_STANDARD_NAME
+	ServiceLogs(context.Context, *ServiceLogsRequest) (*ServiceLogsResponse, error)
+	// StreamServiceLogs
+	// buf:lint:ignore RPC_REQUEST_RESPONSE_UNIQUE
+	// buf:lint:ignore RPC_RESPONSE_STANDARD_NAME
+	StreamServiceLogs(*ServiceLogsRequest, LeaseRPC_StreamServiceLogsServer) error
+}
+
+// UnimplementedLeaseRPCServer can be embedded to have forward compatible implementations.
+type UnimplementedLeaseRPCServer struct {
+}
+
+func (*UnimplementedLeaseRPCServer) SendManifest(ctx context.Context, req *SendManifestRequest) (*SendManifestResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SendManifest not implemented")
+}
+func (*UnimplementedLeaseRPCServer) ServiceStatus(ctx context.Context, req *ServiceStatusRequest) (*ServiceStatusResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ServiceStatus not implemented")
+}
+func (*UnimplementedLeaseRPCServer) StreamServiceStatus(req *ServiceStatusRequest, srv LeaseRPC_StreamServiceStatusServer) error {
+	return status.Errorf(codes.Unimplemented, "method StreamServiceStatus not implemented")
+}
+func (*UnimplementedLeaseRPCServer) ServiceLogs(ctx context.Context, req *ServiceLogsRequest) (*ServiceLogsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ServiceLogs not implemented")
+}
+func (*UnimplementedLeaseRPCServer) StreamServiceLogs(req *ServiceLogsRequest, srv LeaseRPC_StreamServiceLogsServer) error {
+	return status.Errorf(codes.Unimplemented, "method StreamServiceLogs not implemented")
+}
+
+func RegisterLeaseRPCServer(s grpc1.Server, srv LeaseRPCServer) {
+	s.RegisterService(&_LeaseRPC_serviceDesc, srv)
+}
+
+func _LeaseRPC_SendManifest_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SendManifestRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(LeaseRPCServer).SendManifest(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/subnet.k8s.provider.lease.v1.LeaseRPC/SendManifest",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(LeaseRPCServer).SendManifest(ctx, req.(*SendManifestRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _LeaseRPC_ServiceStatus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ServiceStatusRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(LeaseRPCServer).ServiceStatus(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/subnet.k8s.provider.lease.v1.LeaseRPC/ServiceStatus",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(LeaseRPCServer).ServiceStatus(ctx, req.(*ServiceStatusRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _LeaseRPC_StreamServiceStatus_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(ServiceStatusRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(LeaseRPCServer).StreamServiceStatus(m, &leaseRPCStreamServiceStatusServer{stream})
+}
+
+type LeaseRPC_StreamServiceStatusServer interface {
+	Send(*ServiceStatusResponse) error
+	grpc.ServerStream
+}
+
+type leaseRPCStreamServiceStatusServer struct {
+	grpc.ServerStream
+}
+
+func (x *leaseRPCStreamServiceStatusServer) Send(m *ServiceStatusResponse) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func _LeaseRPC_ServiceLogs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ServiceLogsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(LeaseRPCServer).ServiceLogs(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/subnet.k8s.provider.lease.v1.LeaseRPC/ServiceLogs",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(LeaseRPCServer).ServiceLogs(ctx, req.(*ServiceLogsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _LeaseRPC_StreamServiceLogs_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(ServiceLogsRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(LeaseRPCServer).StreamServiceLogs(m, &leaseRPCStreamServiceLogsServer{stream})
+}
+
+type LeaseRPC_StreamServiceLogsServer interface {
+	Send(*ServiceLogsResponse) error
+	grpc.ServerStream
+}
+
+type leaseRPCStreamServiceLogsServer struct {
+	grpc.ServerStream
+}
+
+func (x *leaseRPCStreamServiceLogsServer) Send(m *ServiceLogsResponse) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+var _LeaseRPC_serviceDesc = grpc.ServiceDesc{
+	ServiceName: "subnet.k8s.provider.lease.v1.LeaseRPC",
+	HandlerType: (*LeaseRPCServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "SendManifest",
+			Handler:    _LeaseRPC_SendManifest_Handler,
+		},
+		{
+			MethodName: "ServiceStatus",
+			Handler:    _LeaseRPC_ServiceStatus_Handler,
+		},
+		{
+			MethodName: "ServiceLogs",
+			Handler:    _LeaseRPC_ServiceLogs_Handler,
+		},
+	},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "StreamServiceStatus",
+			Handler:       _LeaseRPC_StreamServiceStatus_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "StreamServiceLogs",
+			Handler:       _LeaseRPC_StreamServiceLogs_Handler,
+			ServerStreams: true,
+		},
+	},
+	Metadata: "provider/lease/v1/service.proto",
+}
+
+func (m *LeaseServiceStatus) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *LeaseServiceStatus) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *LeaseServiceStatus) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.AvailableReplicas != 0 {
+		i = encodeVarintService(dAtA, i, uint64(m.AvailableReplicas))
+		i--
+		dAtA[i] = 0x40
+	}
+	if m.ReadyReplicas != 0 {
+		i = encodeVarintService(dAtA, i, uint64(m.ReadyReplicas))
+		i--
+		dAtA[i] = 0x38
+	}
+	if m.UpdatedReplicas != 0 {
+		i = encodeVarintService(dAtA, i, uint64(m.UpdatedReplicas))
+		i--
+		dAtA[i] = 0x30
+	}
+	if m.Replicas != 0 {
+		i = encodeVarintService(dAtA, i, uint64(m.Replicas))
+		i--
+		dAtA[i] = 0x28
+	}
+	if m.ObservedGeneration != 0 {
+		i = encodeVarintService(dAtA, i, uint64(m.ObservedGeneration))
+		i--
+		dAtA[i] = 0x20
+	}
+	if len(m.Uris) > 0 {
+		for iNdEx := len(m.Uris) - 1; iNdEx >= 0; iNdEx-- {
+			i -= len(m.Uris[iNdEx])
+			copy(dAtA[i:], m.Uris[iNdEx])
+			i = encodeVarintService(dAtA, i, uint64(len(m.Uris[iNdEx])))
+			i--
+			dAtA[i] = 0x1a
+		}
+	}
+	if m.Total != 0 {
+		i = encodeVarintService(dAtA, i, uint64(m.Total))
+		i--
+		dAtA[i] = 0x10
+	}
+	if m.Available != 0 {
+		i = encodeVarintService(dAtA, i, uint64(m.Available))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *LeaseIPStatus) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *LeaseIPStatus) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *LeaseIPStatus) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.Ip) > 0 {
+		i -= len(m.Ip)
+		copy(dAtA[i:], m.Ip)
+		i = encodeVarintService(dAtA, i, uint64(len(m.Ip)))
+		i--
+		dAtA[i] = 0x22
+	}
+	if len(m.Protocol) > 0 {
+		i -= len(m.Protocol)
+		copy(dAtA[i:], m.Protocol)
+		i = encodeVarintService(dAtA, i, uint64(len(m.Protocol)))
+		i--
+		dAtA[i] = 0x1a
+	}
+	if m.ExternalPort != 0 {
+		i = encodeVarintService(dAtA, i, uint64(m.ExternalPort))
+		i--
+		dAtA[i] = 0x10
+	}
+	if m.Port != 0 {
+		i = encodeVarintService(dAtA, i, uint64(m.Port))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *ForwarderPortStatus) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ForwarderPortStatus) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ForwarderPortStatus) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.Name) > 0 {
+		i -= len(m.Name)
+		copy(dAtA[i:], m.Name)
+		i = encodeVarintService(dAtA, i, uint64(len(m.Name)))
+		i--
+		dAtA[i] = 0x2a
+	}
+	if len(m.Proto) > 0 {
+		i -= len(m.Proto)
+		copy(dAtA[i:], m.Proto)
+		i = encodeVarintService(dAtA, i, uint64(len(m.Proto)))
+		i--
+		dAtA[i] = 0x22
+	}
+	if m.ExternalPort != 0 {
+		i = encodeVarintService(dAtA, i, uint64(m.ExternalPort))
+		i--
+		dAtA[i] = 0x18
+	}
+	if m.Port != 0 {
+		i = encodeVarintService(dAtA, i, uint64(m.Port))
+		i--
+		dAtA[i] = 0x10
+	}
+	if len(m.Host) > 0 {
+		i -= len(m.Host)
+		copy(dAtA[i:], m.Host)
+		i = encodeVarintService(dAtA, i, uint64(len(m.Host)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *ServiceStatus) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ServiceStatus) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ServiceStatus) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.Ips) > 0 {
+		for iNdEx := len(m.Ips) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.Ips[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintService(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0x22
+		}
+	}
+	if len(m.Ports) > 0 {
+		for iNdEx := len(m.Ports) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.Ports[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintService(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0x1a
+		}
+	}
+	{
+		size, err := m.Status.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintService(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x12
+	if len(m.Name) > 0 {
+		i -= len(m.Name)
+		copy(dAtA[i:], m.Name)
+		i = encodeVarintService(dAtA, i, uint64(len(m.Name)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *SendManifestRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *SendManifestRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *SendManifestRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.Manifest) > 0 {
+		for iNdEx := len(m.Manifest) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.Manifest[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintService(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0x12
+		}
+	}
+	{
+		size, err := m.LeaseId.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintService(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
+}
+
+func (m *SendManifestResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *SendManifestResponse) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *SendManifestResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	return len(dAtA) - i, nil
+}
+
+func (m *ServiceLogsRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ServiceLogsRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ServiceLogsRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.Services) > 0 {
+		for iNdEx := len(m.Services) - 1; iNdEx >= 0; iNdEx-- {
+			i -= len(m.Services[iNdEx])
+			copy(dAtA[i:], m.Services[iNdEx])
+			i = encodeVarintService(dAtA, i, uint64(len(m.Services[iNdEx])))
+			i--
+			dAtA[i] = 0x12
+		}
+	}
+	{
+		size, err := m.LeaseId.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintService(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
+}
+
+func (m *ServiceLogs) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ServiceLogs) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ServiceLogs) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.Logs) > 0 {
+		i -= len(m.Logs)
+		copy(dAtA[i:], m.Logs)
+		i = encodeVarintService(dAtA, i, uint64(len(m.Logs)))
+		i--
+		dAtA[i] = 0x12
+	}
+	if len(m.Name) > 0 {
+		i -= len(m.Name)
+		copy(dAtA[i:], m.Name)
+		i = encodeVarintService(dAtA, i, uint64(len(m.Name)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *ServiceLogsResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ServiceLogsResponse) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ServiceLogsResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.Services) > 0 {
+		for iNdEx := len(m.Services) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.Services[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintService(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0xa
+		}
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *ShellRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ShellRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ShellRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	{
+		size, err := m.LeaseId.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintService(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
+}
+
+func (m *ServiceStatusRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ServiceStatusRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ServiceStatusRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.Services) > 0 {
+		for iNdEx := len(m.Services) - 1; iNdEx >= 0; iNdEx-- {
+			i -= len(m.Services[iNdEx])
+			copy(dAtA[i:], m.Services[iNdEx])
+			i = encodeVarintService(dAtA, i, uint64(len(m.Services[iNdEx])))
+			i--
+			dAtA[i] = 0x12
+		}
+	}
+	{
+		size, err := m.LeaseId.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintService(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
+}
+
+func (m *ServiceStatusResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ServiceStatusResponse) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ServiceStatusResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.Services) > 0 {
+		for iNdEx := len(m.Services) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.Services[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintService(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0xa
+		}
+	}
+	return len(dAtA) - i, nil
+}
+
+func encodeVarintService(dAtA []byte, offset int, v uint64) int {
+	offset -= sovService(v)
+	base := offset
+	for v >= 1<<7 {
+		dAtA[offset] = uint8(v&0x7f | 0x80)
+		v >>= 7
+		offset++
+	}
+	dAtA[offset] = uint8(v)
+	return base
+}
+func (m *LeaseServiceStatus) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.Available != 0 {
+		n += 1 + sovService(uint64(m.Available))
+	}
+	if m.Total != 0 {
+		n += 1 + sovService(uint64(m.Total))
+	}
+	if len(m.Uris) > 0 {
+		for _, s := range m.Uris {
+			l = len(s)
+			n += 1 + l + sovService(uint64(l))
+		}
+	}
+	if m.ObservedGeneration != 0 {
+		n += 1 + sovService(uint64(m.ObservedGeneration))
+	}
+	if m.Replicas != 0 {
+		n += 1 + sovService(uint64(m.Replicas))
+	}
+	if m.UpdatedReplicas != 0 {
+		n += 1 + sovService(uint64(m.UpdatedReplicas))
+	}
+	if m.ReadyReplicas != 0 {
+		n += 1 + sovService(uint64(m.ReadyReplicas))
+	}
+	if m.AvailableReplicas != 0 {
+		n += 1 + sovService(uint64(m.AvailableReplicas))
+	}
+	return n
+}
+
+func (m *LeaseIPStatus) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.Port != 0 {
+		n += 1 + sovService(uint64(m.Port))
+	}
+	if m.ExternalPort != 0 {
+		n += 1 + sovService(uint64(m.ExternalPort))
+	}
+	l = len(m.Protocol)
+	if l > 0 {
+		n += 1 + l + sovService(uint64(l))
+	}
+	l = len(m.Ip)
+	if l > 0 {
+		n += 1 + l + sovService(uint64(l))
+	}
+	return n
+}
+
+func (m *ForwarderPortStatus) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.Host)
+	if l > 0 {
+		n += 1 + l + sovService(uint64(l))
+	}
+	if m.Port != 0 {
+		n += 1 + sovService(uint64(m.Port))
+	}
+	if m.ExternalPort != 0 {
+		n += 1 + sovService(uint64(m.ExternalPort))
+	}
+	l = len(m.Proto)
+	if l > 0 {
+		n += 1 + l + sovService(uint64(l))
+	}
+	l = len(m.Name)
+	if l > 0 {
+		n += 1 + l + sovService(uint64(l))
+	}
+	return n
+}
+
+func (m *ServiceStatus) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.Name)
+	if l > 0 {
+		n += 1 + l + sovService(uint64(l))
+	}
+	l = m.Status.Size()
+	n += 1 + l + sovService(uint64(l))
+	if len(m.Ports) > 0 {
+		for _, e := range m.Ports {
+			l = e.Size()
+			n += 1 + l + sovService(uint64(l))
+		}
+	}
+	if len(m.Ips) > 0 {
+		for _, e := range m.Ips {
+			l = e.Size()
+			n += 1 + l + sovService(uint64(l))
+		}
+	}
+	return n
+}
+
+func (m *SendManifestRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = m.LeaseId.Size()
+	n += 1 + l + sovService(uint64(l))
+	if len(m.Manifest) > 0 {
+		for _, e := range m.Manifest {
+			l = e.Size()
+			n += 1 + l + sovService(uint64(l))
+		}
+	}
+	return n
+}
+
+func (m *SendManifestResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	return n
+}
+
+func (m *ServiceLogsRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = m.LeaseId.Size()
+	n += 1 + l + sovService(uint64(l))
+	if len(m.Services) > 0 {
+		for _, s := range m.Services {
+			l = len(s)
+			n += 1 + l + sovService(uint64(l))
+		}
+	}
+	return n
+}
+
+func (m *ServiceLogs) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.Name)
+	if l > 0 {
+		n += 1 + l + sovService(uint64(l))
+	}
+	l = len(m.Logs)
+	if l > 0 {
+		n += 1 + l + sovService(uint64(l))
+	}
+	return n
+}
+
+func (m *ServiceLogsResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if len(m.Services) > 0 {
+		for _, e := range m.Services {
+			l = e.Size()
+			n += 1 + l + sovService(uint64(l))
+		}
+	}
+	return n
+}
+
+func (m *ShellRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = m.LeaseId.Size()
+	n += 1 + l + sovService(uint64(l))
+	return n
+}
+
+func (m *ServiceStatusRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = m.LeaseId.Size()
+	n += 1 + l + sovService(uint64(l))
+	if len(m.Services) > 0 {
+		for _, s := range m.Services {
+			l = len(s)
+			n += 1 + l + sovService(uint64(l))
+		}
+	}
+	return n
+}
+
+func (m *ServiceStatusResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if len(m.Services) > 0 {
+		for _, e := range m.Services {
+			l = e.Size()
+			n += 1 + l + sovService(uint64(l))
+		}
+	}
+	return n
+}
+
+func sovService(x uint64) (n int) {
+	return (math_bits.Len64(x|1) + 6) / 7
+}
+func sozService(x uint64) (n int) {
+	return sovService(uint64((x << 1) ^ uint64((int64(x) >> 63))))
+}
+func (m *LeaseServiceStatus) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowService
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: LeaseServiceStatus: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: LeaseServiceStatus: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Available", wireType)
+			}
+			m.Available = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowService
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Available |= int32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Total", wireType)
+			}
+			m.Total = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowService
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Total |= int32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Uris", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowService
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthService
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthService
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Uris = append(m.Uris, string(dAtA[iNdEx:postIndex]))
+			iNdEx = postIndex
+		case 4:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ObservedGeneration", wireType)
+			}
+			m.ObservedGeneration = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowService
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.ObservedGeneration |= int64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 5:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Replicas", wireType)
+			}
+			m.Replicas = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowService
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Replicas |= int32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 6:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field UpdatedReplicas", wireType)
+			}
+			m.UpdatedReplicas = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowService
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.UpdatedReplicas |= int32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 7:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ReadyReplicas", wireType)
+			}
+			m.ReadyReplicas = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowService
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.ReadyReplicas |= int32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 8:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field AvailableReplicas", wireType)
+			}
+			m.AvailableReplicas = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowService
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.AvailableReplicas |= int32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipService(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthService
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *LeaseIPStatus) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowService
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: LeaseIPStatus: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: LeaseIPStatus: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Port", wireType)
+			}
+			m.Port = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowService
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Port |= uint32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ExternalPort", wireType)
+			}
+			m.ExternalPort = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowService
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.ExternalPort |= uint32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Protocol", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowService
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthService
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthService
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Protocol = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Ip", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowService
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthService
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthService
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Ip = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipService(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthService
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *ForwarderPortStatus) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowService
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ForwarderPortStatus: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ForwarderPortStatus: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Host", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowService
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthService
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthService
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Host = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Port", wireType)
+			}
+			m.Port = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowService
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Port |= uint32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ExternalPort", wireType)
+			}
+			m.ExternalPort = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowService
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.ExternalPort |= uint32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Proto", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowService
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthService
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthService
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Proto = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Name", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowService
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthService
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthService
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Name = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipService(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthService
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *ServiceStatus) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowService
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ServiceStatus: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ServiceStatus: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Name", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowService
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthService
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthService
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Name = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Status", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowService
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthService
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthService
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Status.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Ports", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowService
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthService
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthService
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Ports = append(m.Ports, ForwarderPortStatus{})
+			if err := m.Ports[len(m.Ports)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Ips", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowService
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthService
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthService
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Ips = append(m.Ips, LeaseIPStatus{})
+			if err := m.Ips[len(m.Ips)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipService(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthService
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *SendManifestRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowService
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: SendManifestRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: SendManifestRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field LeaseId", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowService
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthService
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthService
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.LeaseId.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Manifest", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowService
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthService
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthService
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Manifest = append(m.Manifest, v11.Group{})
+			if err := m.Manifest[len(m.Manifest)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipService(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthService
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *SendManifestResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowService
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: SendManifestResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: SendManifestResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		default:
+			iNdEx = preIndex
+			skippy, err := skipService(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthService
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *ServiceLogsRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowService
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ServiceLogsRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ServiceLogsRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field LeaseId", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowService
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthService
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthService
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.LeaseId.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Services", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowService
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthService
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthService
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Services = append(m.Services, string(dAtA[iNdEx:postIndex]))
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipService(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthService
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *ServiceLogs) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowService
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ServiceLogs: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ServiceLogs: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Name", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowService
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthService
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthService
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Name = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Logs", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowService
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthService
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthService
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Logs = append(m.Logs[:0], dAtA[iNdEx:postIndex]...)
+			if m.Logs == nil {
+				m.Logs = []byte{}
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipService(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthService
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *ServiceLogsResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowService
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ServiceLogsResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ServiceLogsResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Services", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowService
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthService
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthService
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Services = append(m.Services, &ServiceLogs{})
+			if err := m.Services[len(m.Services)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipService(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthService
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *ShellRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowService
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ShellRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ShellRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field LeaseId", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowService
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthService
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthService
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.LeaseId.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipService(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthService
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *ServiceStatusRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowService
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ServiceStatusRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ServiceStatusRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field LeaseId", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowService
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthService
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthService
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.LeaseId.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Services", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowService
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthService
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthService
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Services = append(m.Services, string(dAtA[iNdEx:postIndex]))
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipService(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthService
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *ServiceStatusResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowService
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ServiceStatusResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ServiceStatusResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Services", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowService
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthService
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthService
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Services = append(m.Services, ServiceStatus{})
+			if err := m.Services[len(m.Services)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipService(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthService
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func skipService(dAtA []byte) (n int, err error) {
+	l := len(dAtA)
+	iNdEx := 0
+	depth := 0
+	for iNdEx < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return 0, ErrIntOverflowService
+			}
+			if iNdEx >= l {
+				return 0, io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		wireType := int(wire & 0x7)
+		switch wireType {
+		case 0:
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return 0, ErrIntOverflowService
+				}
+				if iNdEx >= l {
+					return 0, io.ErrUnexpectedEOF
+				}
+				iNdEx++
+				if dAtA[iNdEx-1] < 0x80 {
+					break
+				}
+			}
+		case 1:
+			iNdEx += 8
+		case 2:
+			var length int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return 0, ErrIntOverflowService
+				}
+				if iNdEx >= l {
+					return 0, io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				length |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if length < 0 {
+				return 0, ErrInvalidLengthService
+			}
+			iNdEx += length
+		case 3:
+			depth++
+		case 4:
+			if depth == 0 {
+				return 0, ErrUnexpectedEndOfGroupService
+			}
+			depth--
+		case 5:
+			iNdEx += 4
+		default:
+			return 0, fmt.Errorf("proto: illegal wireType %d", wireType)
+		}
+		if iNdEx < 0 {
+			return 0, ErrInvalidLengthService
+		}
+		if depth == 0 {
+			return iNdEx, nil
+		}
+	}
+	return 0, io.ErrUnexpectedEOF
+}
+
+var (
+	ErrInvalidLengthService        = fmt.Errorf("proto: negative length found during unmarshaling")
+	ErrIntOverflowService          = fmt.Errorf("proto: integer overflow")
+	ErrUnexpectedEndOfGroupService = fmt.Errorf("proto: unexpected end of group")
+)

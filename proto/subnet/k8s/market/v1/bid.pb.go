@@ -4,9 +4,10 @@
 package v1
 
 import (
-	bytes "bytes"
 	fmt "fmt"
+	io "io"
 	math "math"
+	math_bits "math/bits"
 
 	_ "github.com/cosmos/gogoproto/gogoproto"
 	proto "github.com/gogo/protobuf/proto"
@@ -67,11 +68,8 @@ func (Bid_State) EnumDescriptor() ([]byte, []int) {
 // ResourceOffer describes resources that provider is offering
 // for deployment
 type ResourceOffer struct {
-	Resources            v1.Resources `protobuf:"bytes,1,opt,name=resources,proto3" json:"resources" yaml:"resources"`
-	Count                uint32       `protobuf:"varint,2,opt,name=count,proto3" json:"count" yaml:"count"`
-	XXX_NoUnkeyedLiteral struct{}     `json:"-"`
-	XXX_unrecognized     []byte       `json:"-"`
-	XXX_sizecache        int32        `json:"-"`
+	Resources v1.Resources `protobuf:"bytes,1,opt,name=resources,proto3" json:"resources" yaml:"resources"`
+	Count     uint32       `protobuf:"varint,2,opt,name=count,proto3" json:"count" yaml:"count"`
 }
 
 func (m *ResourceOffer) Reset()         { *m = ResourceOffer{} }
@@ -81,16 +79,25 @@ func (*ResourceOffer) Descriptor() ([]byte, []int) {
 	return fileDescriptor_55d814d17af82341, []int{0}
 }
 func (m *ResourceOffer) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_ResourceOffer.Unmarshal(m, b)
+	return m.Unmarshal(b)
 }
 func (m *ResourceOffer) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_ResourceOffer.Marshal(b, m, deterministic)
+	if deterministic {
+		return xxx_messageInfo_ResourceOffer.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
 }
 func (m *ResourceOffer) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_ResourceOffer.Merge(m, src)
 }
 func (m *ResourceOffer) XXX_Size() int {
-	return xxx_messageInfo_ResourceOffer.Size(m)
+	return m.Size()
 }
 func (m *ResourceOffer) XXX_DiscardUnknown() {
 	xxx_messageInfo_ResourceOffer.DiscardUnknown(m)
@@ -114,12 +121,9 @@ func (m *ResourceOffer) GetCount() uint32 {
 
 // MsgCreateBid defines an SDK message for creating Bid
 type MsgCreateBid struct {
-	Order                OrderID        `protobuf:"bytes,1,opt,name=order,proto3" json:"order" yaml:"order"`
-	Provider             string         `protobuf:"bytes,2,opt,name=provider,proto3" json:"provider" yaml:"provider"`
-	ResourcesOffer       ResourcesOffer `protobuf:"bytes,3,rep,name=resources_offer,json=resourcesOffer,proto3,castrepeated=ResourcesOffer" json:"resources_offer" yaml:"resources_offer"`
-	XXX_NoUnkeyedLiteral struct{}       `json:"-"`
-	XXX_unrecognized     []byte         `json:"-"`
-	XXX_sizecache        int32          `json:"-"`
+	Order          OrderID        `protobuf:"bytes,1,opt,name=order,proto3" json:"order" yaml:"order"`
+	Provider       string         `protobuf:"bytes,2,opt,name=provider,proto3" json:"provider" yaml:"provider"`
+	ResourcesOffer ResourcesOffer `protobuf:"bytes,3,rep,name=resources_offer,json=resourcesOffer,proto3,castrepeated=ResourcesOffer" json:"resources_offer" yaml:"resources_offer"`
 }
 
 func (m *MsgCreateBid) Reset()         { *m = MsgCreateBid{} }
@@ -129,16 +133,25 @@ func (*MsgCreateBid) Descriptor() ([]byte, []int) {
 	return fileDescriptor_55d814d17af82341, []int{1}
 }
 func (m *MsgCreateBid) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_MsgCreateBid.Unmarshal(m, b)
+	return m.Unmarshal(b)
 }
 func (m *MsgCreateBid) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_MsgCreateBid.Marshal(b, m, deterministic)
+	if deterministic {
+		return xxx_messageInfo_MsgCreateBid.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
 }
 func (m *MsgCreateBid) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_MsgCreateBid.Merge(m, src)
 }
 func (m *MsgCreateBid) XXX_Size() int {
-	return xxx_messageInfo_MsgCreateBid.Size(m)
+	return m.Size()
 }
 func (m *MsgCreateBid) XXX_DiscardUnknown() {
 	xxx_messageInfo_MsgCreateBid.DiscardUnknown(m)
@@ -169,9 +182,6 @@ func (m *MsgCreateBid) GetResourcesOffer() ResourcesOffer {
 
 // MsgCreateBidResponse defines the Msg/CreateBid response type.
 type MsgCreateBidResponse struct {
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *MsgCreateBidResponse) Reset()         { *m = MsgCreateBidResponse{} }
@@ -181,16 +191,25 @@ func (*MsgCreateBidResponse) Descriptor() ([]byte, []int) {
 	return fileDescriptor_55d814d17af82341, []int{2}
 }
 func (m *MsgCreateBidResponse) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_MsgCreateBidResponse.Unmarshal(m, b)
+	return m.Unmarshal(b)
 }
 func (m *MsgCreateBidResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_MsgCreateBidResponse.Marshal(b, m, deterministic)
+	if deterministic {
+		return xxx_messageInfo_MsgCreateBidResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
 }
 func (m *MsgCreateBidResponse) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_MsgCreateBidResponse.Merge(m, src)
 }
 func (m *MsgCreateBidResponse) XXX_Size() int {
-	return xxx_messageInfo_MsgCreateBidResponse.Size(m)
+	return m.Size()
 }
 func (m *MsgCreateBidResponse) XXX_DiscardUnknown() {
 	xxx_messageInfo_MsgCreateBidResponse.DiscardUnknown(m)
@@ -200,10 +219,7 @@ var xxx_messageInfo_MsgCreateBidResponse proto.InternalMessageInfo
 
 // MsgCloseBid defines an SDK message for closing bid
 type MsgCloseBid struct {
-	BidID                BidID    `protobuf:"bytes,1,opt,name=bid_id,json=bidId,proto3" json:"id" yaml:"id"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
+	BidID BidID `protobuf:"bytes,1,opt,name=bid_id,json=bidId,proto3" json:"id" yaml:"id"`
 }
 
 func (m *MsgCloseBid) Reset()         { *m = MsgCloseBid{} }
@@ -213,16 +229,25 @@ func (*MsgCloseBid) Descriptor() ([]byte, []int) {
 	return fileDescriptor_55d814d17af82341, []int{3}
 }
 func (m *MsgCloseBid) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_MsgCloseBid.Unmarshal(m, b)
+	return m.Unmarshal(b)
 }
 func (m *MsgCloseBid) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_MsgCloseBid.Marshal(b, m, deterministic)
+	if deterministic {
+		return xxx_messageInfo_MsgCloseBid.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
 }
 func (m *MsgCloseBid) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_MsgCloseBid.Merge(m, src)
 }
 func (m *MsgCloseBid) XXX_Size() int {
-	return xxx_messageInfo_MsgCloseBid.Size(m)
+	return m.Size()
 }
 func (m *MsgCloseBid) XXX_DiscardUnknown() {
 	xxx_messageInfo_MsgCloseBid.DiscardUnknown(m)
@@ -239,9 +264,6 @@ func (m *MsgCloseBid) GetBidID() BidID {
 
 // MsgCloseBidResponse defines the Msg/CloseBid response type.
 type MsgCloseBidResponse struct {
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *MsgCloseBidResponse) Reset()         { *m = MsgCloseBidResponse{} }
@@ -251,16 +273,25 @@ func (*MsgCloseBidResponse) Descriptor() ([]byte, []int) {
 	return fileDescriptor_55d814d17af82341, []int{4}
 }
 func (m *MsgCloseBidResponse) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_MsgCloseBidResponse.Unmarshal(m, b)
+	return m.Unmarshal(b)
 }
 func (m *MsgCloseBidResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_MsgCloseBidResponse.Marshal(b, m, deterministic)
+	if deterministic {
+		return xxx_messageInfo_MsgCloseBidResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
 }
 func (m *MsgCloseBidResponse) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_MsgCloseBidResponse.Merge(m, src)
 }
 func (m *MsgCloseBidResponse) XXX_Size() int {
-	return xxx_messageInfo_MsgCloseBidResponse.Size(m)
+	return m.Size()
 }
 func (m *MsgCloseBidResponse) XXX_DiscardUnknown() {
 	xxx_messageInfo_MsgCloseBidResponse.DiscardUnknown(m)
@@ -271,14 +302,11 @@ var xxx_messageInfo_MsgCloseBidResponse proto.InternalMessageInfo
 // BidID stores owner and all other seq numbers
 // A successful bid becomes a Lease(ID).
 type BidID struct {
-	Owner                string   `protobuf:"bytes,1,opt,name=owner,proto3" json:"owner" yaml:"owner"`
-	DSeq                 uint64   `protobuf:"varint,2,opt,name=dseq,proto3" json:"dseq" yaml:"dseq"`
-	GSeq                 uint32   `protobuf:"varint,3,opt,name=gseq,proto3" json:"gseq" yaml:"gseq"`
-	OSeq                 uint32   `protobuf:"varint,4,opt,name=oseq,proto3" json:"oseq" yaml:"oseq"`
-	Provider             string   `protobuf:"bytes,5,opt,name=provider,proto3" json:"provider" yaml:"provider"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
+	Owner    string `protobuf:"bytes,1,opt,name=owner,proto3" json:"owner" yaml:"owner"`
+	DSeq     uint64 `protobuf:"varint,2,opt,name=dseq,proto3" json:"dseq" yaml:"dseq"`
+	GSeq     uint32 `protobuf:"varint,3,opt,name=gseq,proto3" json:"gseq" yaml:"gseq"`
+	OSeq     uint32 `protobuf:"varint,4,opt,name=oseq,proto3" json:"oseq" yaml:"oseq"`
+	Provider string `protobuf:"bytes,5,opt,name=provider,proto3" json:"provider" yaml:"provider"`
 }
 
 func (m *BidID) Reset()      { *m = BidID{} }
@@ -287,16 +315,25 @@ func (*BidID) Descriptor() ([]byte, []int) {
 	return fileDescriptor_55d814d17af82341, []int{5}
 }
 func (m *BidID) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_BidID.Unmarshal(m, b)
+	return m.Unmarshal(b)
 }
 func (m *BidID) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_BidID.Marshal(b, m, deterministic)
+	if deterministic {
+		return xxx_messageInfo_BidID.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
 }
 func (m *BidID) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_BidID.Merge(m, src)
 }
 func (m *BidID) XXX_Size() int {
-	return xxx_messageInfo_BidID.Size(m)
+	return m.Size()
 }
 func (m *BidID) XXX_DiscardUnknown() {
 	xxx_messageInfo_BidID.DiscardUnknown(m)
@@ -341,13 +378,10 @@ func (m *BidID) GetProvider() string {
 
 // Bid stores BidID, state of bid and price
 type Bid struct {
-	BidID                BidID          `protobuf:"bytes,1,opt,name=bid_id,json=bidId,proto3" json:"id" yaml:"id"`
-	State                Bid_State      `protobuf:"varint,2,opt,name=state,proto3,enum=subnet.k8s.market.v1.Bid_State" json:"state" yaml:"state"`
-	CreatedAt            int64          `protobuf:"varint,4,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	ResourcesOffer       ResourcesOffer `protobuf:"bytes,5,rep,name=resources_offer,json=resourcesOffer,proto3,castrepeated=ResourcesOffer" json:"resources_offer" yaml:"resources_offer"`
-	XXX_NoUnkeyedLiteral struct{}       `json:"-"`
-	XXX_unrecognized     []byte         `json:"-"`
-	XXX_sizecache        int32          `json:"-"`
+	BidID          BidID          `protobuf:"bytes,1,opt,name=bid_id,json=bidId,proto3" json:"id" yaml:"id"`
+	State          Bid_State      `protobuf:"varint,2,opt,name=state,proto3,enum=subnet.k8s.market.v1.Bid_State" json:"state" yaml:"state"`
+	CreatedAt      int64          `protobuf:"varint,4,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	ResourcesOffer ResourcesOffer `protobuf:"bytes,5,rep,name=resources_offer,json=resourcesOffer,proto3,castrepeated=ResourcesOffer" json:"resources_offer" yaml:"resources_offer"`
 }
 
 func (m *Bid) Reset()      { *m = Bid{} }
@@ -356,16 +390,25 @@ func (*Bid) Descriptor() ([]byte, []int) {
 	return fileDescriptor_55d814d17af82341, []int{6}
 }
 func (m *Bid) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_Bid.Unmarshal(m, b)
+	return m.Unmarshal(b)
 }
 func (m *Bid) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_Bid.Marshal(b, m, deterministic)
+	if deterministic {
+		return xxx_messageInfo_Bid.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
 }
 func (m *Bid) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_Bid.Merge(m, src)
 }
 func (m *Bid) XXX_Size() int {
-	return xxx_messageInfo_Bid.Size(m)
+	return m.Size()
 }
 func (m *Bid) XXX_DiscardUnknown() {
 	xxx_messageInfo_Bid.DiscardUnknown(m)
@@ -403,15 +446,12 @@ func (m *Bid) GetResourcesOffer() ResourcesOffer {
 
 // BidFilters defines flags for bid list filter
 type BidFilters struct {
-	Owner                string   `protobuf:"bytes,1,opt,name=owner,proto3" json:"owner" yaml:"owner"`
-	DSeq                 uint64   `protobuf:"varint,2,opt,name=dseq,proto3" json:"dseq" yaml:"dseq"`
-	GSeq                 uint32   `protobuf:"varint,3,opt,name=gseq,proto3" json:"gseq" yaml:"gseq"`
-	OSeq                 uint32   `protobuf:"varint,4,opt,name=oseq,proto3" json:"oseq" yaml:"oseq"`
-	Provider             string   `protobuf:"bytes,5,opt,name=provider,proto3" json:"provider" yaml:"provider"`
-	State                string   `protobuf:"bytes,6,opt,name=state,proto3" json:"state" yaml:"state"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
+	Owner    string `protobuf:"bytes,1,opt,name=owner,proto3" json:"owner" yaml:"owner"`
+	DSeq     uint64 `protobuf:"varint,2,opt,name=dseq,proto3" json:"dseq" yaml:"dseq"`
+	GSeq     uint32 `protobuf:"varint,3,opt,name=gseq,proto3" json:"gseq" yaml:"gseq"`
+	OSeq     uint32 `protobuf:"varint,4,opt,name=oseq,proto3" json:"oseq" yaml:"oseq"`
+	Provider string `protobuf:"bytes,5,opt,name=provider,proto3" json:"provider" yaml:"provider"`
+	State    string `protobuf:"bytes,6,opt,name=state,proto3" json:"state" yaml:"state"`
 }
 
 func (m *BidFilters) Reset()         { *m = BidFilters{} }
@@ -421,16 +461,25 @@ func (*BidFilters) Descriptor() ([]byte, []int) {
 	return fileDescriptor_55d814d17af82341, []int{7}
 }
 func (m *BidFilters) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_BidFilters.Unmarshal(m, b)
+	return m.Unmarshal(b)
 }
 func (m *BidFilters) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_BidFilters.Marshal(b, m, deterministic)
+	if deterministic {
+		return xxx_messageInfo_BidFilters.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
 }
 func (m *BidFilters) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_BidFilters.Merge(m, src)
 }
 func (m *BidFilters) XXX_Size() int {
-	return xxx_messageInfo_BidFilters.Size(m)
+	return m.Size()
 }
 func (m *BidFilters) XXX_DiscardUnknown() {
 	xxx_messageInfo_BidFilters.DiscardUnknown(m)
@@ -495,57 +544,58 @@ func init() {
 func init() { proto.RegisterFile("market/v1/bid.proto", fileDescriptor_55d814d17af82341) }
 
 var fileDescriptor_55d814d17af82341 = []byte{
-	// 787 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xec, 0x95, 0xbf, 0x6f, 0xdb, 0x38,
-	0x14, 0xc7, 0x2d, 0x5b, 0x72, 0x62, 0x3a, 0x3f, 0x0c, 0xe5, 0xc7, 0x25, 0x3e, 0xe4, 0x28, 0xe8,
-	0x70, 0x87, 0x2c, 0x27, 0x21, 0xc9, 0x12, 0xe4, 0xa6, 0xa8, 0x41, 0x5b, 0x17, 0x2d, 0x5c, 0x28,
-	0xed, 0xd2, 0x0e, 0x81, 0x64, 0x32, 0x2a, 0x11, 0x47, 0x74, 0x44, 0xda, 0x45, 0xff, 0x83, 0x22,
-	0x63, 0xbb, 0x74, 0x49, 0x11, 0x20, 0x5b, 0xfe, 0x92, 0x8e, 0x1d, 0x3a, 0xab, 0x40, 0xa6, 0xc2,
-	0xa3, 0xff, 0x82, 0x82, 0xa4, 0x2c, 0xdb, 0x81, 0x5b, 0xa0, 0x43, 0x81, 0x0e, 0x9d, 0xec, 0xf7,
-	0x7d, 0xfc, 0x90, 0x8f, 0xdf, 0xf7, 0x68, 0x83, 0xa5, 0xd3, 0x20, 0x39, 0xc1, 0xdc, 0xed, 0x6d,
-	0xb9, 0x21, 0x41, 0x4e, 0x27, 0xa1, 0x9c, 0x9a, 0xcb, 0xac, 0x1b, 0xc6, 0x98, 0x3b, 0x27, 0xbb,
-	0xcc, 0x51, 0x79, 0xa7, 0xb7, 0x55, 0x5f, 0x8e, 0x68, 0x44, 0xe5, 0x02, 0x57, 0x7c, 0x53, 0x6b,
-	0xeb, 0x7f, 0x84, 0x01, 0xc3, 0x02, 0x4f, 0x30, 0xa3, 0xdd, 0xa4, 0x85, 0x59, 0x96, 0x58, 0x19,
-	0xed, 0x4c, 0x13, 0x84, 0x13, 0x25, 0xdb, 0xd7, 0x1a, 0x98, 0xf7, 0xb3, 0xa5, 0xcd, 0xe3, 0x63,
-	0x9c, 0x98, 0x21, 0xa8, 0xe4, 0xec, 0x9a, 0x66, 0x69, 0x9b, 0xd5, 0xed, 0x0d, 0x67, 0xac, 0x02,
-	0x71, 0x80, 0xd3, 0xdb, 0x72, 0x86, 0x14, 0xf3, 0xfe, 0xf9, 0x90, 0xc2, 0x42, 0x3f, 0x85, 0x23,
-	0x6e, 0x90, 0xc2, 0xda, 0xab, 0xe0, 0xb4, 0xbd, 0x67, 0xe7, 0x92, 0xed, 0x8f, 0xd2, 0xa6, 0x0b,
-	0x8c, 0x16, 0xed, 0xc6, 0x7c, 0xad, 0x68, 0x69, 0x9b, 0xf3, 0xde, 0x7a, 0x3f, 0x85, 0x4a, 0x18,
-	0xa4, 0x70, 0x4e, 0x81, 0x32, 0xb4, 0x7d, 0x25, 0xef, 0xe9, 0x5f, 0x2e, 0xa1, 0x66, 0x7f, 0x2a,
-	0x82, 0xb9, 0x47, 0x2c, 0xba, 0x93, 0xe0, 0x80, 0x63, 0x8f, 0x20, 0xf3, 0x39, 0x30, 0xe4, 0x65,
-	0xa6, 0xd5, 0x99, 0x3b, 0xe5, 0x34, 0xc5, 0x92, 0xc6, 0x81, 0xf7, 0xaf, 0xa8, 0xf3, 0x26, 0x85,
-	0x86, 0x14, 0xc4, 0x99, 0x12, 0x1e, 0x9d, 0x29, 0x43, 0xdb, 0x57, 0xb2, 0xf9, 0x3f, 0x98, 0xed,
-	0x24, 0xb4, 0x47, 0xc4, 0xfe, 0xa2, 0xce, 0x8a, 0x07, 0xfb, 0x29, 0xcc, 0xb5, 0x41, 0x0a, 0x17,
-	0x15, 0x36, 0x54, 0x6c, 0x3f, 0x4f, 0x9a, 0x57, 0x1a, 0x58, 0xcc, 0xef, 0x7b, 0x44, 0x85, 0xb3,
-	0x6b, 0x25, 0xab, 0xb4, 0x59, 0xdd, 0xfe, 0x7b, 0x7a, 0x91, 0x13, 0x4d, 0xf0, 0x9e, 0x66, 0xa5,
-	0x2e, 0xe4, 0x2e, 0x4b, 0xbd, 0x9f, 0xc2, 0xdb, 0xbb, 0x0e, 0x52, 0xb8, 0x7a, 0xcb, 0x6a, 0x95,
-	0xb0, 0xaf, 0x3f, 0xdf, 0xc6, 0xfd, 0x85, 0x64, 0x22, 0x96, 0xb6, 0x16, 0xec, 0x55, 0xb0, 0x3c,
-	0xee, 0xaa, 0x8f, 0x59, 0x87, 0xc6, 0x0c, 0xdb, 0x04, 0x54, 0x85, 0xde, 0xa6, 0x4c, 0x9a, 0xfd,
-	0x04, 0x94, 0x43, 0x82, 0x8e, 0x08, 0xca, 0xdc, 0xfe, 0x73, 0xfa, 0x45, 0x3c, 0x82, 0x1a, 0x07,
-	0x9e, 0x35, 0xf4, 0x5a, 0x86, 0xfd, 0x14, 0x16, 0x09, 0x1a, 0xa4, 0xb0, 0xa2, 0x4a, 0x25, 0xc8,
-	0xf6, 0x8d, 0x90, 0xa0, 0x06, 0xca, 0x4a, 0x58, 0x01, 0x4b, 0x63, 0x47, 0xe5, 0x15, 0xbc, 0x2f,
-	0x02, 0xb5, 0x81, 0x98, 0x18, 0xfa, 0x32, 0xce, 0x3a, 0x5d, 0x51, 0x13, 0x23, 0x85, 0xb1, 0xee,
-	0x89, 0x50, 0x74, 0x4f, 0x7c, 0x9a, 0x3b, 0x40, 0x47, 0x0c, 0x9f, 0xc9, 0xce, 0xe9, 0x1e, 0xbc,
-	0x49, 0xa1, 0x7e, 0x70, 0x88, 0xcf, 0xfa, 0x29, 0x94, 0xfa, 0x20, 0x85, 0x55, 0x85, 0x89, 0xc8,
-	0xf6, 0xa5, 0x28, 0xa0, 0x48, 0x40, 0x25, 0x39, 0x96, 0x12, 0xba, 0x97, 0x41, 0xd1, 0x04, 0x14,
-	0x29, 0x28, 0xca, 0x20, 0x2a, 0x20, 0x7d, 0x04, 0x35, 0x33, 0x88, 0x4e, 0x40, 0x54, 0x41, 0xe2,
-	0x63, 0x62, 0xb8, 0x8c, 0x1f, 0x1c, 0xae, 0xbd, 0xd9, 0x77, 0x97, 0xb0, 0x20, 0x7d, 0x7b, 0xa3,
-	0x83, 0xd2, 0x4f, 0xeb, 0x8d, 0xf9, 0x18, 0x18, 0x8c, 0x07, 0x1c, 0x4b, 0x13, 0x17, 0xb6, 0xe1,
-	0x37, 0x37, 0x75, 0x0e, 0xc5, 0x32, 0xd5, 0x15, 0x49, 0x8c, 0xba, 0x22, 0x43, 0xdb, 0x57, 0xb2,
-	0xb9, 0x01, 0x40, 0x4b, 0xce, 0x19, 0x3a, 0x0a, 0xb8, 0x74, 0xac, 0xe4, 0x57, 0x32, 0x65, 0x9f,
-	0x4f, 0x7d, 0x35, 0xc6, 0xaf, 0xf6, 0x6a, 0xec, 0xb7, 0x1a, 0x30, 0xe4, 0x85, 0x4d, 0x0b, 0xcc,
-	0x90, 0xb8, 0x17, 0xb4, 0x09, 0xaa, 0x15, 0xea, 0x4b, 0xe7, 0x17, 0xd6, 0xa2, 0x47, 0x90, 0x4c,
-	0x35, 0x94, 0x6c, 0xae, 0x00, 0x9d, 0x76, 0x70, 0x5c, 0xd3, 0xea, 0xd5, 0xf3, 0x0b, 0x6b, 0xc6,
-	0x23, 0xa8, 0xd9, 0xc1, 0xb1, 0xb9, 0x0e, 0xca, 0x41, 0x8b, 0x93, 0x1e, 0xae, 0x15, 0xeb, 0xf3,
-	0xe7, 0x17, 0x56, 0xc5, 0x23, 0x68, 0x5f, 0x0a, 0x82, 0x68, 0x53, 0xc6, 0x6b, 0xa5, 0x9c, 0x78,
-	0x48, 0x19, 0x17, 0x44, 0x4b, 0x3c, 0x0f, 0x54, 0xd3, 0x73, 0x42, 0xbe, 0x17, 0x54, 0xd7, 0x5f,
-	0x5f, 0xfd, 0x55, 0x18, 0x1b, 0x8a, 0x8f, 0x45, 0x00, 0x3c, 0x82, 0xee, 0x92, 0x36, 0xc7, 0x09,
-	0xfb, 0xfd, 0x74, 0xc6, 0x7f, 0x97, 0xdd, 0xe1, 0x48, 0x97, 0x47, 0x66, 0x7c, 0x6f, 0x62, 0xd5,
-	0xef, 0x93, 0xf7, 0xe0, 0xd9, 0xfd, 0x88, 0xf0, 0x17, 0xdd, 0xd0, 0x69, 0xd1, 0x53, 0xb7, 0x1b,
-	0x93, 0x16, 0x4d, 0xe2, 0x6e, 0x9b, 0x27, 0xc1, 0x31, 0xed, 0xc6, 0x28, 0xe0, 0x84, 0xc6, 0xae,
-	0x9a, 0xd0, 0xff, 0x62, 0x8a, 0xb0, 0xab, 0xfe, 0x98, 0x95, 0xe2, 0x9e, 0xec, 0x32, 0x37, 0xff,
-	0xfb, 0x0d, 0xcb, 0x32, 0xb7, 0xf3, 0x35, 0x00, 0x00, 0xff, 0xff, 0xff, 0xb4, 0x1f, 0xdb, 0xec,
-	0x07, 0x00, 0x00,
+	// 810 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xec, 0x95, 0x3f, 0x6f, 0xfb, 0x44,
+	0x18, 0xc7, 0xed, 0xc4, 0x4e, 0x9b, 0x4b, 0xff, 0x44, 0xee, 0x1f, 0xda, 0xa0, 0xe6, 0x2c, 0x23,
+	0x50, 0x17, 0x6c, 0xb5, 0x5d, 0xaa, 0x32, 0xd5, 0x54, 0x40, 0x24, 0x50, 0x90, 0x0b, 0x0b, 0x0c,
+	0x95, 0x9d, 0xbb, 0x9a, 0x53, 0x53, 0x5f, 0xea, 0xbb, 0x04, 0xf1, 0x0e, 0x50, 0x27, 0x04, 0x0b,
+	0x4b, 0x51, 0xa5, 0x6e, 0x7d, 0x25, 0x1d, 0x3b, 0x30, 0x30, 0x19, 0x94, 0x2e, 0x28, 0x63, 0x5e,
+	0x01, 0xba, 0x3b, 0xc7, 0x49, 0xaa, 0x80, 0xc4, 0x80, 0xc4, 0xf0, 0x9b, 0x92, 0xe7, 0xfb, 0xdc,
+	0xe7, 0xee, 0xb9, 0xef, 0xf3, 0x5c, 0x02, 0x36, 0xae, 0xc3, 0xf4, 0x0a, 0x73, 0x6f, 0x70, 0xe0,
+	0x45, 0x04, 0xb9, 0xbd, 0x94, 0x72, 0x6a, 0x6d, 0xb2, 0x7e, 0x94, 0x60, 0xee, 0x5e, 0x1d, 0x33,
+	0x57, 0xe5, 0xdd, 0xc1, 0x41, 0x63, 0x33, 0xa6, 0x31, 0x95, 0x0b, 0x3c, 0xf1, 0x4d, 0xad, 0x6d,
+	0xbc, 0x15, 0x85, 0x0c, 0x0b, 0x3c, 0xc5, 0x8c, 0xf6, 0xd3, 0x0e, 0x66, 0x79, 0x62, 0x6b, 0xba,
+	0x33, 0x4d, 0x11, 0x4e, 0x95, 0xec, 0x3c, 0xea, 0x60, 0x35, 0xc8, 0x97, 0xb6, 0x2f, 0x2f, 0x71,
+	0x6a, 0x45, 0xa0, 0x5a, 0xb0, 0x3b, 0xba, 0xad, 0xef, 0xd7, 0x0e, 0xf7, 0xdc, 0x99, 0x0a, 0xc4,
+	0x01, 0xee, 0xe0, 0xc0, 0x9d, 0x50, 0xcc, 0x7f, 0xf7, 0x29, 0x83, 0xda, 0x28, 0x83, 0x53, 0x6e,
+	0x9c, 0xc1, 0xfa, 0x77, 0xe1, 0x75, 0xf7, 0xc4, 0x29, 0x24, 0x27, 0x98, 0xa6, 0x2d, 0x0f, 0x98,
+	0x1d, 0xda, 0x4f, 0xf8, 0x4e, 0xc9, 0xd6, 0xf7, 0x57, 0xfd, 0xdd, 0x51, 0x06, 0x95, 0x30, 0xce,
+	0xe0, 0x8a, 0x02, 0x65, 0xe8, 0x04, 0x4a, 0x3e, 0x31, 0xfe, 0xbc, 0x87, 0xba, 0xf3, 0x6b, 0x09,
+	0xac, 0x7c, 0xc6, 0xe2, 0x0f, 0x53, 0x1c, 0x72, 0xec, 0x13, 0x64, 0x7d, 0x0d, 0x4c, 0x79, 0x99,
+	0x45, 0x75, 0x16, 0x4e, 0xb9, 0x6d, 0xb1, 0xa4, 0x75, 0xe6, 0xbf, 0x27, 0xea, 0x1c, 0x66, 0xd0,
+	0x94, 0x82, 0x38, 0x53, 0xc2, 0xd3, 0x33, 0x65, 0xe8, 0x04, 0x4a, 0xb6, 0x3e, 0x00, 0xcb, 0xbd,
+	0x94, 0x0e, 0x88, 0xd8, 0x5f, 0xd4, 0x59, 0xf5, 0xe1, 0x28, 0x83, 0x85, 0x36, 0xce, 0xe0, 0xba,
+	0xc2, 0x26, 0x8a, 0x13, 0x14, 0x49, 0xeb, 0x41, 0x07, 0xeb, 0xc5, 0x7d, 0x2f, 0xa8, 0x70, 0x76,
+	0xa7, 0x6c, 0x97, 0xf7, 0x6b, 0x87, 0xef, 0x2c, 0x2e, 0x72, 0xae, 0x09, 0xfe, 0x97, 0x79, 0xa9,
+	0x6b, 0x85, 0xcb, 0x52, 0x1f, 0x65, 0xf0, 0xf5, 0xae, 0xe3, 0x0c, 0x6e, 0xbf, 0xb2, 0x5a, 0x25,
+	0x9c, 0xc7, 0xdf, 0x5f, 0xe3, 0xc1, 0x5a, 0x3a, 0x17, 0x4b, 0x5b, 0x35, 0x67, 0x1b, 0x6c, 0xce,
+	0xba, 0x1a, 0x60, 0xd6, 0xa3, 0x09, 0xc3, 0x0e, 0x01, 0x35, 0xa1, 0x77, 0x29, 0x93, 0x66, 0x7f,
+	0x01, 0x2a, 0x11, 0x41, 0x17, 0x04, 0xe5, 0x6e, 0xbf, 0xbd, 0xf8, 0x22, 0x3e, 0x41, 0xad, 0x33,
+	0xdf, 0x9e, 0x78, 0x2d, 0xc3, 0x51, 0x06, 0x4b, 0x04, 0x8d, 0x33, 0x58, 0x55, 0xa5, 0x12, 0xe4,
+	0x04, 0x66, 0x44, 0x50, 0x0b, 0xe5, 0x25, 0x6c, 0x81, 0x8d, 0x99, 0xa3, 0x8a, 0x0a, 0x7e, 0x29,
+	0x01, 0xb5, 0x81, 0x98, 0x18, 0xfa, 0x6d, 0x92, 0x77, 0xba, 0xaa, 0x26, 0x46, 0x0a, 0x33, 0xdd,
+	0x13, 0xa1, 0xe8, 0x9e, 0xf8, 0xb4, 0x8e, 0x80, 0x81, 0x18, 0xbe, 0x91, 0x9d, 0x33, 0x7c, 0x38,
+	0xcc, 0xa0, 0x71, 0x76, 0x8e, 0x6f, 0x46, 0x19, 0x94, 0xfa, 0x38, 0x83, 0x35, 0x85, 0x89, 0xc8,
+	0x09, 0xa4, 0x28, 0xa0, 0x58, 0x40, 0x65, 0x39, 0x96, 0x12, 0xfa, 0x38, 0x87, 0xe2, 0x39, 0x28,
+	0x56, 0x50, 0x9c, 0x43, 0x54, 0x40, 0xc6, 0x14, 0x6a, 0xe7, 0x10, 0x9d, 0x83, 0xa8, 0x82, 0xc4,
+	0xc7, 0xdc, 0x70, 0x99, 0xff, 0x72, 0xb8, 0x4e, 0x96, 0x7f, 0xbe, 0x87, 0x9a, 0xf4, 0xed, 0x47,
+	0x03, 0x94, 0xff, 0xb3, 0xde, 0x58, 0x9f, 0x03, 0x93, 0xf1, 0x90, 0x63, 0x69, 0xe2, 0xda, 0x21,
+	0xfc, 0xdb, 0x4d, 0xdd, 0x73, 0xb1, 0x4c, 0x75, 0x45, 0x12, 0xd3, 0xae, 0xc8, 0xd0, 0x09, 0x94,
+	0x6c, 0xed, 0x01, 0xd0, 0x91, 0x73, 0x86, 0x2e, 0x42, 0x2e, 0x1d, 0x2b, 0x07, 0xd5, 0x5c, 0x39,
+	0xe5, 0x0b, 0x5f, 0x8d, 0xf9, 0x7f, 0x7b, 0x35, 0xce, 0x4f, 0x3a, 0x30, 0xe5, 0x85, 0x2d, 0x1b,
+	0x2c, 0x91, 0x64, 0x10, 0x76, 0x09, 0xaa, 0x6b, 0x8d, 0x8d, 0xdb, 0x3b, 0x7b, 0xdd, 0x27, 0x48,
+	0xa6, 0x5a, 0x4a, 0xb6, 0xb6, 0x80, 0x41, 0x7b, 0x38, 0xa9, 0xeb, 0x8d, 0xda, 0xed, 0x9d, 0xbd,
+	0xe4, 0x13, 0xd4, 0xee, 0xe1, 0xc4, 0xda, 0x05, 0x95, 0xb0, 0xc3, 0xc9, 0x00, 0xd7, 0x4b, 0x8d,
+	0xd5, 0xdb, 0x3b, 0xbb, 0xea, 0x13, 0x74, 0x2a, 0x05, 0x41, 0x74, 0x29, 0xe3, 0xf5, 0x72, 0x41,
+	0x7c, 0x4a, 0x19, 0x17, 0x44, 0x47, 0x3c, 0x0f, 0x54, 0x37, 0x0a, 0x42, 0xbe, 0x17, 0xd4, 0x30,
+	0xbe, 0x7f, 0x68, 0x6a, 0x33, 0x43, 0xf1, 0x5c, 0x02, 0xc0, 0x27, 0xe8, 0x23, 0xd2, 0xe5, 0x38,
+	0x65, 0x6f, 0x9e, 0xce, 0xec, 0xef, 0xb2, 0x37, 0x19, 0xe9, 0xca, 0xd4, 0x8c, 0x7f, 0x9a, 0x58,
+	0xf5, 0xfb, 0xe4, 0x47, 0x4f, 0xc3, 0xa6, 0xfe, 0x3c, 0x6c, 0xea, 0x7f, 0x0c, 0x9b, 0xfa, 0x0f,
+	0x2f, 0x4d, 0xed, 0xf9, 0xa5, 0xa9, 0xfd, 0xf6, 0xd2, 0xd4, 0xbe, 0xfa, 0x24, 0x26, 0xfc, 0x9b,
+	0x7e, 0xe4, 0x76, 0xe8, 0xb5, 0xd7, 0x4f, 0x48, 0x87, 0xa6, 0x49, 0xbf, 0xcb, 0xd3, 0xf0, 0x92,
+	0xf6, 0x13, 0x14, 0x72, 0x42, 0x13, 0x4f, 0x4d, 0xee, 0xfb, 0x09, 0x45, 0xd8, 0x53, 0x7f, 0xd8,
+	0x4a, 0xf1, 0xae, 0x8e, 0x99, 0x57, 0xfc, 0x2d, 0x47, 0x15, 0x99, 0x3b, 0xfa, 0x2b, 0x00, 0x00,
+	0xff, 0xff, 0x5e, 0x01, 0xf0, 0x57, 0x04, 0x08, 0x00, 0x00,
 }
 
 func (this *ResourceOffer) Equal(that interface{}) bool {
@@ -573,8 +623,1551 @@ func (this *ResourceOffer) Equal(that interface{}) bool {
 	if this.Count != that1.Count {
 		return false
 	}
-	if !bytes.Equal(this.XXX_unrecognized, that1.XXX_unrecognized) {
-		return false
-	}
 	return true
 }
+func (m *ResourceOffer) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ResourceOffer) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ResourceOffer) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.Count != 0 {
+		i = encodeVarintBid(dAtA, i, uint64(m.Count))
+		i--
+		dAtA[i] = 0x10
+	}
+	{
+		size, err := m.Resources.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintBid(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
+}
+
+func (m *MsgCreateBid) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *MsgCreateBid) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *MsgCreateBid) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.ResourcesOffer) > 0 {
+		for iNdEx := len(m.ResourcesOffer) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.ResourcesOffer[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintBid(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0x1a
+		}
+	}
+	if len(m.Provider) > 0 {
+		i -= len(m.Provider)
+		copy(dAtA[i:], m.Provider)
+		i = encodeVarintBid(dAtA, i, uint64(len(m.Provider)))
+		i--
+		dAtA[i] = 0x12
+	}
+	{
+		size, err := m.Order.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintBid(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
+}
+
+func (m *MsgCreateBidResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *MsgCreateBidResponse) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *MsgCreateBidResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	return len(dAtA) - i, nil
+}
+
+func (m *MsgCloseBid) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *MsgCloseBid) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *MsgCloseBid) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	{
+		size, err := m.BidID.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintBid(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
+}
+
+func (m *MsgCloseBidResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *MsgCloseBidResponse) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *MsgCloseBidResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	return len(dAtA) - i, nil
+}
+
+func (m *BidID) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *BidID) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *BidID) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.Provider) > 0 {
+		i -= len(m.Provider)
+		copy(dAtA[i:], m.Provider)
+		i = encodeVarintBid(dAtA, i, uint64(len(m.Provider)))
+		i--
+		dAtA[i] = 0x2a
+	}
+	if m.OSeq != 0 {
+		i = encodeVarintBid(dAtA, i, uint64(m.OSeq))
+		i--
+		dAtA[i] = 0x20
+	}
+	if m.GSeq != 0 {
+		i = encodeVarintBid(dAtA, i, uint64(m.GSeq))
+		i--
+		dAtA[i] = 0x18
+	}
+	if m.DSeq != 0 {
+		i = encodeVarintBid(dAtA, i, uint64(m.DSeq))
+		i--
+		dAtA[i] = 0x10
+	}
+	if len(m.Owner) > 0 {
+		i -= len(m.Owner)
+		copy(dAtA[i:], m.Owner)
+		i = encodeVarintBid(dAtA, i, uint64(len(m.Owner)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *Bid) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *Bid) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *Bid) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.ResourcesOffer) > 0 {
+		for iNdEx := len(m.ResourcesOffer) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.ResourcesOffer[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintBid(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0x2a
+		}
+	}
+	if m.CreatedAt != 0 {
+		i = encodeVarintBid(dAtA, i, uint64(m.CreatedAt))
+		i--
+		dAtA[i] = 0x20
+	}
+	if m.State != 0 {
+		i = encodeVarintBid(dAtA, i, uint64(m.State))
+		i--
+		dAtA[i] = 0x10
+	}
+	{
+		size, err := m.BidID.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintBid(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
+}
+
+func (m *BidFilters) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *BidFilters) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *BidFilters) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.State) > 0 {
+		i -= len(m.State)
+		copy(dAtA[i:], m.State)
+		i = encodeVarintBid(dAtA, i, uint64(len(m.State)))
+		i--
+		dAtA[i] = 0x32
+	}
+	if len(m.Provider) > 0 {
+		i -= len(m.Provider)
+		copy(dAtA[i:], m.Provider)
+		i = encodeVarintBid(dAtA, i, uint64(len(m.Provider)))
+		i--
+		dAtA[i] = 0x2a
+	}
+	if m.OSeq != 0 {
+		i = encodeVarintBid(dAtA, i, uint64(m.OSeq))
+		i--
+		dAtA[i] = 0x20
+	}
+	if m.GSeq != 0 {
+		i = encodeVarintBid(dAtA, i, uint64(m.GSeq))
+		i--
+		dAtA[i] = 0x18
+	}
+	if m.DSeq != 0 {
+		i = encodeVarintBid(dAtA, i, uint64(m.DSeq))
+		i--
+		dAtA[i] = 0x10
+	}
+	if len(m.Owner) > 0 {
+		i -= len(m.Owner)
+		copy(dAtA[i:], m.Owner)
+		i = encodeVarintBid(dAtA, i, uint64(len(m.Owner)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func encodeVarintBid(dAtA []byte, offset int, v uint64) int {
+	offset -= sovBid(v)
+	base := offset
+	for v >= 1<<7 {
+		dAtA[offset] = uint8(v&0x7f | 0x80)
+		v >>= 7
+		offset++
+	}
+	dAtA[offset] = uint8(v)
+	return base
+}
+func (m *ResourceOffer) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = m.Resources.Size()
+	n += 1 + l + sovBid(uint64(l))
+	if m.Count != 0 {
+		n += 1 + sovBid(uint64(m.Count))
+	}
+	return n
+}
+
+func (m *MsgCreateBid) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = m.Order.Size()
+	n += 1 + l + sovBid(uint64(l))
+	l = len(m.Provider)
+	if l > 0 {
+		n += 1 + l + sovBid(uint64(l))
+	}
+	if len(m.ResourcesOffer) > 0 {
+		for _, e := range m.ResourcesOffer {
+			l = e.Size()
+			n += 1 + l + sovBid(uint64(l))
+		}
+	}
+	return n
+}
+
+func (m *MsgCreateBidResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	return n
+}
+
+func (m *MsgCloseBid) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = m.BidID.Size()
+	n += 1 + l + sovBid(uint64(l))
+	return n
+}
+
+func (m *MsgCloseBidResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	return n
+}
+
+func (m *BidID) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.Owner)
+	if l > 0 {
+		n += 1 + l + sovBid(uint64(l))
+	}
+	if m.DSeq != 0 {
+		n += 1 + sovBid(uint64(m.DSeq))
+	}
+	if m.GSeq != 0 {
+		n += 1 + sovBid(uint64(m.GSeq))
+	}
+	if m.OSeq != 0 {
+		n += 1 + sovBid(uint64(m.OSeq))
+	}
+	l = len(m.Provider)
+	if l > 0 {
+		n += 1 + l + sovBid(uint64(l))
+	}
+	return n
+}
+
+func (m *Bid) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = m.BidID.Size()
+	n += 1 + l + sovBid(uint64(l))
+	if m.State != 0 {
+		n += 1 + sovBid(uint64(m.State))
+	}
+	if m.CreatedAt != 0 {
+		n += 1 + sovBid(uint64(m.CreatedAt))
+	}
+	if len(m.ResourcesOffer) > 0 {
+		for _, e := range m.ResourcesOffer {
+			l = e.Size()
+			n += 1 + l + sovBid(uint64(l))
+		}
+	}
+	return n
+}
+
+func (m *BidFilters) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.Owner)
+	if l > 0 {
+		n += 1 + l + sovBid(uint64(l))
+	}
+	if m.DSeq != 0 {
+		n += 1 + sovBid(uint64(m.DSeq))
+	}
+	if m.GSeq != 0 {
+		n += 1 + sovBid(uint64(m.GSeq))
+	}
+	if m.OSeq != 0 {
+		n += 1 + sovBid(uint64(m.OSeq))
+	}
+	l = len(m.Provider)
+	if l > 0 {
+		n += 1 + l + sovBid(uint64(l))
+	}
+	l = len(m.State)
+	if l > 0 {
+		n += 1 + l + sovBid(uint64(l))
+	}
+	return n
+}
+
+func sovBid(x uint64) (n int) {
+	return (math_bits.Len64(x|1) + 6) / 7
+}
+func sozBid(x uint64) (n int) {
+	return sovBid(uint64((x << 1) ^ uint64((int64(x) >> 63))))
+}
+func (m *ResourceOffer) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowBid
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ResourceOffer: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ResourceOffer: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Resources", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowBid
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthBid
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthBid
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Resources.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Count", wireType)
+			}
+			m.Count = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowBid
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Count |= uint32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipBid(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthBid
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *MsgCreateBid) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowBid
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: MsgCreateBid: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: MsgCreateBid: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Order", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowBid
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthBid
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthBid
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Order.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Provider", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowBid
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthBid
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthBid
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Provider = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ResourcesOffer", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowBid
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthBid
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthBid
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.ResourcesOffer = append(m.ResourcesOffer, ResourceOffer{})
+			if err := m.ResourcesOffer[len(m.ResourcesOffer)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipBid(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthBid
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *MsgCreateBidResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowBid
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: MsgCreateBidResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: MsgCreateBidResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		default:
+			iNdEx = preIndex
+			skippy, err := skipBid(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthBid
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *MsgCloseBid) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowBid
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: MsgCloseBid: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: MsgCloseBid: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field BidID", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowBid
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthBid
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthBid
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.BidID.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipBid(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthBid
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *MsgCloseBidResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowBid
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: MsgCloseBidResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: MsgCloseBidResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		default:
+			iNdEx = preIndex
+			skippy, err := skipBid(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthBid
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *BidID) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowBid
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: BidID: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: BidID: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Owner", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowBid
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthBid
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthBid
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Owner = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field DSeq", wireType)
+			}
+			m.DSeq = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowBid
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.DSeq |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field GSeq", wireType)
+			}
+			m.GSeq = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowBid
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.GSeq |= uint32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 4:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field OSeq", wireType)
+			}
+			m.OSeq = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowBid
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.OSeq |= uint32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Provider", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowBid
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthBid
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthBid
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Provider = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipBid(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthBid
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Bid) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowBid
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Bid: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Bid: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field BidID", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowBid
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthBid
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthBid
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.BidID.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field State", wireType)
+			}
+			m.State = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowBid
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.State |= Bid_State(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 4:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CreatedAt", wireType)
+			}
+			m.CreatedAt = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowBid
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.CreatedAt |= int64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ResourcesOffer", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowBid
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthBid
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthBid
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.ResourcesOffer = append(m.ResourcesOffer, ResourceOffer{})
+			if err := m.ResourcesOffer[len(m.ResourcesOffer)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipBid(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthBid
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *BidFilters) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowBid
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: BidFilters: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: BidFilters: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Owner", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowBid
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthBid
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthBid
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Owner = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field DSeq", wireType)
+			}
+			m.DSeq = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowBid
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.DSeq |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field GSeq", wireType)
+			}
+			m.GSeq = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowBid
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.GSeq |= uint32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 4:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field OSeq", wireType)
+			}
+			m.OSeq = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowBid
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.OSeq |= uint32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Provider", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowBid
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthBid
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthBid
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Provider = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 6:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field State", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowBid
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthBid
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthBid
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.State = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipBid(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthBid
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func skipBid(dAtA []byte) (n int, err error) {
+	l := len(dAtA)
+	iNdEx := 0
+	depth := 0
+	for iNdEx < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return 0, ErrIntOverflowBid
+			}
+			if iNdEx >= l {
+				return 0, io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		wireType := int(wire & 0x7)
+		switch wireType {
+		case 0:
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return 0, ErrIntOverflowBid
+				}
+				if iNdEx >= l {
+					return 0, io.ErrUnexpectedEOF
+				}
+				iNdEx++
+				if dAtA[iNdEx-1] < 0x80 {
+					break
+				}
+			}
+		case 1:
+			iNdEx += 8
+		case 2:
+			var length int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return 0, ErrIntOverflowBid
+				}
+				if iNdEx >= l {
+					return 0, io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				length |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if length < 0 {
+				return 0, ErrInvalidLengthBid
+			}
+			iNdEx += length
+		case 3:
+			depth++
+		case 4:
+			if depth == 0 {
+				return 0, ErrUnexpectedEndOfGroupBid
+			}
+			depth--
+		case 5:
+			iNdEx += 4
+		default:
+			return 0, fmt.Errorf("proto: illegal wireType %d", wireType)
+		}
+		if iNdEx < 0 {
+			return 0, ErrInvalidLengthBid
+		}
+		if depth == 0 {
+			return iNdEx, nil
+		}
+	}
+	return 0, io.ErrUnexpectedEOF
+}
+
+var (
+	ErrInvalidLengthBid        = fmt.Errorf("proto: negative length found during unmarshaling")
+	ErrIntOverflowBid          = fmt.Errorf("proto: integer overflow")
+	ErrUnexpectedEndOfGroupBid = fmt.Errorf("proto: unexpected end of group")
+)

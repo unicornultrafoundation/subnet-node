@@ -5,7 +5,9 @@ package v1
 
 import (
 	fmt "fmt"
+	io "io"
 	math "math"
+	math_bits "math/bits"
 
 	_ "github.com/cosmos/gogoproto/gogoproto"
 	proto "github.com/gogo/protobuf/proto"
@@ -60,14 +62,11 @@ func (Lease_State) EnumDescriptor() ([]byte, []int) {
 
 // LeaseID stores bid details of lease
 type LeaseID struct {
-	Owner                string   `protobuf:"bytes,1,opt,name=owner,proto3" json:"owner" yaml:"owner"`
-	DSeq                 uint64   `protobuf:"varint,2,opt,name=dseq,proto3" json:"dseq" yaml:"dseq"`
-	GSeq                 uint32   `protobuf:"varint,3,opt,name=gseq,proto3" json:"gseq" yaml:"gseq"`
-	OSeq                 uint32   `protobuf:"varint,4,opt,name=oseq,proto3" json:"oseq" yaml:"oseq"`
-	Provider             string   `protobuf:"bytes,5,opt,name=provider,proto3" json:"provider" yaml:"provider"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
+	Owner    string `protobuf:"bytes,1,opt,name=owner,proto3" json:"owner" yaml:"owner"`
+	DSeq     uint64 `protobuf:"varint,2,opt,name=dseq,proto3" json:"dseq" yaml:"dseq"`
+	GSeq     uint32 `protobuf:"varint,3,opt,name=gseq,proto3" json:"gseq" yaml:"gseq"`
+	OSeq     uint32 `protobuf:"varint,4,opt,name=oseq,proto3" json:"oseq" yaml:"oseq"`
+	Provider string `protobuf:"bytes,5,opt,name=provider,proto3" json:"provider" yaml:"provider"`
 }
 
 func (m *LeaseID) Reset()      { *m = LeaseID{} }
@@ -76,16 +75,25 @@ func (*LeaseID) Descriptor() ([]byte, []int) {
 	return fileDescriptor_8be04d3a3720c30d, []int{0}
 }
 func (m *LeaseID) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_LeaseID.Unmarshal(m, b)
+	return m.Unmarshal(b)
 }
 func (m *LeaseID) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_LeaseID.Marshal(b, m, deterministic)
+	if deterministic {
+		return xxx_messageInfo_LeaseID.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
 }
 func (m *LeaseID) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_LeaseID.Merge(m, src)
 }
 func (m *LeaseID) XXX_Size() int {
-	return xxx_messageInfo_LeaseID.Size(m)
+	return m.Size()
 }
 func (m *LeaseID) XXX_DiscardUnknown() {
 	xxx_messageInfo_LeaseID.DiscardUnknown(m)
@@ -130,13 +138,10 @@ func (m *LeaseID) GetProvider() string {
 
 // Lease stores LeaseID, state of lease and price
 type Lease struct {
-	LeaseID              LeaseID     `protobuf:"bytes,1,opt,name=lease_id,json=leaseId,proto3" json:"id" yaml:"id"`
-	State                Lease_State `protobuf:"varint,2,opt,name=state,proto3,enum=subnet.k8s.market.v1.Lease_State" json:"state" yaml:"state"`
-	CreatedAt            int64       `protobuf:"varint,3,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	ClosedOn             int64       `protobuf:"varint,4,opt,name=closed_on,json=closedOn,proto3" json:"closed_on,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}    `json:"-"`
-	XXX_unrecognized     []byte      `json:"-"`
-	XXX_sizecache        int32       `json:"-"`
+	LeaseID   LeaseID     `protobuf:"bytes,1,opt,name=lease_id,json=leaseId,proto3" json:"id" yaml:"id"`
+	State     Lease_State `protobuf:"varint,2,opt,name=state,proto3,enum=subnet.k8s.market.v1.Lease_State" json:"state" yaml:"state"`
+	CreatedAt int64       `protobuf:"varint,3,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	ClosedOn  int64       `protobuf:"varint,4,opt,name=closed_on,json=closedOn,proto3" json:"closed_on,omitempty"`
 }
 
 func (m *Lease) Reset()      { *m = Lease{} }
@@ -145,16 +150,25 @@ func (*Lease) Descriptor() ([]byte, []int) {
 	return fileDescriptor_8be04d3a3720c30d, []int{1}
 }
 func (m *Lease) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_Lease.Unmarshal(m, b)
+	return m.Unmarshal(b)
 }
 func (m *Lease) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_Lease.Marshal(b, m, deterministic)
+	if deterministic {
+		return xxx_messageInfo_Lease.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
 }
 func (m *Lease) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_Lease.Merge(m, src)
 }
 func (m *Lease) XXX_Size() int {
-	return xxx_messageInfo_Lease.Size(m)
+	return m.Size()
 }
 func (m *Lease) XXX_DiscardUnknown() {
 	xxx_messageInfo_Lease.DiscardUnknown(m)
@@ -192,15 +206,12 @@ func (m *Lease) GetClosedOn() int64 {
 
 // LeaseFilters defines flags for lease list filter
 type LeaseFilters struct {
-	Owner                string   `protobuf:"bytes,1,opt,name=owner,proto3" json:"owner" yaml:"owner"`
-	DSeq                 uint64   `protobuf:"varint,2,opt,name=dseq,proto3" json:"dseq" yaml:"dseq"`
-	GSeq                 uint32   `protobuf:"varint,3,opt,name=gseq,proto3" json:"gseq" yaml:"gseq"`
-	OSeq                 uint32   `protobuf:"varint,4,opt,name=oseq,proto3" json:"oseq" yaml:"oseq"`
-	Provider             string   `protobuf:"bytes,5,opt,name=provider,proto3" json:"provider" yaml:"provider"`
-	State                string   `protobuf:"bytes,6,opt,name=state,proto3" json:"state" yaml:"state"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
+	Owner    string `protobuf:"bytes,1,opt,name=owner,proto3" json:"owner" yaml:"owner"`
+	DSeq     uint64 `protobuf:"varint,2,opt,name=dseq,proto3" json:"dseq" yaml:"dseq"`
+	GSeq     uint32 `protobuf:"varint,3,opt,name=gseq,proto3" json:"gseq" yaml:"gseq"`
+	OSeq     uint32 `protobuf:"varint,4,opt,name=oseq,proto3" json:"oseq" yaml:"oseq"`
+	Provider string `protobuf:"bytes,5,opt,name=provider,proto3" json:"provider" yaml:"provider"`
+	State    string `protobuf:"bytes,6,opt,name=state,proto3" json:"state" yaml:"state"`
 }
 
 func (m *LeaseFilters) Reset()         { *m = LeaseFilters{} }
@@ -210,16 +221,25 @@ func (*LeaseFilters) Descriptor() ([]byte, []int) {
 	return fileDescriptor_8be04d3a3720c30d, []int{2}
 }
 func (m *LeaseFilters) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_LeaseFilters.Unmarshal(m, b)
+	return m.Unmarshal(b)
 }
 func (m *LeaseFilters) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_LeaseFilters.Marshal(b, m, deterministic)
+	if deterministic {
+		return xxx_messageInfo_LeaseFilters.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
 }
 func (m *LeaseFilters) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_LeaseFilters.Merge(m, src)
 }
 func (m *LeaseFilters) XXX_Size() int {
-	return xxx_messageInfo_LeaseFilters.Size(m)
+	return m.Size()
 }
 func (m *LeaseFilters) XXX_DiscardUnknown() {
 	xxx_messageInfo_LeaseFilters.DiscardUnknown(m)
@@ -271,10 +291,7 @@ func (m *LeaseFilters) GetState() string {
 
 // MsgCreateLease is sent to create a lease
 type MsgCreateLease struct {
-	BidID                BidID    `protobuf:"bytes,1,opt,name=bid_id,json=bidId,proto3" json:"id" yaml:"id"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
+	BidID BidID `protobuf:"bytes,1,opt,name=bid_id,json=bidId,proto3" json:"id" yaml:"id"`
 }
 
 func (m *MsgCreateLease) Reset()         { *m = MsgCreateLease{} }
@@ -284,16 +301,25 @@ func (*MsgCreateLease) Descriptor() ([]byte, []int) {
 	return fileDescriptor_8be04d3a3720c30d, []int{3}
 }
 func (m *MsgCreateLease) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_MsgCreateLease.Unmarshal(m, b)
+	return m.Unmarshal(b)
 }
 func (m *MsgCreateLease) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_MsgCreateLease.Marshal(b, m, deterministic)
+	if deterministic {
+		return xxx_messageInfo_MsgCreateLease.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
 }
 func (m *MsgCreateLease) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_MsgCreateLease.Merge(m, src)
 }
 func (m *MsgCreateLease) XXX_Size() int {
-	return xxx_messageInfo_MsgCreateLease.Size(m)
+	return m.Size()
 }
 func (m *MsgCreateLease) XXX_DiscardUnknown() {
 	xxx_messageInfo_MsgCreateLease.DiscardUnknown(m)
@@ -310,9 +336,6 @@ func (m *MsgCreateLease) GetBidID() BidID {
 
 // MsgCreateLeaseResponse is the response from creating a lease
 type MsgCreateLeaseResponse struct {
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *MsgCreateLeaseResponse) Reset()         { *m = MsgCreateLeaseResponse{} }
@@ -322,16 +345,25 @@ func (*MsgCreateLeaseResponse) Descriptor() ([]byte, []int) {
 	return fileDescriptor_8be04d3a3720c30d, []int{4}
 }
 func (m *MsgCreateLeaseResponse) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_MsgCreateLeaseResponse.Unmarshal(m, b)
+	return m.Unmarshal(b)
 }
 func (m *MsgCreateLeaseResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_MsgCreateLeaseResponse.Marshal(b, m, deterministic)
+	if deterministic {
+		return xxx_messageInfo_MsgCreateLeaseResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
 }
 func (m *MsgCreateLeaseResponse) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_MsgCreateLeaseResponse.Merge(m, src)
 }
 func (m *MsgCreateLeaseResponse) XXX_Size() int {
-	return xxx_messageInfo_MsgCreateLeaseResponse.Size(m)
+	return m.Size()
 }
 func (m *MsgCreateLeaseResponse) XXX_DiscardUnknown() {
 	xxx_messageInfo_MsgCreateLeaseResponse.DiscardUnknown(m)
@@ -341,10 +373,7 @@ var xxx_messageInfo_MsgCreateLeaseResponse proto.InternalMessageInfo
 
 // MsgWithdrawLease defines an SDK message for closing bid
 type MsgWithdrawLease struct {
-	LeaseID              LeaseID  `protobuf:"bytes,1,opt,name=bid_id,json=bidId,proto3" json:"id" yaml:"id"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
+	LeaseID LeaseID `protobuf:"bytes,1,opt,name=bid_id,json=bidId,proto3" json:"id" yaml:"id"`
 }
 
 func (m *MsgWithdrawLease) Reset()         { *m = MsgWithdrawLease{} }
@@ -354,16 +383,25 @@ func (*MsgWithdrawLease) Descriptor() ([]byte, []int) {
 	return fileDescriptor_8be04d3a3720c30d, []int{5}
 }
 func (m *MsgWithdrawLease) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_MsgWithdrawLease.Unmarshal(m, b)
+	return m.Unmarshal(b)
 }
 func (m *MsgWithdrawLease) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_MsgWithdrawLease.Marshal(b, m, deterministic)
+	if deterministic {
+		return xxx_messageInfo_MsgWithdrawLease.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
 }
 func (m *MsgWithdrawLease) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_MsgWithdrawLease.Merge(m, src)
 }
 func (m *MsgWithdrawLease) XXX_Size() int {
-	return xxx_messageInfo_MsgWithdrawLease.Size(m)
+	return m.Size()
 }
 func (m *MsgWithdrawLease) XXX_DiscardUnknown() {
 	xxx_messageInfo_MsgWithdrawLease.DiscardUnknown(m)
@@ -380,9 +418,6 @@ func (m *MsgWithdrawLease) GetLeaseID() LeaseID {
 
 // MsgWithdrawLeaseResponse defines the Msg/WithdrawLease response type.
 type MsgWithdrawLeaseResponse struct {
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *MsgWithdrawLeaseResponse) Reset()         { *m = MsgWithdrawLeaseResponse{} }
@@ -392,16 +427,25 @@ func (*MsgWithdrawLeaseResponse) Descriptor() ([]byte, []int) {
 	return fileDescriptor_8be04d3a3720c30d, []int{6}
 }
 func (m *MsgWithdrawLeaseResponse) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_MsgWithdrawLeaseResponse.Unmarshal(m, b)
+	return m.Unmarshal(b)
 }
 func (m *MsgWithdrawLeaseResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_MsgWithdrawLeaseResponse.Marshal(b, m, deterministic)
+	if deterministic {
+		return xxx_messageInfo_MsgWithdrawLeaseResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
 }
 func (m *MsgWithdrawLeaseResponse) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_MsgWithdrawLeaseResponse.Merge(m, src)
 }
 func (m *MsgWithdrawLeaseResponse) XXX_Size() int {
-	return xxx_messageInfo_MsgWithdrawLeaseResponse.Size(m)
+	return m.Size()
 }
 func (m *MsgWithdrawLeaseResponse) XXX_DiscardUnknown() {
 	xxx_messageInfo_MsgWithdrawLeaseResponse.DiscardUnknown(m)
@@ -411,10 +455,7 @@ var xxx_messageInfo_MsgWithdrawLeaseResponse proto.InternalMessageInfo
 
 // MsgCloseLease defines an SDK message for closing order
 type MsgCloseLease struct {
-	LeaseID              LeaseID  `protobuf:"bytes,1,opt,name=lease_id,json=leaseId,proto3" json:"id" yaml:"id"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
+	LeaseID LeaseID `protobuf:"bytes,1,opt,name=lease_id,json=leaseId,proto3" json:"id" yaml:"id"`
 }
 
 func (m *MsgCloseLease) Reset()         { *m = MsgCloseLease{} }
@@ -424,16 +465,25 @@ func (*MsgCloseLease) Descriptor() ([]byte, []int) {
 	return fileDescriptor_8be04d3a3720c30d, []int{7}
 }
 func (m *MsgCloseLease) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_MsgCloseLease.Unmarshal(m, b)
+	return m.Unmarshal(b)
 }
 func (m *MsgCloseLease) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_MsgCloseLease.Marshal(b, m, deterministic)
+	if deterministic {
+		return xxx_messageInfo_MsgCloseLease.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
 }
 func (m *MsgCloseLease) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_MsgCloseLease.Merge(m, src)
 }
 func (m *MsgCloseLease) XXX_Size() int {
-	return xxx_messageInfo_MsgCloseLease.Size(m)
+	return m.Size()
 }
 func (m *MsgCloseLease) XXX_DiscardUnknown() {
 	xxx_messageInfo_MsgCloseLease.DiscardUnknown(m)
@@ -450,9 +500,6 @@ func (m *MsgCloseLease) GetLeaseID() LeaseID {
 
 // MsgCloseLeaseResponse defines the Msg/CloseLease response type.
 type MsgCloseLeaseResponse struct {
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *MsgCloseLeaseResponse) Reset()         { *m = MsgCloseLeaseResponse{} }
@@ -462,16 +509,25 @@ func (*MsgCloseLeaseResponse) Descriptor() ([]byte, []int) {
 	return fileDescriptor_8be04d3a3720c30d, []int{8}
 }
 func (m *MsgCloseLeaseResponse) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_MsgCloseLeaseResponse.Unmarshal(m, b)
+	return m.Unmarshal(b)
 }
 func (m *MsgCloseLeaseResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_MsgCloseLeaseResponse.Marshal(b, m, deterministic)
+	if deterministic {
+		return xxx_messageInfo_MsgCloseLeaseResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
 }
 func (m *MsgCloseLeaseResponse) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_MsgCloseLeaseResponse.Merge(m, src)
 }
 func (m *MsgCloseLeaseResponse) XXX_Size() int {
-	return xxx_messageInfo_MsgCloseLeaseResponse.Size(m)
+	return m.Size()
 }
 func (m *MsgCloseLeaseResponse) XXX_DiscardUnknown() {
 	xxx_messageInfo_MsgCloseLeaseResponse.DiscardUnknown(m)
@@ -495,48 +551,1528 @@ func init() {
 func init() { proto.RegisterFile("market/v1/lease.proto", fileDescriptor_8be04d3a3720c30d) }
 
 var fileDescriptor_8be04d3a3720c30d = []byte{
-	// 679 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xec, 0x55, 0xcb, 0x4e, 0xdb, 0x40,
-	0x14, 0xcd, 0xcb, 0x21, 0x19, 0x5e, 0xa9, 0x0b, 0x34, 0x35, 0xa2, 0xe3, 0x7a, 0xc5, 0xa6, 0xb6,
-	0x80, 0x0d, 0xa2, 0x2b, 0x02, 0xa2, 0x4d, 0x55, 0x84, 0x64, 0x2a, 0xb5, 0xaa, 0x2a, 0x45, 0x4e,
-	0x66, 0x62, 0x46, 0x98, 0x19, 0xf0, 0x8c, 0x83, 0xfa, 0x07, 0x15, 0x5f, 0xd0, 0x0d, 0x2a, 0x55,
-	0x7f, 0xa6, 0xeb, 0x7e, 0x80, 0x17, 0xac, 0xaa, 0x2c, 0xf3, 0x05, 0xd5, 0xcc, 0x98, 0x3c, 0x50,
-	0xc4, 0xaa, 0xea, 0xaa, 0xab, 0x64, 0xce, 0xbd, 0xe7, 0xde, 0x93, 0x33, 0xc7, 0x31, 0x58, 0x3e,
-	0x0b, 0xe2, 0x53, 0x2c, 0xbc, 0xde, 0x86, 0x17, 0xe1, 0x80, 0x63, 0xf7, 0x3c, 0x66, 0x82, 0x99,
-	0x4b, 0x3c, 0x69, 0x53, 0x2c, 0xdc, 0xd3, 0x6d, 0xee, 0xea, 0x0e, 0xb7, 0xb7, 0x61, 0x2d, 0x85,
-	0x2c, 0x64, 0xaa, 0xc1, 0x93, 0xdf, 0x74, 0xaf, 0xf5, 0x78, 0x34, 0xa2, 0x4d, 0x90, 0x06, 0x9d,
-	0x9b, 0x02, 0x98, 0x79, 0x2b, 0x07, 0x36, 0xf7, 0x4d, 0x0f, 0x18, 0xec, 0x92, 0xe2, 0xb8, 0x9e,
-	0xb7, 0xf3, 0xeb, 0xd5, 0xc6, 0xd3, 0x7e, 0x0a, 0x35, 0x30, 0x48, 0xe1, 0xdc, 0xe7, 0xe0, 0x2c,
-	0xda, 0x71, 0xd4, 0xd1, 0xf1, 0x35, 0x6c, 0x6e, 0x81, 0x12, 0xe2, 0xf8, 0xa2, 0x5e, 0xb0, 0xf3,
-	0xeb, 0xa5, 0x06, 0xbc, 0x4d, 0x61, 0x69, 0xff, 0x18, 0x5f, 0xf4, 0x53, 0xa8, 0xf0, 0x41, 0x0a,
-	0x67, 0x35, 0x4d, 0x9e, 0x1c, 0x5f, 0x81, 0x92, 0x14, 0x4a, 0x52, 0xd1, 0xce, 0xaf, 0xcf, 0x6b,
-	0xd2, 0xab, 0x8c, 0x14, 0x4e, 0x90, 0x42, 0x4d, 0x0a, 0x33, 0x12, 0x93, 0xa4, 0xd2, 0x88, 0x74,
-	0x94, 0x91, 0xd8, 0x04, 0x89, 0x69, 0x92, 0xfc, 0x30, 0x5f, 0x82, 0xca, 0x79, 0xcc, 0x7a, 0x04,
-	0xe1, 0xb8, 0x6e, 0xa8, 0x9f, 0x04, 0xfb, 0x29, 0x1c, 0x62, 0x83, 0x14, 0x2e, 0x6a, 0xd2, 0x1d,
-	0xe2, 0xf8, 0xc3, 0xe2, 0x4e, 0xe5, 0xeb, 0x0d, 0xcc, 0xfd, 0xbe, 0x81, 0x39, 0xe7, 0x7b, 0x11,
-	0x18, 0xca, 0x22, 0xf3, 0x13, 0xa8, 0x28, 0xf3, 0x5b, 0x04, 0x29, 0x8f, 0x66, 0x37, 0xd7, 0xdc,
-	0x69, 0x17, 0xe0, 0x66, 0x8e, 0x36, 0x9c, 0x9f, 0x29, 0xcc, 0xdd, 0xa6, 0xf0, 0xce, 0xe2, 0x7e,
-	0x0a, 0x0b, 0x04, 0x0d, 0x52, 0x58, 0xd5, 0x8b, 0x09, 0x72, 0xfc, 0x19, 0x35, 0xb2, 0x89, 0x4c,
-	0x1f, 0x18, 0x5c, 0x04, 0x02, 0x2b, 0x3b, 0x17, 0x36, 0x9f, 0x3f, 0x30, 0xda, 0x3d, 0x96, 0x8d,
-	0xfa, 0x86, 0x14, 0x67, 0x74, 0x43, 0xea, 0xe8, 0xf8, 0x1a, 0x36, 0xd7, 0x00, 0xe8, 0xc4, 0x38,
-	0x10, 0x18, 0xb5, 0x02, 0xa1, 0x2c, 0x2f, 0xfa, 0xd5, 0x0c, 0xd9, 0x15, 0xe6, 0x2a, 0xa8, 0x76,
-	0x22, 0xc6, 0x31, 0x6a, 0x31, 0xaa, 0xbc, 0x2d, 0xfa, 0x15, 0x0d, 0x1c, 0x51, 0xe7, 0x5b, 0x1e,
-	0x18, 0x6a, 0x8f, 0xe9, 0x80, 0x19, 0x42, 0x7b, 0x41, 0x44, 0x50, 0x2d, 0x67, 0x2d, 0x5f, 0x5d,
-	0xdb, 0x8f, 0x94, 0x0a, 0x55, 0x6c, 0xea, 0x82, 0xb9, 0x0a, 0xca, 0x41, 0x47, 0x90, 0x1e, 0xae,
-	0xe5, 0xad, 0xc5, 0xab, 0x6b, 0x7b, 0x56, 0xb5, 0xec, 0x2a, 0xc8, 0xdc, 0x04, 0x26, 0xa1, 0x3c,
-	0xe9, 0x76, 0x49, 0x87, 0x60, 0x2a, 0x5a, 0xdd, 0x84, 0x22, 0x5e, 0x2b, 0x58, 0xd6, 0xd5, 0xb5,
-	0xbd, 0xa2, 0xbd, 0x19, 0x2b, 0x1f, 0xc8, 0xaa, 0x1c, 0xa8, 0xa5, 0xd4, 0x8a, 0x63, 0x03, 0xf7,
-	0x14, 0x64, 0x95, 0xbe, 0xfc, 0x78, 0x96, 0x1b, 0xbb, 0xa3, 0x5f, 0x05, 0x30, 0xa7, 0xea, 0x07,
-	0x24, 0x12, 0x38, 0xe6, 0xff, 0xb3, 0x3c, 0x96, 0x65, 0x69, 0x86, 0x4e, 0x56, 0x79, 0x64, 0xc6,
-	0x43, 0xb1, 0xd9, 0x29, 0x29, 0x53, 0x23, 0xb0, 0x70, 0xc8, 0xc3, 0x3d, 0x95, 0x16, 0xfd, 0x00,
-	0xbc, 0x03, 0xe5, 0x36, 0x41, 0xa3, 0xf8, 0xaf, 0x4e, 0xcf, 0x68, 0x83, 0xa0, 0xe6, 0x7e, 0xc3,
-	0xce, 0xc2, 0x6f, 0xa8, 0xe3, 0xb4, 0xe8, 0x1b, 0x6d, 0x82, 0x9a, 0x28, 0xdb, 0x56, 0x07, 0x2b,
-	0x93, 0xdb, 0x7c, 0xcc, 0xcf, 0x19, 0xe5, 0xd8, 0x89, 0x41, 0xed, 0x90, 0x87, 0xef, 0x89, 0x38,
-	0x41, 0x71, 0x70, 0xa9, 0x95, 0x7c, 0xb8, 0xa7, 0xe4, 0x2f, 0x3c, 0x88, 0x13, 0x6a, 0x2c, 0x50,
-	0xbf, 0xbf, 0x73, 0xa8, 0x87, 0x83, 0x79, 0xa9, 0x54, 0x26, 0xf1, 0x1f, 0xfc, 0x2f, 0x64, 0x82,
-	0x9e, 0x80, 0xe5, 0x89, 0xa5, 0x77, 0x6a, 0x1a, 0x6f, 0x3e, 0xbe, 0x0e, 0x89, 0x38, 0x49, 0xda,
-	0x6e, 0x87, 0x9d, 0x79, 0x09, 0x25, 0x1d, 0x16, 0xd3, 0x24, 0x12, 0x71, 0xd0, 0x65, 0x09, 0x45,
-	0x81, 0x20, 0x8c, 0x7a, 0x5a, 0xcd, 0x0b, 0xca, 0x10, 0xf6, 0xf4, 0x8b, 0x41, 0x23, 0xde, 0xe9,
-	0x36, 0xf7, 0x86, 0xef, 0x85, 0x76, 0x59, 0xd5, 0xb6, 0xfe, 0x04, 0x00, 0x00, 0xff, 0xff, 0xf3,
-	0x27, 0x98, 0x34, 0x6e, 0x06, 0x00, 0x00,
+	// 707 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xec, 0x55, 0x4d, 0x4f, 0xdb, 0x4a,
+	0x14, 0xb5, 0xf3, 0x45, 0x32, 0x7c, 0xe5, 0xf9, 0x01, 0x2f, 0xcf, 0x88, 0x4c, 0xea, 0x15, 0x9b,
+	0xda, 0x02, 0x36, 0x88, 0xae, 0x08, 0x88, 0x36, 0x52, 0x11, 0x92, 0xa9, 0xd4, 0xaa, 0xaa, 0x14,
+	0x39, 0x99, 0x89, 0x19, 0x61, 0x66, 0xc0, 0x33, 0x0e, 0xea, 0x3f, 0xa8, 0x58, 0x75, 0xd9, 0x0d,
+	0x2a, 0x55, 0xff, 0x0c, 0x4b, 0xd4, 0x55, 0x57, 0x56, 0x15, 0x36, 0x55, 0x96, 0xf9, 0x05, 0x95,
+	0x67, 0x4c, 0x3e, 0x10, 0x62, 0x55, 0x75, 0xd5, 0x55, 0x32, 0xe7, 0xde, 0x73, 0xef, 0xc9, 0x99,
+	0xe3, 0x18, 0x2c, 0x9e, 0x78, 0xe1, 0x31, 0x16, 0x4e, 0x77, 0xcd, 0x09, 0xb0, 0xc7, 0xb1, 0x7d,
+	0x1a, 0x32, 0xc1, 0x8c, 0x05, 0x1e, 0xb5, 0x28, 0x16, 0xf6, 0xf1, 0x26, 0xb7, 0x55, 0x87, 0xdd,
+	0x5d, 0x33, 0x17, 0x7c, 0xe6, 0x33, 0xd9, 0xe0, 0x24, 0xdf, 0x54, 0xaf, 0xf9, 0xef, 0x68, 0x44,
+	0x8b, 0x20, 0x05, 0x5a, 0x57, 0x19, 0x30, 0xf5, 0x32, 0x19, 0xd8, 0xd8, 0x35, 0x1c, 0x90, 0x67,
+	0xe7, 0x14, 0x87, 0x15, 0xbd, 0xa6, 0xaf, 0x96, 0xea, 0xff, 0xf7, 0x63, 0xa8, 0x80, 0x41, 0x0c,
+	0x67, 0xde, 0x7b, 0x27, 0xc1, 0x96, 0x25, 0x8f, 0x96, 0xab, 0x60, 0x63, 0x03, 0xe4, 0x10, 0xc7,
+	0x67, 0x95, 0x4c, 0x4d, 0x5f, 0xcd, 0xd5, 0x61, 0x2f, 0x86, 0xb9, 0xdd, 0x43, 0x7c, 0xd6, 0x8f,
+	0xa1, 0xc4, 0x07, 0x31, 0x9c, 0x56, 0xb4, 0xe4, 0x64, 0xb9, 0x12, 0x4c, 0x48, 0x7e, 0x42, 0xca,
+	0xd6, 0xf4, 0xd5, 0x59, 0x45, 0x7a, 0x9e, 0x92, 0xfc, 0x09, 0x92, 0xaf, 0x48, 0x7e, 0x4a, 0x62,
+	0x09, 0x29, 0x37, 0x22, 0x1d, 0xa4, 0x24, 0x36, 0x41, 0x62, 0x8a, 0x94, 0x7c, 0x18, 0xcf, 0x40,
+	0xf1, 0x34, 0x64, 0x5d, 0x82, 0x70, 0x58, 0xc9, 0xcb, 0x9f, 0x04, 0xfb, 0x31, 0x1c, 0x62, 0x83,
+	0x18, 0xce, 0x2b, 0xd2, 0x1d, 0x62, 0xb9, 0xc3, 0xe2, 0x56, 0xf1, 0xd3, 0x15, 0xd4, 0x7e, 0x5e,
+	0x41, 0xcd, 0xfa, 0x92, 0x05, 0x79, 0x69, 0x91, 0xf1, 0x0e, 0x14, 0xa5, 0xf9, 0x4d, 0x82, 0xa4,
+	0x47, 0xd3, 0xeb, 0x2b, 0xf6, 0x43, 0x17, 0x60, 0xa7, 0x8e, 0xd6, 0xad, 0xeb, 0x18, 0x6a, 0xbd,
+	0x18, 0xde, 0x59, 0xdc, 0x8f, 0x61, 0x86, 0xa0, 0x41, 0x0c, 0x4b, 0x6a, 0x31, 0x41, 0x96, 0x3b,
+	0x25, 0x47, 0x36, 0x90, 0xe1, 0x82, 0x3c, 0x17, 0x9e, 0xc0, 0xd2, 0xce, 0xb9, 0xf5, 0x27, 0x8f,
+	0x8c, 0xb6, 0x0f, 0x93, 0x46, 0x75, 0x43, 0x92, 0x33, 0xba, 0x21, 0x79, 0xb4, 0x5c, 0x05, 0x1b,
+	0x2b, 0x00, 0xb4, 0x43, 0xec, 0x09, 0x8c, 0x9a, 0x9e, 0x90, 0x96, 0x67, 0xdd, 0x52, 0x8a, 0x6c,
+	0x0b, 0x63, 0x19, 0x94, 0xda, 0x01, 0xe3, 0x18, 0x35, 0x19, 0x95, 0xde, 0x66, 0xdd, 0xa2, 0x02,
+	0x0e, 0xa8, 0xf5, 0x59, 0x07, 0x79, 0xb9, 0xc7, 0xb0, 0xc0, 0x14, 0xa1, 0x5d, 0x2f, 0x20, 0xa8,
+	0xac, 0x99, 0x8b, 0x17, 0x97, 0xb5, 0x7f, 0xa4, 0x0a, 0x59, 0x6c, 0xa8, 0x82, 0xb1, 0x0c, 0x0a,
+	0x5e, 0x5b, 0x90, 0x2e, 0x2e, 0xeb, 0xe6, 0xfc, 0xc5, 0x65, 0x6d, 0x5a, 0xb6, 0x6c, 0x4b, 0xc8,
+	0x58, 0x07, 0x06, 0xa1, 0x3c, 0xea, 0x74, 0x48, 0x9b, 0x60, 0x2a, 0x9a, 0x9d, 0x88, 0x22, 0x5e,
+	0xce, 0x98, 0xe6, 0xc5, 0x65, 0x6d, 0x49, 0x79, 0x33, 0x56, 0xde, 0x4b, 0xaa, 0xc9, 0x40, 0x25,
+	0xa5, 0x9c, 0x1d, 0x1b, 0xb8, 0x23, 0x21, 0x33, 0xf7, 0xe1, 0x6b, 0x55, 0x1b, 0xbb, 0xa3, 0x6f,
+	0x19, 0x30, 0x23, 0xeb, 0x7b, 0x24, 0x10, 0x38, 0xe4, 0x7f, 0xb3, 0x3c, 0x96, 0xe5, 0xc4, 0x0c,
+	0x95, 0xac, 0xc2, 0xc8, 0x8c, 0xc7, 0x62, 0xb3, 0x95, 0x93, 0xa6, 0x06, 0x60, 0x6e, 0x9f, 0xfb,
+	0x3b, 0x32, 0x2d, 0xea, 0x01, 0x78, 0x05, 0x0a, 0x2d, 0x82, 0x46, 0xf1, 0x5f, 0x7e, 0x38, 0xa3,
+	0x75, 0x82, 0x1a, 0xbb, 0xf5, 0x5a, 0x1a, 0xfe, 0xbc, 0x3c, 0x3e, 0x14, 0xfd, 0x7c, 0x8b, 0xa0,
+	0x06, 0x4a, 0xb7, 0x55, 0xc0, 0xd2, 0xe4, 0x36, 0x17, 0xf3, 0x53, 0x46, 0x39, 0xb6, 0x42, 0x50,
+	0xde, 0xe7, 0xfe, 0x6b, 0x22, 0x8e, 0x50, 0xe8, 0x9d, 0x2b, 0x25, 0x6f, 0xee, 0x29, 0xf9, 0x0d,
+	0x0f, 0xe2, 0x84, 0x1a, 0x13, 0x54, 0xee, 0xef, 0x1c, 0xea, 0xe1, 0x60, 0x36, 0x51, 0x9a, 0x24,
+	0xf1, 0x0f, 0xfc, 0x2f, 0xa4, 0x82, 0xfe, 0x03, 0x8b, 0x13, 0x4b, 0xef, 0xd4, 0xd4, 0x5b, 0xd7,
+	0xbd, 0xaa, 0x7e, 0xd3, 0xab, 0xea, 0x3f, 0x7a, 0x55, 0xfd, 0xe3, 0x6d, 0x55, 0xbb, 0xb9, 0xad,
+	0x6a, 0xdf, 0x6f, 0xab, 0xda, 0xdb, 0x17, 0x3e, 0x11, 0x47, 0x51, 0xcb, 0x6e, 0xb3, 0x13, 0x27,
+	0xa2, 0xa4, 0xcd, 0x42, 0x1a, 0x05, 0x22, 0xf4, 0x3a, 0x2c, 0xa2, 0xc8, 0x13, 0x84, 0x51, 0x47,
+	0xa9, 0x7c, 0x4a, 0x19, 0xc2, 0x8e, 0x7a, 0x61, 0x28, 0xc4, 0x39, 0xde, 0xe4, 0xce, 0xf0, 0x7d,
+	0xd1, 0x2a, 0xc8, 0xda, 0xc6, 0xaf, 0x00, 0x00, 0x00, 0xff, 0xff, 0x85, 0x2b, 0x43, 0xa7, 0x86,
+	0x06, 0x00, 0x00,
 }
+
+func (m *LeaseID) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *LeaseID) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *LeaseID) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.Provider) > 0 {
+		i -= len(m.Provider)
+		copy(dAtA[i:], m.Provider)
+		i = encodeVarintLease(dAtA, i, uint64(len(m.Provider)))
+		i--
+		dAtA[i] = 0x2a
+	}
+	if m.OSeq != 0 {
+		i = encodeVarintLease(dAtA, i, uint64(m.OSeq))
+		i--
+		dAtA[i] = 0x20
+	}
+	if m.GSeq != 0 {
+		i = encodeVarintLease(dAtA, i, uint64(m.GSeq))
+		i--
+		dAtA[i] = 0x18
+	}
+	if m.DSeq != 0 {
+		i = encodeVarintLease(dAtA, i, uint64(m.DSeq))
+		i--
+		dAtA[i] = 0x10
+	}
+	if len(m.Owner) > 0 {
+		i -= len(m.Owner)
+		copy(dAtA[i:], m.Owner)
+		i = encodeVarintLease(dAtA, i, uint64(len(m.Owner)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *Lease) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *Lease) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *Lease) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.ClosedOn != 0 {
+		i = encodeVarintLease(dAtA, i, uint64(m.ClosedOn))
+		i--
+		dAtA[i] = 0x20
+	}
+	if m.CreatedAt != 0 {
+		i = encodeVarintLease(dAtA, i, uint64(m.CreatedAt))
+		i--
+		dAtA[i] = 0x18
+	}
+	if m.State != 0 {
+		i = encodeVarintLease(dAtA, i, uint64(m.State))
+		i--
+		dAtA[i] = 0x10
+	}
+	{
+		size, err := m.LeaseID.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintLease(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
+}
+
+func (m *LeaseFilters) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *LeaseFilters) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *LeaseFilters) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.State) > 0 {
+		i -= len(m.State)
+		copy(dAtA[i:], m.State)
+		i = encodeVarintLease(dAtA, i, uint64(len(m.State)))
+		i--
+		dAtA[i] = 0x32
+	}
+	if len(m.Provider) > 0 {
+		i -= len(m.Provider)
+		copy(dAtA[i:], m.Provider)
+		i = encodeVarintLease(dAtA, i, uint64(len(m.Provider)))
+		i--
+		dAtA[i] = 0x2a
+	}
+	if m.OSeq != 0 {
+		i = encodeVarintLease(dAtA, i, uint64(m.OSeq))
+		i--
+		dAtA[i] = 0x20
+	}
+	if m.GSeq != 0 {
+		i = encodeVarintLease(dAtA, i, uint64(m.GSeq))
+		i--
+		dAtA[i] = 0x18
+	}
+	if m.DSeq != 0 {
+		i = encodeVarintLease(dAtA, i, uint64(m.DSeq))
+		i--
+		dAtA[i] = 0x10
+	}
+	if len(m.Owner) > 0 {
+		i -= len(m.Owner)
+		copy(dAtA[i:], m.Owner)
+		i = encodeVarintLease(dAtA, i, uint64(len(m.Owner)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *MsgCreateLease) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *MsgCreateLease) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *MsgCreateLease) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	{
+		size, err := m.BidID.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintLease(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
+}
+
+func (m *MsgCreateLeaseResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *MsgCreateLeaseResponse) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *MsgCreateLeaseResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	return len(dAtA) - i, nil
+}
+
+func (m *MsgWithdrawLease) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *MsgWithdrawLease) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *MsgWithdrawLease) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	{
+		size, err := m.LeaseID.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintLease(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
+}
+
+func (m *MsgWithdrawLeaseResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *MsgWithdrawLeaseResponse) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *MsgWithdrawLeaseResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	return len(dAtA) - i, nil
+}
+
+func (m *MsgCloseLease) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *MsgCloseLease) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *MsgCloseLease) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	{
+		size, err := m.LeaseID.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintLease(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
+}
+
+func (m *MsgCloseLeaseResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *MsgCloseLeaseResponse) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *MsgCloseLeaseResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	return len(dAtA) - i, nil
+}
+
+func encodeVarintLease(dAtA []byte, offset int, v uint64) int {
+	offset -= sovLease(v)
+	base := offset
+	for v >= 1<<7 {
+		dAtA[offset] = uint8(v&0x7f | 0x80)
+		v >>= 7
+		offset++
+	}
+	dAtA[offset] = uint8(v)
+	return base
+}
+func (m *LeaseID) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.Owner)
+	if l > 0 {
+		n += 1 + l + sovLease(uint64(l))
+	}
+	if m.DSeq != 0 {
+		n += 1 + sovLease(uint64(m.DSeq))
+	}
+	if m.GSeq != 0 {
+		n += 1 + sovLease(uint64(m.GSeq))
+	}
+	if m.OSeq != 0 {
+		n += 1 + sovLease(uint64(m.OSeq))
+	}
+	l = len(m.Provider)
+	if l > 0 {
+		n += 1 + l + sovLease(uint64(l))
+	}
+	return n
+}
+
+func (m *Lease) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = m.LeaseID.Size()
+	n += 1 + l + sovLease(uint64(l))
+	if m.State != 0 {
+		n += 1 + sovLease(uint64(m.State))
+	}
+	if m.CreatedAt != 0 {
+		n += 1 + sovLease(uint64(m.CreatedAt))
+	}
+	if m.ClosedOn != 0 {
+		n += 1 + sovLease(uint64(m.ClosedOn))
+	}
+	return n
+}
+
+func (m *LeaseFilters) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.Owner)
+	if l > 0 {
+		n += 1 + l + sovLease(uint64(l))
+	}
+	if m.DSeq != 0 {
+		n += 1 + sovLease(uint64(m.DSeq))
+	}
+	if m.GSeq != 0 {
+		n += 1 + sovLease(uint64(m.GSeq))
+	}
+	if m.OSeq != 0 {
+		n += 1 + sovLease(uint64(m.OSeq))
+	}
+	l = len(m.Provider)
+	if l > 0 {
+		n += 1 + l + sovLease(uint64(l))
+	}
+	l = len(m.State)
+	if l > 0 {
+		n += 1 + l + sovLease(uint64(l))
+	}
+	return n
+}
+
+func (m *MsgCreateLease) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = m.BidID.Size()
+	n += 1 + l + sovLease(uint64(l))
+	return n
+}
+
+func (m *MsgCreateLeaseResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	return n
+}
+
+func (m *MsgWithdrawLease) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = m.LeaseID.Size()
+	n += 1 + l + sovLease(uint64(l))
+	return n
+}
+
+func (m *MsgWithdrawLeaseResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	return n
+}
+
+func (m *MsgCloseLease) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = m.LeaseID.Size()
+	n += 1 + l + sovLease(uint64(l))
+	return n
+}
+
+func (m *MsgCloseLeaseResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	return n
+}
+
+func sovLease(x uint64) (n int) {
+	return (math_bits.Len64(x|1) + 6) / 7
+}
+func sozLease(x uint64) (n int) {
+	return sovLease(uint64((x << 1) ^ uint64((int64(x) >> 63))))
+}
+func (m *LeaseID) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowLease
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: LeaseID: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: LeaseID: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Owner", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLease
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthLease
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthLease
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Owner = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field DSeq", wireType)
+			}
+			m.DSeq = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLease
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.DSeq |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field GSeq", wireType)
+			}
+			m.GSeq = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLease
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.GSeq |= uint32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 4:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field OSeq", wireType)
+			}
+			m.OSeq = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLease
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.OSeq |= uint32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Provider", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLease
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthLease
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthLease
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Provider = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipLease(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthLease
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Lease) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowLease
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Lease: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Lease: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field LeaseID", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLease
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthLease
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthLease
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.LeaseID.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field State", wireType)
+			}
+			m.State = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLease
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.State |= Lease_State(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CreatedAt", wireType)
+			}
+			m.CreatedAt = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLease
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.CreatedAt |= int64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 4:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ClosedOn", wireType)
+			}
+			m.ClosedOn = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLease
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.ClosedOn |= int64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipLease(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthLease
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *LeaseFilters) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowLease
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: LeaseFilters: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: LeaseFilters: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Owner", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLease
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthLease
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthLease
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Owner = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field DSeq", wireType)
+			}
+			m.DSeq = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLease
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.DSeq |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field GSeq", wireType)
+			}
+			m.GSeq = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLease
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.GSeq |= uint32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 4:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field OSeq", wireType)
+			}
+			m.OSeq = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLease
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.OSeq |= uint32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Provider", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLease
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthLease
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthLease
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Provider = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 6:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field State", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLease
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthLease
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthLease
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.State = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipLease(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthLease
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *MsgCreateLease) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowLease
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: MsgCreateLease: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: MsgCreateLease: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field BidID", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLease
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthLease
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthLease
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.BidID.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipLease(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthLease
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *MsgCreateLeaseResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowLease
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: MsgCreateLeaseResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: MsgCreateLeaseResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		default:
+			iNdEx = preIndex
+			skippy, err := skipLease(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthLease
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *MsgWithdrawLease) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowLease
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: MsgWithdrawLease: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: MsgWithdrawLease: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field LeaseID", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLease
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthLease
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthLease
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.LeaseID.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipLease(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthLease
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *MsgWithdrawLeaseResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowLease
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: MsgWithdrawLeaseResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: MsgWithdrawLeaseResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		default:
+			iNdEx = preIndex
+			skippy, err := skipLease(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthLease
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *MsgCloseLease) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowLease
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: MsgCloseLease: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: MsgCloseLease: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field LeaseID", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLease
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthLease
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthLease
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.LeaseID.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipLease(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthLease
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *MsgCloseLeaseResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowLease
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: MsgCloseLeaseResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: MsgCloseLeaseResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		default:
+			iNdEx = preIndex
+			skippy, err := skipLease(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthLease
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func skipLease(dAtA []byte) (n int, err error) {
+	l := len(dAtA)
+	iNdEx := 0
+	depth := 0
+	for iNdEx < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return 0, ErrIntOverflowLease
+			}
+			if iNdEx >= l {
+				return 0, io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		wireType := int(wire & 0x7)
+		switch wireType {
+		case 0:
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return 0, ErrIntOverflowLease
+				}
+				if iNdEx >= l {
+					return 0, io.ErrUnexpectedEOF
+				}
+				iNdEx++
+				if dAtA[iNdEx-1] < 0x80 {
+					break
+				}
+			}
+		case 1:
+			iNdEx += 8
+		case 2:
+			var length int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return 0, ErrIntOverflowLease
+				}
+				if iNdEx >= l {
+					return 0, io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				length |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if length < 0 {
+				return 0, ErrInvalidLengthLease
+			}
+			iNdEx += length
+		case 3:
+			depth++
+		case 4:
+			if depth == 0 {
+				return 0, ErrUnexpectedEndOfGroupLease
+			}
+			depth--
+		case 5:
+			iNdEx += 4
+		default:
+			return 0, fmt.Errorf("proto: illegal wireType %d", wireType)
+		}
+		if iNdEx < 0 {
+			return 0, ErrInvalidLengthLease
+		}
+		if depth == 0 {
+			return iNdEx, nil
+		}
+	}
+	return 0, io.ErrUnexpectedEOF
+}
+
+var (
+	ErrInvalidLengthLease        = fmt.Errorf("proto: negative length found during unmarshaling")
+	ErrIntOverflowLease          = fmt.Errorf("proto: integer overflow")
+	ErrUnexpectedEndOfGroupLease = fmt.Errorf("proto: unexpected end of group")
+)

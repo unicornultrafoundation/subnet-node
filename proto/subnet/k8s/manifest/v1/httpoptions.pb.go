@@ -5,7 +5,9 @@ package v1
 
 import (
 	fmt "fmt"
+	io "io"
 	math "math"
+	math_bits "math/bits"
 	reflect "reflect"
 	strings "strings"
 
@@ -26,15 +28,12 @@ const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
 // ServiceExposeHTTPOptions
 type ServiceExposeHTTPOptions struct {
-	MaxBodySize          uint32   `protobuf:"varint,1,opt,name=max_body_size,json=maxBodySize,proto3" json:"maxBodySize" yaml:"maxBodySize"`
-	ReadTimeout          uint32   `protobuf:"varint,2,opt,name=read_timeout,json=readTimeout,proto3" json:"readTimeout" yaml:"readTimeout"`
-	SendTimeout          uint32   `protobuf:"varint,3,opt,name=send_timeout,json=sendTimeout,proto3" json:"sendTimeout" yaml:"sendTimeout"`
-	NextTries            uint32   `protobuf:"varint,4,opt,name=next_tries,json=nextTries,proto3" json:"nextTries" yaml:"nextTries"`
-	NextTimeout          uint32   `protobuf:"varint,5,opt,name=next_timeout,json=nextTimeout,proto3" json:"nextTimeout" yaml:"nextTimeout"`
-	NextCases            []string `protobuf:"bytes,6,rep,name=next_cases,json=nextCases,proto3" json:"nextCases" yaml:"nextCases"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
+	MaxBodySize uint32   `protobuf:"varint,1,opt,name=max_body_size,json=maxBodySize,proto3" json:"maxBodySize" yaml:"maxBodySize"`
+	ReadTimeout uint32   `protobuf:"varint,2,opt,name=read_timeout,json=readTimeout,proto3" json:"readTimeout" yaml:"readTimeout"`
+	SendTimeout uint32   `protobuf:"varint,3,opt,name=send_timeout,json=sendTimeout,proto3" json:"sendTimeout" yaml:"sendTimeout"`
+	NextTries   uint32   `protobuf:"varint,4,opt,name=next_tries,json=nextTries,proto3" json:"nextTries" yaml:"nextTries"`
+	NextTimeout uint32   `protobuf:"varint,5,opt,name=next_timeout,json=nextTimeout,proto3" json:"nextTimeout" yaml:"nextTimeout"`
+	NextCases   []string `protobuf:"bytes,6,rep,name=next_cases,json=nextCases,proto3" json:"nextCases" yaml:"nextCases"`
 }
 
 func (m *ServiceExposeHTTPOptions) Reset()      { *m = ServiceExposeHTTPOptions{} }
@@ -43,16 +42,25 @@ func (*ServiceExposeHTTPOptions) Descriptor() ([]byte, []int) {
 	return fileDescriptor_e3fb58f55107ceba, []int{0}
 }
 func (m *ServiceExposeHTTPOptions) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_ServiceExposeHTTPOptions.Unmarshal(m, b)
+	return m.Unmarshal(b)
 }
 func (m *ServiceExposeHTTPOptions) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_ServiceExposeHTTPOptions.Marshal(b, m, deterministic)
+	if deterministic {
+		return xxx_messageInfo_ServiceExposeHTTPOptions.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
 }
 func (m *ServiceExposeHTTPOptions) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_ServiceExposeHTTPOptions.Merge(m, src)
 }
 func (m *ServiceExposeHTTPOptions) XXX_Size() int {
-	return xxx_messageInfo_ServiceExposeHTTPOptions.Size(m)
+	return m.Size()
 }
 func (m *ServiceExposeHTTPOptions) XXX_DiscardUnknown() {
 	xxx_messageInfo_ServiceExposeHTTPOptions.DiscardUnknown(m)
@@ -109,32 +117,138 @@ func init() {
 func init() { proto.RegisterFile("manifest/v1/httpoptions.proto", fileDescriptor_e3fb58f55107ceba) }
 
 var fileDescriptor_e3fb58f55107ceba = []byte{
-	// 360 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x64, 0x92, 0xc1, 0x4a, 0xc3, 0x30,
-	0x1c, 0x87, 0x9d, 0xd3, 0xc1, 0xaa, 0x03, 0x29, 0x22, 0x45, 0x70, 0x9d, 0x05, 0x61, 0x17, 0x1b,
-	0x86, 0x97, 0xe1, 0x49, 0x26, 0xc2, 0xf4, 0xa2, 0x74, 0x3d, 0x79, 0x29, 0x69, 0x9b, 0x6d, 0x61,
-	0x6b, 0x52, 0x9a, 0x74, 0x74, 0x3b, 0xf9, 0x76, 0xbe, 0x82, 0xa7, 0x82, 0x1e, 0x77, 0xdc, 0x13,
-	0x48, 0x9a, 0xb9, 0x44, 0xbd, 0x95, 0x2f, 0x3f, 0x3e, 0x3e, 0xe8, 0xdf, 0xb8, 0x48, 0x20, 0xc1,
-	0x63, 0xc4, 0x38, 0x58, 0xf4, 0xc0, 0x94, 0xf3, 0x94, 0xa6, 0x1c, 0x53, 0xc2, 0xdc, 0x34, 0xa3,
-	0x9c, 0x9a, 0x67, 0x2c, 0x0f, 0x09, 0xe2, 0xee, 0xac, 0xcf, 0xdc, 0x9f, 0xa5, 0xbb, 0xe8, 0x9d,
-	0x9f, 0x4e, 0xe8, 0x84, 0x56, 0x13, 0x20, 0xbe, 0xe4, 0xda, 0x79, 0xaf, 0x1b, 0xd6, 0x08, 0x65,
-	0x0b, 0x1c, 0xa1, 0x87, 0x22, 0xa5, 0x0c, 0x0d, 0x7d, 0xff, 0xe5, 0x59, 0x0a, 0xcd, 0x47, 0xa3,
-	0x95, 0xc0, 0x22, 0x08, 0x69, 0xbc, 0x0c, 0x18, 0x5e, 0x21, 0xab, 0xd6, 0xa9, 0x75, 0x5b, 0x83,
-	0xab, 0x75, 0x69, 0x1f, 0x25, 0xb0, 0x18, 0xd0, 0x78, 0x39, 0xc2, 0x2b, 0xb4, 0x29, 0x6d, 0x73,
-	0x09, 0x93, 0xf9, 0xad, 0xa3, 0x41, 0xc7, 0xd3, 0x27, 0xe6, 0xd0, 0x38, 0xce, 0x10, 0x8c, 0x03,
-	0x8e, 0x13, 0x44, 0x73, 0x6e, 0xed, 0x2b, 0x93, 0xe0, 0xbe, 0xc4, 0xca, 0xa4, 0x41, 0xc7, 0xd3,
-	0x27, 0xc2, 0xc4, 0x10, 0x51, 0xa6, 0xba, 0x32, 0x09, 0xfe, 0xcf, 0xa4, 0x41, 0xc7, 0xd3, 0x27,
-	0xe6, 0x9d, 0x61, 0x10, 0x54, 0xf0, 0x80, 0x67, 0x18, 0x31, 0xeb, 0xa0, 0xf2, 0x5c, 0xae, 0x4b,
-	0xbb, 0x29, 0xa8, 0x2f, 0xe0, 0xa6, 0xb4, 0x4f, 0xa4, 0x65, 0x87, 0x1c, 0x4f, 0x3d, 0x8b, 0x16,
-	0x69, 0xd8, 0xb6, 0x1c, 0xaa, 0x96, 0x6a, 0xf4, 0xb7, 0x45, 0x83, 0x8e, 0xa7, 0x4f, 0x76, 0x2d,
-	0x11, 0x64, 0x88, 0x59, 0x8d, 0x4e, 0xbd, 0xdb, 0x54, 0x2d, 0xf7, 0x02, 0xfe, 0x6e, 0xa9, 0xd0,
-	0xb6, 0xa5, 0xfa, 0x1e, 0xf8, 0x1f, 0x9f, 0xed, 0xbd, 0xb7, 0xaf, 0x76, 0xed, 0xf5, 0x69, 0x82,
-	0xf9, 0x34, 0x0f, 0xdd, 0x88, 0x26, 0x20, 0x27, 0x38, 0xa2, 0x19, 0xc9, 0xe7, 0x3c, 0x83, 0x63,
-	0x9a, 0x93, 0x18, 0x8a, 0x5f, 0x0b, 0xe4, 0x8d, 0x5c, 0x13, 0x1a, 0x23, 0x20, 0x6f, 0x42, 0x12,
-	0x30, 0xeb, 0x33, 0xa0, 0xdd, 0x57, 0xd8, 0xa8, 0x5e, 0x6f, 0xbe, 0x03, 0x00, 0x00, 0xff, 0xff,
-	0x8d, 0xe7, 0x0c, 0xb1, 0x75, 0x02, 0x00, 0x00,
+	// 387 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x64, 0x92, 0x31, 0xcb, 0xd3, 0x40,
+	0x1c, 0x87, 0x13, 0xab, 0x2f, 0x34, 0x5a, 0x90, 0x20, 0x12, 0x04, 0x2f, 0x35, 0x20, 0x74, 0x31,
+	0x47, 0x71, 0x29, 0x4e, 0x52, 0x11, 0xaa, 0x8b, 0x92, 0x66, 0x72, 0x09, 0x97, 0xe4, 0xda, 0x1e,
+	0x6d, 0xee, 0x42, 0xee, 0x52, 0xd2, 0x4e, 0x7e, 0x04, 0xbf, 0x95, 0x8e, 0x1d, 0x3b, 0x05, 0x4d,
+	0xb7, 0x8e, 0xfd, 0x04, 0x72, 0xb9, 0xda, 0x9c, 0xba, 0x85, 0xe7, 0x7e, 0x3c, 0x3c, 0x90, 0xbf,
+	0xf5, 0x3c, 0x43, 0x94, 0x2c, 0x30, 0x17, 0x70, 0x3b, 0x86, 0x2b, 0x21, 0x72, 0x96, 0x0b, 0xc2,
+	0x28, 0xf7, 0xf3, 0x82, 0x09, 0x66, 0x3f, 0xe5, 0x65, 0x4c, 0xb1, 0xf0, 0xd7, 0x13, 0xee, 0xff,
+	0x59, 0xfa, 0xdb, 0xf1, 0xb3, 0x27, 0x4b, 0xb6, 0x64, 0xed, 0x04, 0xca, 0x2f, 0xb5, 0xf6, 0xbe,
+	0xf7, 0x2c, 0x67, 0x8e, 0x8b, 0x2d, 0x49, 0xf0, 0xfb, 0x2a, 0x67, 0x1c, 0xcf, 0xc2, 0xf0, 0xf3,
+	0x27, 0x25, 0xb4, 0x3f, 0x58, 0x83, 0x0c, 0x55, 0x51, 0xcc, 0xd2, 0x5d, 0xc4, 0xc9, 0x1e, 0x3b,
+	0xe6, 0xd0, 0x1c, 0x0d, 0xa6, 0x2f, 0xcf, 0xb5, 0xfb, 0x30, 0x43, 0xd5, 0x94, 0xa5, 0xbb, 0x39,
+	0xd9, 0xe3, 0x4b, 0xed, 0xda, 0x3b, 0x94, 0x6d, 0xde, 0x78, 0x1a, 0xf4, 0x02, 0x7d, 0x62, 0xcf,
+	0xac, 0x47, 0x05, 0x46, 0x69, 0x24, 0x48, 0x86, 0x59, 0x29, 0x9c, 0x7b, 0x9d, 0x49, 0xf2, 0x50,
+	0xe1, 0xce, 0xa4, 0x41, 0x2f, 0xd0, 0x27, 0xd2, 0xc4, 0x31, 0xed, 0x4c, 0xbd, 0xce, 0x24, 0xf9,
+	0x7f, 0x26, 0x0d, 0x7a, 0x81, 0x3e, 0xb1, 0xdf, 0x5a, 0x16, 0xc5, 0x95, 0x88, 0x44, 0x41, 0x30,
+	0x77, 0xee, 0xb7, 0x9e, 0x17, 0xe7, 0xda, 0xed, 0x4b, 0x1a, 0x4a, 0x78, 0xa9, 0xdd, 0xc7, 0xca,
+	0x72, 0x43, 0x5e, 0xd0, 0x3d, 0xcb, 0x16, 0x65, 0xb8, 0xb6, 0x3c, 0xe8, 0x5a, 0xda, 0xd1, 0xbf,
+	0x2d, 0x1a, 0xf4, 0x02, 0x7d, 0x72, 0x6b, 0x49, 0x10, 0xc7, 0xdc, 0xb9, 0x1b, 0xf6, 0x46, 0xfd,
+	0xae, 0xe5, 0x9d, 0x84, 0x7f, 0xb7, 0xb4, 0xe8, 0xda, 0xd2, 0x7e, 0x4f, 0x37, 0xc7, 0x5f, 0xc0,
+	0xf8, 0xda, 0x00, 0xf3, 0x47, 0x03, 0xcc, 0x43, 0x03, 0xcc, 0x9f, 0x0d, 0x30, 0xbf, 0x9d, 0x80,
+	0x71, 0x38, 0x01, 0xe3, 0x78, 0x02, 0xc6, 0x97, 0x8f, 0x4b, 0x22, 0x56, 0x65, 0xec, 0x27, 0x2c,
+	0x83, 0x25, 0x25, 0x09, 0x2b, 0x68, 0xb9, 0x11, 0x05, 0x5a, 0xb0, 0x92, 0xa6, 0x48, 0xfe, 0x72,
+	0xa8, 0x6e, 0xe7, 0x15, 0x65, 0x29, 0x86, 0xea, 0x56, 0x14, 0x81, 0xeb, 0x09, 0x87, 0xda, 0xdd,
+	0xc5, 0x77, 0xed, 0xeb, 0xeb, 0xdf, 0x01, 0x00, 0x00, 0xff, 0xff, 0xe4, 0x36, 0x71, 0x4a, 0x8d,
+	0x02, 0x00, 0x00,
 }
 
+func (m *ServiceExposeHTTPOptions) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ServiceExposeHTTPOptions) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ServiceExposeHTTPOptions) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.NextCases) > 0 {
+		for iNdEx := len(m.NextCases) - 1; iNdEx >= 0; iNdEx-- {
+			i -= len(m.NextCases[iNdEx])
+			copy(dAtA[i:], m.NextCases[iNdEx])
+			i = encodeVarintHttpoptions(dAtA, i, uint64(len(m.NextCases[iNdEx])))
+			i--
+			dAtA[i] = 0x32
+		}
+	}
+	if m.NextTimeout != 0 {
+		i = encodeVarintHttpoptions(dAtA, i, uint64(m.NextTimeout))
+		i--
+		dAtA[i] = 0x28
+	}
+	if m.NextTries != 0 {
+		i = encodeVarintHttpoptions(dAtA, i, uint64(m.NextTries))
+		i--
+		dAtA[i] = 0x20
+	}
+	if m.SendTimeout != 0 {
+		i = encodeVarintHttpoptions(dAtA, i, uint64(m.SendTimeout))
+		i--
+		dAtA[i] = 0x18
+	}
+	if m.ReadTimeout != 0 {
+		i = encodeVarintHttpoptions(dAtA, i, uint64(m.ReadTimeout))
+		i--
+		dAtA[i] = 0x10
+	}
+	if m.MaxBodySize != 0 {
+		i = encodeVarintHttpoptions(dAtA, i, uint64(m.MaxBodySize))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
+func encodeVarintHttpoptions(dAtA []byte, offset int, v uint64) int {
+	offset -= sovHttpoptions(v)
+	base := offset
+	for v >= 1<<7 {
+		dAtA[offset] = uint8(v&0x7f | 0x80)
+		v >>= 7
+		offset++
+	}
+	dAtA[offset] = uint8(v)
+	return base
+}
+func (m *ServiceExposeHTTPOptions) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.MaxBodySize != 0 {
+		n += 1 + sovHttpoptions(uint64(m.MaxBodySize))
+	}
+	if m.ReadTimeout != 0 {
+		n += 1 + sovHttpoptions(uint64(m.ReadTimeout))
+	}
+	if m.SendTimeout != 0 {
+		n += 1 + sovHttpoptions(uint64(m.SendTimeout))
+	}
+	if m.NextTries != 0 {
+		n += 1 + sovHttpoptions(uint64(m.NextTries))
+	}
+	if m.NextTimeout != 0 {
+		n += 1 + sovHttpoptions(uint64(m.NextTimeout))
+	}
+	if len(m.NextCases) > 0 {
+		for _, s := range m.NextCases {
+			l = len(s)
+			n += 1 + l + sovHttpoptions(uint64(l))
+		}
+	}
+	return n
+}
+
+func sovHttpoptions(x uint64) (n int) {
+	return (math_bits.Len64(x|1) + 6) / 7
+}
+func sozHttpoptions(x uint64) (n int) {
+	return sovHttpoptions(uint64((x << 1) ^ uint64((int64(x) >> 63))))
+}
 func (this *ServiceExposeHTTPOptions) String() string {
 	if this == nil {
 		return "nil"
@@ -146,7 +260,6 @@ func (this *ServiceExposeHTTPOptions) String() string {
 		`NextTries:` + fmt.Sprintf("%v", this.NextTries) + `,`,
 		`NextTimeout:` + fmt.Sprintf("%v", this.NextTimeout) + `,`,
 		`NextCases:` + fmt.Sprintf("%v", this.NextCases) + `,`,
-		`XXX_unrecognized:` + fmt.Sprintf("%v", this.XXX_unrecognized) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -159,3 +272,264 @@ func valueToStringHttpoptions(v interface{}) string {
 	pv := reflect.Indirect(rv).Interface()
 	return fmt.Sprintf("*%v", pv)
 }
+func (m *ServiceExposeHTTPOptions) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowHttpoptions
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ServiceExposeHTTPOptions: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ServiceExposeHTTPOptions: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field MaxBodySize", wireType)
+			}
+			m.MaxBodySize = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowHttpoptions
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.MaxBodySize |= uint32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ReadTimeout", wireType)
+			}
+			m.ReadTimeout = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowHttpoptions
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.ReadTimeout |= uint32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SendTimeout", wireType)
+			}
+			m.SendTimeout = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowHttpoptions
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.SendTimeout |= uint32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 4:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field NextTries", wireType)
+			}
+			m.NextTries = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowHttpoptions
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.NextTries |= uint32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 5:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field NextTimeout", wireType)
+			}
+			m.NextTimeout = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowHttpoptions
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.NextTimeout |= uint32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 6:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field NextCases", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowHttpoptions
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthHttpoptions
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthHttpoptions
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.NextCases = append(m.NextCases, string(dAtA[iNdEx:postIndex]))
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipHttpoptions(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthHttpoptions
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func skipHttpoptions(dAtA []byte) (n int, err error) {
+	l := len(dAtA)
+	iNdEx := 0
+	depth := 0
+	for iNdEx < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return 0, ErrIntOverflowHttpoptions
+			}
+			if iNdEx >= l {
+				return 0, io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		wireType := int(wire & 0x7)
+		switch wireType {
+		case 0:
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return 0, ErrIntOverflowHttpoptions
+				}
+				if iNdEx >= l {
+					return 0, io.ErrUnexpectedEOF
+				}
+				iNdEx++
+				if dAtA[iNdEx-1] < 0x80 {
+					break
+				}
+			}
+		case 1:
+			iNdEx += 8
+		case 2:
+			var length int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return 0, ErrIntOverflowHttpoptions
+				}
+				if iNdEx >= l {
+					return 0, io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				length |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if length < 0 {
+				return 0, ErrInvalidLengthHttpoptions
+			}
+			iNdEx += length
+		case 3:
+			depth++
+		case 4:
+			if depth == 0 {
+				return 0, ErrUnexpectedEndOfGroupHttpoptions
+			}
+			depth--
+		case 5:
+			iNdEx += 4
+		default:
+			return 0, fmt.Errorf("proto: illegal wireType %d", wireType)
+		}
+		if iNdEx < 0 {
+			return 0, ErrInvalidLengthHttpoptions
+		}
+		if depth == 0 {
+			return iNdEx, nil
+		}
+	}
+	return 0, io.ErrUnexpectedEOF
+}
+
+var (
+	ErrInvalidLengthHttpoptions        = fmt.Errorf("proto: negative length found during unmarshaling")
+	ErrIntOverflowHttpoptions          = fmt.Errorf("proto: integer overflow")
+	ErrUnexpectedEndOfGroupHttpoptions = fmt.Errorf("proto: unexpected end of group")
+)
