@@ -165,7 +165,7 @@ func (api *VirtualBoxAPI) GetVM(ctx context.Context, vmID string) (*vmResult, er
 	return convertToVMResult(vm), nil
 }
 
-func (api *VirtualBoxAPI) CreateTemplateVM(ctx context.Context, name string, cpuCores int, memoryMB int, diskSizeGB int, osType string, username string, password string) (*vmResult, error) {
+func (api *VirtualBoxAPI) CreateTemplateVM(ctx context.Context, name string, cpuCores int, memoryMB int, diskSizeGB int, osType string, username string, password string) {
 	vbReq := vbtypes.VMCreateRequest{
 		Name:       name,
 		CPUCores:   cpuCores,
@@ -176,15 +176,10 @@ func (api *VirtualBoxAPI) CreateTemplateVM(ctx context.Context, name string, cpu
 		Password:   password,
 	}
 
-	vm, err := api.vboxService.CreateVM(ctx, vbReq)
-	if err != nil {
-		return nil, err
-	}
-
-	return convertToVMResult(vm), nil
+	api.vboxService.CreateTemplateVM(ctx, vbReq)
 }
 
-func (api *VirtualBoxAPI) CreateAndStartVM(ctx context.Context, name string, cpuCores int, memoryMB int, diskSizeGB int, osType string, username string, password string) (*vmResult, error) {
+func (api *VirtualBoxAPI) CreateVM(ctx context.Context, name string, cpuCores int, memoryMB int, diskSizeGB int, osType string, username string, password string) {
 	vbReq := vbtypes.VMCreateRequest{
 		Name:       name,
 		CPUCores:   cpuCores,
@@ -195,12 +190,7 @@ func (api *VirtualBoxAPI) CreateAndStartVM(ctx context.Context, name string, cpu
 		Password:   password,
 	}
 
-	vm, err := api.vboxService.CreateAndStartVM(ctx, vbReq)
-	if err != nil {
-		return nil, err
-	}
-
-	return convertToVMResult(vm), nil
+	api.vboxService.CreateVM(ctx, vbReq)
 }
 
 func (api *VirtualBoxAPI) UpdateVM(ctx context.Context, vmID string, name string, cpuCores int, memoryMB int, diskSizeGB int) (*vmResult, error) {

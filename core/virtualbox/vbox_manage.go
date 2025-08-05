@@ -779,6 +779,7 @@ func (e *VBoxManageExecutor) ImportOVA(ovaPath string, vmName string) error {
 
 	// VBoxManage import <ovaPath> --vsys 0 --vmname <vmName>
 	cmd := exec.Command("VBoxManage", "import", ovaPath, "--vsys", "0", "--vmname", vmName)
+
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to import OVA: %w, output: %s", err, string(output))

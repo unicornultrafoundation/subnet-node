@@ -120,3 +120,30 @@ type SSHTokenResponse struct {
 	Token     string    `json:"token"`
 	ExpiresAt time.Time `json:"expires_at"`
 }
+
+// VMEventType represents the type of VM event
+type VMEventType string
+
+const (
+	VMEventCreateVM         VMEventType = "create_vm"
+	VMEventCreateTemplateVM VMEventType = "create_template_vm"
+)
+
+// VMRequest represents a VM operation request sent through the channel
+type VMRequest struct {
+	Type      VMEventType            `json:"type"`
+	VMID      string                 `json:"vm_id,omitempty"`
+	VMName    string                 `json:"vm_name"`
+	VMStatus  VMStatus               `json:"vm_status"`
+	Timestamp time.Time              `json:"timestamp"`
+	Data      map[string]interface{} `json:"data"`
+}
+
+type VMEvent struct {
+	EventType VMEventType            `json:"event_type"`
+	VMID      string                 `json:"vm_id,omitempty"`
+	VMName    string                 `json:"vm_name"`
+	VMStatus  VMStatus               `json:"vm_status"`
+	Timestamp time.Time              `json:"timestamp"`
+	Data      map[string]interface{} `json:"data"`
+}

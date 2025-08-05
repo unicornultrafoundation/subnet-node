@@ -44,6 +44,8 @@ type VirtualboxService struct {
 	tokenMu            sync.RWMutex
 	tokens             map[string]*vbtypes.SSHAccessToken
 	tokenCleanupTicker *time.Ticker
+
+	requestChannel chan *vbtypes.VMRequest
 }
 
 // NewService creates a new VirtualBox service
@@ -83,6 +85,7 @@ func NewService(ds datastore.Datastore) (*VirtualboxService, error) {
 		// Initialize token management
 		tokens:             make(map[string]*vbtypes.SSHAccessToken),
 		tokenCleanupTicker: time.NewTicker(5 * time.Minute), // Clean up expired tokens every 5 minutes
+		requestChannel:     make(chan *vbtypes.VMRequest, 100),
 	}
 
 	// Validate VirtualBox installation once during service creation
@@ -126,6 +129,8 @@ func (s *VirtualboxService) Start(ctx context.Context) error {
 		serviceLog.Warnf("Failed to sync SSHServer with running VMs: %v", err)
 	}
 
+	s.StartWorker(ctx)
+
 	serviceLog.Info("VirtualBox service started successfully")
 	return nil
 }
@@ -146,301 +151,57 @@ func (s *VirtualboxService) Stop(ctx context.Context) error {
 	return nil
 }
 
-// CreateVM creates a new VM with the specified configuration using VBoxManage
-func (s *VirtualboxService) CreateVM(ctx context.Context, req vbtypes.VMCreateRequest) (*vbtypes.VM, error) {
-	// Validate system resources before creating VM
-	serviceLog.Infof("Validating system resources...")
-	if err := s.validateResources(ctx, req); err != nil {
-		return nil, fmt.Errorf("resource validation failed: %w", err)
-	}
-	serviceLog.Infof("Resource validation passed")
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	serviceLog.Infof("Creating VM: %s", req.Name)
-
-	// Validate OS type compatibility with hardware if provided
-	if req.OSType != "" {
-		serviceLog.Infof("Validating OS type compatibility: %s", req.OSType)
-		if err := s.validateOSTypeCompatibility(req.OSType); err != nil {
-			return nil, fmt.Errorf("OS type validation failed: %w", err)
-		}
-		serviceLog.Infof("OS type validation passed")
+// CreateTemplateVM is used when has issue with ova file
+func (s *VirtualboxService) CreateTemplateVM(ctx context.Context, req vbtypes.VMCreateRequest) (*vbtypes.VM, error) {
+	// Add VM template creation request to channel for async processing
+	vmRequest := &vbtypes.VMRequest{
+		Type:      vbtypes.VMEventCreateTemplateVM,
+		VMID:      "", // Will be set by worker
+		VMName:    req.Name,
+		VMStatus:  vbtypes.Stopped,
+		Timestamp: time.Now(),
+		Data: map[string]interface{}{
+			"request": req,
+		},
 	}
 
-	// Generate unique VM ID
-	vmID := generateVMID(req.Name)
-	serviceLog.Infof("Generated VM ID: %s", vmID)
-
-	// Determine OS type and ISO URL based on the request
-	serviceLog.Infof("Determining OS type and ISO URL...")
-	osType, isoURL, err := s.storageMgr.DetermineOSTypeAndISO(ctx, req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to determine OS type: %w", err)
+	select {
+	case s.requestChannel <- vmRequest:
+		serviceLog.WithField("vmName", req.Name).Info("VM template creation request added to channel")
+		// Return a placeholder VM object indicating the request was submitted
+		return &vbtypes.VM{
+			Name:   req.Name,
+			Status: vbtypes.Stopped,
+		}, nil
+	default:
+		return nil, fmt.Errorf("request channel is full")
 	}
-	serviceLog.Infof("OS Type: %s, ISO URL: %s", osType, isoURL)
-
-	// Download ISO if needed
-	serviceLog.Infof("Ensuring ISO is available...")
-	isoPath, err := s.ensureISO(ctx, isoURL)
-	if err != nil {
-		return nil, fmt.Errorf("failed to ensure ISO: %w", err)
-	}
-	serviceLog.Infof("ISO Path: %s", isoPath)
-
-	// Create VM directory
-	vmFolder := filepath.Join(s.vmDir, req.Name)
-	serviceLog.Infof("Creating VM directory: %s", vmFolder)
-	if err := fsutil.DirWritable(vmFolder); err != nil {
-		return nil, fmt.Errorf("failed to create VM directory: %w", err)
-	}
-
-	// Create VM using VBoxManage
-	serviceLog.Infof("Creating VM with VBoxManage...")
-	if err := s.vboxExec.CreateVM(req.Name, req.OSType); err != nil {
-		return nil, fmt.Errorf("failed to create VM: %w", err)
-	}
-	serviceLog.Infof("VM created successfully")
-	// Get the actual UUID from VBoxManage
-	output, err := s.vboxExec.executeCommand("showvminfo", req.Name, "--machinereadable")
-	if err != nil {
-		return nil, fmt.Errorf("failed to get VM info for UUID: %w", err)
-	}
-	vmInfo := s.parseMachineReadableOutput(output)
-	vmUuid := vmInfo["UUID"]
-	vmName := req.Name
-	if vmUuid == "" {
-		return nil, fmt.Errorf("could not retrieve VM UUID from VBoxManage output")
-	}
-
-	// Configure VM hardware using VBoxManage
-	serviceLog.Infof("Configuring VM hardware...")
-	if err := s.vboxExec.ConfigureVMHardware(vmName, req.CPUCores, req.MemoryMB); err != nil {
-		serviceLog.Errorf("Failed to configure VM hardware: %v", err)
-		// Clean up on failure
-		serviceLog.Infof("Cleaning up failed VM...")
-		if delErr := s.vboxExec.DeleteVM(vmName); delErr != nil {
-			serviceLog.Errorf("Failed to delete VM during cleanup: %v", delErr)
-		}
-		return nil, fmt.Errorf("failed to configure VM hardware: %w", err)
-	}
-	serviceLog.Infof("VM hardware configured successfully")
-
-	// Configure network adapter
-	serviceLog.Infof("Configuring network adapter...")
-	if err := s.vboxExec.ConfigureNetwork(vmName, "nat"); err != nil {
-		serviceLog.Errorf("Failed to configure network adapter: %v", err)
-		// Clean up on failure
-		serviceLog.Infof("Cleaning up failed VM...")
-		if delErr := s.vboxExec.DeleteVM(vmName); delErr != nil {
-			serviceLog.Errorf("Failed to delete VM during cleanup: %v", delErr)
-		}
-		return nil, fmt.Errorf("failed to configure network adapter: %w", err)
-	}
-	serviceLog.Infof("Network adapter configured successfully")
-
-	// Create and attach storage using VBoxManage
-	serviceLog.Infof("Setting up VM storage...")
-
-	// Generate cloud-init ISO
-	cloudInitISO := ""
-	cloudInitISO, err = s.generateCloudInitISO(req.Name, req.Username, req.Password)
-	if err != nil {
-		serviceLog.Errorf("Failed to generate cloud-init ISO: %v", err)
-		// Continue without cloud-init ISO - it's not critical for VM creation
-	}
-
-	if err := s.vboxExec.SetupStorage(vmName, req, isoPath, cloudInitISO); err != nil {
-		serviceLog.Errorf("Failed to setup VM storage: %v", err)
-		// Clean up on failure
-		serviceLog.Infof("Cleaning up failed VM...")
-		if delErr := s.vboxExec.DeleteVM(vmUuid); delErr != nil {
-			serviceLog.Errorf("Failed to delete VM during cleanup: %v", delErr)
-		}
-		return nil, fmt.Errorf("failed to setup VM storage: %w", err)
-	}
-	serviceLog.Infof("VM storage setup completed")
-
-	// Create VM object (no CreatedAt/UpdatedAt)
-	vm := &vbtypes.VM{
-		ID:         vmUuid,
-		Name:       req.Name,
-		Status:     vbtypes.Stopped,
-		CPUCores:   req.CPUCores,
-		MemoryMB:   req.MemoryMB,
-		DiskSizeGB: req.DiskSizeGB,
-		VMFolder:   vmFolder,
-	}
-
-	// Store VM metadata in datastore
-	if err := s.storeVMMetadata(ctx, vm); err != nil {
-		serviceLog.Warnf("Failed to store VM metadata in datastore: %v", err)
-	}
-
-	serviceLog.Infof("Successfully created VM: %s", req.Name)
-	return vm, nil
 }
 
-// CreateAndStartVM creates a new VM by importing from an OVA template and starts it immediately
-func (s *VirtualboxService) CreateAndStartVM(ctx context.Context, req vbtypes.VMCreateRequest) (*vbtypes.VM, error) {
-
-	// Validate system resources before creating VM
-	serviceLog.Infof("Validating system resources...")
-	if err := s.validateResources(ctx, req); err != nil {
-		return nil, fmt.Errorf("resource validation failed: %w", err)
-	}
-	serviceLog.Infof("Resource validation passed")
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	serviceLog.Infof("Creating and starting VM from OVA template: %s", req.Name)
-
-	// Find the OVA file in ~/VirtualBox VMs/Templates/
-	ovaPathRaw := "~/VirtualBox VMs/Templates/template_sample_" + req.OSType + ".ova"
-	ovaPath, err := fsutil.ExpandHome(ovaPathRaw)
-	if err != nil {
-		return nil, fmt.Errorf("failed to expand home in OVA path: %w", err)
-	}
-	if !fsutil.FileExists(ovaPath) {
-		templatesDir, _ := fsutil.ExpandHome("~/VirtualBox VMs/Templates")
-		if err := fsutil.DirWritable(templatesDir); err != nil {
-			return nil, fmt.Errorf("failed to ensure Templates dir: %w", err)
-		}
-		// Fetch OVA index and get URL for this OS type
-		ovaURL, err := getOVAURLForOSType(req.OSType)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get OVA URL for OS type %s: %w", req.OSType, err)
-		}
-		serviceLog.Infof("Downloading OVA template from %s to %s", ovaURL, ovaPath)
-		if err := DownloadFile(ovaPath, ovaURL); err != nil {
-			return nil, fmt.Errorf("failed to download OVA: %w", err)
-		}
-		serviceLog.Infof("OVA template downloaded successfully")
+// CreateVM creates a new VM by importing from an OVA template and starts it immediately
+func (s *VirtualboxService) CreateVM(ctx context.Context, req vbtypes.VMCreateRequest) (*vbtypes.VM, error) {
+	// Add VM creation and start request to channel for async processing
+	vmRequest := &vbtypes.VMRequest{
+		Type:      vbtypes.VMEventCreateVM,
+		VMID:      "", // Will be set by worker
+		VMName:    req.Name,
+		VMStatus:  vbtypes.Stopped,
+		Timestamp: time.Now(),
+		Data: map[string]interface{}{
+			"request": req,
+		},
 	}
 
-	// Import the OVA as the new VM
-	serviceLog.Infof("Importing OVA template: %s", ovaPath)
-	if err := s.vboxExec.ImportOVA(ovaPath, req.Name); err != nil {
-		return nil, fmt.Errorf("failed to import OVA template: %w", err)
+	select {
+	case s.requestChannel <- vmRequest:
+		serviceLog.WithField("vmName", req.Name).Info("VM creation and start request added to channel")
+		return &vbtypes.VM{
+			Name:   req.Name,
+			Status: vbtypes.Starting,
+		}, nil
+	default:
+		return nil, fmt.Errorf("request channel is full")
 	}
-	serviceLog.Infof("OVA template imported successfully")
-
-	// Get the actual UUID from VBoxManage for the imported VM
-	output, err := s.vboxExec.executeCommand("showvminfo", req.Name, "--machinereadable")
-	if err != nil {
-		return nil, fmt.Errorf("failed to get VM info for UUID: %w", err)
-	}
-	vmInfo := s.parseMachineReadableOutput(output)
-	vmUuid := vmInfo["UUID"]
-	if vmUuid == "" {
-		return nil, fmt.Errorf("could not retrieve VM UUID from VBoxManage output")
-	}
-
-	// Update VM hardware configuration to match the request
-	serviceLog.Infof("Updating VM hardware configuration...")
-	if err := s.vboxExec.UpdateCPUCores(req.Name, req.CPUCores); err != nil {
-		serviceLog.Errorf("Failed to update CPU cores: %v", err)
-		// Clean up on failure
-		serviceLog.Infof("Cleaning up failed VM...")
-		if delErr := s.vboxExec.DeleteVM(req.Name); delErr != nil {
-			serviceLog.Errorf("Failed to delete VM during cleanup: %v", delErr)
-		}
-		return nil, fmt.Errorf("failed to update CPU cores: %w", err)
-	}
-
-	if err := s.vboxExec.UpdateMemory(req.Name, req.MemoryMB); err != nil {
-		serviceLog.Errorf("Failed to update memory: %v", err)
-		// Clean up on failure
-		serviceLog.Infof("Cleaning up failed VM...")
-		if delErr := s.vboxExec.DeleteVM(req.Name); delErr != nil {
-			serviceLog.Errorf("Failed to delete VM during cleanup: %v", delErr)
-		}
-		return nil, fmt.Errorf("failed to update memory: %w", err)
-	}
-
-	// Generate new cloud-init ISO for the imported VM
-	serviceLog.Infof("Generating cloud-init ISO for imported VM...")
-	cloudInitISO, err := s.generateCloneVMCloudInitISO(req.Name, req.Username, req.Password)
-	if err != nil {
-		serviceLog.Errorf("Failed to generate cloud-init ISO: %v", err)
-		// Continue without cloud-init ISO - it's not critical for VM creation
-	}
-
-	// Attach the new cloud-init ISO to the imported VM
-	if cloudInitISO != "" {
-		serviceLog.Infof("Attaching cloud-init ISO to imported VM...")
-		if err := s.vboxExec.AttachCloudInitISO(req.Name, cloudInitISO); err != nil {
-			serviceLog.Warnf("Failed to attach cloud-init ISO: %v", err)
-			// Continue without cloud-init ISO - it's not critical for VM operation
-		}
-	}
-
-	// Create VM directory
-	vmFolder := filepath.Join(s.vmDir, req.Name)
-	serviceLog.Infof("VM directory: %s", vmFolder)
-
-	// Create VM object
-	vm := &vbtypes.VM{
-		ID:         vmUuid,
-		Name:       req.Name,
-		Status:     vbtypes.Stopped, // Will be updated after starting
-		CPUCores:   req.CPUCores,
-		MemoryMB:   req.MemoryMB,
-		DiskSizeGB: req.DiskSizeGB,
-		VMFolder:   vmFolder,
-	}
-
-	// Store VM metadata in datastore
-	if err := s.storeVMMetadata(ctx, vm); err != nil {
-		serviceLog.Warnf("Failed to store VM metadata in datastore: %v", err)
-	}
-
-	// Set up SSH port forwarding BEFORE starting the VM
-	serviceLog.Infof("Setting up SSH port forwarding for VM: %s", req.Name)
-	hostPort, err := getAvailablePort()
-	if err != nil {
-		serviceLog.Errorf("Failed to find available port for SSH forwarding: %v", err)
-		// Continue without port forwarding - it's not critical for VM operation
-	} else {
-		if err := s.vboxExec.SetupSSHPortForward(req.Name, hostPort, 22); err != nil {
-			serviceLog.Errorf("Failed to set up SSH port forwarding: %v", err)
-			// Continue without port forwarding - it's not critical for VM operation
-		} else {
-			serviceLog.Infof("Successfully set up SSH port forwarding: host port %d -> guest port 22", hostPort, hostPort)
-			vm.SSHPort = hostPort
-		}
-	}
-
-	// Start the VM
-	serviceLog.Infof("Starting imported VM: %s", req.Name)
-	if err := s.vboxExec.StartVM(req.Name, true); err != nil { // Start in headless mode
-		serviceLog.Errorf("Failed to start VM: %v", err)
-		// Clean up on failure
-		serviceLog.Infof("Cleaning up failed VM...")
-		if delErr := s.vboxExec.DeleteVM(req.Name); delErr != nil {
-			serviceLog.Errorf("Failed to delete VM during cleanup: %v", delErr)
-		}
-		return nil, fmt.Errorf("failed to start VM: %w", err)
-	}
-
-	// Update VM status to Running
-	vm.Status = vbtypes.Running
-
-	// Register VM with SSHServer for SSH access
-	if vm.SSHPort > 0 {
-		s.sshServer.AddVMConfig(vm.ID, "localhost", strconv.Itoa(vm.SSHPort))
-		serviceLog.Infof("Registered VM %s with SSHServer: localhost:%d", vm.ID, vm.SSHPort)
-	}
-
-	// Update stored metadata with running status and SSH port
-	if err := s.storeVMMetadata(ctx, vm); err != nil {
-		serviceLog.Warnf("Failed to update VM metadata with running status: %v", err)
-	}
-
-	serviceLog.Infof("Successfully created and started VM: %s", req.Name)
-	return vm, nil
 }
 
 // validateResources checks if the system has sufficient resources to create the VM
@@ -1846,4 +1607,143 @@ func generateSecureToken() string {
 		b[i] = charset[idx.Int64()]
 	}
 	return string(b)
+}
+
+// performCreateVM performs the actual VM creation (moved from CreateVM)
+func (s *VirtualboxService) performCreateVM(ctx context.Context, req vbtypes.VMCreateRequest) (*vbtypes.VM, error) {
+	// Validate system resources before creating VM
+	serviceLog.Infof("Validating system resources...")
+	if err := s.validateResources(ctx, req); err != nil {
+		return nil, fmt.Errorf("resource validation failed: %w", err)
+	}
+	serviceLog.Infof("Resource validation passed")
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	serviceLog.Infof("Creating and starting VM from OVA template: %s", req.Name)
+
+	// Find the OVA file in ~/VirtualBox VMs/Templates/
+	ovaPathRaw := "~/VirtualBox VMs/Templates/template_sample_" + req.OSType + ".ova"
+	ovaPath, err := fsutil.ExpandHome(ovaPathRaw)
+	if err != nil {
+		return nil, fmt.Errorf("failed to expand home in OVA path: %w", err)
+	}
+	if !fsutil.FileExists(ovaPath) {
+		templatesDir, _ := fsutil.ExpandHome("~/VirtualBox VMs/Templates")
+		if err := fsutil.DirWritable(templatesDir); err != nil {
+			return nil, fmt.Errorf("failed to ensure Templates dir: %w", err)
+		}
+		// Fetch OVA index and get URL for this OS type
+		ovaURL, err := getOVAURLForOSType(req.OSType)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get OVA URL for OS type %s: %w", req.OSType, err)
+		}
+		serviceLog.Infof("Downloading OVA template from %s to %s", ovaURL, ovaPath)
+		if err := DownloadFile(ovaPath, ovaURL); err != nil {
+			return nil, fmt.Errorf("failed to download OVA: %w", err)
+		}
+		serviceLog.Infof("OVA template downloaded successfully")
+	}
+
+	// Import the OVA as the new VM
+	serviceLog.Infof("Importing OVA template: %s", ovaPath)
+	if err := s.vboxExec.ImportOVA(ovaPath, req.Name); err != nil {
+		return nil, fmt.Errorf("failed to import OVA template: %w", err)
+	}
+	serviceLog.Infof("OVA template imported successfully")
+
+	// Get the actual UUID from VBoxManage for the imported VM
+	output, err := s.vboxExec.executeCommand("showvminfo", req.Name, "--machinereadable")
+	if err != nil {
+		return nil, fmt.Errorf("failed to get VM info for UUID: %w", err)
+	}
+	vmInfo := s.parseMachineReadableOutput(output)
+	vmUuid := vmInfo["UUID"]
+	if vmUuid == "" {
+		return nil, fmt.Errorf("could not retrieve VM UUID from VBoxManage output")
+	}
+
+	// Update VM hardware configuration to match the request
+	serviceLog.Infof("Updating VM hardware configuration...")
+	if err := s.vboxExec.UpdateCPUCores(req.Name, req.CPUCores); err != nil {
+		serviceLog.Errorf("Failed to update CPU cores: %v", err)
+		// Clean up on failure
+		serviceLog.Infof("Cleaning up failed VM...")
+		if delErr := s.vboxExec.DeleteVM(req.Name); delErr != nil {
+			serviceLog.Errorf("Failed to delete VM during cleanup: %v", delErr)
+		}
+		return nil, fmt.Errorf("failed to update CPU cores: %w", err)
+	}
+
+	if err := s.vboxExec.UpdateMemory(req.Name, req.MemoryMB); err != nil {
+		serviceLog.Errorf("Failed to update memory: %v", err)
+		// Clean up on failure
+		serviceLog.Infof("Cleaning up failed VM...")
+		if delErr := s.vboxExec.DeleteVM(req.Name); delErr != nil {
+			serviceLog.Errorf("Failed to delete VM during cleanup: %v", delErr)
+		}
+		return nil, fmt.Errorf("failed to update memory: %w", err)
+	}
+
+	// Generate new cloud-init ISO for the imported VM
+	serviceLog.Infof("Generating cloud-init ISO for imported VM...")
+	cloudInitISO, err := s.generateCloneVMCloudInitISO(req.Name, req.Username, req.Password)
+	if err != nil {
+		serviceLog.Errorf("Failed to generate cloud-init ISO: %v", err)
+		// Continue without cloud-init ISO - it's not critical for VM creation
+	}
+
+	// Attach the new cloud-init ISO to the imported VM
+	if cloudInitISO != "" {
+		serviceLog.Infof("Attaching cloud-init ISO to imported VM...")
+		if err := s.vboxExec.AttachCloudInitISO(req.Name, cloudInitISO); err != nil {
+			serviceLog.Warnf("Failed to attach cloud-init ISO: %v", err)
+			// Continue without cloud-init ISO - it's not critical for VM operation
+		}
+	}
+
+	// Create VM directory
+	vmFolder := filepath.Join(s.vmDir, req.Name)
+	serviceLog.Infof("VM directory: %s", vmFolder)
+
+	// Create VM object
+	vm := &vbtypes.VM{
+		ID:         vmUuid,
+		Name:       req.Name,
+		Status:     vbtypes.Stopped, // Will be updated after starting
+		CPUCores:   req.CPUCores,
+		MemoryMB:   req.MemoryMB,
+		DiskSizeGB: req.DiskSizeGB,
+		VMFolder:   vmFolder,
+	}
+
+	// Store VM metadata in datastore
+	if err := s.storeVMMetadata(ctx, vm); err != nil {
+		serviceLog.Warnf("Failed to store VM metadata in datastore: %v", err)
+	}
+
+	// Set up SSH port forwarding BEFORE starting the VM
+	serviceLog.Infof("Setting up SSH port forwarding for VM: %s", req.Name)
+	hostPort, err := getAvailablePort()
+	if err != nil {
+		serviceLog.Errorf("Failed to find available port for SSH forwarding: %v", err)
+		// Continue without port forwarding - it's not critical for VM operation
+	} else {
+		if err := s.vboxExec.SetupSSHPortForward(req.Name, hostPort, 22); err != nil {
+			serviceLog.Errorf("Failed to set up SSH port forwarding: %v", err)
+			// Continue without port forwarding - it's not critical for VM operation
+		} else {
+			serviceLog.Infof("Successfully set up SSH port forwarding: host port %d -> guest port 22", hostPort)
+			vm.SSHPort = hostPort
+		}
+	}
+
+	// Update stored metadata with running status and SSH port
+	if err := s.storeVMMetadata(ctx, vm); err != nil {
+		serviceLog.Warnf("Failed to update VM metadata with running status: %v", err)
+	}
+
+	serviceLog.Infof("Successfully created VM: %s", req.Name)
+	return vm, nil
 }
