@@ -13,6 +13,7 @@ func RootCmd() *cobra.Command {
 		configPath string
 		dataPath   string
 		debug      bool
+		pass       string
 	)
 
 	cmd := &cobra.Command{
@@ -26,13 +27,14 @@ func RootCmd() *cobra.Command {
 			}
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			subnet.Main(dataPath, &configPath)
+			subnet.Main(dataPath, &configPath, pass)
 		},
 	}
 
 	cmd.PersistentFlags().StringVarP(&configPath, "config", "c", "", "Path to config file or directory")
 	cmd.PersistentFlags().StringVarP(&dataPath, "datadir", "d", "~/.subnet-node", "Path to data directory")
 	cmd.PersistentFlags().BoolVarP(&debug, "debug", "", false, "Enable debug logging")
+	cmd.PersistentFlags().StringVarP(&pass, "password", "p", "", "Password for the account")
 
 	cmd.AddCommand(versionCmd())
 	cmd.AddCommand(ninit.InitCmd())

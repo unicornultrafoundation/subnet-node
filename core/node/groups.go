@@ -10,6 +10,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/config"
+	"github.com/unicornultrafoundation/subnet-node/core/account"
 	"github.com/unicornultrafoundation/subnet-node/core/node/libp2p"
 	"github.com/unicornultrafoundation/subnet-node/p2p"
 	"go.uber.org/fx"
@@ -249,22 +250,42 @@ func Subnet(ctx context.Context, bcfg *BuildCfg) fx.Option {
 		fx.Provide(baseProcess),
 		Storage(bcfg),
 		Core(cfg),
-		maybeProvide(SubnetBidEngine(bcfg, cfg), cfg.GetBool("bidengine.enabled", false)),
-		maybeProvide(SubnetVPN(bcfg, cfg), cfg.GetBool("vpn.enabled", false)),
+		SubnetBidEngine(bcfg, cfg),
+		SubnetVPN(bcfg, cfg),
+		SubnetDeployer(bcfg, cfg),
 	)
 }
 
 func SubnetBidEngine(bcfg *BuildCfg, cfg *config.C) fx.Option {
+	if !cfg.GetBool("bidengine.enable", false) {
+		return fx.Options()
+	}
+
 	return fx.Options(
+		fx.Provide(account.EthereumService),
 		fx.Provide(BidengineService),
 	)
 }
 
 func SubnetVPN(bcfg *BuildCfg, cfg *config.C) fx.Option {
+	if !cfg.GetBool("vpn.enable", false) {
+		return fx.Options()
+	}
+
 	return fx.Options(
 		Identity(cfg),
 		IPNS,
 		Online(bcfg, cfg),
 		fx.Provide(VPNService),
+	)
+}
+
+func SubnetDeployer(bcfg *BuildCfg, cfg *config.C) fx.Option {
+	if !cfg.GetBool("deployer.enable", false) {
+		return fx.Options()
+	}
+
+	return fx.Options(
+		fx.Provide(DeployerService),
 	)
 }

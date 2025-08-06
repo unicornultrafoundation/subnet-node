@@ -6,6 +6,7 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -63,14 +64,41 @@ type ServiceConfig struct {
 	MaxRetries           int
 }
 
+// readPasswordFromFile reads password from a file if the path is provided
+func readPasswordFromFile(passwordPath string) (string, error) {
+	if passwordPath == "" {
+		return "", nil
+	}
+
+	// Check if it's a file path
+	if _, err := os.Stat(passwordPath); err == nil {
+		// File exists, read password from it
+		passwordBytes, err := os.ReadFile(passwordPath)
+		if err != nil {
+			return "", fmt.Errorf("failed to read password file %s: %w", passwordPath, err)
+		}
+		// Trim whitespace and newlines from password
+		return strings.TrimSpace(string(passwordBytes)), nil
+	}
+
+	// Not a file path, return as is
+	return passwordPath, nil
+}
+
 // NewServiceConfig creates a new ServiceConfig from the application config
 func NewServiceConfig(cfg *config.C) (*ServiceConfig, error) {
+	passwordPath := cfg.GetString("password", os.Getenv("ACCOUNT_PASSWORD"))
+	password, err := readPasswordFromFile(passwordPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read password: %w", err)
+	}
+
 	sc := &ServiceConfig{
 		RPCURL:               cfg.GetString("account.rpc", config.DefaultRPC),
 		ChainID:              int64(cfg.GetInt("account.chainid", config.DefaultChainID)),
 		SubnetIPRegistryAddr: cfg.GetString("apps.subnet_ip_registry", config.DefaultSubnetIP),
 		SubnetProviderAddr:   cfg.GetString("apps.subnet_provider", config.DefaultSubnetProviderAddr),
-		Password:             cfg.GetString("account.password", os.Getenv("ACCOUNT_PASSWORD")),
+		Password:             password,
 		ClientTimeout:        cfg.GetDuration("account.client_timeout", 30*time.Second),
 		MaxRetries:           cfg.GetInt("account.max_retries", 3),
 	}

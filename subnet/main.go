@@ -23,13 +23,13 @@ import (
 
 var log = logrus.WithField("service", "subnet")
 
-func Main(repoPath string, configPath *string) {
-	if err := run(repoPath, configPath); err != nil {
+func Main(repoPath string, configPath *string, pass string) {
+	if err := run(repoPath, configPath, pass); err != nil {
 		log.Fatal(err)
 	}
 }
 
-func run(repoPath string, configPath *string) error {
+func run(repoPath string, configPath *string, pass string) error {
 	// let the user know we're going.
 	if !snrepo.IsInitialized(repoPath) {
 		log.Printf("Initializing Subnet Node...\n")
@@ -47,6 +47,12 @@ func run(repoPath string, configPath *string) error {
 	}
 
 	defer r.Close()
+
+	settings := r.Config().Settings
+
+	if pass != "" {
+		settings["password"] = pass
+	}
 
 	node, err := core.NewNode(context.Background(), &core.BuildCfg{
 		Repo:   r,
