@@ -295,7 +295,7 @@ func (e *VBoxManageExecutor) SetupStorage(vmName string, req vbtypes.VMCreateReq
 	// Create virtual disk
 	diskPath := filepath.Join(e.vmDir, vmName, fmt.Sprintf("%s.vdi", vmName))
 	diskSizeGB := req.DiskSizeGB
-	if _, err := e.createVirtualDisk(vmName, diskPath, diskSizeGB); err != nil {
+	if _, err := e.createVirtualDisk(diskPath, diskSizeGB); err != nil {
 		return fmt.Errorf("failed to create virtual disk: %w", err)
 	}
 
@@ -327,14 +327,14 @@ func (e *VBoxManageExecutor) SetupStorage(vmName string, req vbtypes.VMCreateReq
 }
 
 // StartVM starts a VM
-func (e *VBoxManageExecutor) StartVM(vmName string, headless bool) error {
-	vboxLog.Infof("Starting VM: %s (headless: %v)", vmName, headless)
+func (e *VBoxManageExecutor) StartVM(vmId string, headless bool) error {
+	vboxLog.Infof("Starting VM: %s (headless: %v)", vmId, headless)
 
 	var cmd *exec.Cmd
 	if headless {
-		cmd = exec.Command("VBoxManage", "startvm", vmName, "--type", "headless")
+		cmd = exec.Command("VBoxManage", "startvm", vmId, "--type", "headless")
 	} else {
-		cmd = exec.Command("VBoxManage", "startvm", vmName)
+		cmd = exec.Command("VBoxManage", "startvm", vmId)
 	}
 
 	output, err := cmd.CombinedOutput()
@@ -342,83 +342,83 @@ func (e *VBoxManageExecutor) StartVM(vmName string, headless bool) error {
 		return fmt.Errorf("failed to start VM: %w, output: %s", err, string(output))
 	}
 
-	vboxLog.Infof("VM started successfully: %s", vmName)
+	vboxLog.Infof("VM started successfully: %s", vmId)
 	return nil
 }
 
 // StopVM stops a VM
-func (e *VBoxManageExecutor) StopVM(vmName string) error {
-	vboxLog.Infof("Stopping VM: %s", vmName)
+func (e *VBoxManageExecutor) StopVM(vmId string) error {
+	vboxLog.Infof("Stopping VM: %s", vmId)
 
-	cmd := exec.Command("VBoxManage", "controlvm", vmName, "poweroff")
+	cmd := exec.Command("VBoxManage", "controlvm", vmId, "poweroff")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to stop VM: %w, output: %s", err, string(output))
 	}
 
-	vboxLog.Infof("VM stopped successfully: %s", vmName)
+	vboxLog.Infof("VM stopped successfully: %s", vmId)
 	return nil
 }
 
 // PauseVM pauses a VM
-func (e *VBoxManageExecutor) PauseVM(vmName string) error {
-	vboxLog.Infof("Pausing VM: %s", vmName)
+func (e *VBoxManageExecutor) PauseVM(vmId string) error {
+	vboxLog.Infof("Pausing VM: %s", vmId)
 
-	cmd := exec.Command("VBoxManage", "controlvm", vmName, "pause")
+	cmd := exec.Command("VBoxManage", "controlvm", vmId, "pause")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to pause VM: %w, output: %s", err, string(output))
 	}
 
-	vboxLog.Infof("VM paused successfully: %s", vmName)
+	vboxLog.Infof("VM paused successfully: %s", vmId)
 	return nil
 }
 
 // ResumeVM resumes a VM
-func (e *VBoxManageExecutor) ResumeVM(vmName string) error {
-	vboxLog.Infof("Resuming VM: %s", vmName)
+func (e *VBoxManageExecutor) ResumeVM(vmId string) error {
+	vboxLog.Infof("Resuming VM: %s", vmId)
 
-	cmd := exec.Command("VBoxManage", "controlvm", vmName, "resume")
+	cmd := exec.Command("VBoxManage", "controlvm", vmId, "resume")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to resume VM: %w, output: %s", err, string(output))
 	}
 
-	vboxLog.Infof("VM resumed successfully: %s", vmName)
+	vboxLog.Infof("VM resumed successfully: %s", vmId)
 	return nil
 }
 
 // ResetVM resets a VM
-func (e *VBoxManageExecutor) ResetVM(vmName string) error {
-	vboxLog.Infof("Resetting VM: %s", vmName)
+func (e *VBoxManageExecutor) ResetVM(vmId string) error {
+	vboxLog.Infof("Resetting VM: %s", vmId)
 
-	cmd := exec.Command("VBoxManage", "controlvm", vmName, "reset")
+	cmd := exec.Command("VBoxManage", "controlvm", vmId, "reset")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to reset VM: %w, output: %s", err, string(output))
 	}
 
-	vboxLog.Infof("VM reset successfully: %s", vmName)
+	vboxLog.Infof("VM reset successfully: %s", vmId)
 	return nil
 }
 
 // DeleteVM deletes a VM and its associated files
-func (e *VBoxManageExecutor) DeleteVM(vmName string) error {
-	vboxLog.Infof("Deleting VM: %s", vmName)
+func (e *VBoxManageExecutor) DeleteVM(vmId string) error {
+	vboxLog.Infof("Deleting VM: %s", vmId)
 
-	cmd := exec.Command("VBoxManage", "unregistervm", vmName, "--delete")
+	cmd := exec.Command("VBoxManage", "unregistervm", vmId, "--delete")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to delete VM: %w, output: %s", err, string(output))
 	}
 
-	vboxLog.Infof("VM deleted successfully: %s", vmName)
+	vboxLog.Infof("VM deleted successfully: %s", vmId)
 	return nil
 }
 
 // GetVMStatus gets the current status of a VM
-func (e *VBoxManageExecutor) GetVMStatus(vmName string) (string, error) {
-	cmd := exec.Command("VBoxManage", "showvminfo", vmName, "--machinereadable")
+func (e *VBoxManageExecutor) GetVMStatus(vmId string) (string, error) {
+	cmd := exec.Command("VBoxManage", "showvminfo", vmId, "--machinereadable")
 	output, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("failed to get VM status: %w", err)
@@ -531,15 +531,15 @@ func (e *VBoxManageExecutor) setIOAPIC(vmName string, enabled bool) error {
 	return err
 }
 
-func (e *VBoxManageExecutor) setBootOrder(vmName string) error {
+func (e *VBoxManageExecutor) setBootOrder(vmId string) error {
 	vboxLog.Infof("Setting boot order")
-	_, err := e.executeCommand("modifyvm", vmName, "--boot1", "dvd", "--boot2", "disk", "--boot3", "none", "--boot4", "none")
+	_, err := e.executeCommand("modifyvm", vmId, "--boot1", "dvd", "--boot2", "disk", "--boot3", "none", "--boot4", "none")
 	return err
 }
 
-func (e *VBoxManageExecutor) configureInputDevices(vmName string) error {
+func (e *VBoxManageExecutor) configureInputDevices(vmId string) error {
 	vboxLog.Infof("Configuring input devices")
-	_, err := e.executeCommand("modifyvm", vmName, "--mouse", "usbtablet", "--keyboard", "usb")
+	_, err := e.executeCommand("modifyvm", vmId, "--mouse", "usbtablet", "--keyboard", "usb")
 	return err
 }
 
@@ -659,7 +659,7 @@ func (e *VBoxManageExecutor) configureAudioWithSettings(vmName, controller, outp
 }
 
 // createVirtualDisk creates a virtual disk for a VM
-func (e *VBoxManageExecutor) createVirtualDisk(vmName string, diskPath string, diskSizeGB int) (string, error) {
+func (e *VBoxManageExecutor) createVirtualDisk(diskPath string, diskSizeGB int) (string, error) {
 	vboxLog.Infof("Creating virtual disk")
 
 	_, err := e.executeCommand("createhd", "--filename", diskPath, "--size", fmt.Sprintf("%d", diskSizeGB*1024), "--format", "VDI")

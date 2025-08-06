@@ -25,7 +25,6 @@ type Service interface {
 	GetSystemInfo(ctx context.Context) (*VMSystemInfo, error)
 
 	// ISO Management
-	DownloadISO(ctx context.Context, isoURL string) (*ISOInfo, error)
 	ListOSTypes(ctx context.Context) ([]string, error)
 
 	// SSH Token Management
@@ -62,13 +61,14 @@ type VBoxManageExecutor interface {
 	GenerateCloudInitISO(cloudInitDir string) (string, error)
 	AttachCloudInitISO(vmName, isoPath string) error
 	SetupStorage(vmName string, req VMCreateRequest, isoPath string, cloudInitISO string) error
-	StartVM(vmName string, headless bool) error
-	StopVM(vmName string) error
-	PauseVM(vmName string) error
-	ResumeVM(vmName string) error
-	ResetVM(vmName string) error
-	DeleteVM(vmName string) error
-	GetVMStatus(vmName string) (string, error)
+
+	StartVM(vmId string, headless bool) error
+	StopVM(vmId string) error
+	PauseVM(vmId string) error
+	ResumeVM(vmId string) error
+	ResetVM(vmId string) error
+	DeleteVM(vmId string) error
+	GetVMStatus(vmId string) (string, error)
 	ListVMs() ([]string, error)
 	CheckVBoxManageVersion() (string, error)
 }

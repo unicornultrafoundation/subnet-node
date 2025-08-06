@@ -2,12 +2,14 @@ package virtualbox
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/common/fsutil"
 	"github.com/unicornultrafoundation/subnet-node/core/virtualbox/hardware_detector"
+	"github.com/unicornultrafoundation/subnet-node/core/virtualbox/storage"
 	vbtypes "github.com/unicornultrafoundation/subnet-node/core/virtualbox/types"
 )
 
@@ -54,20 +56,54 @@ func (s *VirtualboxService) handleVMRequest(ctx context.Context, request *vbtype
 func (s *VirtualboxService) handleCreateVMRequest(ctx context.Context, request *vbtypes.VMRequest) {
 	serviceLog.WithField("vmName", request.VMName).Info("Handling VM creation request")
 
-	// Extract request data
-	reqData, ok := request.Data["request"].(vbtypes.VMCreateRequest)
+	// Extract job ID from request data
+	jobID, ok := request.Data["jobID"].(string)
+	if !ok {
+		serviceLog.WithField("vmName", request.VMName).Error("Failed to extract job ID from request data")
+		return
+	}
+
+	// Start the job
+	if err := s.jobManager.StartJob(ctx, jobID); err != nil {
+		serviceLog.WithFields(logrus.Fields{
+			"vmName": request.VMName,
+			"jobID":  jobID,
+			"error":  err,
+		}).Error("Failed to start job")
+		return
+	}
+
+	// Extract request data using JSON marshaling/unmarshaling
+	reqData, err := extractVMCreateRequest(request.Data["request"])
+	if err != nil {
+		serviceLog.WithField("vmName", request.VMName).Error("Failed to extract create request from request data")
+		// Fail the job
+		if failErr := s.jobManager.FailJob(ctx, jobID, "Failed to extract create request from request data"); failErr != nil {
+			serviceLog.WithError(failErr).Error("Failed to mark job as failed")
+		}
+		return
+	}
 	if !ok {
 		serviceLog.WithField("vmName", request.VMName).Error("Failed to extract create request from request data")
+		// Fail the job
+		if failErr := s.jobManager.FailJob(ctx, jobID, "Failed to extract create request from request data"); failErr != nil {
+			serviceLog.WithError(failErr).Error("Failed to mark job as failed")
+		}
 		return
 	}
 
 	// Perform the actual VM creation
-	vm, err := s.performCreateVM(ctx, reqData)
+	vm, err := s.performCreateVM(ctx, *reqData)
 	if err != nil {
 		serviceLog.WithFields(logrus.Fields{
 			"vmName": request.VMName,
 			"error":  err,
 		}).Error("Failed to create VM")
+
+		// Fail the job
+		if failErr := s.jobManager.FailJob(ctx, jobID, err.Error()); failErr != nil {
+			serviceLog.WithError(failErr).Error("Failed to mark job as failed")
+		}
 		return
 	}
 
@@ -76,29 +112,75 @@ func (s *VirtualboxService) handleCreateVMRequest(ctx context.Context, request *
 	request.VMName = vm.Name
 	request.VMStatus = vm.Status
 
+	// Complete the job with success
+	result := map[string]interface{}{
+		"vm_id":        vm.ID,
+		"vm_name":      vm.Name,
+		"vm_status":    vm.Status,
+		"cpu_cores":    vm.CPUCores,
+		"memory_mb":    vm.MemoryMB,
+		"disk_size_gb": vm.DiskSizeGB,
+		"vm_folder":    vm.VMFolder,
+	}
+
+	if err := s.jobManager.CompleteJob(ctx, jobID, vm.ID, result); err != nil {
+		serviceLog.WithFields(logrus.Fields{
+			"vmName": request.VMName,
+			"jobID":  jobID,
+			"error":  err,
+		}).Error("Failed to mark job as completed")
+	}
+
 	serviceLog.WithFields(logrus.Fields{
 		"vmID":   vm.ID,
 		"vmName": vm.Name,
+		"jobID":  jobID,
 	}).Info("VM creation completed successfully")
 }
 
 func (s *VirtualboxService) handleCreateTemplateVMRequest(ctx context.Context, request *vbtypes.VMRequest) {
 	serviceLog.WithField("vmName", request.VMName).Info("Handling VM template creation request")
 
-	// Extract request data
-	reqData, ok := request.Data["request"].(vbtypes.VMCreateRequest)
+	// Extract job ID from request data
+	jobID, ok := request.Data["jobID"].(string)
 	if !ok {
+		serviceLog.WithField("vmName", request.VMName).Error("Failed to extract job ID from request data")
+		return
+	}
+
+	// Start the job
+	if err := s.jobManager.StartJob(ctx, jobID); err != nil {
+		serviceLog.WithFields(logrus.Fields{
+			"vmName": request.VMName,
+			"jobID":  jobID,
+			"error":  err,
+		}).Error("Failed to start job")
+		return
+	}
+
+	// Extract request data using JSON marshaling/unmarshaling
+	reqData, err := extractVMCreateRequest(request.Data["request"])
+	if err != nil {
 		serviceLog.WithField("vmName", request.VMName).Error("Failed to extract create request from request data")
+		// Fail the job
+		if failErr := s.jobManager.FailJob(ctx, jobID, "Failed to extract create request from request data"); failErr != nil {
+			serviceLog.WithError(failErr).Error("Failed to mark job as failed")
+		}
 		return
 	}
 
 	// Perform the actual VM template creation
-	vm, err := s.performCreateTemplateVM(ctx, reqData)
+	vm, err := s.performCreateTemplateVM(ctx, *reqData)
 	if err != nil {
 		serviceLog.WithFields(logrus.Fields{
 			"vmName": request.VMName,
 			"error":  err,
 		}).Error("Failed to create VM template")
+
+		// Fail the job
+		if failErr := s.jobManager.FailJob(ctx, jobID, err.Error()); failErr != nil {
+			serviceLog.WithError(failErr).Error("Failed to mark job as failed")
+		}
 		return
 	}
 
@@ -107,9 +189,29 @@ func (s *VirtualboxService) handleCreateTemplateVMRequest(ctx context.Context, r
 	request.VMName = vm.Name
 	request.VMStatus = vm.Status
 
+	// Complete the job with success
+	result := map[string]interface{}{
+		"vm_id":        vm.ID,
+		"vm_name":      vm.Name,
+		"vm_status":    vm.Status,
+		"cpu_cores":    vm.CPUCores,
+		"memory_mb":    vm.MemoryMB,
+		"disk_size_gb": vm.DiskSizeGB,
+		"vm_folder":    vm.VMFolder,
+	}
+
+	if err := s.jobManager.CompleteJob(ctx, jobID, vm.ID, result); err != nil {
+		serviceLog.WithFields(logrus.Fields{
+			"vmName": request.VMName,
+			"jobID":  jobID,
+			"error":  err,
+		}).Error("Failed to mark job as completed")
+	}
+
 	serviceLog.WithFields(logrus.Fields{
 		"vmID":   vm.ID,
 		"vmName": vm.Name,
+		"jobID":  jobID,
 	}).Info("VM template creation completed successfully")
 }
 
@@ -243,6 +345,169 @@ func (s *VirtualboxService) performCreateTemplateVM(ctx context.Context, req vbt
 	// Store VM metadata in datastore
 	if err := s.storeVMMetadata(ctx, vm); err != nil {
 		serviceLog.Warnf("Failed to store VM metadata in datastore: %v", err)
+	}
+
+	serviceLog.Infof("Successfully created VM: %s", req.Name)
+	return vm, nil
+}
+
+// extractVMCreateRequest safely extracts VMCreateRequest from interface{}
+func extractVMCreateRequest(data interface{}) (*vbtypes.VMCreateRequest, error) {
+	switch v := data.(type) {
+	case vbtypes.VMCreateRequest:
+		return &v, nil
+	case *vbtypes.VMCreateRequest:
+		return v, nil
+	case map[string]interface{}:
+		// Convert map to JSON bytes, then unmarshal to struct
+		jsonBytes, err := json.Marshal(v)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal map to JSON: %w", err)
+		}
+
+		var req vbtypes.VMCreateRequest
+		if err := json.Unmarshal(jsonBytes, &req); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal JSON to VMCreateRequest: %w", err)
+		}
+		return &req, nil
+	default:
+		return nil, fmt.Errorf("unsupported type for VMCreateRequest: %T", data)
+	}
+}
+
+// performCreateVM performs the actual VM creation (moved from CreateVM)
+func (s *VirtualboxService) performCreateVM(ctx context.Context, req vbtypes.VMCreateRequest) (*vbtypes.VM, error) {
+	// Validate system resources before creating VM
+	serviceLog.Infof("Validating system resources...")
+	if err := s.validateResources(ctx, req); err != nil {
+		return nil, fmt.Errorf("resource validation failed: %w", err)
+	}
+	serviceLog.Infof("Resource validation passed")
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	serviceLog.Infof("Creating and starting VM from OVA template: %s", req.Name)
+
+	// Find the OVA file in ~/VirtualBox VMs/Templates/
+	ovaPathRaw := "~/VirtualBox VMs/Templates/template_sample_" + req.OSType + ".ova"
+	ovaPath, err := fsutil.ExpandHome(ovaPathRaw)
+	if err != nil {
+		return nil, fmt.Errorf("failed to expand home in OVA path: %w", err)
+	}
+	if !fsutil.FileExists(ovaPath) {
+		templatesDir, _ := fsutil.ExpandHome("~/VirtualBox VMs/Templates")
+		if err := fsutil.DirWritable(templatesDir); err != nil {
+			return nil, fmt.Errorf("failed to ensure Templates dir: %w", err)
+		}
+		// Fetch OVA index and get URL for this OS type
+		ovaURL, err := storage.GetOVAURLForOSType(req.OSType)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get OVA URL for OS type %s: %w", req.OSType, err)
+		}
+		serviceLog.Infof("Downloading OVA template from %s to %s", ovaURL, ovaPath)
+		if err := storage.DownloadFile(ovaPath, ovaURL); err != nil {
+			return nil, fmt.Errorf("failed to download OVA: %w", err)
+		}
+		serviceLog.Infof("OVA template downloaded successfully")
+	}
+
+	// Import the OVA as the new VM
+	serviceLog.Infof("Importing OVA template: %s", ovaPath)
+	if err := s.vboxExec.ImportOVA(ovaPath, req.Name); err != nil {
+		return nil, fmt.Errorf("failed to import OVA template: %w", err)
+	}
+	serviceLog.Infof("OVA template imported successfully")
+
+	// Get the actual UUID from VBoxManage for the imported VM
+	output, err := s.vboxExec.executeCommand("showvminfo", req.Name, "--machinereadable")
+	if err != nil {
+		return nil, fmt.Errorf("failed to get VM info for UUID: %w", err)
+	}
+	vmInfo := s.parseMachineReadableOutput(output)
+	vmUuid := vmInfo["UUID"]
+	if vmUuid == "" {
+		return nil, fmt.Errorf("could not retrieve VM UUID from VBoxManage output")
+	}
+
+	// Update VM hardware configuration to match the request
+	serviceLog.Infof("Updating VM hardware configuration...")
+	if err := s.vboxExec.UpdateCPUCores(req.Name, req.CPUCores); err != nil {
+		serviceLog.Errorf("Failed to update CPU cores: %v", err)
+		// Clean up on failure
+		serviceLog.Infof("Cleaning up failed VM...")
+		if delErr := s.vboxExec.DeleteVM(req.Name); delErr != nil {
+			serviceLog.Errorf("Failed to delete VM during cleanup: %v", delErr)
+		}
+		return nil, fmt.Errorf("failed to update CPU cores: %w", err)
+	}
+
+	if err := s.vboxExec.UpdateMemory(req.Name, req.MemoryMB); err != nil {
+		serviceLog.Errorf("Failed to update memory: %v", err)
+		// Clean up on failure
+		serviceLog.Infof("Cleaning up failed VM...")
+		if delErr := s.vboxExec.DeleteVM(req.Name); delErr != nil {
+			serviceLog.Errorf("Failed to delete VM during cleanup: %v", delErr)
+		}
+		return nil, fmt.Errorf("failed to update memory: %w", err)
+	}
+
+	// Generate new cloud-init ISO for the imported VM
+	serviceLog.Infof("Generating cloud-init ISO for imported VM...")
+	cloudInitISO, err := s.generateCloneVMCloudInitISO(req.Name, req.Username, req.Password)
+	if err != nil {
+		serviceLog.Errorf("Failed to generate cloud-init ISO: %v", err)
+		// Continue without cloud-init ISO - it's not critical for VM creation
+	}
+
+	// Attach the new cloud-init ISO to the imported VM
+	if cloudInitISO != "" {
+		serviceLog.Infof("Attaching cloud-init ISO to imported VM...")
+		if err := s.vboxExec.AttachCloudInitISO(req.Name, cloudInitISO); err != nil {
+			serviceLog.Warnf("Failed to attach cloud-init ISO: %v", err)
+			// Continue without cloud-init ISO - it's not critical for VM operation
+		}
+	}
+
+	// Create VM directory
+	vmFolder := filepath.Join(s.vmDir, req.Name)
+	serviceLog.Infof("VM directory: %s", vmFolder)
+
+	// Create VM object
+	vm := &vbtypes.VM{
+		ID:         vmUuid,
+		Name:       req.Name,
+		Status:     vbtypes.Stopped, // Will be updated after starting
+		CPUCores:   req.CPUCores,
+		MemoryMB:   req.MemoryMB,
+		DiskSizeGB: req.DiskSizeGB,
+		VMFolder:   vmFolder,
+	}
+
+	// Store VM metadata in datastore
+	if err := s.storeVMMetadata(ctx, vm); err != nil {
+		serviceLog.Warnf("Failed to store VM metadata in datastore: %v", err)
+	}
+
+	// Set up SSH port forwarding BEFORE starting the VM
+	serviceLog.Infof("Setting up SSH port forwarding for VM: %s", req.Name)
+	hostPort, err := getAvailablePort()
+	if err != nil {
+		serviceLog.Errorf("Failed to find available port for SSH forwarding: %v", err)
+		// Continue without port forwarding - it's not critical for VM operation
+	} else {
+		if err := s.vboxExec.SetupSSHPortForward(req.Name, hostPort, 22); err != nil {
+			serviceLog.Errorf("Failed to set up SSH port forwarding: %v", err)
+			// Continue without port forwarding - it's not critical for VM operation
+		} else {
+			serviceLog.Infof("Successfully set up SSH port forwarding: host port %d -> guest port 22", hostPort)
+			vm.SSHPort = hostPort
+		}
+	}
+
+	// Update stored metadata with running status and SSH port
+	if err := s.storeVMMetadata(ctx, vm); err != nil {
+		serviceLog.Warnf("Failed to update VM metadata with running status: %v", err)
 	}
 
 	serviceLog.Infof("Successfully created VM: %s", req.Name)

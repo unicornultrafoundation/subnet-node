@@ -159,21 +159,10 @@ const (
 	JobStatusCancelled JobStatus = "cancelled"
 )
 
-// JobType represents the type of job
-type JobType string
-
-const (
-	JobTypeCreateVM         JobType = "create_vm"
-	JobTypeCreateTemplateVM JobType = "create_template_vm"
-	JobTypeDeleteVM         JobType = "delete_vm"
-	JobTypeStartVM          JobType = "start_vm"
-	JobTypeStopVM           JobType = "stop_vm"
-)
-
 // Job represents a background job
 type Job struct {
 	ID          string                 `json:"id"`
-	Type        JobType                `json:"type"`
+	EventType   VMEventType            `json:"event_type"`
 	Status      JobStatus              `json:"status"`
 	Request     map[string]interface{} `json:"request"`
 	Result      map[string]interface{} `json:"result,omitempty"`

@@ -34,7 +34,7 @@ func (jm *JobManager) Start(ctx context.Context) error {
 }
 
 // CreateJob creates a new job and returns its ID
-func (jm *JobManager) CreateJob(ctx context.Context, jobType vbtypes.JobType, request map[string]interface{}, vmName string) (*vbtypes.Job, error) {
+func (jm *JobManager) CreateJob(ctx context.Context, jobType vbtypes.VMEventType, request map[string]interface{}, vmName string) (*vbtypes.Job, error) {
 	jm.mu.Lock()
 	defer jm.mu.Unlock()
 
@@ -42,7 +42,7 @@ func (jm *JobManager) CreateJob(ctx context.Context, jobType vbtypes.JobType, re
 
 	job := &vbtypes.Job{
 		ID:        jobID,
-		Type:      jobType,
+		EventType: jobType,
 		Status:    vbtypes.JobStatusPending,
 		Request:   request,
 		CreatedAt: time.Now(),
@@ -52,13 +52,30 @@ func (jm *JobManager) CreateJob(ctx context.Context, jobType vbtypes.JobType, re
 	// Store job in memory
 	jm.jobs[jobID] = job
 
-	jobLog.WithFields(logrus.Fields{
-		"jobID":  jobID,
-		"type":   jobType,
-		"vmName": vmName,
-	}).Info("Created new job")
+	vmRequest := &vbtypes.VMRequest{
+		Type:      jobType,
+		VMID:      "",
+		VMName:    vmName,
+		VMStatus:  vbtypes.Stopped,
+		Timestamp: time.Now(),
+		Data: map[string]interface{}{
+			"request": request,
+			"jobID":   jobID,
+		},
+	}
 
-	return job, nil
+	select {
+	case jm.GetRequestChannel() <- vmRequest:
+		jobLog.WithFields(logrus.Fields{
+			"vmName": vmName,
+			"jobID":  job.ID,
+		}).Info("VM template creation request added to channel")
+		return job, nil
+	default:
+		// Clean up the job if we can't process it
+		jm.FailJob(ctx, job.ID, "Request channel is full")
+		return nil, fmt.Errorf("request channel is full")
+	}
 }
 
 // GetJob retrieves a job by ID
@@ -98,7 +115,7 @@ func (jm *JobManager) StartJob(ctx context.Context, jobID string) error {
 }
 
 // CompleteJob marks a job as completed with optional result
-func (jm *JobManager) CompleteJob(ctx context.Context, jobID string, result map[string]interface{}) error {
+func (jm *JobManager) CompleteJob(ctx context.Context, jobID string, vmID string, result map[string]interface{}) error {
 	jm.mu.Lock()
 	defer jm.mu.Unlock()
 
@@ -109,12 +126,13 @@ func (jm *JobManager) CompleteJob(ctx context.Context, jobID string, result map[
 
 	job.Status = vbtypes.JobStatusCompleted
 	job.Result = result
+	job.VMID = vmID
 	now := time.Now()
 	job.CompletedAt = &now
 
 	jobLog.WithFields(logrus.Fields{
 		"jobID": jobID,
-		"type":  job.Type,
+		"type":  job.EventType,
 	}).Info("Job completed successfully")
 
 	return nil
@@ -137,7 +155,7 @@ func (jm *JobManager) FailJob(ctx context.Context, jobID string, errorMsg string
 
 	jobLog.WithFields(logrus.Fields{
 		"jobID": jobID,
-		"type":  job.Type,
+		"type":  job.EventType,
 		"error": errorMsg,
 	}).Error("Job failed")
 
@@ -164,7 +182,7 @@ func (jm *JobManager) CancelJob(ctx context.Context, jobID string) error {
 
 	jobLog.WithFields(logrus.Fields{
 		"jobID": jobID,
-		"type":  job.Type,
+		"type":  job.EventType,
 	}).Info("Job cancelled")
 
 	return nil
@@ -209,7 +227,7 @@ func (jm *JobManager) CleanupOldJobs(ctx context.Context, maxAge time.Duration) 
 	return nil
 }
 
-func generateJobID(jobType vbtypes.JobType, vmName string) string {
+func generateJobID(jobType vbtypes.VMEventType, vmName string) string {
 	timestamp := time.Now().Unix()
 	return fmt.Sprintf("%s-%s-%d", jobType, vmName, timestamp)
 }
