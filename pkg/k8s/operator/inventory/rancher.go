@@ -96,7 +96,7 @@ func (c *rancher) run(startch chan<- struct{}) error {
 
 	events := bus.Sub(topicKubeNS, topicKubeSC, topicKubeNodes)
 
-	log := fromctx.LogrFromCtx(c.ctx).WithName("rancher")
+	log := fromctx.LogrFromCtx(c.ctx).WithField("service", "rancher").Logger
 	kc := fromctx.MustKubeClientFromCtx(c.ctx)
 
 	scs := make(rancherStorageClasses)

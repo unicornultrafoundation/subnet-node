@@ -1,6 +1,7 @@
 package operator
 
 import (
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/troian/pubsub"
@@ -22,6 +23,10 @@ func OperatorsCmd() *cobra.Command {
 		Short:        "kubernetes operators control",
 		SilenceUsage: true,
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
+			log := logrus.New()
+			log.SetLevel(logrus.DebugLevel)
+			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyLogc, log)
+
 			group, ctx := errgroup.WithContext(cmd.Context())
 
 			kubecfg, err := fromctx.KubeConfigFromCtx(cmd.Context())

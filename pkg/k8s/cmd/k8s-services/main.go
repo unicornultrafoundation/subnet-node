@@ -6,11 +6,12 @@ import (
 	"os"
 	"os/signal"
 
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
+	"github.com/unicornultrafoundation/subnet-node/core/k8s/kube/clientcommon"
 	kcmd "github.com/unicornultrafoundation/subnet-node/pkg/k8s/cmd/k8s-services/cmd"
 	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/operator/common"
 	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/tools/fromctx"
-	"k8s.io/client-go/tools/clientcmd"
 )
 
 func run() error {
@@ -19,13 +20,14 @@ func run() error {
 
 	rootCmd := kcmd.NewRootCmd()
 
-	// set up k8s
+	// set up k8s using the proper OpenKubeConfig function that handles in-cluster auth
 	kubeconfig := rootCmd.PersistentFlags().String(common.FlagKubeConfig, common.KubeConfigDefaultPath, "kubernetes configuration file path")
 	if err := viper.BindPFlag(common.FlagKubeConfig, rootCmd.PersistentFlags().Lookup(common.FlagKubeConfig)); err != nil {
 		panic(err)
 	}
 
-	config, err := clientcmd.BuildConfigFromFlags("", *kubeconfig)
+	logger := logrus.New().WithField("service", "k8s-services").Logger
+	config, err := clientcommon.OpenKubeConfig(*kubeconfig, logger)
 	if err != nil {
 		fmt.Printf("failed to build kubeconfig: %v\n", err)
 		os.Exit(1)

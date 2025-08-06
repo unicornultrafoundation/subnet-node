@@ -287,11 +287,19 @@ func Cmd() *cobra.Command {
 		panic(err)
 	}
 
+	// Bind environment variables for pod name and namespace
+	if err = viper.BindEnv(FlagPodName, "AP_POD_NAME"); err != nil {
+		panic(err)
+	}
+	if err = viper.BindEnv(FlagPodNamespace, "AP_POD_NAMESPACE"); err != nil {
+		panic(err)
+	}
+
 	return cmd
 }
 
 func configWatcher(ctx context.Context, file string) error {
-	log := fromctx.LogrFromCtx(ctx).WithName("watcher.config")
+	log := fromctx.LogrFromCtx(ctx).WithField("service", "watcher.config").Logger
 
 	defer func() {
 		log.Info("stopped")
@@ -352,7 +360,7 @@ func configWatcher(ctx context.Context, file string) error {
 
 // this function is piece of sh*t. refactor it!
 func registryLoader(ctx context.Context) error {
-	log := fromctx.LogrFromCtx(ctx).WithName("watcher.registry")
+	log := fromctx.LogrFromCtx(ctx).WithField("service", "watcher.registry").Logger
 	bus, err := fromctx.PubSubFromCtx(ctx)
 	if err != nil {
 		return err
@@ -368,8 +376,6 @@ func registryLoader(ctx context.Context) error {
 		},
 	}
 
-	// TODO: Get the GPU vendor list from local file
-	urlGPU := fmt.Sprintf("%s/devices/gpus", strings.TrimSuffix(viper.GetString(FlagProviderConfigsURL), "/"))
 	urlPcieDB := viper.GetString(FlagPciDbURL)
 
 	var gpuCurrHash []byte
@@ -378,22 +384,10 @@ func registryLoader(ctx context.Context) error {
 	gpuIDs := make(RegistryGPUVendors)
 
 	queryGPUs := func() bool {
-		res, err := cl.Get(urlGPU)
+
+		gpus, err := json.Marshal(GetAllVendors())
 		if err != nil {
-			log.Error(err, "couldn't query inventory registry")
-			return false
-		}
-
-		defer func() {
-			_ = res.Body.Close()
-		}()
-
-		if res.StatusCode != http.StatusOK {
-			return false
-		}
-
-		gpus, err := io.ReadAll(res.Body)
-		if err != nil {
+			log.Error(err, "couldn't marshal gpu vendors")
 			return false
 		}
 
@@ -478,7 +472,7 @@ func registryLoader(ctx context.Context) error {
 }
 
 func scWatcher(ctx context.Context) error {
-	log := fromctx.LogrFromCtx(ctx).WithName("watcher.storageclasses")
+	log := fromctx.LogrFromCtx(ctx).WithField("service", "watcher.storageclasses").Logger
 
 	defer func() {
 		log.Info("stopped")

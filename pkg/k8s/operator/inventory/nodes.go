@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/go-logr/logr"
+	"github.com/sirupsen/logrus"
 	"github.com/troian/pubsub"
 	"golang.org/x/sync/errgroup"
 	corev1 "k8s.io/api/core/v1"
@@ -36,7 +36,7 @@ type clusterNodes struct {
 	querierNodes
 	ctx        context.Context
 	group      *errgroup.Group
-	log        logr.Logger
+	log        *logrus.Logger
 	kc         kubernetes.Interface
 	signaldone chan string
 	image      string
@@ -46,14 +46,14 @@ type clusterNodes struct {
 func newClusterNodes(ctx context.Context, image, namespace string) *clusterNodes {
 	kc := fromctx.MustKubeClientFromCtx(ctx)
 
-	log := fromctx.LogrFromCtx(ctx).WithName("nodes")
+	log := fromctx.LogrFromCtx(ctx).WithField("service", "nodes").Logger
 
 	group, ctx := errgroup.WithContext(ctx)
 
 	fd := &clusterNodes{
 		querierNodes: newQuerierNodes(),
 		log:          log,
-		ctx:          logr.NewContext(ctx, log),
+		ctx:          ctx,
 		group:        group,
 		kc:           kc,
 		signaldone:   make(chan string, 1),
@@ -79,7 +79,7 @@ func newClusterNodes(ctx context.Context, image, namespace string) *clusterNodes
 }
 
 func (cl *clusterNodes) Wait() error {
-	log := fromctx.LogrFromCtx(cl.ctx).WithName("nodes")
+	log := fromctx.LogrFromCtx(cl.ctx).WithField("service", "nodes").Logger
 
 	log.Info("waiting for nodes to finish")
 	err := cl.group.Wait()
@@ -91,7 +91,7 @@ func (cl *clusterNodes) Wait() error {
 func (cl *clusterNodes) connector() error {
 	ctx := cl.ctx
 	bus := fromctx.MustPubSubFromCtx(ctx)
-	log := fromctx.LogrFromCtx(ctx).WithName("nodes")
+	log := fromctx.LogrFromCtx(ctx).WithField("service", "nodes").Logger
 
 	events := bus.Sub(topicKubeNodes)
 	nodes := make(map[string]*nodeDiscovery)

@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	KubeConfigDefaultPath = "/home/duchuong.linux/.kube/config"
+	KubeConfigDefaultPath = "$HOME/.kube/config"
 )
 
 func AddKubeConfigPathFlag(cmd *cobra.Command) error {

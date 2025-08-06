@@ -17,7 +17,7 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/core/k8s/kube"
 	"github.com/unicornultrafoundation/subnet-node/core/k8s/kube/builder"
 
-	kubeinventory "github.com/unicornultrafoundation/subnet-node/core/k8s/types/v1/clients/inventory"
+	kubeinventory "github.com/unicornultrafoundation/subnet-node/core/k8s/kube/operators/clients/inventory"
 	cfromctx "github.com/unicornultrafoundation/subnet-node/core/k8s/types/v1/fromctx"
 	subnetclientset "github.com/unicornultrafoundation/subnet-node/pkg/k8s/client/clientset/versioned"
 
@@ -32,6 +32,7 @@ import (
 func K8sService(lc fx.Lifecycle, cfg *config.C, account *account.AccountService) (k8s.Service, error) {
 	ctx := context.Background()
 	logger := logrus.New().WithField("service", "k8s").Logger
+	ctx = context.WithValue(ctx, fromctx.CtxKeyLogc, logger)
 
 	// set up k8s
 	kubeconfig := cfg.GetString("deployer.kubeconfig_path", "")
@@ -56,8 +57,11 @@ func K8sService(lc fx.Lifecycle, cfg *config.C, account *account.AccountService)
 	}
 	ctx = context.WithValue(ctx, fromctx.CtxKeySubnetClientSet, subnetClientset)
 
-	// temporary inventory
-	inventory := kubeinventory.NewNull(ctx, "nodeA")
+	inventory, err := kubeinventory.NewClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create inventory client: %w", err)
+	}
+
 	ctx = context.WithValue(ctx, cfromctx.CtxKeyClientInventory, inventory)
 
 	group, ctx := errgroup.WithContext(ctx)

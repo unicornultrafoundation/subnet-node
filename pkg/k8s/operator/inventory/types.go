@@ -27,7 +27,6 @@ const (
 	FlagPodName             = "pod-name"
 	FlagPodNamespace        = "pod-namespace"
 	FlagConfig              = "config"
-	FlagProviderConfigsURL  = "provider-configs-url"
 	FlagPciDbURL            = "provider-pcidb-url"
 	FlagRegistryQueryPeriod = "registry-query-period"
 	FlagDiscoveryImage      = "discovery-image"

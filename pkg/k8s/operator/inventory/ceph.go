@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-logr/logr"
 	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
 	rookclientset "github.com/rook/rook/pkg/client/clientset/versioned"
 	rookifactory "github.com/rook/rook/pkg/client/informers/externalversions"
+	"github.com/sirupsen/logrus"
 	inventory "github.com/unicornultrafoundation/subnet-node/proto/subnet/k8s/inventory/v1"
 	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
@@ -148,7 +148,7 @@ func NewCeph(ctx context.Context) (QuerierStorage, error) {
 	return c, nil
 }
 
-func (c *ceph) crdInstalled(log logr.Logger, rc *rookclientset.Clientset) bool {
+func (c *ceph) crdInstalled(log *logrus.Logger, rc *rookclientset.Clientset) bool {
 	groups, err := rc.Discovery().ServerGroups()
 	if err != nil {
 		log.Error(err, "discover server groups")
@@ -171,7 +171,7 @@ func (c *ceph) run(startch chan<- struct{}) error {
 
 	defer bus.Unsub(events)
 
-	log := fromctx.LogrFromCtx(c.ctx).WithName("rook-ceph")
+	log := fromctx.LogrFromCtx(c.ctx).WithField("service", "rook-ceph").Logger
 
 	clusters := make(cephClusters)
 	scs := make(cephStorageClasses)
@@ -391,7 +391,7 @@ func (c *ceph) run(startch chan<- struct{}) error {
 }
 
 func (c *ceph) scraper() error {
-	log := fromctx.LogrFromCtx(c.ctx).WithName("rook-ceph")
+	log := fromctx.LogrFromCtx(c.ctx).WithField("service", "rook-ceph").Logger
 
 	for {
 		select {

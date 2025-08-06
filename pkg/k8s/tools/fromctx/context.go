@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/go-logr/logr"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/troian/pubsub"
@@ -70,8 +69,8 @@ func LogcFromCtx(ctx context.Context, opts ...LogcOption) *logrus.Logger {
 	return logger
 }
 
-func LogrFromCtx(ctx context.Context) logr.Logger {
-	lg, _ := logr.FromContext(ctx)
+func LogrFromCtx(ctx context.Context) *logrus.Logger {
+	lg, _ := ctx.Value(CtxKeyLogc).(*logrus.Logger)
 	return lg
 }
 

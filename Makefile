@@ -56,3 +56,8 @@ proto-check-breaking: check-proto-deps
 proto-check-breaking-ci:
 	@go run github.com/bufbuild/buf/cmd/buf breaking --against $(HTTPS_GIT)#branch=v0.34.x
 .PHONY: proto-check-breaking-ci
+
+kustomize-deploy-subnet-operator-inventory:
+	@echo "Deploying subnet-operator-inventory"
+	@kubectl kustomize pkg/k8s/kustomize/subnet-operator-inventory | kubectl apply -f-
+.PHONY: kustomize-deploy-subnet-operator-inventory

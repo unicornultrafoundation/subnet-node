@@ -154,7 +154,7 @@ func (dp *nodeDiscovery) queryGPU(ctx context.Context) (*gpu.Info, error) {
 func (dp *nodeDiscovery) apiConnector() error {
 	ctx := dp.ctx
 
-	log := fromctx.LogrFromCtx(ctx).WithName("node.discovery")
+	log := fromctx.LogrFromCtx(ctx).WithField("service", "node.discovery").Logger
 
 	defer func() {
 		log.Info("shutting down hardware discovery pod", "node", dp.name)
@@ -192,7 +192,6 @@ func (dp *nodeDiscovery) apiConnector() error {
 					Image:           dp.image,
 					ImagePullPolicy: corev1.PullIfNotPresent, // or corev1.PullNever for local-only
 					Args: []string{
-						"k8s-services",
 						"tools",
 						"psutil",
 						"serve",
@@ -357,7 +356,7 @@ func isPodAllocated(status corev1.PodStatus) bool {
 
 func (dp *nodeDiscovery) monitor() error {
 	ctx := dp.ctx
-	log := fromctx.LogrFromCtx(ctx).WithName("node.monitor")
+	log := fromctx.LogrFromCtx(ctx).WithField("service", "node.monitor").Logger
 
 	bus := fromctx.MustPubSubFromCtx(ctx)
 	kc := fromctx.MustKubeClientFromCtx(ctx)
@@ -891,7 +890,7 @@ func generateLabels(cfg Config, knode *corev1.Node, node v1.Node, sc storageClas
 }
 
 func (dp *nodeDiscovery) parseCPUInfo(ctx context.Context) v1.CPUInfoS {
-	log := fromctx.LogrFromCtx(ctx).WithName("node.monitor")
+	log := fromctx.LogrFromCtx(ctx).WithField("service", "node.monitor").Logger
 
 	cpus, err := dp.queryCPU(ctx)
 	if err != nil {
@@ -916,7 +915,7 @@ func (dp *nodeDiscovery) parseCPUInfo(ctx context.Context) v1.CPUInfoS {
 func (dp *nodeDiscovery) parseGPUInfo(ctx context.Context, info RegistryGPUVendors) v1.GPUInfoS {
 	res := make(v1.GPUInfoS, 0)
 
-	log := fromctx.LogrFromCtx(ctx).WithName("node.monitor")
+	log := fromctx.LogrFromCtx(ctx).WithField("service", "node.monitor").Logger
 
 	gpus, err := dp.queryGPU(ctx)
 	if err != nil {
