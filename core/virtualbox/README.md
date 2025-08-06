@@ -180,7 +180,7 @@ To create your own template OVA:
        Password:   "template-password",
    }
 
-   vm, err := service.CreateVM(ctx, req)
+   vm, err := service.CreateTemplateVM(ctx, req)
    ```
 
 2. Start the VM and install any necessary software and configurations
@@ -222,7 +222,19 @@ This process ensures that when new VMs are created from your template, they will
 
 ## VM Creation Strategy
 
-The service follows a streamlined approach to VM creation:
+The service follows an asynchronous job-based approach to VM creation for better scalability and user experience:
+
+### Asynchronous Job Processing
+
+1. **Request Submission**: VM creation requests are submitted through the `CreateVM` API
+2. **Job Creation**: The request is immediately converted to a job and stored in the job manager
+3. **Queue Processing**: The request is added to a buffered channel (queue) for background processing
+4. **Background Execution**: A dedicated worker processes requests from the queue asynchronously
+5. **Progress Tracking**: Job status and progress can be monitored through the job management APIs
+
+### VM Creation Flow
+
+When a VM creation request is processed from the queue:
 
 1. **Resource Validation**: Check if sufficient system resources are available
 2. **OVA Template Selection**: Choose appropriate OVA based on requested OS type
@@ -232,7 +244,14 @@ The service follows a streamlined approach to VM creation:
 6. **Network Configuration**: Set up SSH port forwarding for remote access
 7. **VM Startup**: Boot the VM with the new configuration
 
-This approach provides faster VM creation compared to installing from scratch, with consistent configuration across deployments.
+### Job Management
+
+- **Job Status**: Jobs can be in `Pending`, `Running`, `Completed`, `Failed`, or `Cancelled` states
+- **Progress Monitoring**: Use `GetJobProgress` to check job status and results
+- **Job Cancellation**: Long-running jobs can be cancelled using `CancelJob`
+- **Automatic Cleanup**: Completed and failed jobs are automatically cleaned up after 24 hours
+
+This approach provides faster VM creation compared to installing from scratch, with consistent configuration across deployments, while allowing for better resource management and user experience through asynchronous processing.
 
 ## Usage Examples
 
@@ -249,12 +268,14 @@ req := vbtypes.VMCreateRequest{
     Password:   "secure-password",
 }
 
-vm, err := service.CreateAndStartVM(ctx, req)
+// Submit VM creation request (returns immediately with job ID)
+jobResponse, err := service.CreateVM(ctx, req)
 if err != nil {
-    log.Fatalf("Failed to create VM: %v", err)
+    log.Fatalf("Failed to submit VM creation request: %v", err)
 }
 
-log.Printf("VM created successfully: %s, SSH Port: %d", vm.Name, vm.SSHPort)
+log.Printf("VM creation job submitted: %s", jobResponse.JobID)
+
 ```
 
 ### Managing VMs
@@ -271,6 +292,37 @@ vm, err = service.StopVM(ctx, vmID)
 
 // Delete VM
 err = service.DeleteVM(ctx, vmID)
+```
+
+### Job Management
+
+```go
+// Get job progress
+job, err := service.GetJobProgress(ctx, jobID)
+if err != nil {
+    log.Fatalf("Failed to get job: %v", err)
+}
+
+log.Printf("Job %s: %s", job.ID, job.Status)
+if job.Status == vbtypes.JobStatusCompleted {
+    log.Printf("VM created: %s", job.Result["vm_id"])
+}
+
+// List all jobs
+jobs, err := service.ListJobs(ctx)
+if err != nil {
+    log.Fatalf("Failed to list jobs: %v", err)
+}
+
+for _, job := range jobs {
+    log.Printf("Job %s: %s - %s", job.ID, job.EventType, job.Status)
+}
+
+// Cancel a job
+err = service.CancelJob(ctx, jobID)
+if err != nil {
+    log.Fatalf("Failed to cancel job: %v", err)
+}
 ```
 
 ### SSH Connection Examples
@@ -421,6 +473,49 @@ if err := sshConn.Connect("admin", "password"); err != nil {
 - **Concurrent Connections**: Multiple SSH connections can run simultaneously with thread-safe operations
 - **Memory Usage**: Each connection maintains minimal state and properly cleans up resources
 - **Network Efficiency**: Binary WebSocket messages are used for optimal data transfer
+
+## SSH WebSocket Connection Flow
+
+To connect to a Virtual Machine via SSH using WebSocket, follow these steps:
+
+### Step 1: Generate SSH Token
+
+First, generate a one-time SSH access token using the JSON-RPC API:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "virtualbox_generateSSHToken",
+  "params": ["
+  ef944449-d2c8-4c91-9c0e-f23e8ec46b8e",
+  "ubuntu",
+  "ubuntu"
+  ],
+  "id": 1
+}
+```
+
+**Parameters:**
+
+- `vmId`: The UUID of the target VM
+- `username`: SSH username
+- `password`: SSH password
+
+### Step 2: Connect via WebSocket
+
+Use the returned token to establish a WebSocket connection:
+
+```
+ws://localhost:8081/api/v1/vms/{vmId}/ssh?token={generated_token}
+```
+
+**Example:**
+
+```
+ws://localhost:8081/api/v1/vms/683c12f6-8af8-4cef-b8a9-960fa50e803d/ssh?token=abc123def456
+```
+
+The WebSocket connection provides a secure SSH terminal session to the VM.
 
 ## Architecture-Specific Considerations
 

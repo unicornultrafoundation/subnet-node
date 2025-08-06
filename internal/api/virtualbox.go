@@ -262,11 +262,6 @@ func (api *VirtualBoxAPI) GenerateSSHToken(ctx context.Context, vmID string, use
 	return api.vboxService.GenerateSSHToken(ctx, vmID, username, password)
 }
 
-// GetJobProgress retrieves the progress of a job
-func (api *VirtualBoxAPI) GetJobProgress(ctx context.Context, jobID string) (*vbtypes.Job, error) {
-	return api.vboxService.GetJobProgress(ctx, jobID)
-}
-
 // ListJobs returns all jobs
 func (api *VirtualBoxAPI) ListJobs(ctx context.Context) ([]*vbtypes.Job, error) {
 	return api.vboxService.ListJobs(ctx)
