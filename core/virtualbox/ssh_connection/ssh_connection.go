@@ -1,4 +1,4 @@
-package virtualbox
+package ssh_connection
 
 import (
 	"fmt"

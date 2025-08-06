@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/core/virtualbox"
+	"github.com/unicornultrafoundation/subnet-node/core/virtualbox/ssh_connection"
 	vbtypes "github.com/unicornultrafoundation/subnet-node/core/virtualbox/types"
 	"github.com/unicornultrafoundation/subnet-node/internal/api/ws"
 )
@@ -165,7 +166,7 @@ func (api *VirtualBoxAPI) GetVM(ctx context.Context, vmID string) (*vmResult, er
 	return convertToVMResult(vm), nil
 }
 
-func (api *VirtualBoxAPI) CreateTemplateVM(ctx context.Context, name string, cpuCores int, memoryMB int, diskSizeGB int, osType string, username string, password string) {
+func (api *VirtualBoxAPI) CreateTemplateVM(ctx context.Context, name string, cpuCores int, memoryMB int, diskSizeGB int, osType string, username string, password string) (*vbtypes.JobCreateResponse, error) {
 	vbReq := vbtypes.VMCreateRequest{
 		Name:       name,
 		CPUCores:   cpuCores,
@@ -176,10 +177,10 @@ func (api *VirtualBoxAPI) CreateTemplateVM(ctx context.Context, name string, cpu
 		Password:   password,
 	}
 
-	api.vboxService.CreateTemplateVM(ctx, vbReq)
+	return api.vboxService.CreateTemplateVM(ctx, vbReq)
 }
 
-func (api *VirtualBoxAPI) CreateVM(ctx context.Context, name string, cpuCores int, memoryMB int, diskSizeGB int, osType string, username string, password string) {
+func (api *VirtualBoxAPI) CreateVM(ctx context.Context, name string, cpuCores int, memoryMB int, diskSizeGB int, osType string, username string, password string) (*vbtypes.JobCreateResponse, error) {
 	vbReq := vbtypes.VMCreateRequest{
 		Name:       name,
 		CPUCores:   cpuCores,
@@ -190,7 +191,7 @@ func (api *VirtualBoxAPI) CreateVM(ctx context.Context, name string, cpuCores in
 		Password:   password,
 	}
 
-	api.vboxService.CreateVM(ctx, vbReq)
+	return api.vboxService.CreateVM(ctx, vbReq)
 }
 
 func (api *VirtualBoxAPI) UpdateVM(ctx context.Context, vmID string, name string, cpuCores int, memoryMB int, diskSizeGB int) (*vmResult, error) {
@@ -259,6 +260,26 @@ func (api *VirtualBoxAPI) ListOSTypes(ctx context.Context) ([]string, error) {
 
 func (api *VirtualBoxAPI) GenerateSSHToken(ctx context.Context, vmID string, username string, password string) (*vbtypes.SSHTokenResponse, error) {
 	return api.vboxService.GenerateSSHToken(ctx, vmID, username, password)
+}
+
+// GetJobProgress retrieves the progress of a job
+func (api *VirtualBoxAPI) GetJobProgress(ctx context.Context, jobID string) (*vbtypes.Job, error) {
+	return api.vboxService.GetJobProgress(ctx, jobID)
+}
+
+// ListJobs returns all jobs
+func (api *VirtualBoxAPI) ListJobs(ctx context.Context) ([]*vbtypes.Job, error) {
+	return api.vboxService.ListJobs(ctx)
+}
+
+// GetJob returns a job by ID
+func (api *VirtualBoxAPI) GetJob(ctx context.Context, jobID string) (*vbtypes.Job, error) {
+	return api.vboxService.GetJobProgress(ctx, jobID)
+}
+
+// CancelJob cancels a job
+func (api *VirtualBoxAPI) CancelJob(ctx context.Context, jobID string) error {
+	return api.vboxService.CancelJob(ctx, jobID)
 }
 
 // Router returns the chi router with all VirtualBox routes
@@ -350,7 +371,7 @@ func (api *VirtualBoxAPI) vmSSHWebSocketHandler(w http.ResponseWriter, r *http.R
 
 	// Create SSH connection
 	sshServer := api.vboxService.GetSSHServer()
-	sshConn := virtualbox.NewSSHConnection(vmID, conn, sshServer)
+	sshConn := ssh_connection.NewSSHConnection(vmID, conn, sshServer)
 
 	// Verify VM exists in SSHServer configs
 	_, exists := sshServer.GetVMConfig(vmID)

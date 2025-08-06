@@ -1,4 +1,4 @@
-package virtualbox
+package hardware_detector
 
 import (
 	"testing"
@@ -7,8 +7,7 @@ import (
 )
 
 func TestHardwareDetector_DetectHardware(t *testing.T) {
-	detector := NewHardwareDetector()
-	hardware, err := detector.DetectHardware()
+	hardware, err := DetectHardware()
 
 	// Hardware detection should not fail
 	assert.NoError(t, err)
@@ -27,11 +26,10 @@ func TestHardwareDetector_DetectHardware(t *testing.T) {
 }
 
 func TestHardwareDetector_GetVirtualBoxSettings(t *testing.T) {
-	detector := NewHardwareDetector()
-	hardware, err := detector.DetectHardware()
+	hardware, err := DetectHardware()
 	assert.NoError(t, err)
 
-	settings := detector.GetVirtualBoxSettings(hardware)
+	settings := GetVirtualBoxSettings(hardware)
 	assert.NotNil(t, settings)
 
 	// Settings should be populated
@@ -49,8 +47,6 @@ func TestHardwareDetector_GetVirtualBoxSettings(t *testing.T) {
 }
 
 func TestHardwareDetector_DetermineOSType(t *testing.T) {
-	detector := NewHardwareDetector()
-
 	tests := []struct {
 		arch     string
 		expected string
@@ -67,14 +63,12 @@ func TestHardwareDetector_DetermineOSType(t *testing.T) {
 
 	for _, test := range tests {
 		hardware := &HardwareInfo{Architecture: test.arch}
-		result := detector.determineOSType(hardware)
+		result := determineOSType(hardware)
 		assert.Equal(t, test.expected, result, "Architecture: %s", test.arch)
 	}
 }
 
 func TestHardwareDetector_DetermineChipset(t *testing.T) {
-	detector := NewHardwareDetector()
-
 	tests := []struct {
 		arch     string
 		expected string
@@ -91,14 +85,12 @@ func TestHardwareDetector_DetermineChipset(t *testing.T) {
 
 	for _, test := range tests {
 		hardware := &HardwareInfo{Architecture: test.arch}
-		result := detector.determineChipset(hardware)
+		result := determineChipset(hardware)
 		assert.Equal(t, test.expected, result, "Architecture: %s", test.arch)
 	}
 }
 
 func TestHardwareDetector_DetermineFirmware(t *testing.T) {
-	detector := NewHardwareDetector()
-
 	tests := []struct {
 		arch     string
 		expected string
@@ -115,14 +107,12 @@ func TestHardwareDetector_DetermineFirmware(t *testing.T) {
 
 	for _, test := range tests {
 		hardware := &HardwareInfo{Architecture: test.arch}
-		result := detector.determineFirmware(hardware)
+		result := determineFirmware(hardware)
 		assert.Equal(t, test.expected, result, "Architecture: %s", test.arch)
 	}
 }
 
 func TestHardwareDetector_DetermineVRAM(t *testing.T) {
-	detector := NewHardwareDetector()
-
 	tests := []struct {
 		name     string
 		hardware *HardwareInfo
@@ -168,14 +158,12 @@ func TestHardwareDetector_DetermineVRAM(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		result := detector.determineVRAM(test.hardware)
+		result := determineVRAM(test.hardware)
 		assert.Equal(t, test.expected, result, "Test: %s", test.name)
 	}
 }
 
 func TestHardwareDetector_DetermineIOAPIC(t *testing.T) {
-	detector := NewHardwareDetector()
-
 	tests := []struct {
 		arch     string
 		expected bool
@@ -192,7 +180,7 @@ func TestHardwareDetector_DetermineIOAPIC(t *testing.T) {
 
 	for _, test := range tests {
 		hardware := &HardwareInfo{Architecture: test.arch}
-		result := detector.determineIOAPIC(hardware)
+		result := determineIOAPIC(hardware)
 		assert.Equal(t, test.expected, result, "Architecture: %s", test.arch)
 	}
 }

@@ -24,6 +24,9 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/common/fsutil"
 	"github.com/unicornultrafoundation/subnet-node/config"
 	"github.com/unicornultrafoundation/subnet-node/core/node/resource"
+	"github.com/unicornultrafoundation/subnet-node/core/virtualbox/hardware_detector"
+	"github.com/unicornultrafoundation/subnet-node/core/virtualbox/ssh_connection"
+	"github.com/unicornultrafoundation/subnet-node/core/virtualbox/storage"
 	vbtypes "github.com/unicornultrafoundation/subnet-node/core/virtualbox/types"
 )
 
@@ -31,27 +34,28 @@ var serviceLog = logrus.WithField("service", "virtualbox")
 
 // VirtualboxService implements the Service interface
 type VirtualboxService struct {
-	mu         sync.RWMutex
-	storageMgr StorageManager
 	vmDir      string
-	stopChan   chan struct{}
+	mu         sync.RWMutex
+	storageMgr *storage.StorageManagerImpl
 	vboxExec   *VBoxManageExecutor
 	datastore  datastore.Datastore
 	syncTicker *time.Ticker
-	sshServer  *SSHServer
+	sshServer  *ssh_connection.SSHServer
+	stopChan   chan struct{}
 
 	// Token management for SSH access
 	tokenMu            sync.RWMutex
 	tokens             map[string]*vbtypes.SSHAccessToken
 	tokenCleanupTicker *time.Ticker
 
-	requestChannel chan *vbtypes.VMRequest
+	// Job management
+	jobManager *JobManager
 }
 
 // NewService creates a new VirtualBox service
 func NewService(ds datastore.Datastore) (*VirtualboxService, error) {
 	// Create storage manager
-	storageMgr, err := NewStorageManager()
+	storageMgr, err := storage.NewStorageManager()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create storage manager: %w", err)
 	}
@@ -80,12 +84,12 @@ func NewService(ds datastore.Datastore) (*VirtualboxService, error) {
 		stopChan:   make(chan struct{}),
 		vboxExec:   NewVBoxManageExecutor(vmDir),
 		datastore:  ds,
-		sshServer:  NewSSHServer(),
+		sshServer:  ssh_connection.NewSSHServer(),
 
-		// Initialize token management
 		tokens:             make(map[string]*vbtypes.SSHAccessToken),
 		tokenCleanupTicker: time.NewTicker(5 * time.Minute), // Clean up expired tokens every 5 minutes
-		requestChannel:     make(chan *vbtypes.VMRequest, 100),
+
+		jobManager: NewJobManager(),
 	}
 
 	// Validate VirtualBox installation once during service creation
@@ -152,7 +156,23 @@ func (s *VirtualboxService) Stop(ctx context.Context) error {
 }
 
 // CreateTemplateVM is used when has issue with ova file
-func (s *VirtualboxService) CreateTemplateVM(ctx context.Context, req vbtypes.VMCreateRequest) (*vbtypes.VM, error) {
+func (s *VirtualboxService) CreateTemplateVM(ctx context.Context, req vbtypes.VMCreateRequest) (*vbtypes.JobCreateResponse, error) {
+	// Create a job for tracking progress
+	requestData := map[string]interface{}{
+		"name":         req.Name,
+		"cpu_cores":    req.CPUCores,
+		"memory_mb":    req.MemoryMB,
+		"disk_size_gb": req.DiskSizeGB,
+		"os_type":      req.OSType,
+		"username":     req.Username,
+		"password":     req.Password,
+	}
+
+	job, err := s.jobManager.CreateJob(ctx, vbtypes.JobTypeCreateTemplateVM, requestData, req.Name)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create job: %w", err)
+	}
+
 	// Add VM template creation request to channel for async processing
 	vmRequest := &vbtypes.VMRequest{
 		Type:      vbtypes.VMEventCreateTemplateVM,
@@ -162,24 +182,44 @@ func (s *VirtualboxService) CreateTemplateVM(ctx context.Context, req vbtypes.VM
 		Timestamp: time.Now(),
 		Data: map[string]interface{}{
 			"request": req,
+			"jobID":   job.ID,
 		},
 	}
 
 	select {
-	case s.requestChannel <- vmRequest:
-		serviceLog.WithField("vmName", req.Name).Info("VM template creation request added to channel")
-		// Return a placeholder VM object indicating the request was submitted
-		return &vbtypes.VM{
-			Name:   req.Name,
-			Status: vbtypes.Stopped,
+	case s.jobManager.GetRequestChannel() <- vmRequest:
+		serviceLog.WithFields(logrus.Fields{
+			"vmName": req.Name,
+			"jobID":  job.ID,
+		}).Info("VM template creation request added to channel")
+		return &vbtypes.JobCreateResponse{
+			JobID: job.ID,
 		}, nil
 	default:
+		// Clean up the job if we can't process it
+		s.jobManager.FailJob(ctx, job.ID, "Request channel is full")
 		return nil, fmt.Errorf("request channel is full")
 	}
 }
 
 // CreateVM creates a new VM by importing from an OVA template and starts it immediately
-func (s *VirtualboxService) CreateVM(ctx context.Context, req vbtypes.VMCreateRequest) (*vbtypes.VM, error) {
+func (s *VirtualboxService) CreateVM(ctx context.Context, req vbtypes.VMCreateRequest) (*vbtypes.JobCreateResponse, error) {
+	// Create a job for tracking progress
+	requestData := map[string]interface{}{
+		"name":         req.Name,
+		"cpu_cores":    req.CPUCores,
+		"memory_mb":    req.MemoryMB,
+		"disk_size_gb": req.DiskSizeGB,
+		"os_type":      req.OSType,
+		"username":     req.Username,
+		"password":     req.Password,
+	}
+
+	job, err := s.jobManager.CreateJob(ctx, vbtypes.JobTypeCreateVM, requestData, req.Name)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create job: %w", err)
+	}
+
 	// Add VM creation and start request to channel for async processing
 	vmRequest := &vbtypes.VMRequest{
 		Type:      vbtypes.VMEventCreateVM,
@@ -189,17 +229,22 @@ func (s *VirtualboxService) CreateVM(ctx context.Context, req vbtypes.VMCreateRe
 		Timestamp: time.Now(),
 		Data: map[string]interface{}{
 			"request": req,
+			"jobID":   job.ID,
 		},
 	}
 
 	select {
-	case s.requestChannel <- vmRequest:
-		serviceLog.WithField("vmName", req.Name).Info("VM creation and start request added to channel")
-		return &vbtypes.VM{
-			Name:   req.Name,
-			Status: vbtypes.Starting,
+	case s.jobManager.GetRequestChannel() <- vmRequest:
+		serviceLog.WithFields(logrus.Fields{
+			"vmName": req.Name,
+			"jobID":  job.ID,
+		}).Info("VM creation and start request added to channel")
+		return &vbtypes.JobCreateResponse{
+			JobID: job.ID,
 		}, nil
 	default:
+		// Clean up the job if we can't process it
+		s.jobManager.FailJob(ctx, job.ID, "Request channel is full")
 		return nil, fmt.Errorf("request channel is full")
 	}
 }
@@ -350,66 +395,6 @@ func (s *VirtualboxService) validateDiskResources(req vbtypes.VMCreateRequest, r
 
 	serviceLog.Infof("Disk validation passed: %d GB requested, %d GB available", req.DiskSizeGB, availableDiskGB)
 	return nil
-}
-
-// validateOSTypeCompatibility validates if the provided OS type is compatible with the detected hardware
-func (s *VirtualboxService) validateOSTypeCompatibility(requestedOSType string) error {
-	serviceLog.Infof("Validating OS type compatibility for: %s", requestedOSType)
-
-	// Detect hardware to determine appropriate OS type
-	detector := NewHardwareDetector()
-	hardware, err := detector.DetectHardware()
-	if err != nil {
-		serviceLog.Warnf("Hardware detection failed, skipping OS type validation: %v", err)
-		return nil // Skip validation if we can't detect hardware
-	}
-
-	// Get the appropriate OS type for the detected hardware
-	appropriateOSType := detector.determineOSType(hardware)
-	serviceLog.Infof("Detected hardware architecture: %s", hardware.Architecture)
-	serviceLog.Infof("Appropriate OS type for hardware: %s", appropriateOSType)
-	serviceLog.Infof("Requested OS type: %s", requestedOSType)
-
-	// Check if the requested OS type is compatible with the hardware architecture
-	if !s.isOSTypeCompatible(requestedOSType, hardware.Architecture) {
-		return fmt.Errorf("OS type '%s' is not compatible with hardware architecture '%s'. Recommended OS type: '%s'",
-			requestedOSType, hardware.Architecture, appropriateOSType)
-	}
-
-	serviceLog.Infof("OS type validation passed: %s is compatible with %s architecture", requestedOSType, hardware.Architecture)
-	return nil
-}
-
-// isOSTypeCompatible checks if an OS type is compatible with a given architecture
-func (s *VirtualboxService) isOSTypeCompatible(osType, architecture string) bool {
-	// Define compatibility matrix
-	compatibilityMap := map[string][]string{
-		"Ubuntu_ARM64": {"arm64", "aarch64"},
-		"Ubuntu_64":    {"amd64", "x86_64"},
-		"Ubuntu":       {"arm", "386", "i386", "amd64", "x86_64", "arm64", "aarch64"},
-		"Debian_ARM64": {"arm64", "aarch64"},
-		"Debian_64":    {"amd64", "x86_64"},
-		"Debian":       {"arm", "386", "i386", "amd64", "x86_64", "arm64", "aarch64"},
-		// "Windows_ARM64": {"arm64", "aarch64"},
-		// "Windows_64":    {"amd64", "x86_64"},
-		// "Windows":       {"amd64", "x86_64"},
-	}
-
-	// Check if the OS type is in our compatibility map
-	supportedArchitectures, exists := compatibilityMap[osType]
-	if !exists {
-		serviceLog.Warnf("Unknown OS type: %s, allowing it to pass validation", osType)
-		return true // Allow unknown OS types to pass validation
-	}
-
-	// Check if the architecture is supported by this OS type
-	for _, supportedArch := range supportedArchitectures {
-		if supportedArch == architecture {
-			return true
-		}
-	}
-
-	return false
 }
 
 // GetVM gets a VM by ID using VBoxManage
@@ -647,8 +632,6 @@ func (s *VirtualboxService) syncSSHServerWithRunningVMs(ctx context.Context) err
 	// Get all VMs
 	vms, _, err := s.GetVMs(ctx)
 
-	fmt.Println("vms", vms)
-
 	if err != nil {
 		return fmt.Errorf("failed to get VMs for SSHServer sync: %w", err)
 	}
@@ -659,8 +642,6 @@ func (s *VirtualboxService) syncSSHServerWithRunningVMs(ctx context.Context) err
 		s.sshServer.RemoveVMConfig(vmID)
 	}
 
-	fmt.Println("existingConfigs", existingConfigs)
-
 	// Add configurations for running VMs
 	for _, vm := range vms {
 		if vm.Status == vbtypes.Running && vm.SSHPort > 0 {
@@ -668,9 +649,6 @@ func (s *VirtualboxService) syncSSHServerWithRunningVMs(ctx context.Context) err
 			serviceLog.Infof("Synced running VM %s with SSHServer: localhost:%d", vm.ID, vm.SSHPort)
 		}
 	}
-
-	existingConfigs = s.sshServer.GetAllVMConfigs()
-	fmt.Println("existingConfigs", existingConfigs)
 
 	serviceLog.Infof("SSHServer sync completed. Registered %d running VMs", len(vms))
 	return nil
@@ -892,7 +870,7 @@ func (s *VirtualboxService) ListOSTypes(ctx context.Context) ([]string, error) {
 }
 
 // GetSSHServer returns the SSH server instance
-func (s *VirtualboxService) GetSSHServer() *SSHServer {
+func (s *VirtualboxService) GetSSHServer() *ssh_connection.SSHServer {
 	return s.sshServer
 }
 
@@ -1003,6 +981,21 @@ func (s *VirtualboxService) stopTokenCleanup() {
 	}
 }
 
+// GetJobProgress retrieves the progress of a job
+func (s *VirtualboxService) GetJobProgress(ctx context.Context, jobID string) (*vbtypes.Job, error) {
+	return s.jobManager.GetJob(ctx, jobID)
+}
+
+// ListJobs returns all jobs
+func (s *VirtualboxService) ListJobs(ctx context.Context) ([]*vbtypes.Job, error) {
+	return s.jobManager.ListJobs(ctx)
+}
+
+// CancelJob cancels a job
+func (s *VirtualboxService) CancelJob(ctx context.Context, jobID string) error {
+	return s.jobManager.CancelJob(ctx, jobID)
+}
+
 // ensureISO ensures an ISO file is available locally
 func (s *VirtualboxService) ensureISO(ctx context.Context, isoURL string) (string, error) {
 	if isoURL == "" {
@@ -1046,14 +1039,13 @@ func (s *VirtualboxService) configureVMHardwareWithVBoxManage(vmName string, req
 	serviceLog.Infof("Starting VM hardware configuration with VBoxManage...")
 
 	// Detect hardware and get appropriate settings
-	detector := NewHardwareDetector()
-	hardware, err := detector.DetectHardware()
+	hardware, err := hardware_detector.DetectHardware()
 	if err != nil {
 		serviceLog.Warnf("Hardware detection failed, using fallback settings: %v", err)
 		return s.configureVMHardwareWithVBoxManageFallback(vmName, req, osType)
 	}
 
-	settings := detector.GetVirtualBoxSettings(hardware)
+	settings := hardware_detector.GetVirtualBoxSettings(hardware)
 	serviceLog.Infof("Detected hardware: %+v", hardware)
 	serviceLog.Infof("Using VirtualBox settings: %+v", settings)
 
@@ -1251,7 +1243,7 @@ func (s *VirtualboxService) generateCloudInitISO(vmName string, username string,
 	}
 
 	serviceLog.Infof("Successfully generated cloud-init ISO for VM %s: %s", vmName, cloudInitISO)
-	serviceLog.Infof("VM %s cloud-init credentials - Username: %s, Password: %s", vmName, username, password)
+	serviceLog.Infof("VM %s cloud-init credentials - Username: %s", vmName, username)
 	return cloudInitISO, nil
 }
 
@@ -1635,12 +1627,12 @@ func (s *VirtualboxService) performCreateVM(ctx context.Context, req vbtypes.VMC
 			return nil, fmt.Errorf("failed to ensure Templates dir: %w", err)
 		}
 		// Fetch OVA index and get URL for this OS type
-		ovaURL, err := getOVAURLForOSType(req.OSType)
+		ovaURL, err := storage.GetOVAURLForOSType(req.OSType)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get OVA URL for OS type %s: %w", req.OSType, err)
 		}
 		serviceLog.Infof("Downloading OVA template from %s to %s", ovaURL, ovaPath)
-		if err := DownloadFile(ovaPath, ovaURL); err != nil {
+		if err := storage.DownloadFile(ovaPath, ovaURL); err != nil {
 			return nil, fmt.Errorf("failed to download OVA: %w", err)
 		}
 		serviceLog.Infof("OVA template downloaded successfully")

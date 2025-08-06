@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/unicornultrafoundation/subnet-node/common/fsutil"
-	"github.com/unicornultrafoundation/subnet-node/core/virtualbox"
+	"github.com/unicornultrafoundation/subnet-node/core/virtualbox/storage"
 )
 
 func main() {
@@ -16,7 +16,7 @@ func main() {
 	if len(os.Args) > 1 {
 		osTypes = os.Args[1:]
 	} else {
-		for osType := range virtualbox.DefaultOVAURLs() {
+		for osType := range storage.DefaultOVAURLs() {
 			osTypes = append(osTypes, osType)
 		}
 	}
@@ -28,7 +28,7 @@ func main() {
 	}
 
 	for _, osType := range osTypes {
-		url, ok := virtualbox.DefaultOVAURLs()[osType]
+		url, ok := storage.DefaultOVAURLs()[osType]
 		if !ok {
 			fmt.Printf("No URL for OS type: %s\n", osType)
 			continue
@@ -52,7 +52,7 @@ func main() {
 
 // DownloadFileWithProgress downloads a file and prints progress to stdout
 func DownloadFileWithProgress(filepath string, url string) error {
-	resp, err := virtualbox.HTTPGetWithProgress(url)
+	resp, err := storage.HTTPGetWithProgress(url)
 	if err != nil {
 		return err
 	}
@@ -65,7 +65,7 @@ func DownloadFileWithProgress(filepath string, url string) error {
 		return err
 	}
 	defer out.Close()
-	written, err := virtualbox.CopyWithProgress(out, resp.Body, resp.ContentLength)
+	written, err := storage.CopyWithProgress(out, resp.Body, resp.ContentLength)
 	if err == nil {
 		fmt.Printf("  Downloaded %d bytes\n", written)
 	}

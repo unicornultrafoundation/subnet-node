@@ -7,6 +7,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/common/fsutil"
+	"github.com/unicornultrafoundation/subnet-node/core/virtualbox/hardware_detector"
 	vbtypes "github.com/unicornultrafoundation/subnet-node/core/virtualbox/types"
 )
 
@@ -18,7 +19,7 @@ func (s *VirtualboxService) StartWorker(ctx context.Context) {
 func (s *VirtualboxService) processRequests(ctx context.Context) {
 	for {
 		select {
-		case request := <-s.requestChannel:
+		case request := <-s.jobManager.GetRequestChannel():
 			go s.handleVMRequest(ctx, request)
 		case <-s.stopChan:
 			serviceLog.Info("Request processing stopped")
@@ -129,7 +130,7 @@ func (s *VirtualboxService) performCreateTemplateVM(ctx context.Context, req vbt
 	// Validate OS type compatibility with hardware if provided
 	if req.OSType != "" {
 		serviceLog.Infof("Validating OS type compatibility: %s", req.OSType)
-		if err := s.validateOSTypeCompatibility(req.OSType); err != nil {
+		if err := hardware_detector.ValidateOSTypeCompatibility(req.OSType); err != nil {
 			return nil, fmt.Errorf("OS type validation failed: %w", err)
 		}
 		serviceLog.Infof("OS type validation passed")

@@ -1,4 +1,4 @@
-package virtualbox
+package storage
 
 import (
 	"context"
@@ -14,6 +14,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/common/fsutil"
+	"github.com/unicornultrafoundation/subnet-node/core/virtualbox/hardware_detector"
 	vbtypes "github.com/unicornultrafoundation/subnet-node/core/virtualbox/types"
 )
 
@@ -244,7 +245,7 @@ func (s *StorageManagerImpl) DetermineOSTypeAndISO(ctx context.Context, req vbty
 	storageLog.Infof("Determined OS type: %s", osType)
 
 	// Step 2: Determine ISO URL
-	isoURL, err := s.determineISOURL(req, osType)
+	isoURL, err := s.determineISOURL(osType)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to determine ISO URL: %w", err)
 	}
@@ -268,8 +269,7 @@ func (s *StorageManagerImpl) determineOSType(req vbtypes.VMCreateRequest) (strin
 	}
 
 	// Use hardware detection to determine appropriate OS type
-	detector := NewHardwareDetector()
-	hardwareInfo, err := detector.DetectHardware()
+	hardwareInfo, err := hardware_detector.DetectHardware()
 	if err != nil {
 		storageLog.Warnf("Hardware detection failed, falling back to architecture-based detection: %v", err)
 		// Fallback to architecture-based detection
@@ -286,7 +286,7 @@ func (s *StorageManagerImpl) determineOSType(req vbtypes.VMCreateRequest) (strin
 }
 
 // determineISOURL determines the appropriate ISO URL based on request and OS type
-func (s *StorageManagerImpl) determineISOURL(req vbtypes.VMCreateRequest, osType string) (string, error) {
+func (s *StorageManagerImpl) determineISOURL(osType string) (string, error) {
 
 	// Determine ISO URL based on OS type
 	isoURL := s.getISOURLForOSType(osType)
@@ -344,7 +344,7 @@ func (s *StorageManagerImpl) getOSTypeForArchitecture(arch string) string {
 }
 
 // getOSTypeForHardware returns the appropriate OS type based on hardware information
-func (s *StorageManagerImpl) getOSTypeForHardware(hardwareInfo *HardwareInfo) string {
+func (s *StorageManagerImpl) getOSTypeForHardware(hardwareInfo *hardware_detector.HardwareInfo) string {
 	// Use the architecture from hardware detection
 	switch hardwareInfo.Architecture {
 	case "arm64", "aarch64":

@@ -1,4 +1,4 @@
-package virtualbox
+package types
 
 import (
 	"time"
@@ -146,4 +146,46 @@ type VMEvent struct {
 	VMStatus  VMStatus               `json:"vm_status"`
 	Timestamp time.Time              `json:"timestamp"`
 	Data      map[string]interface{} `json:"data"`
+}
+
+// JobStatus represents the status of a background job
+type JobStatus string
+
+const (
+	JobStatusPending   JobStatus = "pending"
+	JobStatusRunning   JobStatus = "running"
+	JobStatusCompleted JobStatus = "completed"
+	JobStatusFailed    JobStatus = "failed"
+	JobStatusCancelled JobStatus = "cancelled"
+)
+
+// JobType represents the type of job
+type JobType string
+
+const (
+	JobTypeCreateVM         JobType = "create_vm"
+	JobTypeCreateTemplateVM JobType = "create_template_vm"
+	JobTypeDeleteVM         JobType = "delete_vm"
+	JobTypeStartVM          JobType = "start_vm"
+	JobTypeStopVM           JobType = "stop_vm"
+)
+
+// Job represents a background job
+type Job struct {
+	ID          string                 `json:"id"`
+	Type        JobType                `json:"type"`
+	Status      JobStatus              `json:"status"`
+	Request     map[string]interface{} `json:"request"`
+	Result      map[string]interface{} `json:"result,omitempty"`
+	Error       string                 `json:"error,omitempty"`
+	CreatedAt   time.Time              `json:"created_at"`
+	StartedAt   *time.Time             `json:"started_at,omitempty"`
+	CompletedAt *time.Time             `json:"completed_at,omitempty"`
+	VMID        string                 `json:"vm_id,omitempty"`
+	VMName      string                 `json:"vm_name,omitempty"`
+}
+
+// JobCreateResponse represents the response when creating a job
+type JobCreateResponse struct {
+	JobID string `json:"job_id"`
 }

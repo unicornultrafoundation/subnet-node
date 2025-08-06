@@ -11,6 +11,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/common/fsutil"
+	"github.com/unicornultrafoundation/subnet-node/core/virtualbox/hardware_detector"
 	"github.com/unicornultrafoundation/subnet-node/core/virtualbox/templates"
 	vbtypes "github.com/unicornultrafoundation/subnet-node/core/virtualbox/types"
 )
@@ -93,15 +94,14 @@ func (e *VBoxManageExecutor) ConfigureVMHardware(vmName string, cpuCount int, me
 	vboxLog.Infof("Configuring VM hardware for: %s", vmName)
 
 	// Detect hardware and get appropriate settings
-	detector := NewHardwareDetector()
-	hardware, err := detector.DetectHardware()
+	hardware, err := hardware_detector.DetectHardware()
 	if err != nil {
 		vboxLog.Warnf("Hardware detection failed, using fallback settings: %v", err)
 		// Fallback to basic settings
 		return e.configureVMHardwareFallback(vmName, cpuCount, memoryMB)
 	}
 
-	settings := detector.GetVirtualBoxSettings(hardware)
+	settings := hardware_detector.GetVirtualBoxSettings(hardware)
 	vboxLog.Infof("Detected hardware: %+v", hardware)
 	vboxLog.Infof("Using VirtualBox settings: %+v", settings)
 

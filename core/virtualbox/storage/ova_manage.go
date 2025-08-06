@@ -1,4 +1,4 @@
-package virtualbox
+package storage
 
 import (
 	"fmt"
@@ -15,7 +15,7 @@ var defaultOVAURLs = map[string]string{
 }
 
 // getOVAURLForOSType returns the OVA URL for the given OS type from the hardcoded map
-func getOVAURLForOSType(osType string) (string, error) {
+func GetOVAURLForOSType(osType string) (string, error) {
 	url, ok := defaultOVAURLs[osType]
 	if !ok {
 		return "", fmt.Errorf("no OVA for OS type %s", osType)

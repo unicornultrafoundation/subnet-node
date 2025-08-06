@@ -1,4 +1,4 @@
-package virtualbox
+package hardware_detector
 
 import (
 	"fmt"
@@ -43,79 +43,97 @@ type VirtualBoxSettings struct {
 	AudioInput         string `json:"audio_input"`
 }
 
-// HardwareDetector provides hardware detection capabilities
-type HardwareDetector struct{}
-
-// NewHardwareDetector creates a new hardware detector
-func NewHardwareDetector() *HardwareDetector {
-	return &HardwareDetector{}
-}
-
 // DetectHardware detects the current system hardware
-func (d *HardwareDetector) DetectHardware() (*HardwareInfo, error) {
+func DetectHardware() (*HardwareInfo, error) {
 	info := &HardwareInfo{
 		Architecture: runtime.GOARCH,
 		OSType:       runtime.GOOS,
 	}
 
 	// Detect CPU information
-	if err := d.detectCPU(info); err != nil {
+	if err := detectCPU(info); err != nil {
 		hardwareLog.Warnf("Failed to detect CPU: %v", err)
 	}
 
 	// Detect memory information
-	if err := d.detectMemory(info); err != nil {
+	if err := detectMemory(info); err != nil {
 		hardwareLog.Warnf("Failed to detect memory: %v", err)
 	}
 
 	// Detect GPU information
-	if err := d.detectGPU(info); err != nil {
+	if err := detectGPU(info); err != nil {
 		hardwareLog.Warnf("Failed to detect GPU: %v", err)
 	}
 
 	// Detect platform-specific information
-	d.detectPlatform(info)
+	detectPlatform(info)
 
 	hardwareLog.Infof("Hardware detection completed: %+v", info)
 	return info, nil
 }
 
+func ValidateOSTypeCompatibility(requestedOSType string) error {
+
+	// Detect hardware to determine appropriate OS type
+	hardware, err := DetectHardware()
+	if err != nil {
+		hardwareLog.Warnf("Hardware detection failed, skipping OS type validation: %v", err)
+		return nil // Skip validation if we can't detect hardware
+	}
+
+	// Get the appropriate OS type for the detected hardware
+	appropriateOSType := determineOSType(hardware)
+	hardwareLog.Infof("Detected hardware architecture: %s", hardware.Architecture)
+	hardwareLog.Infof("Appropriate OS type for hardware: %s", appropriateOSType)
+	hardwareLog.Infof("Requested OS type: %s", requestedOSType)
+
+	// Check if the requested OS type is compatible with the hardware architecture
+	if !isOSTypeCompatible(requestedOSType, hardware.Architecture) {
+		return fmt.Errorf("OS type '%s' is not compatible with hardware architecture '%s'. Recommended OS type: '%s'",
+			requestedOSType, hardware.Architecture, appropriateOSType)
+	}
+
+	hardwareLog.Infof("OS type validation passed: %s is compatible with %s architecture", requestedOSType, hardware.Architecture)
+	return nil
+
+}
+
 // GetVirtualBoxSettings returns appropriate VirtualBox settings based on hardware
-func (d *HardwareDetector) GetVirtualBoxSettings(hardware *HardwareInfo) *VirtualBoxSettings {
+func GetVirtualBoxSettings(hardware *HardwareInfo) *VirtualBoxSettings {
 	settings := &VirtualBoxSettings{}
 
 	// Determine OS type based on architecture
-	settings.OSType = d.determineOSType(hardware)
+	settings.OSType = determineOSType(hardware)
 
 	// Determine chipset based on architecture
-	settings.Chipset = d.determineChipset(hardware)
+	settings.Chipset = determineChipset(hardware)
 
 	// Determine firmware based on architecture and OS
-	settings.Firmware = d.determineFirmware(hardware)
+	settings.Firmware = determineFirmware(hardware)
 
 	// Determine graphics controller based on platform
-	settings.GraphicsController = d.determineGraphicsController(hardware)
+	settings.GraphicsController = determineGraphicsController(hardware)
 
 	// Determine VRAM based on GPU capabilities
-	settings.VRAMMB = d.determineVRAM(hardware)
+	settings.VRAMMB = determineVRAM(hardware)
 
 	// Determine IOAPIC settings based on architecture
-	settings.IOAPICEnabled = d.determineIOAPIC(hardware)
+	settings.IOAPICEnabled = determineIOAPIC(hardware)
 
 	// Determine USB controller settings
-	settings.USBController = d.determineUSBController(hardware)
+	settings.USBController = determineUSBController(hardware)
 
 	// Determine audio settings
-	settings.AudioController = d.determineAudioController(hardware)
-	settings.AudioOutput = d.determineAudioOutput(hardware)
-	settings.AudioInput = d.determineAudioInput(hardware)
+	settings.AudioController = determineAudioController(hardware)
+	settings.AudioOutput = determineAudioOutput(hardware)
+	settings.AudioInput = determineAudioInput(hardware)
 
 	hardwareLog.Infof("VirtualBox settings determined: %+v", settings)
 	return settings
 }
 
 // detectCPU detects CPU information
-func (d *HardwareDetector) detectCPU(info *HardwareInfo) error {
+func detectCPU(info *HardwareInfo) error {
 	// Get CPU count
 	cpuCount, err := cpu.Counts(false)
 	if err != nil {
@@ -137,7 +155,7 @@ func (d *HardwareDetector) detectCPU(info *HardwareInfo) error {
 }
 
 // detectMemory detects memory information
-func (d *HardwareDetector) detectMemory(info *HardwareInfo) error {
+func detectMemory(info *HardwareInfo) error {
 	vmStat, err := mem.VirtualMemory()
 	if err != nil {
 		return fmt.Errorf("failed to get memory info: %w", err)
@@ -151,14 +169,14 @@ func (d *HardwareDetector) detectMemory(info *HardwareInfo) error {
 }
 
 // detectGPU detects GPU information
-func (d *HardwareDetector) detectGPU(info *HardwareInfo) error {
+func detectGPU(info *HardwareInfo) error {
 	switch runtime.GOOS {
 	case "darwin":
-		return d.detectMacGPU(info)
+		return detectMacGPU(info)
 	case "linux":
-		return d.detectLinuxGPU(info)
+		return detectLinuxGPU(info)
 	case "windows":
-		return d.detectWindowsGPU(info)
+		return detectWindowsGPU(info)
 	default:
 		info.GPUType = "Unknown"
 		info.GPUCount = 0
@@ -167,7 +185,7 @@ func (d *HardwareDetector) detectGPU(info *HardwareInfo) error {
 }
 
 // detectMacGPU detects GPU on macOS
-func (d *HardwareDetector) detectMacGPU(info *HardwareInfo) error {
+func detectMacGPU(info *HardwareInfo) error {
 	if runtime.GOARCH == "arm64" {
 		// Apple Silicon
 		info.IsAppleSilicon = true
@@ -202,7 +220,7 @@ func (d *HardwareDetector) detectMacGPU(info *HardwareInfo) error {
 }
 
 // detectLinuxGPU detects GPU on Linux
-func (d *HardwareDetector) detectLinuxGPU(info *HardwareInfo) error {
+func detectLinuxGPU(info *HardwareInfo) error {
 	info.IsLinux = true
 
 	// Try to detect NVIDIA GPU
@@ -238,7 +256,7 @@ func (d *HardwareDetector) detectLinuxGPU(info *HardwareInfo) error {
 }
 
 // detectWindowsGPU detects GPU on Windows
-func (d *HardwareDetector) detectWindowsGPU(info *HardwareInfo) error {
+func detectWindowsGPU(info *HardwareInfo) error {
 	info.IsWindows = true
 
 	// Try to detect NVIDIA GPU using nvidia-smi
@@ -262,7 +280,7 @@ func (d *HardwareDetector) detectWindowsGPU(info *HardwareInfo) error {
 }
 
 // detectPlatform detects platform-specific information
-func (d *HardwareDetector) detectPlatform(info *HardwareInfo) {
+func detectPlatform(info *HardwareInfo) {
 	switch runtime.GOOS {
 	case "darwin":
 		if runtime.GOARCH == "arm64" {
@@ -278,7 +296,7 @@ func (d *HardwareDetector) detectPlatform(info *HardwareInfo) {
 }
 
 // determineOSType determines the appropriate OS type for VirtualBox
-func (d *HardwareDetector) determineOSType(hardware *HardwareInfo) string {
+func determineOSType(hardware *HardwareInfo) string {
 	switch hardware.Architecture {
 	case "arm64", "aarch64":
 		return "Ubuntu_ARM64"
@@ -293,8 +311,40 @@ func (d *HardwareDetector) determineOSType(hardware *HardwareInfo) string {
 	}
 }
 
+// isOSTypeCompatible checks if an OS type is compatible with a given architecture
+func isOSTypeCompatible(osType, architecture string) bool {
+	// Define compatibility matrix
+	compatibilityMap := map[string][]string{
+		"Ubuntu_ARM64": {"arm64", "aarch64"},
+		"Ubuntu_64":    {"amd64", "x86_64"},
+		"Ubuntu":       {"arm", "386", "i386", "amd64", "x86_64", "arm64", "aarch64"},
+		"Debian_ARM64": {"arm64", "aarch64"},
+		"Debian_64":    {"amd64", "x86_64"},
+		"Debian":       {"arm", "386", "i386", "amd64", "x86_64", "arm64", "aarch64"},
+		// "Windows_ARM64": {"arm64", "aarch64"},
+		// "Windows_64":    {"amd64", "x86_64"},
+		// "Windows":       {"amd64", "x86_64"},
+	}
+
+	// Check if the OS type is in our compatibility map
+	supportedArchitectures, exists := compatibilityMap[osType]
+	if !exists {
+		hardwareLog.Warnf("Unknown OS type: %s, allowing it to pass validation", osType)
+		return true // Allow unknown OS types to pass validation
+	}
+
+	// Check if the architecture is supported by this OS type
+	for _, supportedArch := range supportedArchitectures {
+		if supportedArch == architecture {
+			return true
+		}
+	}
+
+	return false
+}
+
 // determineChipset determines the appropriate chipset for VirtualBox
-func (d *HardwareDetector) determineChipset(hardware *HardwareInfo) string {
+func determineChipset(hardware *HardwareInfo) string {
 	switch hardware.Architecture {
 	case "arm64", "aarch64":
 		return "armv8virtual"
@@ -310,7 +360,7 @@ func (d *HardwareDetector) determineChipset(hardware *HardwareInfo) string {
 }
 
 // determineFirmware determines the appropriate firmware for VirtualBox
-func (d *HardwareDetector) determineFirmware(hardware *HardwareInfo) string {
+func determineFirmware(hardware *HardwareInfo) string {
 	switch hardware.Architecture {
 	case "arm64", "aarch64":
 		return "efi"
@@ -326,7 +376,7 @@ func (d *HardwareDetector) determineFirmware(hardware *HardwareInfo) string {
 }
 
 // determineGraphicsController determines the appropriate graphics controller
-func (d *HardwareDetector) determineGraphicsController(hardware *HardwareInfo) string {
+func determineGraphicsController(hardware *HardwareInfo) string {
 	if hardware.IsAppleSilicon {
 		return "vmsvga"
 	} else if hardware.IsIntelMac {
@@ -349,7 +399,7 @@ func (d *HardwareDetector) determineGraphicsController(hardware *HardwareInfo) s
 }
 
 // determineVRAM determines the appropriate VRAM size
-func (d *HardwareDetector) determineVRAM(hardware *HardwareInfo) int {
+func determineVRAM(hardware *HardwareInfo) int {
 	// Base VRAM on GPU capabilities
 	if hardware.IsAppleSilicon {
 		// Apple Silicon has good integrated graphics
@@ -376,7 +426,7 @@ func (d *HardwareDetector) determineVRAM(hardware *HardwareInfo) int {
 }
 
 // determineIOAPIC determines whether IOAPIC should be enabled
-func (d *HardwareDetector) determineIOAPIC(hardware *HardwareInfo) bool {
+func determineIOAPIC(hardware *HardwareInfo) bool {
 	// IOAPIC is typically disabled for ARM64 architectures
 	switch hardware.Architecture {
 	case "arm64", "aarch64", "arm":
@@ -389,23 +439,23 @@ func (d *HardwareDetector) determineIOAPIC(hardware *HardwareInfo) bool {
 }
 
 // determineUSBController determines the appropriate USB controller
-func (d *HardwareDetector) determineUSBController(hardware *HardwareInfo) string {
+func determineUSBController(hardware *HardwareInfo) string {
 	// Modern systems typically use XHCI
 	return "xHCI"
 }
 
 // determineAudioController determines the appropriate audio controller
-func (d *HardwareDetector) determineAudioController(hardware *HardwareInfo) string {
+func determineAudioController(hardware *HardwareInfo) string {
 	// HDA is the most compatible audio controller
 	return "hda"
 }
 
 // determineAudioOutput determines audio output settings
-func (d *HardwareDetector) determineAudioOutput(hardware *HardwareInfo) string {
+func determineAudioOutput(hardware *HardwareInfo) string {
 	return "on"
 }
 
 // determineAudioInput determines audio input settings
-func (d *HardwareDetector) determineAudioInput(hardware *HardwareInfo) string {
+func determineAudioInput(hardware *HardwareInfo) string {
 	return "off"
 }
