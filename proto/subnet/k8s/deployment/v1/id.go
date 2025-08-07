@@ -60,7 +60,7 @@ func ParseDeploymentPath(parts []string) (DeploymentID, error) {
 	}
 
 	return DeploymentID{
-		Owner: owner.String(),
+		Owner: strings.ToLower(owner.String()),
 		DSeq:  dseq,
 	}, nil
 }

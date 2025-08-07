@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+	"strings"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
@@ -59,22 +60,24 @@ func (id LeaseID) FromCRD() (mtypes.LeaseID, error) {
 	if !common.IsHexAddress(id.Owner) {
 		return mtypes.LeaseID{}, errors.New("invalid owner address")
 	}
-
 	owner := common.HexToAddress(id.Owner)
 
+	if !common.IsHexAddress(id.Provider) {
+		return mtypes.LeaseID{}, errors.New("invalid provider address")
+	}
 	provider := common.HexToAddress(id.Provider)
 
 	dseq, err := strconv.ParseUint(id.DSeq, 10, 64)
 	if err != nil {
-		return mtypes.LeaseID{}, err
+		return mtypes.LeaseID{}, errors.Wrap(err, "invalid dseq")
 	}
 
 	return mtypes.LeaseID{
-		Owner:    owner.String(),
+		Owner:    strings.ToLower(owner.String()),
 		DSeq:     dseq,
 		GSeq:     id.GSeq,
 		OSeq:     id.OSeq,
-		Provider: provider.String(),
+		Provider: strings.ToLower(provider.String()),
 	}, nil
 }
 
