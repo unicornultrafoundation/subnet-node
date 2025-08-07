@@ -28,6 +28,7 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/session"
 	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/tools/fromctx"
 	ptypes "github.com/unicornultrafoundation/subnet-node/pkg/k8s/types"
+	maniv1 "github.com/unicornultrafoundation/subnet-node/proto/subnet/k8s/manifest/v1"
 )
 
 // ErrNotRunning is the error when service is not running
@@ -363,32 +364,49 @@ loop:
 					break
 				}
 
-				_, err := s.Reserve(ev.LeaseID.OrderID(), mgroup)
-				if err != nil {
-					s.log.WithField("lease", ev.LeaseID).WithField("group-name", mgroup.Name).WithField("err", err).Error("Error reserving inventory")
-					break
-				}
+				getDeployment := func(leaseID mtypes.LeaseID, mgroup *maniv1.Group) (*ctypes.Deployment, error) {
+					reservation, err := s.inventory.lookup(leaseID.OrderID(), mgroup)
+					if err != nil {
+						return nil, err
+					}
 
-				reservation, err := s.inventory.lookup(ev.LeaseID.OrderID(), mgroup)
-				if err != nil {
-					s.log.WithField("lease", ev.LeaseID).WithField("group-name", mgroup.Name).WithField("err", err).Error("Error looking up manifest")
-					break
-				}
+					deployment := &ctypes.Deployment{
+						Lid:     leaseID,
+						MGroup:  mgroup,
+						CParams: reservation.ClusterParams(),
+					}
 
-				deployment := &ctypes.Deployment{
-					Lid:     ev.LeaseID,
-					MGroup:  mgroup,
-					CParams: reservation.ClusterParams(),
+					return deployment, nil
 				}
 
 				key := mtypes.LeaseIDToKey(ev.LeaseID)
 				if manager := s.managers[key]; manager != nil {
+					// If the lease is already managed, update the deployment
+					deployment, err := getDeployment(ev.LeaseID, mgroup)
+					if err != nil {
+						s.log.WithField("lease", ev.LeaseID).WithField("group-name", mgroup.Name).WithField("err", err).Error("Error getting deployment")
+						break
+					}
+
 					if err := manager.update(deployment); err != nil {
 						s.log.WithField("lease", ev.LeaseID).WithField("group-name", mgroup.Name).WithField("err", err).Error("Error updating deployment")
 					}
 					break
 				}
 
+				// If the lease is new, reserve the inventory
+				_, err := s.Reserve(ev.LeaseID.OrderID(), mgroup)
+				if err != nil {
+					s.log.WithField("lease", ev.LeaseID).WithField("group-name", mgroup.Name).WithField("err", err).Error("Error reserving inventory")
+					break
+				}
+
+				// Create a new deployment manager
+				deployment, err := getDeployment(ev.LeaseID, mgroup)
+				if err != nil {
+					s.log.WithField("lease", ev.LeaseID).WithField("group-name", mgroup.Name).WithField("err", err).Error("Error getting deployment")
+					break
+				}
 				s.managers[key] = newDeploymentManager(s, deployment, true)
 
 				trySignal()
