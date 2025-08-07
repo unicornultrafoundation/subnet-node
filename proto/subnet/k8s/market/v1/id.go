@@ -3,6 +3,7 @@ package v1
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/ethereum/go-ethereum/common"
 	dtypes "github.com/unicornultrafoundation/subnet-node/proto/subnet/k8s/deployment/v1"
@@ -82,7 +83,7 @@ func (id BidID) OrderID() OrderID {
 
 // String method for consistent output.
 func (id BidID) String() string {
-	return fmt.Sprintf("%s/%v", id.OrderID(), id.Provider)
+	return fmt.Sprintf("%s/%v", id.OrderID(), strings.ToLower(id.Provider))
 }
 
 // GroupID method returns GroupID details with specific bid details

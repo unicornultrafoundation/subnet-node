@@ -29,7 +29,7 @@ func (id DeploymentID) Validate() error {
 
 // String method for deployment IDs
 func (id DeploymentID) String() string {
-	return fmt.Sprintf("%s/%d", id.Owner, id.DSeq)
+	return fmt.Sprintf("%s/%d", strings.ToLower(id.Owner), id.DSeq)
 }
 
 func (id DeploymentID) GetOwnerAddress() (common.Address, error) {
