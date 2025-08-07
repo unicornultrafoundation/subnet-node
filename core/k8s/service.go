@@ -2,12 +2,14 @@ package k8s
 
 import (
 	"context"
+	"io"
 
 	"github.com/boz/go-lifecycle"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/sirupsen/logrus"
 	tpubsub "github.com/troian/pubsub"
 	apclient "github.com/unicornultrafoundation/subnet-node/core/k8s/types/v1/provider/client"
+	"k8s.io/client-go/tools/remotecommand"
 
 	"github.com/pkg/errors"
 
@@ -103,6 +105,24 @@ type Service interface {
 
 	// GetLeaseStatus returns the status of a lease
 	GetLeaseStatus(ctx context.Context, leaseID mtypes.LeaseID) (apclient.LeaseStatus, error)
+
+	// Exec executes a command in a lease
+	Exec(ctx context.Context,
+		lID mtypes.LeaseID,
+		service string,
+		podIndex uint,
+		cmd []string,
+		stdin io.Reader,
+		stdout io.Writer,
+		stderr io.Writer,
+		tty bool,
+		tsq remotecommand.TerminalSizeQueue) (ctypes.ExecResult, error)
+
+	// ServiceStatus returns the status of a service
+	ServiceStatus(ctx context.Context, leaseID mtypes.LeaseID, service string) (*apclient.ServiceStatus, error)
+
+	// LeaseLogs returns the logs of a lease
+	LeaseLogs(context.Context, mtypes.LeaseID, string, bool, *int64) ([]*ctypes.ServiceLog, error)
 }
 
 // NewService returns new Service instance
@@ -277,6 +297,28 @@ func (s *service) StatusV1(ctx context.Context) (*provider.ClusterStatus, error)
 
 		return res, nil
 	}
+}
+
+func (s *service) Exec(ctx context.Context,
+	lID mtypes.LeaseID,
+	service string,
+	podIndex uint,
+	cmd []string,
+	stdin io.Reader,
+	stdout io.Writer,
+	stderr io.Writer,
+	tty bool,
+	tsq remotecommand.TerminalSizeQueue) (ctypes.ExecResult, error) {
+
+	return s.client.Exec(ctx, lID, service, podIndex, cmd, stdin, stdout, stderr, tty, tsq)
+}
+
+func (s *service) LeaseLogs(ctx context.Context, leaseID mtypes.LeaseID, service string, follow bool, tailLines *int64) ([]*ctypes.ServiceLog, error) {
+	return s.client.LeaseLogs(ctx, leaseID, service, follow, tailLines)
+}
+
+func (s *service) ServiceStatus(ctx context.Context, leaseID mtypes.LeaseID, service string) (*apclient.ServiceStatus, error) {
+	return s.client.ServiceStatus(ctx, leaseID, service)
 }
 
 func (s *service) run(ctx context.Context, deployments []ctypes.IDeployment) {
