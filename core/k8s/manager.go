@@ -39,19 +39,18 @@ const (
 )
 
 type deploymentManager struct {
-	bus              pubsub.Bus
-	client           Client
-	session          session.Session
-	state            deploymentState
-	deployment       ctypes.IDeployment
-	monitor          *deploymentMonitor
-	wg               sync.WaitGroup
-	updatech         chan ctypes.IDeployment
-	teardownch       chan struct{}
-	currentHostnames map[string]struct{}
-	log              *logrus.Logger
-	lc               lifecycle.Lifecycle
-	// hostnameService     ctypes.HostnameServiceClient
+	bus                 pubsub.Bus
+	client              Client
+	session             session.Session
+	state               deploymentState
+	deployment          ctypes.IDeployment
+	monitor             *deploymentMonitor
+	wg                  sync.WaitGroup
+	updatech            chan ctypes.IDeployment
+	teardownch          chan struct{}
+	currentHostnames    map[string]struct{}
+	log                 *logrus.Logger
+	lc                  lifecycle.Lifecycle
 	config              Config
 	isNewLease          bool
 	serviceShuttingDown <-chan struct{}
@@ -64,17 +63,16 @@ func newDeploymentManager(s *service, deployment ctypes.IDeployment, isNewLease 
 	logger := s.log.WithField("module", "deployment-manager").WithField("lease", lid).WithField("manifest-group", mgroup.GetName()).Logger
 
 	dm := &deploymentManager{
-		bus:        s.bus,
-		client:     s.client,
-		session:    s.session,
-		state:      dsDeployActive,
-		deployment: deployment,
-		wg:         sync.WaitGroup{},
-		updatech:   make(chan ctypes.IDeployment),
-		teardownch: make(chan struct{}),
-		log:        logger,
-		lc:         lifecycle.New(),
-		// hostnameService:     s.HostnameService(),
+		bus:                 s.bus,
+		client:              s.client,
+		session:             s.session,
+		state:               dsDeployActive,
+		deployment:          deployment,
+		wg:                  sync.WaitGroup{},
+		updatech:            make(chan ctypes.IDeployment),
+		teardownch:          make(chan struct{}),
+		log:                 logger,
+		lc:                  lifecycle.New(),
 		config:              s.config,
 		serviceShuttingDown: s.lc.ShuttingDown(),
 		isNewLease:          isNewLease,
@@ -135,14 +133,6 @@ func (dm *deploymentManager) run(ctx context.Context) {
 	var shutdownErr error
 
 	runch := dm.startDeploy(ctx)
-
-	// defer func() {
-	// 	err := dm.hostnameService.ReleaseHostnames(dm.deployment.LeaseID())
-	// 	if err != nil {
-	// 		dm.log.WithError(err).Warn("failed releasing hostnames")
-	// 	}
-	// 	dm.log.Debug("hostnames released")
-	// }()
 
 	var teardownErr error
 
