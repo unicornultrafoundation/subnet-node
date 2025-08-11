@@ -1,0 +1,15 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: shared-storage-rwm
+  labels:
+    subnet.node: "true"
+    app.kubernetes.io/name: "shared-storage-rwm"
+provisioner: rancher.io/local-path
+reclaimPolicy: Retain
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+# Note: This storage class uses ReadWriteOnce but is designed for shared access
+# through the subnet-node system's volume sharing mechanisms
+# The local-path provisioner only supports ReadWriteOnce, so we use that
+# but the subnet-node system can provide volume sharing at the application level

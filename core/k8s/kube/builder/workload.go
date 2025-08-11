@@ -232,12 +232,39 @@ func (b *Workload) persistentVolumeClaims() []corev1.PersistentVolumeClaim {
 		}
 
 		volumeMode := corev1.PersistentVolumeFilesystem
+		// Determine access mode based on storage class
+		accessModes := []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce}
+
+		// Check if this is a shared storage class that supports ReadWriteMany
+		attr = storage.Attributes.Find(sdl.StorageAttributeClass)
+		if class, valid := attr.AsString(); valid {
+			// Storage classes that support ReadWriteMany
+			sharedStorageClasses := map[string]bool{
+				"nfs":             true,
+				"ceph":            true,
+				"glusterfs":       true,
+				"ceph-shared":     true,
+				"cephfs-shared":   true,
+				"shared-hostpath": true,
+			}
+
+			// Note: shared-storage and shared-storage-rwm use ReadWriteOnce but are designed
+			// for shared access through the subnet-node system's volume sharing mechanisms
+
+			// Enable ReadWriteMany for storage classes that support it
+			if sharedStorageClasses[class] {
+				accessModes = []corev1.PersistentVolumeAccessMode{corev1.ReadWriteMany}
+			}
+			// Note: sharedStorageClassesRWO uses ReadWriteOnce but is designed for shared access
+			// through the subnet-node system's volume sharing mechanisms
+		}
+
 		pvc := corev1.PersistentVolumeClaim{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: fmt.Sprintf("%s-%s", service.Name, storage.Name),
 			},
 			Spec: corev1.PersistentVolumeClaimSpec{
-				AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+				AccessModes: accessModes,
 				Resources: corev1.VolumeResourceRequirements{
 					Limits:   make(corev1.ResourceList),
 					Requests: make(corev1.ResourceList),

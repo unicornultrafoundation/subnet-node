@@ -198,7 +198,7 @@ func (c *rancher) run(startch chan<- struct{}) error {
 							sc = &rancherStorage{}
 						}
 
-						sc.isRancher = obj.Provisioner == "rancher.io/local-path"
+						sc.isRancher = obj.Provisioner == "rancher.io/local-path" || obj.Provisioner == "kubernetes.io/no-provisioner"
 						sc.isSubnetManaged, _ = strconv.ParseBool(lblVal)
 						scs[obj.Name] = sc
 

@@ -47,11 +47,19 @@ type v2ResourceStorageArray []v2ResourceStorage
 type validateAttrFn func(string, *string) error
 
 var allowedStorageClasses = map[string]bool{
-	"default":       true,
-	"beta1":         true,
-	"beta2":         true,
-	"beta3":         true,
-	StorageClassRAM: true,
+	"default":            true,
+	"beta1":              true,
+	"beta2":              true,
+	"beta3":              true,
+	"shared-storage":     true,
+	"nfs":                true,
+	"ceph":               true,
+	"glusterfs":          true,
+	"ceph-shared":        true,
+	"cephfs-shared":      true,
+	"shared-hostpath":    true,
+	"shared-storage-rwm": true,
+	StorageClassRAM:      true,
 }
 
 var validateStorageAttributes = map[string]validateAttrFn{
