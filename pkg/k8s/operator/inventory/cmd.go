@@ -295,6 +295,11 @@ func Cmd() *cobra.Command {
 		panic(err)
 	}
 
+	// Bind environment variable for config
+	if err = viper.BindEnv(FlagConfig, "AP_CONFIG"); err != nil {
+		panic(err)
+	}
+
 	return cmd
 }
 
