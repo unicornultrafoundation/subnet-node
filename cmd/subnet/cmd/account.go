@@ -31,7 +31,10 @@ var accountCreateCmd = &cobra.Command{
 			fmt.Fprintf(os.Stderr, "Failed to create account: %v\n", err)
 			return
 		}
+		// Get the keystore file path
+		keystorePath := filepath.Join(keystoreDir, account.URL.Path)
 		fmt.Printf("New account created: %s\n", account.Address.Hex())
+		fmt.Printf("Keystore file: %s\n", keystorePath)
 	},
 }
 
@@ -68,8 +71,13 @@ var accountListCmd = &cobra.Command{
 			fmt.Println("No accounts found.")
 			return
 		}
+		fmt.Println("Accounts found:")
+		fmt.Println("Address                                    | Keystore File")
+		fmt.Println("------------------------------------------|----------------------------------")
 		for _, acc := range accounts {
-			fmt.Println(acc.Address.Hex())
+			address := acc.Address.Hex()
+			keystorePath := filepath.Join(keystoreDir, acc.URL.Path)
+			fmt.Printf("%-42s | %s\n", address, keystorePath)
 		}
 	},
 }

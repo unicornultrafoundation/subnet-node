@@ -46,7 +46,8 @@ show_welcome() {
     print_warning "Before starting, make sure you have:"
     echo "  ✓ K3s installed and running"
     echo "  ✓ kubectl installed"
-    echo "  ✓ Your private key ready"
+    echo "  ✓ subnet CLI installed (for option 1)"
+    echo "  ✓ Your private key ready (for options 2-3)"
     echo "  ✓ Your provider ID and machine ID"
     echo
     echo "Press Enter to continue or Ctrl+C to cancel..."
@@ -85,7 +86,7 @@ get_private_key() {
     echo
     echo "You have 3 options to provide your private key:"
     echo
-    echo "1. Create a key file (Recommended)"
+    echo "1. Generate new account using subnet CLI (Recommended)"
     echo "2. Enter key manually (Most secure)"
     echo "3. Use existing key file"
     echo
@@ -95,20 +96,65 @@ get_private_key() {
     case $choice in
         1)
             echo
-            echo "Creating a new key file..."
-            echo -n "Enter your private key: "
-            read -s private_key
-            echo
+            echo "Creating a new account using subnet CLI..."
+            
+            # Check if subnet CLI is available
+            if ! command -v subnet &> /dev/null; then
+                print_error "subnet CLI is not installed. Please install it first."
+                echo "You can install it by running:"
+                echo "  sudo cp build/subnet /usr/local/bin/"
+                exit 1
+            fi
+            print_status "✓ subnet CLI found"
             
             # Create .subnet directory if it doesn't exist
             mkdir -p ~/.subnet
             
-            # Save to file
-            echo "$private_key" > ~/.subnet/private.key
-            chmod 600 ~/.subnet/private.key
+            # Change to .subnet directory and create account
+            cd ~/.subnet
+            print_status "Generating new account..."
             
-            PRIVATE_KEY_FILE="$HOME/.subnet/private.key"
-            print_status "✓ Private key saved to $PRIVATE_KEY_FILE"
+            # Get keystore password from user
+            echo -n "Enter password for the new account: "
+            read -s account_password
+            echo
+            
+            # Run the account creation directly with password
+            print_status "Creating account with password..."
+            
+            # Use printf to ensure proper password input and suppress output
+            if ACCOUNT_OUTPUT=$(printf "%s\n" "$account_password" | subnet account create 2>&1); then
+                # Extract account address and keystore file path from output
+                ACCOUNT_ADDRESS=$(echo "$ACCOUNT_OUTPUT" | grep "New account created:" | awk '{print $5}')
+                KEYSTORE_FILE=$(echo "$ACCOUNT_OUTPUT" | grep "Keystore file:" | awk '{print $3}')
+                
+                if [[ -n "$ACCOUNT_ADDRESS" && "$ACCOUNT_ADDRESS" =~ ^0x[a-fA-F0-9]{40}$ ]]; then
+                    print_status "✓ New account created successfully"
+                    print_status "✓ Account address: $ACCOUNT_ADDRESS"
+                    
+                    if [[ -n "$KEYSTORE_FILE" ]]; then
+                        print_status "✓ Keystore file: $KEYSTORE_FILE"
+                        
+                        # Set the keystore file path for later use
+                        PRIVATE_KEY_FILE="$KEYSTORE_FILE"
+                        # Store the password for keystore operations
+                        KEYSTORE_PASSWORD="$account_password"
+                    else
+                        print_warning "Keystore file path not found in output"
+                        # Still set the password for later use
+                        KEYSTORE_PASSWORD="$account_password"
+                    fi
+                else
+                    print_error "Account created but address not found in output"
+                    exit 1
+                fi
+            else
+                print_error "Failed to create account"
+                exit 1
+            fi
+            
+            # Return to original directory
+            cd - > /dev/null
             ;;
         2)
             echo
@@ -139,6 +185,14 @@ get_private_key() {
 get_keystore_password() {
     print_step "2.5" "Setting up keystore password..."
     echo
+    
+    # Skip if keystore password already set (from option 1)
+    if [[ -n "$KEYSTORE_PASSWORD" ]]; then
+        print_status "✓ Keystore password already set from account creation"
+        echo
+        return
+    fi
+    
     echo "The private key will be imported into a keystore file."
     echo "You can set a password to protect the keystore (recommended) or leave it empty."
     echo
@@ -224,7 +278,11 @@ confirm_installation() {
     echo "  Storage: $STORAGE_SIZE"
     echo "  Replicas: $REPLICAS"
     if [[ -n "$PRIVATE_KEY_FILE" ]]; then
-        echo "  Private Key: From file ($PRIVATE_KEY_FILE)"
+        if [[ "$PRIVATE_KEY_FILE" == *.json ]]; then
+            echo "  Private Key: From keystore file ($PRIVATE_KEY_FILE)"
+        else
+            echo "  Private Key: From file ($PRIVATE_KEY_FILE)"
+        fi
     else
         echo "  Private Key: Entered manually"
     fi
@@ -264,7 +322,33 @@ run_installation() {
     
     # Prepare private key
     if [[ -n "$PRIVATE_KEY_FILE" ]]; then
-        PRIVATE_KEY=$(cat "$PRIVATE_KEY_FILE")
+        # Check if it's a keystore file (JSON) or plain private key file
+        if [[ "$PRIVATE_KEY_FILE" == *.json ]]; then
+            # It's a keystore file, we need to extract the private key
+            if [[ -n "$KEYSTORE_PASSWORD" ]]; then
+                print_status "Extracting private key from keystore file..."
+                # Use subnet CLI to export the private key
+                cd "$(dirname "$PRIVATE_KEY_FILE")"
+                print_status "Exporting private key from keystore..."
+                
+                if printf "%s\n" "$KEYSTORE_PASSWORD" | subnet account export --keystore "$(basename "$PRIVATE_KEY_FILE")" --output private.key; then
+                    PRIVATE_KEY=$(cat private.key)
+                    rm -f private.key
+                    print_status "✓ Private key extracted from keystore"
+                else
+                    print_error "Failed to extract private key from keystore"
+                    exit 1
+                fi
+                
+                cd - > /dev/null
+            else
+                print_error "Keystore password required to extract private key"
+                exit 1
+            fi
+        else
+            # It's a plain private key file
+            PRIVATE_KEY=$(cat "$PRIVATE_KEY_FILE")
+        fi
     fi
     
     # Run the installation
