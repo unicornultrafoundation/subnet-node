@@ -32,7 +32,6 @@ spec:
         - name: operator-inventory
           image: k8s-services:latest
           args:
-            - "provider-services"
             - "operator"
             - "inventory"
           imagePullPolicy: IfNotPresent
