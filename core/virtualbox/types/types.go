@@ -53,6 +53,13 @@ type VMCreateRequest struct {
 	Password   string `json:"password,omitempty"`
 }
 
+// CreateVMRequest represents a request to create a new VM
+type CreateVMRequest struct {
+	OrderId  string `json:"orderId"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
 // VMUpdateRequest represents a request to update an existing VM
 type VMUpdateRequest struct {
 	Name       string `json:"name,omitempty"`

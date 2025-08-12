@@ -30,8 +30,7 @@ func APIOption() ServeOption {
 		server.RegisterName("pubsub", api.NewPubsubAPI(capi.PubSub()))
 		server.RegisterName("account", api.NewAccountAPI(n.Account))
 		server.RegisterName("config", api.NewConfigAPI(n.Repo))
-		server.RegisterName("version", api.NewVersionAPI())                   // Register the VersionAPI
-		server.RegisterName("virtualbox", api.NewVirtualBoxAPI(n.VirtualBox)) // Register the VirtualBoxAPI
+		server.RegisterName("version", api.NewVersionAPI()) // Register the VersionAPI
 
 		// Handle public APIs without authentication
 		publicServer := rpc.NewServer()

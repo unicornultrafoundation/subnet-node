@@ -8,8 +8,10 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/core/virtualbox"
+	"github.com/unicornultrafoundation/subnet-node/core/virtualbox/hardware_detector"
 	"github.com/unicornultrafoundation/subnet-node/core/virtualbox/ssh_connection"
 	vbtypes "github.com/unicornultrafoundation/subnet-node/core/virtualbox/types"
 	"github.com/unicornultrafoundation/subnet-node/internal/api/ws"
@@ -138,11 +140,14 @@ func convertToISOInfoResult(iso *vbtypes.ISOInfo) *isoInfoResult {
 
 type VirtualBoxAPI struct {
 	vboxService *virtualbox.VirtualboxService
+	cfg         ConfigProvider
+	ordersCache *OrdersWithCache
 }
 
 // NewVirtualBoxAPI creates a new instance of VirtualBoxAPI.
-func NewVirtualBoxAPI(vboxService *virtualbox.VirtualboxService) *VirtualBoxAPI {
-	return &VirtualBoxAPI{vboxService: vboxService}
+func NewVirtualBoxAPI(vboxService *virtualbox.VirtualboxService, cfg ConfigProvider, bidMarket BidMarketContract) *VirtualBoxAPI {
+
+	return &VirtualBoxAPI{vboxService: vboxService, cfg: cfg, ordersCache: NewOrdersWithCache(bidMarket)}
 }
 
 func (api *VirtualBoxAPI) GetVMs(ctx context.Context) ([]vmResult, error) {
@@ -180,101 +185,231 @@ func (api *VirtualBoxAPI) CreateTemplateVM(ctx context.Context, name string, cpu
 	return api.vboxService.CreateTemplateVM(ctx, vbReq)
 }
 
-func (api *VirtualBoxAPI) CreateVM(ctx context.Context, name string, cpuCores int, memoryMB int, diskSizeGB int, osType string, username string, password string) (*vbtypes.JobCreateResponse, error) {
+func (api *VirtualBoxAPI) createVMHandler(w http.ResponseWriter, r *http.Request) {
+
+	var req vbtypes.CreateVMRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		api.sendErrorResponse(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	order, err := api.ordersCache.GetOrder(r.Context(), req.OrderId)
+	if err != nil {
+		api.sendErrorResponse(w, "Order not found", http.StatusNotFound)
+		return
+	}
+
+	// check current hardware information, if ARM architecture return 'Ubuntu_ARM64'
+	// if x86 architecture return 'Ubuntu_x86_64'
+	hardware, err := hardware_detector.DetectHardware()
+	if err != nil {
+		api.sendErrorResponse(w, "Failed to get hardware information", http.StatusInternalServerError)
+		return
+	}
+
+	// Use the determined Ubuntu OS type from hardware info
+	ubuntuOSType := determineUbuntuOSType(hardware.Architecture)
+
 	vbReq := vbtypes.VMCreateRequest{
-		Name:       name,
-		CPUCores:   cpuCores,
-		MemoryMB:   memoryMB,
-		DiskSizeGB: diskSizeGB,
-		OSType:     osType,
-		Username:   username,
-		Password:   password,
+		Name:       "vm-" + order.ID.String(),
+		CPUCores:   int(order.CpuCores.Int64()),
+		MemoryMB:   int(order.MemoryMB.Int64()),
+		DiskSizeGB: int(order.DiskGB.Int64()),
+		OSType:     ubuntuOSType,
+		Username:   req.Username,
+		Password:   req.Password,
 	}
 
-	return api.vboxService.CreateVM(ctx, vbReq)
-}
-
-func (api *VirtualBoxAPI) UpdateVM(ctx context.Context, vmID string, name string, cpuCores int, memoryMB int, diskSizeGB int) (*vmResult, error) {
-	vbReq := vbtypes.VMUpdateRequest{
-		Name:       name,
-		CPUCores:   cpuCores,
-		MemoryMB:   memoryMB,
-		DiskSizeGB: diskSizeGB,
-	}
-
-	vm, err := api.vboxService.UpdateVM(ctx, vmID, vbReq)
+	// Create the VM using the determined OS type
+	jobResponse, err := api.vboxService.CreateVM(r.Context(), vbReq)
 	if err != nil {
-		return nil, err
+		api.sendErrorResponse(w, "Failed to create VM", http.StatusInternalServerError)
+		return
 	}
 
-	return convertToVMResult(vm), nil
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(jobResponse)
+
 }
 
-func (api *VirtualBoxAPI) DeleteVM(ctx context.Context, vmID string) error {
-	return api.vboxService.DeleteVM(ctx, vmID)
-}
+// getVMsHandler handles GET requests for VMs - gets all VMs or a specific VM by ID
+func (api *VirtualBoxAPI) getVMsHandler(w http.ResponseWriter, r *http.Request) {
+	// Check if vmID is provided in the URL path
+	vmID := chi.URLParam(r, "vmID")
 
-func (api *VirtualBoxAPI) StartVM(ctx context.Context, vmID string) (*vmResult, error) {
-	vm, err := api.vboxService.StartVM(ctx, vmID)
+	if vmID != "" {
+		// Get specific VM
+		vm, err := api.GetVM(r.Context(), vmID)
+		if err != nil {
+			api.sendErrorResponse(w, fmt.Sprintf("Failed to get VM: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+		if vm == nil {
+			api.sendErrorResponse(w, "VM not found", http.StatusNotFound)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(vm)
+		return
+	}
+
+	// Get all VMs
+	vms, err := api.GetVMs(r.Context())
 	if err != nil {
-		return nil, err
+		api.sendErrorResponse(w, fmt.Sprintf("Failed to get VMs: %v", err), http.StatusInternalServerError)
+		return
 	}
-	return convertToVMResult(vm), nil
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(vms)
 }
 
-func (api *VirtualBoxAPI) StopVM(ctx context.Context, vmID string) (*vmResult, error) {
-	vm, err := api.vboxService.StopVM(ctx, vmID)
+// deleteVMHandler handles DELETE requests for a specific VM by ID
+func (api *VirtualBoxAPI) deleteVMHandler(w http.ResponseWriter, r *http.Request) {
+	vmID := chi.URLParam(r, "vmID")
+	if vmID == "" {
+		api.sendErrorResponse(w, "vmID is required", http.StatusBadRequest)
+		return
+	}
+
+	err := api.vboxService.DeleteVM(r.Context(), vmID)
 	if err != nil {
-		return nil, err
+		api.sendErrorResponse(w, fmt.Sprintf("Failed to delete VM: %v", err), http.StatusInternalServerError)
+		return
 	}
-	return convertToVMResult(vm), nil
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": "VM deleted successfully"})
 }
 
-func (api *VirtualBoxAPI) PauseVM(ctx context.Context, vmID string) (*vmResult, error) {
-	vm, err := api.vboxService.PauseVM(ctx, vmID)
+// startVMHandler handles POST requests to start a VM
+func (api *VirtualBoxAPI) startVMHandler(w http.ResponseWriter, r *http.Request) {
+	vmID := chi.URLParam(r, "vmID")
+	if vmID == "" {
+		api.sendErrorResponse(w, "vmID is required", http.StatusBadRequest)
+		return
+	}
+
+	vm, err := api.vboxService.StartVM(r.Context(), vmID)
 	if err != nil {
-		return nil, err
+		api.sendErrorResponse(w, fmt.Sprintf("Failed to start VM: %v", err), http.StatusInternalServerError)
+		return
 	}
-	return convertToVMResult(vm), nil
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(convertToVMResult(vm))
 }
 
-func (api *VirtualBoxAPI) ResumeVM(ctx context.Context, vmID string) (*vmResult, error) {
-	vm, err := api.vboxService.ResumeVM(ctx, vmID)
+// stopVMHandler handles POST requests to stop a VM
+func (api *VirtualBoxAPI) stopVMHandler(w http.ResponseWriter, r *http.Request) {
+	vmID := chi.URLParam(r, "vmID")
+	if vmID == "" {
+		api.sendErrorResponse(w, "vmID is required", http.StatusBadRequest)
+		return
+	}
+
+	vm, err := api.vboxService.StopVM(r.Context(), vmID)
 	if err != nil {
-		return nil, err
+		api.sendErrorResponse(w, fmt.Sprintf("Failed to stop VM: %v", err), http.StatusInternalServerError)
+		return
 	}
-	return convertToVMResult(vm), nil
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(convertToVMResult(vm))
 }
 
-func (api *VirtualBoxAPI) ResetVM(ctx context.Context, vmID string) (*vmResult, error) {
-	vm, err := api.vboxService.ResetVM(ctx, vmID)
+// pauseVMHandler handles POST requests to pause a VM
+func (api *VirtualBoxAPI) pauseVMHandler(w http.ResponseWriter, r *http.Request) {
+	vmID := chi.URLParam(r, "vmID")
+	if vmID == "" {
+		api.sendErrorResponse(w, "vmID is required", http.StatusBadRequest)
+		return
+	}
+
+	vm, err := api.vboxService.PauseVM(r.Context(), vmID)
 	if err != nil {
-		return nil, err
+		api.sendErrorResponse(w, fmt.Sprintf("Failed to pause VM: %v", err), http.StatusInternalServerError)
+		return
 	}
-	return convertToVMResult(vm), nil
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(convertToVMResult(vm))
 }
 
-func (api *VirtualBoxAPI) ListOSTypes(ctx context.Context) ([]string, error) {
-	return api.vboxService.ListOSTypes(ctx)
+// resumeVMHandler handles POST requests to resume a VM
+func (api *VirtualBoxAPI) resumeVMHandler(w http.ResponseWriter, r *http.Request) {
+	vmID := chi.URLParam(r, "vmID")
+	if vmID == "" {
+		api.sendErrorResponse(w, "vmID is required", http.StatusBadRequest)
+		return
+	}
+
+	vm, err := api.vboxService.ResumeVM(r.Context(), vmID)
+	if err != nil {
+		api.sendErrorResponse(w, fmt.Sprintf("Failed to resume VM: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(convertToVMResult(vm))
 }
 
-func (api *VirtualBoxAPI) GenerateSSHToken(ctx context.Context, vmID string, username string, password string) (*vbtypes.SSHTokenResponse, error) {
-	return api.vboxService.GenerateSSHToken(ctx, vmID, username, password)
+// resetVMHandler handles POST requests to reset a VM
+func (api *VirtualBoxAPI) resetVMHandler(w http.ResponseWriter, r *http.Request) {
+	vmID := chi.URLParam(r, "vmID")
+	if vmID == "" {
+		api.sendErrorResponse(w, "vmID is required", http.StatusBadRequest)
+		return
+	}
+
+	vm, err := api.vboxService.ResetVM(r.Context(), vmID)
+	if err != nil {
+		api.sendErrorResponse(w, fmt.Sprintf("Failed to reset VM: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(convertToVMResult(vm))
 }
 
-// ListJobs returns all jobs
-func (api *VirtualBoxAPI) ListJobs(ctx context.Context) ([]*vbtypes.Job, error) {
-	return api.vboxService.ListJobs(ctx)
-}
+// getJobHandler handles GET requests to get the progress of a job
+func (api *VirtualBoxAPI) getJobHandler(w http.ResponseWriter, r *http.Request) {
+	jobID := chi.URLParam(r, "jobID")
+	if jobID != "" {
 
-// GetJob returns a job by ID
-func (api *VirtualBoxAPI) GetJob(ctx context.Context, jobID string) (*vbtypes.Job, error) {
-	return api.vboxService.GetJobProgress(ctx, jobID)
-}
+		job, err := api.vboxService.GetJobProgress(r.Context(), jobID)
+		if err != nil {
+			api.sendErrorResponse(w, fmt.Sprintf("Failed to get job progress: %v", err), http.StatusInternalServerError)
+			return
+		}
 
-// CancelJob cancels a job
-func (api *VirtualBoxAPI) CancelJob(ctx context.Context, jobID string) error {
-	return api.vboxService.CancelJob(ctx, jobID)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(job)
+		return
+	}
+
+	// get all jobs
+	jobs, err := api.vboxService.ListJobs(r.Context())
+	if err != nil {
+		api.sendErrorResponse(w, fmt.Sprintf("Failed to get jobs: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(jobs)
 }
 
 // Router returns the chi router with all VirtualBox routes
@@ -282,8 +417,37 @@ func (api *VirtualBoxAPI) Router() *chi.Mux {
 
 	r := chi.NewRouter()
 
+	// Add middleware
+	r.Use(middleware.Logger)
+	r.Use(middleware.Recoverer)
+	r.Use(middleware.Timeout(60 * time.Second))
+
+	authMiddleware := NewAuthMiddleware(api.cfg, api.ordersCache)
+
 	// WebSocket route for SSH connection
-	r.Get("/api/v1/vms/{vmID}/ssh", api.vmSSHWebSocketHandler)
+	r.Get("/{vmID}/ssh", api.vmSSHWebSocketHandler)
+
+	// Virtualbox API Router
+	r.Group(func(r chi.Router) {
+		r.Use(authMiddleware.Middleware())
+
+		// Virtualbox API routes
+		r.Post("/", api.createVMHandler)
+		r.Get("/", api.getVMsHandler)
+		r.Get("/{vmID}", api.getVMsHandler)
+		r.Delete("/{vmID}", api.deleteVMHandler)
+
+		// startVm, stopVm, pauseVm, resumeVm, resetVm
+		r.Post("/{vmID}/start", api.startVMHandler)
+		r.Post("/{vmID}/stop", api.stopVMHandler)
+		r.Post("/{vmID}/pause", api.pauseVMHandler)
+		r.Post("/{vmID}/resume", api.resumeVMHandler)
+		r.Post("/{vmID}/reset", api.resetVMHandler)
+
+		// Job progress
+		r.Get("/jobs", api.getJobHandler)
+		r.Get("/jobs/{jobID}", api.getJobHandler)
+	})
 
 	return r
 }
@@ -407,4 +571,20 @@ func (api *VirtualBoxAPI) sendErrorResponse(w http.ResponseWriter, message strin
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
 	json.NewEncoder(w).Encode(response)
+}
+
+// determineUbuntuOSType determines the appropriate Ubuntu OS type for the current architecture
+func determineUbuntuOSType(architecture string) string {
+	switch architecture {
+	case "arm64", "aarch64":
+		return "Ubuntu_ARM64"
+	case "amd64", "x86_64":
+		return "Ubuntu_64"
+	case "arm":
+		return "Ubuntu"
+	case "386", "i386":
+		return "Ubuntu"
+	default:
+		return "Ubuntu_64" // Default fallback
+	}
 }
