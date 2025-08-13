@@ -441,65 +441,6 @@ func (s *StorageManagerImpl) getISOURLForOSType(osType string) string {
 		return "https://releases.ubuntu.com/24.04/ubuntu-24.04.2-live-server-amd64.iso"
 	case "Ubuntu_ARM64":
 		return "https://cdimage.ubuntu.com/releases/24.04/release/ubuntu-24.04.2-live-server-arm64.iso"
-	case "Ubuntu":
-		// Use appropriate Ubuntu ISO based on architecture
-		arch := runtime.GOARCH
-		switch arch {
-		case "arm64", "aarch64":
-			return "https://cdimage.ubuntu.com/releases/24.04/release/ubuntu-24.04.2-live-server-arm64.iso"
-		case "amd64", "x86_64":
-			return "https://releases.ubuntu.com/24.04/ubuntu-24.04.2-live-server-amd64.iso"
-		case "arm":
-			return "https://cdimage.ubuntu.com/releases/24.04/release/ubuntu-24.04.2-live-server-arm64.iso"
-		default:
-			return "https://releases.ubuntu.com/24.04/ubuntu-24.04.2-live-server-amd64.iso"
-		}
-	case "Debian_64":
-		return "https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/debian-12.11.0-amd64-netinst.iso"
-	case "Debian_ARM64":
-		return "https://cdimage.debian.org/debian-cd/current/arm64/iso-cd/debian-12.11.0-arm64-netinst.iso"
-	case "Debian":
-		// Use appropriate Debian ISO based on architecture
-		arch := runtime.GOARCH
-		switch arch {
-		case "arm64", "aarch64":
-			return "https://cdimage.debian.org/debian-cd/current/arm64/iso-cd/debian-12.11.0-arm64-netinst.iso"
-		case "amd64", "x86_64":
-			return "https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/debian-12.11.0-amd64-netinst.iso"
-		default:
-			return "https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/debian-12.11.0-amd64-netinst.iso"
-		}
-	// case "Windows_64":
-	// 	return "https://software-download.microsoft.com/download/pr/888969d5-f34g-4e03-ac9d-1f9786c69161/22000.318.211104-1236.co_release_svc_refresh_CLIENTENTERPRISEEVAL_OEMRET_x64FRE_en-us.iso"
-	// case "Windows_ARM64":
-	// 	return "https://software-download.microsoft.com/download/pr/888969d5-f34g-4e03-ac9d-1f9786c69161/22000.318.211104-1236.co_release_svc_refresh_CLIENTENTERPRISEEVAL_OEMRET_ARM64FRE_en-us.iso"
-	// case "Windows":
-	// 	// Use appropriate Windows ISO based on architecture
-	// 	arch := runtime.GOARCH
-	// 	switch arch {
-	// 	case "arm64", "aarch64":
-	// 		return "https://software-download.microsoft.com/download/pr/888969d5-f34g-4e03-ac9d-1f9786c69161/22000.318.211104-1236.co_release_svc_refresh_CLIENTENTERPRISEEVAL_OEMRET_ARM64FRE_en-us.iso"
-	// 	case "amd64", "x86_64":
-	// 		return "https://software-download.microsoft.com/download/pr/888969d5-f34g-4e03-ac9d-1f9786c69161/22000.318.211104-1236.co_release_svc_refresh_CLIENTENTERPRISEEVAL_OEMRET_x64FRE_en-us.iso"
-	// 	default:
-	// 		return "https://software-download.microsoft.com/download/pr/888969d5-f34g-4e03-ac9d-1f9786c69161/22000.318.211104-1236.co_release_svc_refresh_CLIENTENTERPRISEEVAL_OEMRET_x64FRE_en-us.iso"
-	// 	}
-
-	case "Other_64":
-		return "https://releases.ubuntu.com/24.04/ubuntu-24.04.2-live-server-amd64.iso"
-	case "Other_ARM64":
-		return "https://releases.ubuntu.com/24.04/ubuntu-24.04.2-live-server-arm64.iso"
-	case "Other":
-		// Use appropriate generic ISO based on architecture
-		arch := runtime.GOARCH
-		switch arch {
-		case "arm64", "aarch64":
-			return "https://releases.ubuntu.com/24.04/ubuntu-24.04.2-live-server-arm64.iso"
-		case "amd64", "x86_64":
-			return "https://releases.ubuntu.com/24.04/ubuntu-24.04.2-live-server-amd64.iso"
-		default:
-			return "https://releases.ubuntu.com/24.04/ubuntu-24.04.2-live-server-amd64.iso"
-		}
 	default:
 		// Default to Ubuntu 64-bit
 		return "https://releases.ubuntu.com/24.04/ubuntu-24.04.2-live-server-amd64.iso"

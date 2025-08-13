@@ -133,6 +133,28 @@ go run download_ovas.go
 
 This will download OS templates to `~/VirtualBox VMs/Templates/`.
 
+## API Types and VM Creation
+
+The VirtualBox service provides two different APIs for VM creation, each serving different purposes:
+
+### Regular VM Creation (`CreateVM`)
+
+Used for creating VMs from orders with automatic resource configuration:
+
+- **Request Type**: `CreateVMRequest` with `OrderId`, `Username`, and `Password`
+- **Resource Configuration**: Automatically extracted from order data
+- **OS Type**: Automatically determined based on host architecture
+- **VM Naming**: Uses format `vm-{orderId}`
+
+### Template VM Creation (`CreateTemplateVM`)
+
+Used for creating base template VMs with direct configuration:
+
+- **Request Type**: `VMCreateRequest` with direct hardware specifications
+- **Resource Configuration**: Manually specified CPU, memory, and disk settings
+- **OS Type**: Explicitly specified
+- **VM Naming**: Custom name provided in request
+
 ## Template VM Creation Flow
 
 The service uses pre-built OVA templates to create new VMs quickly. The flow for template VM creation is:
@@ -165,9 +187,11 @@ var defaultOVAURLs = map[string]string{
 
 ### Creating Your Own Templates
 
+**Note**: Template creation is different from regular VM creation. Template VMs are created using the `CreateTemplateVM` API with direct configuration parameters, while regular VMs are created using the `CreateVM` API with order data.
+
 To create your own template OVA:
 
-1. Use the `createTemplateVM` API to create a base VM:
+1. Use the `CreateTemplateVM` API to create a base VM:
 
    ```go
    req := vbtypes.VMCreateRequest{
@@ -185,8 +209,8 @@ To create your own template OVA:
 
 2. Start the VM and install any necessary software and configurations
 
-   ```go
-   vm, err = service.StartVM(ctx, vm.ID)
+   ```
+    http://localhost:8081/api/v1/virtualbox/{vmId}/start'
    ```
 
 3. Connect to the VM via SSH (using the assigned SSH port)
@@ -204,8 +228,8 @@ To create your own template OVA:
 
 5. Shut down the VM:
 
-   ```go
-   vm, err = service.StopVM(ctx, vm.ID)
+   ```
+    http://localhost:8081/api/v1/virtualbox/{vmId}/stop
    ```
 
 6. Export the VM as an OVA file:
@@ -236,13 +260,15 @@ The service follows an asynchronous job-based approach to VM creation for better
 
 When a VM creation request is processed from the queue:
 
-1. **Resource Validation**: Check if sufficient system resources are available
-2. **OVA Template Selection**: Choose appropriate OVA based on requested OS type
-3. **OVA Import**: Import the OVA template to create a base VM
-4. **Hardware Configuration**: Adjust CPU, memory, and other settings to match request
-5. **Cloud-Init Configuration**: Generate custom cloud-init ISO with user credentials
-6. **Network Configuration**: Set up SSH port forwarding for remote access
-7. **VM Startup**: Boot the VM with the new configuration
+1. **Order Validation**: Fetch and validate the order using the provided `OrderId`
+2. **Resource Validation**: Check if sufficient system resources are available based on order specifications
+3. **Hardware Detection**: Automatically detect host architecture to determine appropriate OS type
+4. **OVA Template Selection**: Choose appropriate OVA based on detected architecture (Ubuntu_64 for x86_64, Ubuntu_ARM64 for ARM64)
+5. **OVA Import**: Import the OVA template to create a base VM
+6. **Hardware Configuration**: Adjust CPU, memory, and disk settings to match order specifications
+7. **Cloud-Init Configuration**: Generate custom cloud-init ISO with provided user credentials
+8. **Network Configuration**: Set up SSH port forwarding for remote access
+9. **VM Startup**: Boot the VM with the new configuration
 
 ### Job Management
 
@@ -255,74 +281,45 @@ This approach provides faster VM creation compared to installing from scratch, w
 
 ## Usage Examples
 
-### Creating a VM from OVA Template
+### Creating a VM from Order
 
-```go
-req := vbtypes.VMCreateRequest{
-    Name:       "ubuntu-vm",
-    OSType:     "Ubuntu_64",
-    CPUCores:   2,
-    MemoryMB:   2048,
-    DiskSizeGB: 20,
-    Username:   "admin",
-    Password:   "secure-password",
-}
-
-// Submit VM creation request (returns immediately with job ID)
-jobResponse, err := service.CreateVM(ctx, req)
-if err != nil {
-    log.Fatalf("Failed to submit VM creation request: %v", err)
-}
-
-log.Printf("VM creation job submitted: %s", jobResponse.JobID)
+The VM creation process uses order data to determine the VM configuration. The system automatically fetches the order details and creates a VM with the specified resources.
 
 ```
+curl --location 'http://localhost:8081/api/v1/virtualbox/' \
+--header 'Content-Type: application/json' \
+--data '{
+    "order_id": "1",
+    "username": "ubuntu123",
+    "password": "ubuntu"
+}'
+```
+
+The system will:
+
+1. Fetch the order details using the provided `OrderId`
+2. Extract CPU cores, memory, and disk size from the order
+3. Automatically determine the appropriate OS type based on the host architecture
+4. Create a VM with the name format `vm-{orderId}`
+5. Configure the VM with the order's specifications
 
 ### Managing VMs
 
-```go
-// Get VM information
-vm, err := service.GetVM(ctx, vmID)
+```
+http://localhost:8081/api/v1/virtualbox/{vmId}/start
+http://localhost:8081/api/v1/virtualbox/{vmId}/stop
+http://localhost:8081/api/v1/virtualbox/{vmId}/pause
+http://localhost:8081/api/v1/virtualbox/{vmId}/resume
+http://localhost:8081/api/v1/virtualbox/{vmId}/reset
 
-// Start VM
-vm, err = service.StartVM(ctx, vmID)
-
-// Stop VM
-vm, err = service.StopVM(ctx, vmID)
-
-// Delete VM
-err = service.DeleteVM(ctx, vmID)
 ```
 
 ### Job Management
 
-```go
-// Get job progress
-job, err := service.GetJobProgress(ctx, jobID)
-if err != nil {
-    log.Fatalf("Failed to get job: %v", err)
-}
+Get the progress of task in job queue
 
-log.Printf("Job %s: %s", job.ID, job.Status)
-if job.Status == vbtypes.JobStatusCompleted {
-    log.Printf("VM created: %s", job.Result["vm_id"])
-}
-
-// List all jobs
-jobs, err := service.ListJobs(ctx)
-if err != nil {
-    log.Fatalf("Failed to list jobs: %v", err)
-}
-
-for _, job := range jobs {
-    log.Printf("Job %s: %s - %s", job.ID, job.EventType, job.Status)
-}
-
-// Cancel a job
-err = service.CancelJob(ctx, jobID)
-if err != nil {
-    log.Fatalf("Failed to cancel job: %v", err)
-}
+```
+http://localhost:8081/api/v1/virtualbox/jobs
 ```
 
 ### SSH Connection Examples
@@ -360,66 +357,17 @@ wsConn := // ... your WebSocket connection
 sshConn := virtualbox.NewSSHConnection("vm-123", wsConn, sshServer)
 
 // Establish SSH connection with credentials
-err := sshConn.Connect("admin", "password")
-if err != nil {
-    log.Fatalf("SSH connection failed: %v", err)
-}
-
+sshConn := virtualbox.NewSSHConnection(vmID, wsConn, sshServer)
+    if err := sshConn.Connect("admin", "password"); err != nil {
+        wsConn.WriteMessage(websocket.TextMessage, []byte("Connection failed: "+err.Error()))
+        return
+    }
 // Start handling the connection
 sshConn.Start()
 
 // The connection will now handle bidirectional data flow:
 // - SSH output → WebSocket (for display in browser)
 // - WebSocket input → SSH (for user commands)
-```
-
-#### WebSocket Integration
-
-The SSH connection system is designed to work with WebSocket connections for web-based terminal access:
-
-```go
-// Example WebSocket handler
-func handleWebSocket(w http.ResponseWriter, r *http.Request) {
-    upgrader := websocket.Upgrader{
-        CheckOrigin: func(r *http.Request) bool { return true },
-    }
-
-    wsConn, err := upgrader.Upgrade(w, r, nil)
-    if err != nil {
-        return
-    }
-    defer wsConn.Close()
-
-    // Get VM ID from query parameters
-    vmID := r.URL.Query().Get("vm_id")
-
-    // Create and start SSH connection
-    sshConn := virtualbox.NewSSHConnection(vmID, wsConn, sshServer)
-    if err := sshConn.Connect("admin", "password"); err != nil {
-        wsConn.WriteMessage(websocket.TextMessage, []byte("Connection failed: "+err.Error()))
-        return
-    }
-
-    sshConn.Start()
-
-    // Connection will remain active until WebSocket closes
-    // or SSH connection is terminated
-}
-```
-
-#### Connection Management
-
-```go
-// Check connection status
-if sshConn.IsActive {
-    fmt.Println("SSH connection is active")
-}
-
-// Close connection
-sshConn.Close()
-
-// Remove VM configuration when VM is deleted
-sshServer.RemoveVMConfig("vm-123")
 ```
 
 #### Terminal Configuration
@@ -482,22 +430,12 @@ To connect to a Virtual Machine via SSH using WebSocket, follow these steps:
 
 First, generate a one-time SSH access token using the JSON-RPC API:
 
-```json
-{
-  "jsonrpc": "2.0",
-  "method": "virtualbox_generateSSHToken",
-  "params": ["
-  ef944449-d2c8-4c91-9c0e-f23e8ec46b8e",
-  "ubuntu",
-  "ubuntu"
-  ],
-  "id": 1
-}
+```
+http://localhost:8081/api/v1/virtualbox/{vmId}/ssh/token
 ```
 
 **Parameters:**
 
-- `vmId`: The UUID of the target VM
 - `username`: SSH username
 - `password`: SSH password
 

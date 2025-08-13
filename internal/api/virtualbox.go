@@ -17,28 +17,6 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/internal/api/ws"
 )
 
-// WebSocket message codes for VM SSH
-const (
-	VMSSHCodeStdin   = 0
-	VMSSHCodeStdout  = 1
-	VMSSHCodeStderr  = 2
-	VMSSHCodeResult  = 3
-	VMSSHCodeFailure = 4
-	VMSSHCodeResize  = 5
-)
-
-// VMSSHRequest represents the request body for SSH connection
-type VMSSHRequest struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
-}
-
-// VMSSHResponse represents the response from SSH connection
-type VMSSHResponse struct {
-	ExitCode int    `json:"exit_code"`
-	Message  string `json:"message,omitempty"`
-}
-
 type vmResult struct {
 	ID         string           `json:"id,omitempty"`
 	Name       string           `json:"name,omitempty"`
@@ -60,23 +38,6 @@ type vmUsageResult struct {
 	NetworkTxMB   float64 `json:"network_tx_mb"`
 	UptimeSeconds int64   `json:"uptime_seconds"`
 	Timestamp     string  `json:"timestamp"`
-}
-
-type vmSystemInfoResult struct {
-	VBoxVersion     string `json:"vbox_version"`
-	HostOS          string `json:"host_os"`
-	HostArch        string `json:"host_arch"`
-	AvailableCPUs   int    `json:"available_cpus"`
-	AvailableRAMMB  int    `json:"available_ram_mb"`
-	AvailableDiskGB int    `json:"available_disk_gb"`
-}
-
-type isoInfoResult struct {
-	URL          string `json:"url"`
-	Path         string `json:"path"`
-	Size         int64  `json:"size"`
-	Checksum     string `json:"checksum"`
-	DownloadedAt string `json:"downloaded_at"`
 }
 
 func convertToVMResult(vm *vbtypes.VM) *vmResult {
@@ -112,32 +73,6 @@ func convertToVMUsageResult(usage *vbtypes.VMUsage) *vmUsageResult {
 	}
 }
 
-func convertToSystemInfoResult(info *vbtypes.VMSystemInfo) *vmSystemInfoResult {
-	if info == nil {
-		return nil
-	}
-	return &vmSystemInfoResult{
-		HostOS:          info.HostOS,
-		HostArch:        info.HostArch,
-		AvailableCPUs:   info.AvailableCPUs,
-		AvailableRAMMB:  info.AvailableRAMMB,
-		AvailableDiskGB: info.AvailableDiskGB,
-	}
-}
-
-func convertToISOInfoResult(iso *vbtypes.ISOInfo) *isoInfoResult {
-	if iso == nil {
-		return nil
-	}
-	return &isoInfoResult{
-		URL:          iso.URL,
-		Path:         iso.Path,
-		Size:         iso.Size,
-		Checksum:     iso.Checksum,
-		DownloadedAt: iso.DownloadedAt.Format("2006-01-02T15:04:05Z"),
-	}
-}
-
 type VirtualBoxAPI struct {
 	vboxService *virtualbox.VirtualboxService
 	cfg         ConfigProvider
@@ -148,27 +83,6 @@ type VirtualBoxAPI struct {
 func NewVirtualBoxAPI(vboxService *virtualbox.VirtualboxService, cfg ConfigProvider, bidMarket BidMarketContract) *VirtualBoxAPI {
 
 	return &VirtualBoxAPI{vboxService: vboxService, cfg: cfg, ordersCache: NewOrdersWithCache(bidMarket)}
-}
-
-func (api *VirtualBoxAPI) GetVMs(ctx context.Context) ([]vmResult, error) {
-	vms, _, err := api.vboxService.GetVMs(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	result := make([]vmResult, len(vms))
-	for i, vm := range vms {
-		result[i] = *convertToVMResult(vm)
-	}
-	return result, nil
-}
-
-func (api *VirtualBoxAPI) GetVM(ctx context.Context, vmID string) (*vmResult, error) {
-	vm, err := api.vboxService.GetVM(ctx, vmID)
-	if err != nil {
-		return nil, err
-	}
-	return convertToVMResult(vm), nil
 }
 
 func (api *VirtualBoxAPI) CreateTemplateVM(ctx context.Context, name string, cpuCores int, memoryMB int, diskSizeGB int, osType string, username string, password string) (*vbtypes.JobCreateResponse, error) {
@@ -240,7 +154,7 @@ func (api *VirtualBoxAPI) getVMsHandler(w http.ResponseWriter, r *http.Request) 
 
 	if vmID != "" {
 		// Get specific VM
-		vm, err := api.GetVM(r.Context(), vmID)
+		vm, err := api.vboxService.GetVM(r.Context(), vmID)
 		if err != nil {
 			api.sendErrorResponse(w, fmt.Sprintf("Failed to get VM: %v", err), http.StatusInternalServerError)
 			return
@@ -258,15 +172,21 @@ func (api *VirtualBoxAPI) getVMsHandler(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Get all VMs
-	vms, err := api.GetVMs(r.Context())
+	vms, total, err := api.vboxService.GetVMs(r.Context())
+
 	if err != nil {
 		api.sendErrorResponse(w, fmt.Sprintf("Failed to get VMs: %v", err), http.StatusInternalServerError)
 		return
 	}
 
+	result := make([]vmResult, total)
+	for i, vm := range vms {
+		result[i] = *convertToVMResult(vm)
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(vms)
+	json.NewEncoder(w).Encode(result)
 }
 
 // deleteVMHandler handles DELETE requests for a specific VM by ID
@@ -412,6 +332,32 @@ func (api *VirtualBoxAPI) getJobHandler(w http.ResponseWriter, r *http.Request) 
 	json.NewEncoder(w).Encode(jobs)
 }
 
+// generateSSHTokenHandler handles POST requests to generate an SSH token for a VM
+func (api *VirtualBoxAPI) generateSSHTokenHandler(w http.ResponseWriter, r *http.Request) {
+	vmID := chi.URLParam(r, "vmID")
+	if vmID == "" {
+		api.sendErrorResponse(w, "vmID is required", http.StatusBadRequest)
+		return
+	}
+
+	// username, password from body
+	var req vbtypes.GenerateSSHTokenRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		api.sendErrorResponse(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	token, err := api.vboxService.GenerateSSHToken(r.Context(), vmID, req.Username, req.Password)
+	if err != nil {
+		api.sendErrorResponse(w, fmt.Sprintf("Failed to generate SSH token: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(token)
+}
+
 // Router returns the chi router with all VirtualBox routes
 func (api *VirtualBoxAPI) Router() *chi.Mux {
 
@@ -427,27 +373,25 @@ func (api *VirtualBoxAPI) Router() *chi.Mux {
 	// WebSocket route for SSH connection
 	r.Get("/{vmID}/ssh", api.vmSSHWebSocketHandler)
 
-	// Virtualbox API Router
-	r.Group(func(r chi.Router) {
-		r.Use(authMiddleware.Middleware())
+	// Virtualbox API routes
+	r.With(authMiddleware.Middleware()).Post("/", api.createVMHandler)
+	r.Get("/", api.getVMsHandler)
+	r.Get("/{vmID}", api.getVMsHandler)
+	r.Delete("/{vmID}", api.deleteVMHandler)
 
-		// Virtualbox API routes
-		r.Post("/", api.createVMHandler)
-		r.Get("/", api.getVMsHandler)
-		r.Get("/{vmID}", api.getVMsHandler)
-		r.Delete("/{vmID}", api.deleteVMHandler)
+	// startVm, stopVm, pauseVm, resumeVm, resetVm
+	r.Post("/{vmID}/start", api.startVMHandler)
+	r.Post("/{vmID}/stop", api.stopVMHandler)
+	r.Post("/{vmID}/pause", api.pauseVMHandler)
+	r.Post("/{vmID}/resume", api.resumeVMHandler)
+	r.Post("/{vmID}/reset", api.resetVMHandler)
 
-		// startVm, stopVm, pauseVm, resumeVm, resetVm
-		r.Post("/{vmID}/start", api.startVMHandler)
-		r.Post("/{vmID}/stop", api.stopVMHandler)
-		r.Post("/{vmID}/pause", api.pauseVMHandler)
-		r.Post("/{vmID}/resume", api.resumeVMHandler)
-		r.Post("/{vmID}/reset", api.resetVMHandler)
+	// generateSSHToken
+	r.Post("/{vmID}/ssh/token", api.generateSSHTokenHandler)
 
-		// Job progress
-		r.Get("/jobs", api.getJobHandler)
-		r.Get("/jobs/{jobID}", api.getJobHandler)
-	})
+	// Job progress
+	r.Get("/jobs", api.getJobHandler)
+	r.Get("/jobs/{jobID}", api.getJobHandler)
 
 	return r
 }

@@ -68,6 +68,11 @@ type VMUpdateRequest struct {
 	DiskSizeGB int    `json:"disk_size_gb,omitempty"`
 }
 
+type GenerateSSHTokenRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
 // VMFilter represents filters for querying VMs
 type VMFilter struct {
 	Status string `json:"status,omitempty"`
