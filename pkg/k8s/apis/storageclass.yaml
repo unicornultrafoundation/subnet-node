@@ -7,4 +7,46 @@ metadata:
 provisioner: rancher.io/local-path
 reclaimPolicy: Delete
 volumeBindingMode: WaitForFirstConsumer
-
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: ceph-shared
+  labels:
+    subnet.node: "true"
+    app.kubernetes.io/name: "ceph-shared"
+provisioner: rbd.csi.ceph.com
+reclaimPolicy: Retain
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+parameters:
+  clusterID: ceph-cluster
+  pool: rbd
+  imageFormat: "2"
+  imageFeatures: layering
+  csi.storage.k8s.io/provisioner-secret-name: ceph-csi-rbd-secret
+  csi.storage.k8s.io/provisioner-secret-namespace: default
+  csi.storage.k8s.io/node-stage-secret-name: ceph-csi-rbd-secret
+  csi.storage.k8s.io/node-stage-secret-namespace: default
+  csi.storage.k8s.io/controller-expand-secret-name: ceph-csi-rbd-secret
+  csi.storage.k8s.io/controller-expand-secret-namespace: default
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: cephfs-shared
+  labels:
+    subnet.node: "true"
+    app.kubernetes.io/name: "cephfs-shared"
+provisioner: cephfs.csi.ceph.com
+reclaimPolicy: Retain
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+parameters:
+  clusterID: ceph-cluster
+  fsName: cephfs
+  pool: cephfs_data
+  csi.storage.k8s.io/provisioner-secret-name: ceph-csi-cephfs-secret
+  csi.storage.k8s.io/provisioner-secret-namespace: default
+  csi.storage.k8s.io/node-stage-secret-name: ceph-csi-cephfs-secret
+  csi.storage.k8s.io/node-stage-secret-namespace: default
