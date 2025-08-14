@@ -89,6 +89,20 @@ func (e *VBoxManageExecutor) CreateVM(vmName string, osType string) error {
 	return nil
 }
 
+// CreateVMWithoutOS creates a new VM without specifying OS type
+func (e *VBoxManageExecutor) CreateVMWithoutOS(vmName string) error {
+	vboxLog.Infof("Creating VM without OS type: %s", vmName)
+
+	cmd := exec.Command("VBoxManage", "createvm", "--name", vmName, "--register")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to create VM without OS: %w, output: %s", err, string(output))
+	}
+
+	vboxLog.Infof("VM created successfully without OS: %s", vmName)
+	return nil
+}
+
 // ConfigureVMHardware configures VM hardware settings with dynamic hardware detection
 func (e *VBoxManageExecutor) ConfigureVMHardware(vmName string, cpuCount int, memoryMB int) error {
 	vboxLog.Infof("Configuring VM hardware for: %s", vmName)
@@ -283,6 +297,18 @@ func (e *VBoxManageExecutor) AttachCloudInitISO(vmName, isoPath string) error {
 		"storageattach", vmName,
 		"--storagectl", "VirtioSCSI",
 		"--port", "2", "--device", "0",
+		"--type", "dvddrive", "--medium", isoPath,
+	)
+	return err
+}
+
+// AttachCloudInitISOVirtioSCSI attaches the cloud-init ISO to the VM using VirtioSCSI controller
+func (e *VBoxManageExecutor) AttachCloudInitISOVirtioSCSI(vmName, isoPath string) error {
+	vboxLog.Infof("Attaching cloud-init ISO to VM using VirtioSCSI: %s", vmName)
+	_, err := e.executeCommand(
+		"storageattach", vmName,
+		"--storagectl", "VirtioSCSI",
+		"--port", "1", "--device", "0",
 		"--type", "dvddrive", "--medium", isoPath,
 	)
 	return err
@@ -681,6 +707,35 @@ func (e *VBoxManageExecutor) attachDisk(vmName, diskPath string) error {
 	vboxLog.Infof("Attaching disk to VirtioSCSI controller")
 	_, err := e.executeCommand("storageattach", vmName, "--storagectl", "VirtioSCSI", "--port", "0", "--device", "0", "--type", "hdd", "--medium", diskPath)
 	return err
+}
+
+// AttachExistingVDI attaches an existing VDI file to a VM using VirtioSCSI
+func (e *VBoxManageExecutor) AttachExistingVDI(vmName, vdiPath string) error {
+	vboxLog.Infof("Attaching existing VDI to VM using VirtioSCSI: %s", vmName)
+
+	// First, add a VirtioSCSI controller if it doesn't exist
+	if err := e.addVirtioSCSIController(vmName); err != nil {
+		return fmt.Errorf("failed to add VirtioSCSI controller: %w", err)
+	}
+
+	// Attach the VDI to the VirtioSCSI controller
+	_, err := e.executeCommand("storageattach", vmName, "--storagectl", "VirtioSCSI", "--port", "0", "--device", "0", "--type", "hdd", "--medium", vdiPath)
+	return err
+}
+
+// ResizeVDI resizes a VDI file to the specified size in GB
+func (e *VBoxManageExecutor) ResizeVDI(vdiPath string, diskSizeGB int) error {
+	vboxLog.Infof("Resizing VDI file: %s to %d GB", vdiPath, diskSizeGB)
+
+	// VBoxManage modifymedium disk <filename> --resize <size in MB>
+	sizeMB := diskSizeGB * 1024
+	_, err := e.executeCommand("modifymedium", "disk", vdiPath, "--resize", fmt.Sprintf("%d", sizeMB))
+	if err != nil {
+		return fmt.Errorf("failed to resize VDI file: %w", err)
+	}
+
+	vboxLog.Infof("VDI file resized successfully: %s to %d GB", vdiPath, diskSizeGB)
+	return nil
 }
 
 func (e *VBoxManageExecutor) attachISO(vmName, isoPath string) error {

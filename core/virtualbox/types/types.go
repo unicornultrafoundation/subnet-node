@@ -137,8 +137,9 @@ type SSHTokenResponse struct {
 type VMEventType string
 
 const (
-	VMEventCreateVM         VMEventType = "create_vm"
-	VMEventCreateTemplateVM VMEventType = "create_template_vm"
+	VMEventCreateVM          VMEventType = "create_vm"
+	VMEventCreateTemplateVM  VMEventType = "create_template_vm"
+	VMEventCreateVMFromImage VMEventType = "create_vm_from_image"
 )
 
 // VMRequest represents a VM operation request sent through the channel
@@ -189,4 +190,24 @@ type Job struct {
 // JobCreateResponse represents the response when creating a job
 type JobCreateResponse struct {
 	JobID string `json:"job_id"`
+}
+
+type CreateVMFromImageRequest struct {
+	OrderId  string `json:"order_id"`
+	OS       string `json:"os"`
+	Version  string `json:"version"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+type VMCreateFromImageRequest struct {
+	Name       string `json:"name"`
+	CPUCores   int    `json:"cpu_cores"`
+	OS         string `json:"os"`
+	Version    string `json:"version"`
+	MemoryMB   int    `json:"memory_mb"`
+	DiskSizeGB int    `json:"disk_size_gb"`
+	OSType     string `json:"os_type,omitempty"`
+	Username   string `json:"username,omitempty"`
+	Password   string `json:"password,omitempty"`
 }

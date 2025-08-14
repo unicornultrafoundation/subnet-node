@@ -23,7 +23,6 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/config"
 	"github.com/unicornultrafoundation/subnet-node/core/node/resource"
 	"github.com/unicornultrafoundation/subnet-node/core/virtualbox/ssh_connection"
-	"github.com/unicornultrafoundation/subnet-node/core/virtualbox/storage"
 	vbtypes "github.com/unicornultrafoundation/subnet-node/core/virtualbox/types"
 )
 
@@ -33,7 +32,6 @@ var serviceLog = logrus.WithField("service", "virtualbox")
 type VirtualboxService struct {
 	vmDir      string
 	mu         sync.RWMutex
-	storageMgr *storage.StorageManagerImpl
 	vboxExec   *VBoxManageExecutor
 	datastore  datastore.Datastore
 	syncTicker *time.Ticker
@@ -53,11 +51,6 @@ func IsVirtualBoxEnabled(cfg *config.C) bool {
 
 // NewService creates a new VirtualBox service
 func NewService(ds datastore.Datastore) (*VirtualboxService, error) {
-	// Create storage manager
-	storageMgr, err := storage.NewStorageManager()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create storage manager: %w", err)
-	}
 
 	// Get VM directory
 	vmDir, err := fsutil.ExpandHome("~/VirtualBox VMs")
@@ -82,11 +75,10 @@ func NewService(ds datastore.Datastore) (*VirtualboxService, error) {
 	wsHandler := ssh_connection.NewWebSocketHandler(sshServer, serviceLog)
 
 	service := &VirtualboxService{
-		storageMgr: storageMgr,
-		vmDir:      vmDir,
-		stopChan:   make(chan struct{}),
-		vboxExec:   NewVBoxManageExecutor(vmDir),
-		datastore:  ds,
+		vmDir:     vmDir,
+		stopChan:  make(chan struct{}),
+		vboxExec:  NewVBoxManageExecutor(vmDir),
+		datastore: ds,
 
 		sshServer: sshServer,
 		wsHandler: wsHandler,
@@ -110,13 +102,6 @@ func NewService(ds datastore.Datastore) (*VirtualboxService, error) {
 // Start starts the VirtualBox service
 func (s *VirtualboxService) Start(ctx context.Context) error {
 	serviceLog.Info("Starting VirtualBox service")
-
-	// Ensure the ISOs directory exists
-	isoDir, err := s.ensureISOsDirectory()
-	if err != nil {
-		return fmt.Errorf("failed to ensure ISOs directory exists: %w", err)
-	}
-	serviceLog.Infof("Ensured ISOs directory exists at: %s", isoDir)
 
 	// Start the synchronization ticker to run every 15 seconds
 	s.syncTicker = time.NewTicker(15 * time.Second)
@@ -189,6 +174,29 @@ func (s *VirtualboxService) CreateVM(ctx context.Context, req vbtypes.VMCreateRe
 	}
 
 	job, err := s.jobManager.CreateJob(ctx, vbtypes.VMEventCreateVM, requestData, req.Name)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create job: %w", err)
+	}
+
+	return &vbtypes.JobCreateResponse{
+		JobID: job.ID,
+	}, nil
+}
+
+func (s *VirtualboxService) CreateVMFromImage(ctx context.Context, req vbtypes.VMCreateFromImageRequest) (*vbtypes.JobCreateResponse, error) {
+	// Create a job for tracking progress
+	requestData := map[string]interface{}{
+		"name":         req.Name,
+		"cpu_cores":    req.CPUCores,
+		"memory_mb":    req.MemoryMB,
+		"disk_size_gb": req.DiskSizeGB,
+		"os":           req.OS,
+		"version":      req.Version,
+		"username":     req.Username,
+		"password":     req.Password,
+	}
+
+	job, err := s.jobManager.CreateJob(ctx, vbtypes.VMEventCreateVMFromImage, requestData, req.Name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create job: %w", err)
 	}
@@ -576,7 +584,7 @@ func (s *VirtualboxService) ResetVM(ctx context.Context, uuid string) (*vbtypes.
 }
 
 // validateResources checks if the system has sufficient resources to create the VM
-func (s *VirtualboxService) validateResources(ctx context.Context, req vbtypes.VMCreateRequest) error {
+func (s *VirtualboxService) validateResources(ctx context.Context, vmCPUCores int, vmMemoryMB int, vmDiskSizeGB int) error {
 	serviceLog.Infof("Checking system resources for VM requirements...")
 
 	resourceInfo, err := resource.GetResource()
@@ -609,9 +617,9 @@ func (s *VirtualboxService) validateResources(ctx context.Context, req vbtypes.V
 			}
 		}
 		// Add the new VM's requirements
-		totalCPUs += req.CPUCores
-		totalMem += req.MemoryMB
-		totalDisk += req.DiskSizeGB
+		totalCPUs += vmCPUCores
+		totalMem += vmMemoryMB
+		totalDisk += vmDiskSizeGB
 
 		availableCPUs := resourceInfo.CPU.Count
 		availableMem := int(resourceInfo.Memory.Total / (1024 * 1024))
@@ -629,24 +637,24 @@ func (s *VirtualboxService) validateResources(ctx context.Context, req vbtypes.V
 	}
 
 	serviceLog.Infof("Validating VM requirements against system resources...")
-	serviceLog.Infof("VM Requirements: CPU=%d cores, Memory=%d MB, Disk=%d GB", req.CPUCores, req.MemoryMB, req.DiskSizeGB)
+	serviceLog.Infof("VM Requirements: CPU=%d cores, Memory=%d MB, Disk=%d GB", vmCPUCores, vmMemoryMB, vmDiskSizeGB)
 	serviceLog.Infof("System Resources: CPU=%d cores, Memory=%d MB, Disk=%d GB",
 		resourceInfo.CPU.Count,
 		resourceInfo.Memory.Total/(1024*1024),       // Convert bytes to MB
 		resourceInfo.Storage.Total/(1024*1024*1024)) // Convert bytes to GB
 
 	// Validate CPU cores
-	if err := s.validateCPUResources(req, resourceInfo); err != nil {
+	if err := s.validateCPUResources(vmCPUCores, resourceInfo); err != nil {
 		return fmt.Errorf("CPU validation failed: %w", err)
 	}
 
 	// Validate memory
-	if err := s.validateMemoryResources(req, resourceInfo); err != nil {
+	if err := s.validateMemoryResources(vmMemoryMB, resourceInfo); err != nil {
 		return fmt.Errorf("memory validation failed: %w", err)
 	}
 
 	// Validate disk space
-	if err := s.validateDiskResources(req, resourceInfo); err != nil {
+	if err := s.validateDiskResources(vmDiskSizeGB, resourceInfo); err != nil {
 		return fmt.Errorf("disk validation failed: %w", err)
 	}
 
@@ -655,71 +663,71 @@ func (s *VirtualboxService) validateResources(ctx context.Context, req vbtypes.V
 }
 
 // validateCPUResources validates CPU requirements
-func (s *VirtualboxService) validateCPUResources(req vbtypes.VMCreateRequest, resourceInfo *resource.ResourceInfo) error {
+func (s *VirtualboxService) validateCPUResources(vmCPUCores int, resourceInfo *resource.ResourceInfo) error {
 	// Check if requested CPU cores exceed available cores
-	if req.CPUCores > resourceInfo.CPU.Count {
-		return fmt.Errorf("insufficient CPU cores: requested %d, available %d", req.CPUCores, resourceInfo.CPU.Count)
+	if vmCPUCores > resourceInfo.CPU.Count {
+		return fmt.Errorf("insufficient CPU cores: requested %d, available %d", vmCPUCores, resourceInfo.CPU.Count)
 	}
 
 	// Check for reasonable CPU allocation (not more than 80% of available cores)
 	maxRecommendedCores := int(float64(resourceInfo.CPU.Count) * 0.8)
-	if req.CPUCores > maxRecommendedCores {
-		serviceLog.Warnf("CPU allocation warning: requested %d cores exceeds recommended maximum of %d cores", req.CPUCores, maxRecommendedCores)
+	if vmCPUCores > maxRecommendedCores {
+		serviceLog.Warnf("CPU allocation warning: requested %d cores exceeds recommended maximum of %d cores", vmCPUCores, maxRecommendedCores)
 	}
 
-	serviceLog.Infof("CPU validation passed: %d cores requested, %d available", req.CPUCores, resourceInfo.CPU.Count)
+	serviceLog.Infof("CPU validation passed: %d cores requested, %d available", vmCPUCores, resourceInfo.CPU.Count)
 	return nil
 }
 
 // validateMemoryResources validates memory requirements
-func (s *VirtualboxService) validateMemoryResources(req vbtypes.VMCreateRequest, resourceInfo *resource.ResourceInfo) error {
+func (s *VirtualboxService) validateMemoryResources(vmMemoryMB int, resourceInfo *resource.ResourceInfo) error {
 	// Convert memory from bytes to MB
 	availableMemoryMB := int(resourceInfo.Memory.Total / (1024 * 1024))
 
 	// Check if requested memory exceeds available memory
-	if req.MemoryMB > availableMemoryMB {
-		return fmt.Errorf("insufficient memory: requested %d MB, available %d MB", req.MemoryMB, availableMemoryMB)
+	if vmMemoryMB > availableMemoryMB {
+		return fmt.Errorf("insufficient memory: requested %d MB, available %d MB", vmMemoryMB, availableMemoryMB)
 	}
 
 	// Check for reasonable memory allocation (not more than 80% of available memory)
 	maxRecommendedMemoryMB := int(float64(availableMemoryMB) * 0.8)
-	if req.MemoryMB > maxRecommendedMemoryMB {
-		serviceLog.Warnf("Memory allocation warning: requested %d MB exceeds recommended maximum of %d MB", req.MemoryMB, maxRecommendedMemoryMB)
+	if vmMemoryMB > maxRecommendedMemoryMB {
+		serviceLog.Warnf("Memory allocation warning: requested %d MB exceeds recommended maximum of %d MB", vmMemoryMB, maxRecommendedMemoryMB)
 	}
 
 	// Add 20% buffer for system overhead
-	requiredMemoryWithBuffer := int(float64(req.MemoryMB) * 1.2)
+	requiredMemoryWithBuffer := int(float64(vmMemoryMB) * 1.2)
 	if requiredMemoryWithBuffer > availableMemoryMB {
 		return fmt.Errorf("insufficient memory with system buffer: required %d MB, available %d MB", requiredMemoryWithBuffer, availableMemoryMB)
 	}
 
-	serviceLog.Infof("Memory validation passed: %d MB requested, %d MB available", req.MemoryMB, availableMemoryMB)
+	serviceLog.Infof("Memory validation passed: %d MB requested, %d MB available", vmMemoryMB, availableMemoryMB)
 	return nil
 }
 
 // validateDiskResources validates disk space requirements
-func (s *VirtualboxService) validateDiskResources(req vbtypes.VMCreateRequest, resourceInfo *resource.ResourceInfo) error {
+func (s *VirtualboxService) validateDiskResources(vmDiskSizeGB int, resourceInfo *resource.ResourceInfo) error {
 	// Convert storage from bytes to GB
 	availableDiskGB := int(resourceInfo.Storage.Total / (1024 * 1024 * 1024))
 
 	// Check if requested disk space exceeds available disk space
-	if req.DiskSizeGB > availableDiskGB {
-		return fmt.Errorf("insufficient disk space: requested %d GB, available %d GB", req.DiskSizeGB, availableDiskGB)
+	if vmDiskSizeGB > availableDiskGB {
+		return fmt.Errorf("insufficient disk space: requested %d GB, available %d GB", vmDiskSizeGB, availableDiskGB)
 	}
 
 	// Check for reasonable disk allocation (not more than 90% of available disk space)
 	maxRecommendedDiskGB := int(float64(availableDiskGB) * 0.9)
-	if req.DiskSizeGB > maxRecommendedDiskGB {
-		serviceLog.Warnf("Disk allocation warning: requested %d GB exceeds recommended maximum of %d GB", req.DiskSizeGB, maxRecommendedDiskGB)
+	if vmDiskSizeGB > maxRecommendedDiskGB {
+		serviceLog.Warnf("Disk allocation warning: requested %d GB exceeds recommended maximum of %d GB", vmDiskSizeGB, maxRecommendedDiskGB)
 	}
 
 	// Add 10% buffer for overhead (file system, metadata, etc.)
-	requiredDiskWithBuffer := int(float64(req.DiskSizeGB) * 1.1)
+	requiredDiskWithBuffer := int(float64(vmDiskSizeGB) * 1.1)
 	if requiredDiskWithBuffer > availableDiskGB {
 		return fmt.Errorf("insufficient disk space with overhead buffer: required %d GB, available %d GB", requiredDiskWithBuffer, availableDiskGB)
 	}
 
-	serviceLog.Infof("Disk validation passed: %d GB requested, %d GB available", req.DiskSizeGB, availableDiskGB)
+	serviceLog.Infof("Disk validation passed: %d GB requested, %d GB available", vmDiskSizeGB, availableDiskGB)
 	return nil
 }
 
@@ -788,11 +796,6 @@ func (s *VirtualboxService) GetSystemInfo(ctx context.Context) (*vbtypes.VMSyste
 	}
 
 	return info, nil
-}
-
-// ListOSTypes lists all available OS types that can run on the current machine
-func (s *VirtualboxService) ListOSTypes(ctx context.Context) ([]string, error) {
-	return s.storageMgr.GetSupportedOSTypes(), nil
 }
 
 // GetSSHServer returns the SSH server instance
@@ -864,44 +867,6 @@ func (s *VirtualboxService) ListJobs(ctx context.Context) ([]*vbtypes.Job, error
 // CancelJob cancels a job
 func (s *VirtualboxService) CancelJob(ctx context.Context, jobID string) error {
 	return s.jobManager.CancelJob(ctx, jobID)
-}
-
-// ensureISOsDirectory ensures that the ISOs directory exists
-func (s *VirtualboxService) ensureISOsDirectory() (string, error) {
-	isoDir := filepath.Join(s.vmDir, "ISOs")
-	if err := fsutil.DirWritable(isoDir); err != nil {
-		return "", fmt.Errorf("failed to create ISOs directory: %w", err)
-	}
-	return isoDir, nil
-}
-
-// ensureISO ensures an ISO file is available locally
-func (s *VirtualboxService) ensureISO(ctx context.Context, isoURL string) (string, error) {
-	if isoURL == "" {
-		return "", nil
-	}
-
-	// Ensure ISOs directory exists
-	isoDir, err := s.ensureISOsDirectory()
-	if err != nil {
-		return "", err
-	}
-
-	isoName := filepath.Base(isoURL)
-	isoPath := filepath.Join(isoDir, isoName)
-
-	if s.storageMgr.FileExists(isoPath) {
-		serviceLog.Infof("ISO already exists: %s", isoPath)
-		return isoPath, nil
-	}
-
-	// Download ISO
-	serviceLog.Infof("Downloading ISO: %s", isoPath)
-	if err := s.storageMgr.DownloadFile(ctx, isoURL, isoPath); err != nil {
-		return "", err
-	}
-
-	return isoPath, nil
 }
 
 // generateCloudInitISO generates cloud-init files and ISO for a VM

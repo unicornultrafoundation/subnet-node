@@ -2,471 +2,416 @@ package storage
 
 import (
 	"context"
-	"crypto/sha256"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
-	"runtime"
-	"strings"
 	"time"
 
 	"github.com/sirupsen/logrus"
-	"github.com/unicornultrafoundation/subnet-node/common/fsutil"
-	"github.com/unicornultrafoundation/subnet-node/core/virtualbox/hardware_detector"
-	vbtypes "github.com/unicornultrafoundation/subnet-node/core/virtualbox/types"
 )
 
-var storageLog = logrus.WithField("service", "virtualbox-storage")
+var storageLog = logrus.WithField("package", "storage")
 
-// StorageManagerImpl handles file storage operations
-type StorageManagerImpl struct {
-	isoDir string
+// StorageManager handles image downloads and storage operations
+type StorageManager struct {
+	imageGenerator *UbuntuImageGenerator
+	client         *http.Client
+	vmDir          string
+	imagesDir      string // Base directory for storing images
 }
 
-// NewStorageManager creates a new storage manager
-func NewStorageManager() (*StorageManagerImpl, error) {
-	// Ensure VirtualBox VMs directory exists
-	vmDir, err := fsutil.ExpandHome("~/VirtualBox VMs")
-	if err != nil {
-		return nil, fmt.Errorf("failed to expand VirtualBox VMs directory path: %w", err)
+// NewStorageManager creates a new storage manager instance
+func NewStorageManager(vmDir string) *StorageManager {
+	imagesDir := filepath.Join(vmDir, "Images")
+	return &StorageManager{
+		imageGenerator: NewUbuntuImageGenerator(),
+		client:         &http.Client{}, // No timeout - let the queue system handle timeouts
+		imagesDir:      imagesDir,
+		vmDir:          vmDir,
 	}
-
-	if err := fsutil.DirWritable(vmDir); err != nil {
-		return nil, fmt.Errorf("failed to create VirtualBox VMs directory: %w", err)
-	}
-
-	// Ensure ISOs directory exists
-	isoDir, err := fsutil.ExpandHome("~/VirtualBox VMs/ISOs")
-	if err != nil {
-		return nil, fmt.Errorf("failed to expand ISO directory path: %w", err)
-	}
-
-	if err := fsutil.DirWritable(isoDir); err != nil {
-		return nil, fmt.Errorf("failed to create ISO directory: %w", err)
-	}
-
-	storageLog.Infof("Ensured ISOs directory exists at: %s", isoDir)
-
-	return &StorageManagerImpl{
-		isoDir: isoDir,
-	}, nil
 }
 
-// DownloadFile downloads a file from URL to the specified destination
-func (s *StorageManagerImpl) DownloadFile(ctx context.Context, url, destPath string) error {
-	storageLog.Infof("Downloading %s to %s", url, destPath)
+// GetOrDownloadUbuntuImage downloads an Ubuntu cloud image if it doesn't exist, or returns existing one
+func (sm *StorageManager) GetOrDownloadUbuntuImage(ctx context.Context, version, arch string) (string, error) {
+	// Create the organized directory structure
+	imagePath := sm.getImagePath(version, arch)
 
-	// Create the destination directory if it doesn't exist
-	destDir := filepath.Dir(destPath)
-	if err := fsutil.DirWritable(destDir); err != nil {
-		return fmt.Errorf("failed to create destination directory: %w", err)
+	// Check if image already exists
+	if err := sm.ValidateImageExists(imagePath); err == nil {
+		storageLog.Infof("Ubuntu image already exists: %s", imagePath)
+		return imagePath, nil
 	}
 
-	// Create the destination file
-	destFile, err := os.Create(destPath)
+	// Image doesn't exist, download it
+	storageLog.Infof("Ubuntu image not found, downloading: version=%s, arch=%s", version, arch)
+	return sm.DownloadUbuntuImage(ctx, version, arch)
+}
+
+// DownloadUbuntuImage downloads an Ubuntu cloud image to the organized directory structure
+func (sm *StorageManager) DownloadUbuntuImage(ctx context.Context, version, arch string) (string, error) {
+	storageLog.Infof("Starting Ubuntu image download for version %s, arch %s", version, arch)
+
+	// Create the organized directory structure
+	imageDir := sm.getImageDir(version)
+	if err := os.MkdirAll(imageDir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create image directory: %w", err)
+	}
+
+	// Generate image URL
+	req := ImageRequest{
+		OS:      "ubuntu",
+		Version: version,
+	}
+
+	imageURL := sm.imageGenerator.GenerateImageURLWithFallback(req, arch)
+	if imageURL == "" {
+		return "", fmt.Errorf("failed to generate image URL for Ubuntu %s %s", version, arch)
+	}
+
+	storageLog.Infof("Generated image URL: %s", imageURL)
+
+	// Determine output filename in organized structure
+	outputFilename := sm.getImagePath(version, arch)
+
+	// Download the image
+	if err := sm.downloadFile(ctx, imageURL, outputFilename); err != nil {
+		return "", fmt.Errorf("failed to download Ubuntu image: %w", err)
+	}
+
+	storageLog.Infof("Successfully downloaded Ubuntu image to: %s", outputFilename)
+	return outputFilename, nil
+}
+
+// ConvertImageToVDI converts a downloaded .img file to .vdi format for VirtualBox
+func (sm *StorageManager) ConvertImageToVDI(ctx context.Context, imagePath, vmName, vmFolder string) (string, error) {
+	storageLog.Infof("Converting image to VDI: %s -> %s", imagePath, vmName)
+
+	// Validate source image exists
+	if err := sm.ValidateImageExists(imagePath); err != nil {
+		return "", fmt.Errorf("source image validation failed: %w", err)
+	}
+
+	// Create VM folder if it doesn't exist
+	if err := os.MkdirAll(vmFolder, 0755); err != nil {
+		return "", fmt.Errorf("failed to create VM folder: %w", err)
+	}
+
+	// Create VDI filename in the VM folder
+	vdiPath := filepath.Join(vmFolder, vmName+".vdi")
+
+	// Check if VDI already exists
+	if _, err := os.Stat(vdiPath); err == nil {
+		storageLog.Infof("VDI file already exists: %s", vdiPath)
+		return vdiPath, nil
+	}
+
+	// Execute qemu-img convert command
+	cmd := exec.CommandContext(ctx, "qemu-img", "convert", "-f", "qcow2", "-O", "vdi", imagePath, vdiPath)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	storageLog.Infof("Executing: %s", cmd.String())
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("failed to convert image to VDI: %w", err)
+	}
+
+	storageLog.Infof("Successfully converted image to VDI: %s", vdiPath)
+	return vdiPath, nil
+}
+
+// GetOrCreateVDI gets an existing VDI or creates one from the image
+func (sm *StorageManager) GetOrCreateVDI(ctx context.Context, version, arch, vmName string) (string, error) {
+	vmFolder := filepath.Join(sm.vmDir, vmName)
+	// First, ensure we have the image
+	imagePath, err := sm.GetOrDownloadUbuntuImage(ctx, version, arch)
 	if err != nil {
-		return fmt.Errorf("failed to create destination file: %w", err)
-	}
-	defer destFile.Close()
-
-	// Create HTTP client with timeout
-	client := &http.Client{
-		Timeout: 30 * time.Minute, // Long timeout for large ISO files
+		return "", fmt.Errorf("failed to get/download image: %w", err)
 	}
 
-	// Create request with context
+	// Create VDI filename in the VM folder
+	vdiPath := filepath.Join(vmFolder, vmName+".vdi")
+
+	// Check if VDI already exists
+	if _, err := os.Stat(vdiPath); err == nil {
+		storageLog.Infof("VDI file already exists: %s", vdiPath)
+		return vdiPath, nil
+	}
+
+	// Convert image to VDI
+	return sm.ConvertImageToVDI(ctx, imagePath, vmName, vmFolder)
+}
+
+// downloadFile downloads a file from URL to local path with progress tracking
+func (sm *StorageManager) downloadFile(ctx context.Context, url, outputPath string) error {
+	storageLog.Infof("Downloading file from %s to %s", url, outputPath)
+
+	// Create HTTP request with context
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
 
-	// Add user agent to avoid being blocked
-	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; VirtualBox-ISO-Downloader/1.0)")
+	// Add User-Agent to avoid being blocked
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; SubnetNode/1.0)")
 
-	// Execute the request
-	resp, err := client.Do(req)
+	// Execute request
+	resp, err := sm.client.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to download file: %w", err)
+		return fmt.Errorf("failed to execute request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("download failed with status: %d", resp.StatusCode)
+		return fmt.Errorf("HTTP error: %d - %s", resp.StatusCode, resp.Status)
 	}
 
-	// Copy the response body to the destination file
-	_, err = io.Copy(destFile, resp.Body)
+	// Get content length for progress tracking
+	contentLength := resp.ContentLength
+	storageLog.Infof("File size: %d bytes (%.2f MB)", contentLength, float64(contentLength)/(1024*1024))
+
+	// Create output file
+	outputFile, err := os.Create(outputPath)
 	if err != nil {
-		return fmt.Errorf("failed to write file: %w", err)
+		return fmt.Errorf("failed to create output file: %w", err)
+	}
+	defer outputFile.Close()
+
+	// Download with progress tracking
+	downloadedBytes := int64(0)
+	lastProgressTime := time.Now()
+
+	buffer := make([]byte, 32*1024) // 32KB buffer
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+			// Read chunk
+			n, err := resp.Body.Read(buffer)
+			if n > 0 {
+				// Write chunk to file
+				if _, writeErr := outputFile.Write(buffer[:n]); writeErr != nil {
+					return fmt.Errorf("failed to write to file: %w", writeErr)
+				}
+				downloadedBytes += int64(n)
+
+				// Log progress every 10 seconds or every 10MB
+				if time.Since(lastProgressTime) > 10*time.Second || downloadedBytes%(10*1024*1024) < int64(n) {
+					if contentLength > 0 {
+						progress := float64(downloadedBytes) / float64(contentLength) * 100
+						storageLog.Infof("Download progress: %.1f%% (%d/%d bytes)",
+							progress, downloadedBytes, contentLength)
+					} else {
+						storageLog.Infof("Downloaded: %d bytes", downloadedBytes)
+					}
+					lastProgressTime = time.Now()
+				}
+			}
+			if err != nil {
+				if err == io.EOF {
+					break
+				}
+				return fmt.Errorf("failed to read response body: %w", err)
+			}
+		}
+	}
+}
+
+// GetAvailableUbuntuVersions returns a list of available Ubuntu versions
+func (sm *StorageManager) GetAvailableUbuntuVersions() []string {
+	versions := make([]string, 0, len(sm.imageGenerator.versionToCodename))
+	for version := range sm.imageGenerator.versionToCodename {
+		versions = append(versions, version)
+	}
+	return versions
+}
+
+// ValidateImageExists checks if an image file exists and is valid
+func (sm *StorageManager) ValidateImageExists(imagePath string) error {
+	// Check if file exists
+	if _, err := os.Stat(imagePath); os.IsNotExist(err) {
+		return fmt.Errorf("image file does not exist: %s", imagePath)
 	}
 
-	storageLog.Infof("Successfully downloaded %s", url)
+	// Check if file is readable
+	file, err := os.Open(imagePath)
+	if err != nil {
+		return fmt.Errorf("failed to open image file: %w", err)
+	}
+	defer file.Close()
+
+	// Get file info
+	fileInfo, err := file.Stat()
+	if err != nil {
+		return fmt.Errorf("failed to get file info: %w", err)
+	}
+
+	// Check if file has reasonable size (at least 100MB)
+	if fileInfo.Size() < 100*1024*1024 {
+		return fmt.Errorf("image file seems too small: %d bytes", fileInfo.Size())
+	}
+
+	storageLog.Infof("Image validation passed: %s (%d bytes)", imagePath, fileInfo.Size())
 	return nil
 }
 
-// GetFileInfo gets information about a file
-func (s *StorageManagerImpl) GetFileInfo(filePath string) (*vbtypes.ISOInfo, error) {
-	if !s.FileExists(filePath) {
-		return nil, fmt.Errorf("file does not exist: %s", filePath)
-	}
-
-	// Get file size
-	size, err := s.GetFileSize(filePath)
-	if err != nil {
-		return nil, err
-	}
-
-	// Calculate checksum
-	checksum, err := s.CalculateChecksum(filePath)
-	if err != nil {
-		return nil, err
-	}
-
-	// Get file modification time
-	fileInfo, err := os.Stat(filePath)
-	if err != nil {
-		return nil, err
-	}
-
-	return &vbtypes.ISOInfo{
-		Path:         filePath,
-		Size:         size,
-		Checksum:     checksum,
-		DownloadedAt: fileInfo.ModTime(),
-	}, nil
+// getImageDir returns the directory path for a specific Ubuntu version
+func (sm *StorageManager) getImageDir(version string) string {
+	return filepath.Join(sm.imagesDir, "Ubuntu", version)
 }
 
-// ListFiles lists all files in a directory
-func (s *StorageManagerImpl) ListFiles(dirPath string) ([]string, error) {
-	var files []string
+// getImagePath returns the full path for an Ubuntu image file
+func (sm *StorageManager) getImagePath(version, arch string) string {
+	imageDir := sm.getImageDir(version)
+	filename := fmt.Sprintf("ubuntu-%s-server-cloudimg-%s.img", version, arch)
+	return filepath.Join(imageDir, filename)
+}
 
-	err := filepath.Walk(dirPath, func(path string, info os.FileInfo, err error) error {
+// ListDownloadedImages returns a list of all downloaded images
+func (sm *StorageManager) ListDownloadedImages() (map[string][]string, error) {
+	result := make(map[string][]string)
+
+	ubuntuDir := filepath.Join(sm.imagesDir, "Ubuntu")
+	if _, err := os.Stat(ubuntuDir); os.IsNotExist(err) {
+		return result, nil // No images downloaded yet
+	}
+
+	// Walk through the Ubuntu directory
+	err := filepath.Walk(ubuntuDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
 
-		if !info.IsDir() {
-			// Check if it's an ISO file
-			if strings.HasSuffix(strings.ToLower(path), ".iso") {
-				files = append(files, path)
+		if !info.IsDir() && filepath.Ext(path) == ".img" {
+			// Extract version from path
+			relPath, err := filepath.Rel(ubuntuDir, path)
+			if err != nil {
+				return err
+			}
+
+			parts := filepath.SplitList(relPath)
+			if len(parts) >= 2 {
+				version := parts[0]
+				filename := filepath.Base(path)
+				result[version] = append(result[version], filename)
 			}
 		}
-
 		return nil
 	})
 
+	return result, err
+}
+
+func (sm *StorageManager) GenerateCloudInitISO(ctx context.Context, vmName, username, password string) (string, error) {
+	storageLog.Infof("Generating cloud-init ISO for VM: %s", vmName)
+
+	// Create VM folder if it doesn't exist
+	vmFolder := filepath.Join(sm.vmDir, vmName)
+	if err := os.MkdirAll(vmFolder, 0755); err != nil {
+		return "", fmt.Errorf("failed to create VM folder: %w", err)
+	}
+
+	// Create temporary directory for cloud-init files
+	tempDir, err := os.MkdirTemp("", "cloud-init-*")
 	if err != nil {
-		return nil, fmt.Errorf("failed to list files: %w", err)
+		return "", fmt.Errorf("failed to create temp directory: %w", err)
 	}
-
-	return files, nil
-}
-
-// DeleteFile deletes a file
-func (s *StorageManagerImpl) DeleteFile(filePath string) error {
-	if !s.FileExists(filePath) {
-		return fmt.Errorf("file does not exist: %s", filePath)
-	}
-
-	err := os.Remove(filePath)
-	if err != nil {
-		return fmt.Errorf("failed to delete file: %w", err)
-	}
-
-	storageLog.Infof("Deleted file: %s", filePath)
-	return nil
-}
-
-// FileExists checks if a file exists
-func (s *StorageManagerImpl) FileExists(filePath string) bool {
-	_, err := os.Stat(filePath)
-	return err == nil
-}
-
-// GetFileSize gets the size of a file in bytes
-func (s *StorageManagerImpl) GetFileSize(filePath string) (int64, error) {
-	fileInfo, err := os.Stat(filePath)
-	if err != nil {
-		return 0, fmt.Errorf("failed to get file info: %w", err)
-	}
-
-	return fileInfo.Size(), nil
-}
-
-// CalculateChecksum calculates SHA256 checksum of a file
-func (s *StorageManagerImpl) CalculateChecksum(filePath string) (string, error) {
-	file, err := os.Open(filePath)
-	if err != nil {
-		return "", fmt.Errorf("failed to open file: %w", err)
-	}
-	defer file.Close()
-
-	hash := sha256.New()
-	if _, err := io.Copy(hash, file); err != nil {
-		return "", fmt.Errorf("failed to calculate checksum: %w", err)
-	}
-
-	return fmt.Sprintf("%x", hash.Sum(nil)), nil
-}
-
-// GetISODir returns the ISO directory path
-func (s *StorageManagerImpl) GetISODir() string {
-	return s.isoDir
-}
-
-// GetISOFileName extracts the filename from a URL
-func (s *StorageManagerImpl) GetISOFileName(url string) string {
-	parts := strings.Split(url, "/")
-	if len(parts) > 0 {
-		return parts[len(parts)-1]
-	}
-	return "unknown.iso"
-}
-
-// GetISOPath returns the full path for an ISO file
-func (s *StorageManagerImpl) GetISOPath(isoURL string) string {
-	fileName := s.GetISOFileName(isoURL)
-	return filepath.Join(s.isoDir, fileName)
-}
-
-// ISO OS Type Management Methods
-
-// DetermineOSTypeAndISO handles the complete process of determining OS type and ISO URL
-func (s *StorageManagerImpl) DetermineOSTypeAndISO(ctx context.Context, req vbtypes.VMCreateRequest) (string, string, error) {
-	storageLog.Infof("Starting OS type and ISO determination process...")
-
-	// Step 1: Determine OS type
-	osType, err := s.determineOSType(req)
-	if err != nil {
-		return "", "", fmt.Errorf("failed to determine OS type: %w", err)
-	}
-	storageLog.Infof("Determined OS type: %s", osType)
-
-	// Step 2: Determine ISO URL
-	isoURL, err := s.determineISOURL(osType)
-	if err != nil {
-		return "", "", fmt.Errorf("failed to determine ISO URL: %w", err)
-	}
-	storageLog.Infof("Determined ISO URL: %s", isoURL)
-
-	// Step 3: Validate the combination
-	if err := s.validateOSTypeAndISOCombination(osType, isoURL); err != nil {
-		return "", "", fmt.Errorf("invalid OS type and ISO combination: %w", err)
-	}
-
-	storageLog.Infof("OS type and ISO determination completed successfully")
-	return osType, isoURL, nil
-}
-
-// determineOSType determines the appropriate OS type based on request and system architecture
-func (s *StorageManagerImpl) determineOSType(req vbtypes.VMCreateRequest) (string, error) {
-	// If OS type is explicitly provided in the request, use it
-	if req.OSType != "" {
-		storageLog.Infof("Using provided OS type: %s", req.OSType)
-		return req.OSType, nil
-	}
-
-	// Use hardware detection to determine appropriate OS type
-	hardwareInfo, err := hardware_detector.DetectHardware()
-	if err != nil {
-		storageLog.Warnf("Hardware detection failed, falling back to architecture-based detection: %v", err)
-		// Fallback to architecture-based detection
-		arch := runtime.GOARCH
-		osType := s.getOSTypeForArchitecture(arch)
-		storageLog.Infof("Using architecture-based OS type: %s (for %s)", osType, arch)
-		return osType, nil
-	}
-
-	// Determine OS type based on hardware information
-	osType := s.getOSTypeForHardware(hardwareInfo)
-	storageLog.Infof("Using hardware-based OS type: %s (for %s architecture)", osType, hardwareInfo.Architecture)
-	return osType, nil
-}
-
-// determineISOURL determines the appropriate ISO URL based on request and OS type
-func (s *StorageManagerImpl) determineISOURL(osType string) (string, error) {
-
-	// Determine ISO URL based on OS type
-	isoURL := s.getISOURLForOSType(osType)
-	if isoURL == "" {
-		return "", fmt.Errorf("no ISO URL available for OS type: %s", osType)
-	}
-
-	storageLog.Infof("Using ISO URL for OS type %s: %s", osType, isoURL)
-	return isoURL, nil
-}
-
-// validateOSTypeAndISOCombination validates that the OS type and ISO URL are compatible
-func (s *StorageManagerImpl) validateOSTypeAndISOCombination(osType, isoURL string) error {
-	// Basic validation - check if both are provided
-	if osType == "" {
-		return fmt.Errorf("OS type cannot be empty")
-	}
-	if isoURL == "" {
-		return fmt.Errorf("ISO URL cannot be empty")
-	}
-
-	// Validate OS type format
-	if !s.isValidOSType(osType) {
-		return fmt.Errorf("invalid OS type format: %s", osType)
-	}
-
-	// Validate ISO URL format
-	if !s.isValidISOURL(isoURL) {
-		return fmt.Errorf("invalid ISO URL format: %s", isoURL)
-	}
-
-	// Check architecture compatibility
-	if err := s.validateArchitectureCompatibility(osType); err != nil {
-		return fmt.Errorf("architecture compatibility check failed: %w", err)
-	}
-
-	return nil
-}
-
-// getOSTypeForArchitecture returns the appropriate OS type for the given architecture
-func (s *StorageManagerImpl) getOSTypeForArchitecture(arch string) string {
-	switch arch {
-	case "arm64", "aarch64":
-		return "Ubuntu_ARM64"
-	case "amd64", "x86_64":
-		return "Ubuntu_64"
-	case "arm":
-		return "Ubuntu"
-	case "386", "i386":
-		return "Ubuntu"
-	default:
-		// Default to Ubuntu 64-bit for unknown architectures
-		return "Ubuntu_64"
-	}
-}
-
-// getOSTypeForHardware returns the appropriate OS type based on hardware information
-func (s *StorageManagerImpl) getOSTypeForHardware(hardwareInfo *hardware_detector.HardwareInfo) string {
-	// Use the architecture from hardware detection
-	switch hardwareInfo.Architecture {
-	case "arm64", "aarch64":
-		return "Ubuntu_ARM64"
-	case "amd64", "x86_64":
-		return "Ubuntu_64"
-	case "arm":
-		return "Ubuntu"
-	case "386", "i386":
-		return "Ubuntu"
-	default:
-		// Default to Ubuntu 64-bit for unknown architectures
-		return "Ubuntu_64"
-	}
-}
-
-// isValidOSType checks if the OS type has a valid format
-func (s *StorageManagerImpl) isValidOSType(osType string) bool {
-	// Basic validation - check if it contains valid characters and format
-	if osType == "" {
-		return false
-	}
-
-	// Check for common OS type patterns
-	validPatterns := []string{
-		"Ubuntu", "Ubuntu_64", "Ubuntu_ARM64",
-		"Debian", "Debian_64", "Debian_ARM64",
-		"Windows", "Windows_64", "Windows_ARM64",
-		"Other", "Other_64", "Other_ARM64",
-	}
-
-	for _, pattern := range validPatterns {
-		if osType == pattern {
-			return true
+	// Clean up temp directory and all sensitive files immediately after use
+	defer func() {
+		if err := os.RemoveAll(tempDir); err != nil {
+			storageLog.Warnf("Failed to clean up temporary cloud-init files: %v", err)
 		}
+	}()
+
+	// Generate user-data file
+	userDataPath := filepath.Join(tempDir, "user-data")
+	userData := fmt.Sprintf(`#cloud-config
+
+users:
+  - name: %s
+    plain_text_passwd: %s
+    lock_passwd: false
+    groups: sudo
+    shell: /bin/bash
+
+chpasswd:
+  list: |
+    %s:%s
+  expire: false
+`, username, password, username, password)
+
+	if err := os.WriteFile(userDataPath, []byte(userData), 0644); err != nil {
+		return "", fmt.Errorf("failed to write user-data file: %w", err)
 	}
 
-	return false
+	// Generate meta-data file
+	metaDataPath := filepath.Join(tempDir, "meta-data")
+	metaData := fmt.Sprintf(`instance-id: %s
+local-hostname: %s
+`, vmName, vmName)
+
+	if err := os.WriteFile(metaDataPath, []byte(metaData), 0644); err != nil {
+		return "", fmt.Errorf("failed to write meta-data file: %w", err)
+	}
+
+	// Generate ISO file
+	isoPath := filepath.Join(vmFolder, "cloud-init.iso")
+
+	// Try isogenimage first, then fallback to mkisofs
+	var cmd *exec.Cmd
+	if _, err := exec.LookPath("isogenimage"); err == nil {
+		// Use isogenimage
+		cmd = exec.CommandContext(ctx, "isogenimage", "-o", isoPath, "-V", "cidata", "-r", tempDir)
+		storageLog.Infof("Using isogenimage to create cloud-init ISO")
+	} else if _, err := exec.LookPath("mkisofs"); err == nil {
+		// Use mkisofs
+		cmd = exec.CommandContext(ctx, "mkisofs", "-o", isoPath, "-V", "cidata", "-r", "-J", tempDir)
+		storageLog.Infof("Using mkisofs to create cloud-init ISO")
+	} else {
+		return "", fmt.Errorf("neither isogenimage nor mkisofs found in PATH")
+	}
+
+	// Execute the command
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("failed to create cloud-init ISO: %w, output: %s", err, string(output))
+	}
+
+	// Immediately clean up sensitive files after ISO creation
+	if err := os.RemoveAll(tempDir); err != nil {
+		storageLog.Warnf("Failed to clean up temporary cloud-init files: %v", err)
+	}
+
+	storageLog.Infof("Successfully generated cloud-init ISO: %s", isoPath)
+	return isoPath, nil
 }
 
-// isValidISOURL checks if the ISO URL has a valid format
-func (s *StorageManagerImpl) isValidISOURL(isoURL string) bool {
-	if isoURL == "" {
-		return false
+// GetImageInfo returns information about a specific image
+func (sm *StorageManager) GetImageInfo(version, arch string) (*ImageInfo, error) {
+	imagePath := sm.getImagePath(version, arch)
+
+	fileInfo, err := os.Stat(imagePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get image info: %w", err)
 	}
 
-	// Check if it's a valid HTTP/HTTPS URL
-	if !strings.HasPrefix(isoURL, "http://") && !strings.HasPrefix(isoURL, "https://") {
-		return false
-	}
-
-	// Check if it ends with .iso
-	if !strings.HasSuffix(isoURL, ".iso") {
-		return false
-	}
-
-	return true
+	return &ImageInfo{
+		Path:         imagePath,
+		Size:         fileInfo.Size(),
+		ModifiedTime: fileInfo.ModTime(),
+		Version:      version,
+		Architecture: arch,
+	}, nil
 }
 
-// validateArchitectureCompatibility checks if the OS type is compatible with the current architecture
-func (s *StorageManagerImpl) validateArchitectureCompatibility(osType string) error {
-	currentArch := runtime.GOARCH
-
-	// Define architecture compatibility rules
-	compatibilityMap := map[string][]string{
-		"arm64": {"Ubuntu_ARM64", "Debian_ARM64", "Windows_ARM64", "Other_ARM64"},
-		"amd64": {"Ubuntu_64", "Debian_64", "Windows_64", "Other_64"},
-		"arm":   {"Ubuntu", "Debian", "Windows", "Other"},
-		"386":   {"Ubuntu", "Debian", "Windows", "Other"},
-	}
-
-	// Get compatible OS types for current architecture
-	compatibleTypes, exists := compatibilityMap[currentArch]
-	if !exists {
-		// If architecture not found, assume all types are compatible
-		storageLog.Warnf("Unknown architecture %s, assuming all OS types are compatible", currentArch)
-		return nil
-	}
-
-	// Check if the OS type is compatible
-	for _, compatibleType := range compatibleTypes {
-		if osType == compatibleType {
-			return nil
-		}
-	}
-
-	return fmt.Errorf("OS type %s is not compatible with architecture %s", osType, currentArch)
-}
-
-// getISOURLForOSType returns the ISO URL for a given OS type
-func (s *StorageManagerImpl) getISOURLForOSType(osType string) string {
-	switch osType {
-	case "Ubuntu_64":
-		return "https://releases.ubuntu.com/24.04/ubuntu-24.04.2-live-server-amd64.iso"
-	case "Ubuntu_ARM64":
-		return "https://cdimage.ubuntu.com/releases/24.04/release/ubuntu-24.04.2-live-server-arm64.iso"
-	default:
-		// Default to Ubuntu 64-bit
-		return "https://releases.ubuntu.com/24.04/ubuntu-24.04.2-live-server-amd64.iso"
-	}
-}
-
-// GetSupportedOSTypes returns a list of supported OS types for the current architecture
-func (s *StorageManagerImpl) GetSupportedOSTypes() []string {
-	currentArch := runtime.GOARCH
-
-	compatibilityMap := map[string][]string{
-		"arm64": {"Ubuntu_ARM64"}, //"Debian_ARM64", "Windows_ARM64", "Other_ARM64"},
-		"amd64": {"Ubuntu_64"},    //"Debian_64", "Windows_64", "Other_64"},
-		"arm":   {"Ubuntu"},       //"Debian", "Windows", "Other"},
-		"386":   {"Ubuntu"},       //"Debian", "Windows", "Other"},
-	}
-
-	if compatibleTypes, exists := compatibilityMap[currentArch]; exists {
-		return compatibleTypes
-	}
-
-	// Return all types if architecture not found
-	return []string{
-		"Ubuntu", "Ubuntu_64", "Ubuntu_ARM64",
-		// "Debian", "Debian_64", "Debian_ARM64",
-		// "Windows", "Windows_64", "Windows_ARM64",
-		// "Other", "Other_64", "Other_ARM64",
-	}
+// ImageInfo contains information about a downloaded image
+type ImageInfo struct {
+	Path         string    `json:"path"`
+	Size         int64     `json:"size"`
+	ModifiedTime time.Time `json:"modified_time"`
+	Version      string    `json:"version"`
+	Architecture string    `json:"architecture"`
 }

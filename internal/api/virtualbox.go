@@ -11,7 +11,6 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/core/virtualbox"
-	"github.com/unicornultrafoundation/subnet-node/core/virtualbox/hardware_detector"
 	"github.com/unicornultrafoundation/subnet-node/core/virtualbox/ssh_connection"
 	vbtypes "github.com/unicornultrafoundation/subnet-node/core/virtualbox/types"
 	"github.com/unicornultrafoundation/subnet-node/internal/api/ws"
@@ -85,6 +84,25 @@ func NewVirtualBoxAPI(vboxService *virtualbox.VirtualboxService, cfg ConfigProvi
 	return &VirtualBoxAPI{vboxService: vboxService, cfg: cfg, ordersCache: NewOrdersWithCache(bidMarket)}
 }
 
+// corsMiddleware adds CORS headers to allow frontend testing
+func (api *VirtualBoxAPI) corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Allow all origins for development/testing
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+
+		// Handle preflight requests
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
 func (api *VirtualBoxAPI) CreateTemplateVM(ctx context.Context, name string, cpuCores int, memoryMB int, diskSizeGB int, osType string, username string, password string) (*vbtypes.JobCreateResponse, error) {
 	vbReq := vbtypes.VMCreateRequest{
 		Name:       name,
@@ -107,43 +125,40 @@ func (api *VirtualBoxAPI) createVMHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	order, err := api.ordersCache.GetOrder(r.Context(), req.OrderId)
+	_, err := api.ordersCache.GetOrder(r.Context(), req.OrderId)
 	if err != nil {
 		api.sendErrorResponse(w, "Order not found", http.StatusNotFound)
 		return
 	}
 
-	// check current hardware information, if ARM architecture return 'Ubuntu_ARM64'
-	// if x86 architecture return 'Ubuntu_x86_64'
-	hardware, err := hardware_detector.DetectHardware()
-	if err != nil {
-		api.sendErrorResponse(w, "Failed to get hardware information", http.StatusInternalServerError)
-		return
-	}
+	// // check current hardware information, if ARM architecture return 'Ubuntu_ARM64'
+	// // if x86 architecture return 'Ubuntu_x86_64'
+	// hardware, err := hardware_detector.DetectHardware()
+	// if err != nil {
+	// 	api.sendErrorResponse(w, "Failed to get hardware information", http.StatusInternalServerError)
+	// 	return
+	// }
 
-	// Use the determined Ubuntu OS type from hardware info
-	ubuntuOSType := determineUbuntuOSType(hardware.Architecture)
+	// vbReq := vbtypes.VMCreateRequest{
+	// 	Name:       "vm-" + order.ID.String(),
+	// 	CPUCores:   int(order.CpuCores.Int64()),
+	// 	MemoryMB:   int(order.MemoryMB.Int64()),
+	// 	DiskSizeGB: int(order.DiskGB.Int64()),
+	// 	OSType:     ubuntuOSType,
+	// 	Username:   req.Username,
+	// 	Password:   req.Password,
+	// }
 
-	vbReq := vbtypes.VMCreateRequest{
-		Name:       "vm-" + order.ID.String(),
-		CPUCores:   int(order.CpuCores.Int64()),
-		MemoryMB:   int(order.MemoryMB.Int64()),
-		DiskSizeGB: int(order.DiskGB.Int64()),
-		OSType:     ubuntuOSType,
-		Username:   req.Username,
-		Password:   req.Password,
-	}
+	// // Create the VM using the determined OS type
+	// jobResponse, err := api.vboxService.CreateVM(r.Context(), vbReq)
+	// if err != nil {
+	// 	api.sendErrorResponse(w, "Failed to create VM", http.StatusInternalServerError)
+	// 	return
+	// }
 
-	// Create the VM using the determined OS type
-	jobResponse, err := api.vboxService.CreateVM(r.Context(), vbReq)
-	if err != nil {
-		api.sendErrorResponse(w, "Failed to create VM", http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(jobResponse)
+	// w.Header().Set("Content-Type", "application/json")
+	// w.WriteHeader(http.StatusOK)
+	// json.NewEncoder(w).Encode(jobResponse)
 
 }
 
@@ -368,6 +383,9 @@ func (api *VirtualBoxAPI) Router() *chi.Mux {
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(60 * time.Second))
 
+	// Add CORS middleware for frontend testing
+	r.Use(api.corsMiddleware)
+
 	authMiddleware := NewAuthMiddleware(api.cfg, api.ordersCache)
 
 	// WebSocket route for SSH connection
@@ -375,6 +393,7 @@ func (api *VirtualBoxAPI) Router() *chi.Mux {
 
 	// Virtualbox API routes
 	r.With(authMiddleware.Middleware()).Post("/", api.createVMHandler)
+	r.Post("/image", api.createVMFromImage)
 	r.Get("/", api.getVMsHandler)
 	r.Get("/{vmID}", api.getVMsHandler)
 	r.Delete("/{vmID}", api.deleteVMHandler)
@@ -504,6 +523,43 @@ func (api *VirtualBoxAPI) vmSSHWebSocketHandler(w http.ResponseWriter, r *http.R
 	logger.Info("SSH WebSocket connection closed")
 }
 
+func (api *VirtualBoxAPI) createVMFromImage(w http.ResponseWriter, r *http.Request) {
+
+	var req vbtypes.CreateVMFromImageRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		api.sendErrorResponse(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	order, err := api.ordersCache.GetOrder(r.Context(), req.OrderId)
+	if err != nil {
+		api.sendErrorResponse(w, "Order not found", http.StatusNotFound)
+		return
+	}
+
+	vbReq := vbtypes.VMCreateFromImageRequest{
+		Name:       "vm-" + order.ID.String(),
+		CPUCores:   int(order.CpuCores.Int64()),
+		MemoryMB:   int(order.MemoryMB.Int64()),
+		DiskSizeGB: int(order.DiskGB.Int64()),
+		OSType:     req.OS,
+		Version:    req.Version,
+		Username:   req.Username,
+		Password:   req.Password,
+	}
+
+	// Create the VM using the determined OS type
+	jobResponse, err := api.vboxService.CreateVMFromImage(r.Context(), vbReq)
+	if err != nil {
+		api.sendErrorResponse(w, "Failed to create VM", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(jobResponse)
+}
+
 // sendErrorResponse sends a standardized error response
 func (api *VirtualBoxAPI) sendErrorResponse(w http.ResponseWriter, message string, statusCode int) {
 	response := map[string]interface{}{
@@ -515,20 +571,4 @@ func (api *VirtualBoxAPI) sendErrorResponse(w http.ResponseWriter, message strin
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
 	json.NewEncoder(w).Encode(response)
-}
-
-// determineUbuntuOSType determines the appropriate Ubuntu OS type for the current architecture
-func determineUbuntuOSType(architecture string) string {
-	switch architecture {
-	case "arm64", "aarch64":
-		return "Ubuntu_ARM64"
-	case "amd64", "x86_64":
-		return "Ubuntu_64"
-	case "arm":
-		return "Ubuntu"
-	case "386", "i386":
-		return "Ubuntu"
-	default:
-		return "Ubuntu_64" // Default fallback
-	}
 }
