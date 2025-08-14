@@ -1,14 +1,14 @@
 # VirtualBox Package
 
-This package provides a comprehensive interface for managing VirtualBox virtual machines programmatically. It allows for creating, managing, and controlling VMs with support for various operating systems and hardware configurations.
+This package provides a comprehensive interface for managing VirtualBox virtual machines programmatically. It allows for creating, managing, and controlling VMs with support for various operating systems and hardware configurations using cloud images.
 
 ## Core Components
 
 ### VirtualBox Service
 
-The `ServiceImpl` is the main entry point for interacting with VirtualBox. It implements the `Service` interface and provides methods for:
+The `VirtualboxService` is the main entry point for interacting with VirtualBox. It implements the `Service` interface and provides methods for:
 
-- Creating and managing VMs
+- Creating and managing VMs from cloud images
 - Starting, stopping, pausing, resuming, and resetting VMs
 - Retrieving VM information and system resources
 - Managing VM storage and configuration
@@ -21,6 +21,15 @@ The `VBoxManageExecutor` provides a wrapper around the VirtualBox command-line i
 - Parsing command output
 - Managing VM configuration
 - Setting up storage, networking, and hardware
+
+### Storage Manager
+
+The `StorageManager` handles image downloads and storage operations:
+
+- Downloads Ubuntu cloud images from official sources
+- Converts cloud images to VDI format for VirtualBox
+- Generates cloud-init ISO files for VM initialization
+- Manages organized directory structure for images
 
 ### Hardware Detector
 
@@ -35,19 +44,26 @@ The `HardwareDetector` automatically detects system hardware capabilities and co
 
 ### VM Management
 
-- **Create VM**: Create new VMs with customizable hardware configurations
+- **Create VM from Image**: Create new VMs from cloud images with customizable hardware configurations
 - **Start/Stop VM**: Control VM power state
 - **Pause/Resume VM**: Suspend and resume VM execution
 - **Reset VM**: Restart a VM
 - **Delete VM**: Remove a VM and its associated files
 - **Update VM**: Modify VM hardware configuration
 
+### Cloud Image Integration
+
+- **Automatic Image Download**: Downloads Ubuntu cloud images from official sources
+- **Image Conversion**: Converts cloud images to VDI format for VirtualBox
+- **Version Management**: Supports multiple Ubuntu versions (20.04, 22.04, etc.)
+- **Architecture Support**: Supports both x86_64 and ARM64 architectures
+
 ### Cloud-Init Integration
 
-- **Template-based Configuration**: Generate cloud-init configurations from templates
+- **Dynamic Configuration**: Generate cloud-init configurations for each VM
 - **User Data Customization**: Set hostname, username, and password
 - **ISO Generation**: Automatically create cloud-init ISO images for VM initialization
-- **Different Templates**: Support for both new VM and cloned VM configurations
+- **Secure Credentials**: Temporary credential files with automatic cleanup
 
 ### SSH Port Forwarding
 
@@ -106,7 +122,17 @@ The package provides a comprehensive SSH connection system that enables secure t
    sudo apt-get install virtualbox
    ```
 
-2. **ISO Generation Tools**: Required for cloud-init configuration
+2. **QEMU Tools**: Required for image conversion
+
+   ```
+   # macOS
+   brew install qemu
+
+   # Ubuntu/Debian
+   sudo apt-get install qemu-utils
+   ```
+
+3. **ISO Generation Tools**: Required for cloud-init configuration
 
    ```
    # macOS
@@ -122,127 +148,71 @@ The package provides a comprehensive SSH connection system that enables secure t
 - **ARM64/AArch64**: Specialized configurations for Apple Silicon and other ARM platforms
 - **Other Architectures**: Limited support with fallback configurations
 
-### OVA Templates
+## VM Creation Flow
 
-Run the download script to fetch pre-configured OVA templates:
+The service uses cloud images to create new VMs efficiently. The flow for VM creation is:
+
+1. **Image Preparation**: Downloads Ubuntu cloud images from official sources
+2. **Image Conversion**: Converts cloud images to VDI format for VirtualBox
+3. **VM Creation**: Creates a new VM without OS type specification
+4. **Hardware Configuration**: Configures CPU, memory, and other hardware settings
+5. **Storage Setup**: Attaches the converted VDI file using VirtioSCSI controller
+6. **Cloud-Init Setup**: Generates and attaches cloud-init ISO for VM initialization
+7. **Network Configuration**: Sets up SSH port forwarding for remote access
+
+### Image Management
+
+The storage manager organizes images in a structured directory:
 
 ```
-cd core/virtualbox/script
-go run download_ovas.go
+~/VirtualBox VMs/
+├── Images/
+│   ├── 20.04/
+│   │   ├── ubuntu-20.04-server-cloudimg-amd64.img
+│   │   └── ubuntu-20.04-server-cloudimg-arm64.img
+│   └── 22.04/
+│       ├── ubuntu-22.04-server-cloudimg-amd64.img
+│       └── ubuntu-22.04-server-cloudimg-arm64.img
+└── vm-{orderId}/
+    ├── vm-{orderId}.vdi
+    └── cloud-init.iso
 ```
 
-This will download OS templates to `~/VirtualBox VMs/Templates/`.
+### Supported Ubuntu Versions
+
+The system supports multiple Ubuntu versions:
+
+- **Ubuntu 20.04 LTS**: Long-term support version
+- **Ubuntu 22.04 LTS**: Latest long-term support version
+- **Future versions**: Automatically supported as they become available
 
 ## API Types and VM Creation
 
-The VirtualBox service provides two different APIs for VM creation, each serving different purposes:
+The VirtualBox service provides a unified API for VM creation from cloud images:
 
-### Regular VM Creation (`CreateVM`)
+### VM Creation from Image (`CreateVM`)
 
-Used for creating VMs from orders with automatic resource configuration:
+Used for creating VMs from cloud images with automatic resource configuration:
 
-- **Request Type**: `CreateVMRequest` with `OrderId`, `Username`, and `Password`
-- **Resource Configuration**: Automatically extracted from order data
-- **OS Type**: Automatically determined based on host architecture
-- **VM Naming**: Uses format `vm-{orderId}`
-
-### Template VM Creation (`CreateTemplateVM`)
-
-Used for creating base template VMs with direct configuration:
-
-- **Request Type**: `VMCreateRequest` with direct hardware specifications
+- **Request Type**: `VMCreateFromImageRequest` with hardware specifications and credentials
 - **Resource Configuration**: Manually specified CPU, memory, and disk settings
-- **OS Type**: Explicitly specified
-- **VM Naming**: Custom name provided in request
+- **OS Type**: Automatically determined based on host architecture
+- **VM Naming**: Uses format `vm-{orderId}` when created from orders
 
-## Template VM Creation Flow
-
-The service uses pre-built OVA templates to create new VMs quickly. The flow for template VM creation is:
-
-1. **Template Preparation**: Pre-configured OVA templates are stored in `~/VirtualBox VMs/Templates/`
-2. **Template Download**: If a template doesn't exist locally, it's automatically downloaded from the configured URL
-3. **OVA Import**: The template is imported to create a new VM
-4. **Configuration Customization**: The VM is customized with requested CPU, memory, and disk settings
-5. **Cloud-Init Setup**: A cloud-init ISO is generated to configure the VM on first boot
-6. **Network Configuration**: SSH port forwarding is set up for remote access
-
-### OVA Template URLs
-
-The OVA template URLs are defined in `ova_manage.go` and currently include:
-
-- **Ubuntu_64**: For x86_64/AMD64 architectures
-- **Ubuntu_ARM64**: For ARM64/AArch64 architectures (e.g., Apple Silicon)
-
-These URLs are defined in the `defaultOVAURLs` map and can be accessed using the `getOVAURLForOSType` function.
-
-To add or update template URLs, modify the `defaultOVAURLs` map in `ova_manage.go`:
+### Request Structure
 
 ```go
-var defaultOVAURLs = map[string]string{
-    "Ubuntu_64":    "https://example.com/path/to/ubuntu_64.ova",
-    "Ubuntu_ARM64": "https://example.com/path/to/ubuntu_arm64.ova",
-    // Add more templates here
+type VMCreateFromImageRequest struct {
+    Name       string `json:"name"`
+    CPUCores   int    `json:"cpu_cores"`
+    OS         string `json:"os"`
+    Version    string `json:"version"`
+    MemoryMB   int    `json:"memory_mb"`
+    DiskSizeGB int    `json:"disk_size_gb"`
+    Username   string `json:"username,omitempty"`
+    Password   string `json:"password,omitempty"`
 }
 ```
-
-### Creating Your Own Templates
-
-**Note**: Template creation is different from regular VM creation. Template VMs are created using the `CreateTemplateVM` API with direct configuration parameters, while regular VMs are created using the `CreateVM` API with order data.
-
-To create your own template OVA:
-
-1. Use the `CreateTemplateVM` API to create a base VM:
-
-   ```go
-   req := vbtypes.VMCreateRequest{
-       Name:       "template-base",
-       OSType:     "Ubuntu_64",
-       CPUCores:   2,
-       MemoryMB:   2048,
-       DiskSizeGB: 20,
-       Username:   "admin",
-       Password:   "template-password",
-   }
-
-   vm, err := service.CreateTemplateVM(ctx, req)
-   ```
-
-2. Start the VM and install any necessary software and configurations
-
-   ```
-    http://localhost:8081/api/v1/virtualbox/{vmId}/start'
-   ```
-
-3. Connect to the VM via SSH (using the assigned SSH port)
-
-   ```
-   ssh admin@localhost -p <vm.SSHPort>
-   ```
-
-4. Clean the cloud-init data to ensure the template is pristine:
-
-   ```
-   sudo cloud-init clean
-   sudo rm -rf /var/lib/cloud/*
-   ```
-
-5. Shut down the VM:
-
-   ```
-    http://localhost:8081/api/v1/virtualbox/{vmId}/stop
-   ```
-
-6. Export the VM as an OVA file:
-
-   ```
-   VBoxManage export <vm-name> -o template_sample_<OSType>.ova
-   ```
-
-7. Place the OVA in `~/VirtualBox VMs/Templates/`
-
-8. Update the `defaultOVAURLs` map in `ova_manage.go` if you want to distribute it
-
-This process ensures that when new VMs are created from your template, they will get fresh cloud-init initialization without any remnants from the template creation process.
 
 ## VM Creation Strategy
 
@@ -260,15 +230,15 @@ The service follows an asynchronous job-based approach to VM creation for better
 
 When a VM creation request is processed from the queue:
 
-1. **Order Validation**: Fetch and validate the order using the provided `OrderId`
-2. **Resource Validation**: Check if sufficient system resources are available based on order specifications
-3. **Hardware Detection**: Automatically detect host architecture to determine appropriate OS type
-4. **OVA Template Selection**: Choose appropriate OVA based on detected architecture (Ubuntu_64 for x86_64, Ubuntu_ARM64 for ARM64)
-5. **OVA Import**: Import the OVA template to create a base VM
-6. **Hardware Configuration**: Adjust CPU, memory, and disk settings to match order specifications
-7. **Cloud-Init Configuration**: Generate custom cloud-init ISO with provided user credentials
-8. **Network Configuration**: Set up SSH port forwarding for remote access
-9. **VM Startup**: Boot the VM with the new configuration
+1. **Resource Validation**: Check if sufficient system resources are available
+2. **Hardware Detection**: Automatically detect host architecture
+3. **Image Download**: Download or retrieve existing cloud image for the specified version
+4. **Image Conversion**: Convert cloud image to VDI format for VirtualBox
+5. **VM Creation**: Create a new VM without OS type specification
+6. **Hardware Configuration**: Configure CPU, memory, and other hardware settings
+7. **Storage Setup**: Attach the VDI file using VirtioSCSI controller
+8. **Cloud-Init Configuration**: Generate custom cloud-init ISO with provided credentials
+9. **Network Configuration**: Set up SSH port forwarding for remote access
 
 ### Job Management
 
@@ -277,19 +247,21 @@ When a VM creation request is processed from the queue:
 - **Job Cancellation**: Long-running jobs can be cancelled using `CancelJob`
 - **Automatic Cleanup**: Completed and failed jobs are automatically cleaned up after 24 hours
 
-This approach provides faster VM creation compared to installing from scratch, with consistent configuration across deployments, while allowing for better resource management and user experience through asynchronous processing.
+This approach provides efficient VM creation from cloud images with consistent configuration across deployments, while allowing for better resource management and user experience through asynchronous processing.
 
 ## Usage Examples
 
-### Creating a VM from Order
+### Creating a VM from Cloud Image
 
-The VM creation process uses order data to determine the VM configuration. The system automatically fetches the order details and creates a VM with the specified resources.
+The VM creation process uses cloud images to create VMs efficiently. The system automatically downloads and converts images as needed.
 
 ```
 curl --location 'http://localhost:8081/api/v1/virtualbox/' \
 --header 'Content-Type: application/json' \
 --data '{
     "order_id": "1",
+    "os": "ubuntu",
+    "version": "22.04",
     "username": "ubuntu123",
     "password": "ubuntu"
 }'
@@ -297,11 +269,12 @@ curl --location 'http://localhost:8081/api/v1/virtualbox/' \
 
 The system will:
 
-1. Fetch the order details using the provided `OrderId`
-2. Extract CPU cores, memory, and disk size from the order
-3. Automatically determine the appropriate OS type based on the host architecture
+1. Extract CPU cores, memory, and disk size from the order
+2. Download Ubuntu 22.04 cloud image if not already available
+3. Convert the cloud image to VDI format
 4. Create a VM with the name format `vm-{orderId}`
 5. Configure the VM with the order's specifications
+6. Generate and attach cloud-init ISO for initialization
 
 ### Managing VMs
 
@@ -311,7 +284,6 @@ http://localhost:8081/api/v1/virtualbox/{vmId}/stop
 http://localhost:8081/api/v1/virtualbox/{vmId}/pause
 http://localhost:8081/api/v1/virtualbox/{vmId}/resume
 http://localhost:8081/api/v1/virtualbox/{vmId}/reset
-
 ```
 
 ### Job Management

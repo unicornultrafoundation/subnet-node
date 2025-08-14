@@ -84,25 +84,6 @@ func NewVirtualBoxAPI(vboxService *virtualbox.VirtualboxService, cfg ConfigProvi
 	return &VirtualBoxAPI{vboxService: vboxService, cfg: cfg, ordersCache: NewOrdersWithCache(bidMarket)}
 }
 
-// corsMiddleware adds CORS headers to allow frontend testing
-func (api *VirtualBoxAPI) corsMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Allow all origins for development/testing
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
-		w.Header().Set("Access-Control-Allow-Credentials", "true")
-
-		// Handle preflight requests
-		if r.Method == "OPTIONS" {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-
-		next.ServeHTTP(w, r)
-	})
-}
-
 // getVMsHandler handles GET requests for VMs - gets all VMs or a specific VM by ID
 func (api *VirtualBoxAPI) getVMsHandler(w http.ResponseWriter, r *http.Request) {
 	// Check if vmID is provided in the URL path
@@ -323,9 +304,6 @@ func (api *VirtualBoxAPI) Router() *chi.Mux {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(60 * time.Second))
-
-	// Add CORS middleware for frontend testing
-	r.Use(api.corsMiddleware)
 
 	authMiddleware := NewAuthMiddleware(api.cfg, api.ordersCache)
 
