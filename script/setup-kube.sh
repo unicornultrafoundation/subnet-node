@@ -11,13 +11,6 @@ CRD_FILE=$rootdir/pkg/k8s/apis/crd.yaml
 STORAGE_CLASS_FILE=$rootdir/pkg/k8s/apis/storageclass.yaml
 NAMESPACE_FILE=$rootdir/pkg/k8s/apis/namespace.yaml
 
-# Ingress Nginx
-INGRESS_CONFIG_PATH=$rootdir/pkg/k8s/apis/ingress-nginx.yaml
-KUBE_ROLLOUT_TIMEOUT=180
-METALLB_CONFIG_PATH=$rootdir/pkg/k8s/apis/metallb.yaml
-METALLB_IP_CONFIG_PATH=$rootdir/pkg/k8s/apis/kube-config-metal-lb-ip.yaml
-METALLB_SERVICE_PATH=$rootdir/pkg/k8s/apis/metallb-service.yaml
-
 install_ns() {
     set -x
     kubectl apply -f "$NAMESPACE_FILE"
