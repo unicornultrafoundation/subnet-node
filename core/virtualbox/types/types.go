@@ -53,13 +53,6 @@ type VMCreateRequest struct {
 	Password   string `json:"password,omitempty"`
 }
 
-// CreateVMRequest represents a request to create a new VM
-type CreateVMRequest struct {
-	OrderId  string `json:"orderId"`
-	Username string `json:"username"`
-	Password string `json:"password"`
-}
-
 // VMUpdateRequest represents a request to update an existing VM
 type VMUpdateRequest struct {
 	Name       string `json:"name,omitempty"`
@@ -137,9 +130,7 @@ type SSHTokenResponse struct {
 type VMEventType string
 
 const (
-	VMEventCreateVM          VMEventType = "create_vm"
-	VMEventCreateTemplateVM  VMEventType = "create_template_vm"
-	VMEventCreateVMFromImage VMEventType = "create_vm_from_image"
+	VMEventCreateVM VMEventType = "create_vm"
 )
 
 // VMRequest represents a VM operation request sent through the channel

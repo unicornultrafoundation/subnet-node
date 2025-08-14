@@ -2,67 +2,28 @@ package virtualbox
 
 import (
 	"fmt"
-	"io/ioutil"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 
 	"github.com/sirupsen/logrus"
-	"github.com/unicornultrafoundation/subnet-node/common/fsutil"
 	"github.com/unicornultrafoundation/subnet-node/core/virtualbox/hardware_detector"
-	"github.com/unicornultrafoundation/subnet-node/core/virtualbox/templates"
-	vbtypes "github.com/unicornultrafoundation/subnet-node/core/virtualbox/types"
+	"github.com/unicornultrafoundation/subnet-node/core/virtualbox/types"
 )
 
 var vboxLog = logrus.WithField("component", "vboxmanage")
 
 // VBoxManageExecutor provides functions to execute VBoxManage commands
 type VBoxManageExecutor struct {
-	vmDir       string
-	templateMgr *templates.TemplateManager
+	vmDir string
 }
 
 // NewVBoxManageExecutor creates a new VBoxManage executor
 func NewVBoxManageExecutor(vmDir string) *VBoxManageExecutor {
-	// Get template directory (relative to the project root)
-	// We need to find the project root and then navigate to templates
-	projectRoot := findProjectRoot()
-	templateDir := filepath.Join(projectRoot, "core", "virtualbox", "templates")
-
 	return &VBoxManageExecutor{
-		vmDir:       vmDir,
-		templateMgr: templates.NewTemplateManager(templateDir),
+		vmDir: vmDir,
 	}
-}
-
-// findProjectRoot finds the project root directory by looking for go.mod
-func findProjectRoot() string {
-	// Start from current working directory
-	currentDir, err := os.Getwd()
-	if err != nil {
-		// Fallback to a reasonable default
-		return "."
-	}
-
-	// Walk up the directory tree to find go.mod
-	dir := currentDir
-	for {
-		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
-			return dir
-		}
-
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			// Reached root directory
-			break
-		}
-		dir = parent
-	}
-
-	// Fallback to current directory
-	return currentDir
 }
 
 // executeCommand executes a VBoxManage command and returns the output
@@ -192,86 +153,6 @@ func (e *VBoxManageExecutor) ConfigureNetwork(vmName string, networkType string)
 	return nil
 }
 
-// GenerateCloudInitFiles generates cloud-init meta-data and user-data files from templates
-func (e *VBoxManageExecutor) GenerateCloudInitFiles(vmName, hostname, username, password string) (metaDataPath, userDataPath, cloudInitDir string, err error) {
-	cloudInitDir = filepath.Join(e.vmDir, vmName, "cloud-init")
-	if err := fsutil.DirWritable(cloudInitDir); err != nil {
-		return "", "", "", fmt.Errorf("failed to create cloud-init dir: %w", err)
-	}
-
-	// Prepare template data
-	templateData := templates.CloudInitData{
-		InstanceID: vmName,
-		Hostname:   hostname,
-		Username:   username,
-		Password:   password,
-	}
-
-	// Generate meta-data from template
-	metaData, err := e.templateMgr.GenerateMetaData(templateData)
-	if err != nil {
-		return "", "", "", fmt.Errorf("failed to generate meta-data from template: %w", err)
-	}
-
-	metaDataPath = filepath.Join(cloudInitDir, "meta-data")
-	if err := ioutil.WriteFile(metaDataPath, []byte(metaData), 0644); err != nil {
-		return "", "", "", fmt.Errorf("failed to write meta-data: %w", err)
-	}
-
-	// Generate user-data from template
-	userData, err := e.templateMgr.GenerateUserData(templateData)
-	if err != nil {
-		return "", "", "", fmt.Errorf("failed to generate user-data from template: %w", err)
-	}
-
-	userDataPath = filepath.Join(cloudInitDir, "user-data")
-	if err := ioutil.WriteFile(userDataPath, []byte(userData), 0644); err != nil {
-		return "", "", "", fmt.Errorf("failed to write user-data: %w", err)
-	}
-
-	return metaDataPath, userDataPath, cloudInitDir, nil
-}
-
-// GenerateCloneVMCloudInitFiles generates cloud-init meta-data and user-data files from clone VM templates
-func (e *VBoxManageExecutor) GenerateCloneVMCloudInitFiles(vmName, hostname, username, password string) (metaDataPath, userDataPath, cloudInitDir string, err error) {
-	cloudInitDir = filepath.Join(e.vmDir, vmName, "cloud-init")
-	if err := fsutil.DirWritable(cloudInitDir); err != nil {
-		return "", "", "", fmt.Errorf("failed to create cloud-init dir: %w", err)
-	}
-
-	// Prepare template data
-	templateData := templates.CloudInitData{
-		InstanceID: vmName,
-		Hostname:   hostname,
-		Username:   username,
-		Password:   password,
-	}
-
-	// Generate meta-data from clone VM template
-	metaData, err := e.templateMgr.GenerateCloneVMMetaData(templateData)
-	if err != nil {
-		return "", "", "", fmt.Errorf("failed to generate clone VM meta-data from template: %w", err)
-	}
-
-	metaDataPath = filepath.Join(cloudInitDir, "meta-data")
-	if err := ioutil.WriteFile(metaDataPath, []byte(metaData), 0644); err != nil {
-		return "", "", "", fmt.Errorf("failed to write meta-data: %w", err)
-	}
-
-	// Generate user-data from clone VM template
-	userData, err := e.templateMgr.GenerateCloneVMUserData(templateData)
-	if err != nil {
-		return "", "", "", fmt.Errorf("failed to generate clone VM user-data from template: %w", err)
-	}
-
-	userDataPath = filepath.Join(cloudInitDir, "user-data")
-	if err := ioutil.WriteFile(userDataPath, []byte(userData), 0644); err != nil {
-		return "", "", "", fmt.Errorf("failed to write user-data: %w", err)
-	}
-
-	return metaDataPath, userDataPath, cloudInitDir, nil
-}
-
 // GenerateCloudInitISO creates a cloud-init ISO from the meta-data and user-data files
 func (e *VBoxManageExecutor) GenerateCloudInitISO(cloudInitDir string) (string, error) {
 	isoPath := filepath.Join(cloudInitDir, "cloud-init.iso")
@@ -315,7 +196,7 @@ func (e *VBoxManageExecutor) AttachCloudInitISOVirtioSCSI(vmName, isoPath string
 }
 
 // Update SetupStorage to accept cloudInitISO
-func (e *VBoxManageExecutor) SetupStorage(vmName string, req vbtypes.VMCreateRequest, isoPath string, cloudInitISO string) error {
+func (e *VBoxManageExecutor) SetupStorage(vmName string, req types.VMCreateRequest, isoPath string, cloudInitISO string) error {
 	vboxLog.Infof("Setting up storage for VM: %s", vmName)
 
 	// Create virtual disk
@@ -775,71 +656,4 @@ func (e *VBoxManageExecutor) SetupSSHPortForward(vmName string, hostPort int, gu
 	rule := fmt.Sprintf("ssh,tcp,,%d,,%d", hostPort, guestPort)
 	_, err := e.executeCommand("modifyvm", vmName, "--natpf1", rule)
 	return err
-}
-
-// CreateTemplateVM creates a template VM with ubuntu/ubuntu credentials
-func (e *VBoxManageExecutor) CreateTemplateVM(templateName string, osType string, cpuCount int, memoryMB int, diskSizeGB int) error {
-	vboxLog.Infof("Creating template VM: %s", templateName)
-
-	// Create the base VM
-	if err := e.CreateVM(templateName, osType); err != nil {
-		return fmt.Errorf("failed to create template VM: %w", err)
-	}
-
-	// Configure VM hardware
-	if err := e.ConfigureVMHardware(templateName, cpuCount, memoryMB); err != nil {
-		return fmt.Errorf("failed to configure template VM hardware: %w", err)
-	}
-
-	// Configure network adapter
-	if err := e.ConfigureNetwork(templateName, "nat"); err != nil {
-		return fmt.Errorf("failed to configure template VM network: %w", err)
-	}
-
-	// Generate cloud-init files with ubuntu/ubuntu credentials
-	_, _, cloudInitDir, err := e.GenerateCloudInitFiles(templateName, templateName, "ubuntu", "ubuntu")
-	if err != nil {
-		return fmt.Errorf("failed to generate cloud-init files for template: %w", err)
-	}
-
-	// Generate cloud-init ISO
-	cloudInitISO, err := e.GenerateCloudInitISO(cloudInitDir)
-	if err != nil {
-		return fmt.Errorf("failed to generate cloud-init ISO for template: %w", err)
-	}
-
-	// Create template VM request
-	req := vbtypes.VMCreateRequest{
-		Name:       templateName,
-		CPUCores:   cpuCount,
-		MemoryMB:   memoryMB,
-		DiskSizeGB: diskSizeGB,
-		OSType:     osType,
-		Username:   "ubuntu",
-		Password:   "ubuntu",
-	}
-
-	// Setup storage with cloud-init ISO
-	if err := e.SetupStorage(templateName, req, "", cloudInitISO); err != nil {
-		return fmt.Errorf("failed to setup template VM storage: %w", err)
-	}
-
-	vboxLog.Infof("Template VM created successfully: %s with ubuntu/ubuntu credentials", templateName)
-	return nil
-}
-
-// ImportOVA imports a VM from an OVA file and registers it with the given name
-func (e *VBoxManageExecutor) ImportOVA(ovaPath string, vmName string) error {
-	vboxLog.Infof("Importing OVA: %s as VM: %s", ovaPath, vmName)
-
-	// VBoxManage import <ovaPath> --vsys 0 --vmname <vmName>
-	cmd := exec.Command("VBoxManage", "import", ovaPath, "--vsys", "0", "--vmname", vmName)
-
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("failed to import OVA: %w, output: %s", err, string(output))
-	}
-
-	vboxLog.Infof("OVA imported successfully: %s as VM: %s", ovaPath, vmName)
-	return nil
 }

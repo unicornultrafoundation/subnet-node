@@ -103,65 +103,6 @@ func (api *VirtualBoxAPI) corsMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func (api *VirtualBoxAPI) CreateTemplateVM(ctx context.Context, name string, cpuCores int, memoryMB int, diskSizeGB int, osType string, username string, password string) (*vbtypes.JobCreateResponse, error) {
-	vbReq := vbtypes.VMCreateRequest{
-		Name:       name,
-		CPUCores:   cpuCores,
-		MemoryMB:   memoryMB,
-		DiskSizeGB: diskSizeGB,
-		OSType:     osType, // Pass the OS type to the service
-		Username:   username,
-		Password:   password,
-	}
-
-	return api.vboxService.CreateTemplateVM(ctx, vbReq)
-}
-
-func (api *VirtualBoxAPI) createVMHandler(w http.ResponseWriter, r *http.Request) {
-
-	var req vbtypes.CreateVMRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		api.sendErrorResponse(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
-
-	_, err := api.ordersCache.GetOrder(r.Context(), req.OrderId)
-	if err != nil {
-		api.sendErrorResponse(w, "Order not found", http.StatusNotFound)
-		return
-	}
-
-	// // check current hardware information, if ARM architecture return 'Ubuntu_ARM64'
-	// // if x86 architecture return 'Ubuntu_x86_64'
-	// hardware, err := hardware_detector.DetectHardware()
-	// if err != nil {
-	// 	api.sendErrorResponse(w, "Failed to get hardware information", http.StatusInternalServerError)
-	// 	return
-	// }
-
-	// vbReq := vbtypes.VMCreateRequest{
-	// 	Name:       "vm-" + order.ID.String(),
-	// 	CPUCores:   int(order.CpuCores.Int64()),
-	// 	MemoryMB:   int(order.MemoryMB.Int64()),
-	// 	DiskSizeGB: int(order.DiskGB.Int64()),
-	// 	OSType:     ubuntuOSType,
-	// 	Username:   req.Username,
-	// 	Password:   req.Password,
-	// }
-
-	// // Create the VM using the determined OS type
-	// jobResponse, err := api.vboxService.CreateVM(r.Context(), vbReq)
-	// if err != nil {
-	// 	api.sendErrorResponse(w, "Failed to create VM", http.StatusInternalServerError)
-	// 	return
-	// }
-
-	// w.Header().Set("Content-Type", "application/json")
-	// w.WriteHeader(http.StatusOK)
-	// json.NewEncoder(w).Encode(jobResponse)
-
-}
-
 // getVMsHandler handles GET requests for VMs - gets all VMs or a specific VM by ID
 func (api *VirtualBoxAPI) getVMsHandler(w http.ResponseWriter, r *http.Request) {
 	// Check if vmID is provided in the URL path
@@ -392,8 +333,7 @@ func (api *VirtualBoxAPI) Router() *chi.Mux {
 	r.Get("/{vmID}/ssh", api.vmSSHWebSocketHandler)
 
 	// Virtualbox API routes
-	r.With(authMiddleware.Middleware()).Post("/", api.createVMHandler)
-	r.Post("/image", api.createVMFromImage)
+	r.With(authMiddleware.Middleware()).Post("/", api.createVMFromImage)
 	r.Get("/", api.getVMsHandler)
 	r.Get("/{vmID}", api.getVMsHandler)
 	r.Delete("/{vmID}", api.deleteVMHandler)
@@ -549,7 +489,7 @@ func (api *VirtualBoxAPI) createVMFromImage(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Create the VM using the determined OS type
-	jobResponse, err := api.vboxService.CreateVMFromImage(r.Context(), vbReq)
+	jobResponse, err := api.vboxService.CreateVM(r.Context(), vbReq)
 	if err != nil {
 		api.sendErrorResponse(w, "Failed to create VM", http.StatusInternalServerError)
 		return

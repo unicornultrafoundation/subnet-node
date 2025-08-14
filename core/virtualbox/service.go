@@ -91,11 +91,6 @@ func NewService(ds datastore.Datastore) (*VirtualboxService, error) {
 		return nil, fmt.Errorf("VirtualBox validation failed: %w", err)
 	}
 
-	// Validate cloud-init templates
-	if err := service.vboxExec.templateMgr.ValidateTemplates(); err != nil {
-		return nil, fmt.Errorf("cloud-init template validation failed: %w", err)
-	}
-
 	return service, nil
 }
 
@@ -137,53 +132,7 @@ func (s *VirtualboxService) Stop(ctx context.Context) error {
 	return nil
 }
 
-// CreateTemplateVM is used when has issue with ova file
-func (s *VirtualboxService) CreateTemplateVM(ctx context.Context, req vbtypes.VMCreateRequest) (*vbtypes.JobCreateResponse, error) {
-	// Create a job for tracking progress
-	requestData := map[string]interface{}{
-		"name":         req.Name,
-		"cpu_cores":    req.CPUCores,
-		"memory_mb":    req.MemoryMB,
-		"disk_size_gb": req.DiskSizeGB,
-		"os_type":      req.OSType,
-		"username":     req.Username,
-		"password":     req.Password,
-	}
-
-	job, err := s.jobManager.CreateJob(ctx, vbtypes.VMEventCreateTemplateVM, requestData, req.Name)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create job: %w", err)
-	}
-
-	return &vbtypes.JobCreateResponse{
-		JobID: job.ID,
-	}, nil
-}
-
-// CreateVM creates a new VM by importing from an OVA template and starts it immediately
-func (s *VirtualboxService) CreateVM(ctx context.Context, req vbtypes.VMCreateRequest) (*vbtypes.JobCreateResponse, error) {
-	// Create a job for tracking progress
-	requestData := map[string]interface{}{
-		"name":         req.Name,
-		"cpu_cores":    req.CPUCores,
-		"memory_mb":    req.MemoryMB,
-		"disk_size_gb": req.DiskSizeGB,
-		"os_type":      req.OSType,
-		"username":     req.Username,
-		"password":     req.Password,
-	}
-
-	job, err := s.jobManager.CreateJob(ctx, vbtypes.VMEventCreateVM, requestData, req.Name)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create job: %w", err)
-	}
-
-	return &vbtypes.JobCreateResponse{
-		JobID: job.ID,
-	}, nil
-}
-
-func (s *VirtualboxService) CreateVMFromImage(ctx context.Context, req vbtypes.VMCreateFromImageRequest) (*vbtypes.JobCreateResponse, error) {
+func (s *VirtualboxService) CreateVM(ctx context.Context, req vbtypes.VMCreateFromImageRequest) (*vbtypes.JobCreateResponse, error) {
 	// Create a job for tracking progress
 	requestData := map[string]interface{}{
 		"name":         req.Name,
@@ -196,7 +145,7 @@ func (s *VirtualboxService) CreateVMFromImage(ctx context.Context, req vbtypes.V
 		"password":     req.Password,
 	}
 
-	job, err := s.jobManager.CreateJob(ctx, vbtypes.VMEventCreateVMFromImage, requestData, req.Name)
+	job, err := s.jobManager.CreateJob(ctx, vbtypes.VMEventCreateVM, requestData, req.Name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create job: %w", err)
 	}
@@ -867,71 +816,6 @@ func (s *VirtualboxService) ListJobs(ctx context.Context) ([]*vbtypes.Job, error
 // CancelJob cancels a job
 func (s *VirtualboxService) CancelJob(ctx context.Context, jobID string) error {
 	return s.jobManager.CancelJob(ctx, jobID)
-}
-
-// generateCloudInitISO generates cloud-init files and ISO for a VM
-func (s *VirtualboxService) generateCloudInitISO(vmName string, username string, password string) (string, error) {
-	serviceLog.Infof("Generating cloud-init ISO for VM: %s", vmName)
-
-	// Generate VM-specific cloud-init configuration
-	hostname := vmName
-
-	hashedPassword, err := hashPassword(password)
-	if err != nil {
-		return "", fmt.Errorf("failed to hash password: %w", err)
-	}
-
-	// Create VM-specific cloud-init configuration
-	_, _, cloudInitDir, err := s.vboxExec.GenerateCloudInitFiles(vmName, hostname, username, hashedPassword)
-	if err != nil {
-		return "", fmt.Errorf("failed to generate cloud-init files: %w", err)
-	}
-
-	cloudInitISO, err := s.vboxExec.GenerateCloudInitISO(cloudInitDir)
-	if err != nil {
-		return "", fmt.Errorf("failed to generate cloud-init ISO: %w", err)
-	}
-
-	serviceLog.Infof("Successfully generated cloud-init ISO for VM %s: %s", vmName, cloudInitISO)
-	serviceLog.Infof("VM %s cloud-init credentials - Username: %s", vmName, username)
-	return cloudInitISO, nil
-}
-
-func (s *VirtualboxService) generateCloneVMCloudInitISO(vmName string, username string, password string) (string, error) {
-	serviceLog.Infof("Generating clone VM cloud-init ISO for VM: %s", vmName)
-
-	// Generate VM-specific cloud-init configuration
-	hostname := vmName
-
-	hashedPassword, err := hashPassword(password)
-	if err != nil {
-		return "", fmt.Errorf("failed to hash password: %w", err)
-	}
-
-	// Create VM-specific cloud-init configuration using clone VM templates
-	_, _, cloudInitDir, err := s.vboxExec.GenerateCloneVMCloudInitFiles(vmName, hostname, username, hashedPassword)
-	if err != nil {
-		return "", fmt.Errorf("failed to generate clone VM cloud-init files: %w", err)
-	}
-
-	cloudInitISO, err := s.vboxExec.GenerateCloudInitISO(cloudInitDir)
-	if err != nil {
-		return "", fmt.Errorf("failed to generate clone VM cloud-init ISO: %w", err)
-	}
-
-	serviceLog.Infof("Successfully generated clone VM cloud-init ISO for VM %s: %s", vmName, cloudInitISO)
-	serviceLog.Infof("Clone VM %s cloud-init credentials - Username: %s, Password: %s", vmName, username, password)
-	return cloudInitISO, nil
-}
-
-func hashPassword(password string) (string, error) {
-	// openssl passwd -1  <password>
-	cmd := exec.Command("openssl", "passwd", "-1", password)
-	output, err := cmd.Output()
-	if err != nil {
-		return "", fmt.Errorf("failed to hash password: %w", err)
-	}
-	return string(output), nil
 }
 
 func generateVMID(name string) string {

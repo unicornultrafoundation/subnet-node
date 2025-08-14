@@ -341,6 +341,8 @@ chpasswd:
   list: |
     %s:%s
   expire: false
+
+ssh_pwauth: true
 `, username, password, username, password)
 
 	if err := os.WriteFile(userDataPath, []byte(userData), 0644); err != nil {
