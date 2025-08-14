@@ -1,33 +1,10 @@
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
-  name: v1
-  labels:
-    subnet.node: "true"
-provisioner: rancher.io/local-path
-reclaimPolicy: Delete
-volumeBindingMode: WaitForFirstConsumer
----
-apiVersion: storage.k8s.io/v1
-kind: StorageClass
-metadata:
   name: default
   labels:
     subnet.node: "true"
 provisioner: rancher.io/local-path
 reclaimPolicy: Delete
 volumeBindingMode: WaitForFirstConsumer
----
-apiVersion: storage.k8s.io/v1
-kind: StorageClass
-metadata:
-  name: shared-storage
-  labels:
-    subnet.node: "true"
-    app.kubernetes.io/name: "shared-storage"
-provisioner: rancher.io/local-path
-reclaimPolicy: Retain
-volumeBindingMode: WaitForFirstConsumer
-allowVolumeExpansion: true
-# Note: This storage class uses ReadWriteOnce but is designed for shared access
-# through the subnet-node system's volume sharing mechanisms
+

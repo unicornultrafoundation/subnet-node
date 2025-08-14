@@ -30,17 +30,13 @@ A **Storage Class** in Kubernetes defines:
   provisioner: rancher.io/local-path
   accessModes: [ReadWriteOnce]
   
-- name: local-path
-  provisioner: rancher.io/local-path  
-  accessModes: [ReadWriteOnce]
+- name: ceph-shared
+  provisioner: rbd.csi.ceph.com
+  accessModes: [ReadWriteMany]
   
-- name: v1
-  provisioner: rancher.io/local-path
-  accessModes: [ReadWriteOnce]
-  
-- name: shared-storage  # NEW!
-  provisioner: rancher.io/local-path
-  accessModes: [ReadWriteMany]  # Supports shared access
+- name: cephfs-shared
+  provisioner: cephfs.csi.ceph.com
+  accessModes: [ReadWriteMany]
 ```
 
 ## 🔧 Implementation Details
@@ -75,10 +71,8 @@ accessModes := []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce}
 
 // Check if this is a shared storage class that supports ReadWriteMany
 sharedStorageClasses := map[string]bool{
-    "shared-storage": true,
-    "nfs":            true,
-    "ceph":           true,
-    "glusterfs":      true,
+    "ceph-shared":   true,
+    "cephfs-shared": true,
 }
 
 if sharedStorageClasses[class] {
@@ -93,13 +87,8 @@ if sharedStorageClasses[class] {
 ```go
 var allowedStorageClasses = map[string]bool{
     "default":        true,
-    "beta1":          true,
-    "beta2":          true,
-    "beta3":          true,
-    "shared-storage": true,  // NEW!
-    "nfs":            true,  // NEW!
-    "ceph":           true,  // NEW!
-    "glusterfs":      true,  // NEW!
+    "ceph-shared":   true,  
+    "cephfs-shared": true,  
     StorageClassRAM:  true,
 }
 ```
@@ -144,7 +133,7 @@ Your current MinIO deployment has:
               "size": "10Gi",
               "attributes": {
                 "persistent": true,
-                "class": "shared-storage"  // This enables ReadWriteMany
+                "class": "cephfs-shared"  // ReadWriteMany support
               }
             }
           ]
@@ -165,7 +154,7 @@ Your current MinIO deployment has:
 
 ## ✅ Benefits of Shared Storage
 
-### For MinIO with Shared Storage:
+### For MinIO with CephFS Shared Storage:
 
 1. **✅ Session Persistence**: All pods share the same session data
 2. **✅ Data Consistency**: Files uploaded to any pod are visible to all pods
@@ -196,7 +185,7 @@ Your current MinIO deployment has:
               "size": "10Gi",
               "attributes": {
                 "persistent": true,
-                "class": "shared-storage"
+                "class": "cephfs-shared"
               }
             }
           ]
@@ -221,7 +210,7 @@ Your current MinIO deployment has:
               "size": "10Gi",
               "attributes": {
                 "persistent": true,
-                "class": "shared-storage"
+                "class": "cephfs-shared"
               }
             },
             {
@@ -229,7 +218,7 @@ Your current MinIO deployment has:
               "size": "5Gi",
               "attributes": {
                 "persistent": true,
-                "class": "shared-storage"
+                "class": "cephfs-shared"
               }
             }
           ]
@@ -263,22 +252,14 @@ Your current MinIO deployment has:
 
 ## ⚠️ Important Notes
 
-### 1. Provisioner Limitations
 
-The `rancher.io/local-path` provisioner **does not support ReadWriteMany** in production. For true shared storage, you need:
-
-- **NFS**: Network File System
-- **Ceph**: Distributed storage system
-- **GlusterFS**: Distributed file system
-- **Cloud Storage**: AWS EFS, Azure Files, GCP Filestore
-
-### 2. Performance Considerations
+### 1. Performance Considerations
 
 - **Network Storage**: Shared storage may have higher latency
 - **Concurrent Access**: Multiple pods writing simultaneously may cause conflicts
 - **File Locking**: Applications need to handle concurrent file access
 
-### 3. Backup and Recovery
+### 2. Backup and Recovery
 
 - **Single Point of Failure**: All pods depend on the same storage
 - **Backup Strategy**: Need to backup the shared volume
@@ -289,7 +270,7 @@ The `rancher.io/local-path` provisioner **does not support ReadWriteMany** in pr
 ### From Separate Storage to Shared Storage
 
 1. **Backup Data**: Export data from current MinIO instances
-2. **Update Manifest**: Change storage class to `shared-storage`
+2. **Update Manifest**: Change storage class to `cephfs-shared`
 3. **Redeploy**: Apply the new configuration
 4. **Restore Data**: Import data to the shared storage
 5. **Verify**: Test session persistence and data sharing
@@ -311,7 +292,7 @@ The `rancher.io/local-path` provisioner **does not support ReadWriteMany** in pr
 {
   "attributes": {
     "persistent": true,
-    "class": "shared-storage"  // ReadWriteMany
+    "class": "cephfs-shared"  // True ReadWriteMany support
   }
 }
 ```
@@ -321,7 +302,7 @@ The `rancher.io/local-path` provisioner **does not support ReadWriteMany** in pr
 ### 1. Deploy Test Application
 
 ```bash
-# Deploy MinIO with shared storage
+# Deploy MinIO with true shared storage
 kubectl apply -f minio-shared-storage.json
 ```
 
