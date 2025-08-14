@@ -8,10 +8,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const (
-	APIVersion = "v1beta4"
-)
-
 // ID method returns OrderID details of specific order
 func (o Order) ID() OrderID {
 	return o.OrderID
