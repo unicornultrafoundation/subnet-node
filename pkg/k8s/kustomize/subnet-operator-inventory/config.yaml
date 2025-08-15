@@ -2,6 +2,7 @@
 version: v1
 cluster_storage:
   - default
+  - v1
 exclude:
   nodes: []
   node_storage: []

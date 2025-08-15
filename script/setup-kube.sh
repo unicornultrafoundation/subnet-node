@@ -23,7 +23,7 @@ install_crd() {
 
     # TODO: Config exactly the control plane node name
     CONTROL_PLANE_NODE=$(kubectl get nodes -l node-role.kubernetes.io/control-plane=true -o jsonpath='{.items[0].metadata.name}')
-    kubectl patch node "${CONTROL_PLANE_NODE}" -p '{"metadata":{"labels":{"subnet.node/storageclasses":"v1.default","ingress-ready":"true"}}}'
+    kubectl patch node "${CONTROL_PLANE_NODE}" -p '{"metadata":{"labels":{"subnet.node/storageclasses":"default.v1","ingress-ready":"true"}}}'
 }
 
 install_network_policies() {
