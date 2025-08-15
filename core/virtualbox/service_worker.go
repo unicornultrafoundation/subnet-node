@@ -131,6 +131,15 @@ func (s *VirtualboxService) handleCreateVMFromImageRequest(ctx context.Context, 
 	request.VMName = vm.Name
 	request.VMStatus = vm.Status
 
+	// Store the orderId to vmId mapping if orderId is provided
+	if reqData.OrderId != "" {
+		s.StoreOrderVMMapping(reqData.OrderId, vm.ID)
+		serviceLog.WithFields(logrus.Fields{
+			"orderId": reqData.OrderId,
+			"vmId":    vm.ID,
+		}).Info("Stored order to VM mapping after VM creation")
+	}
+
 	// Complete the job with success
 	result := map[string]interface{}{
 		"vm_id":        vm.ID,

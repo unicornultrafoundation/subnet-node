@@ -198,4 +198,5 @@ type VMCreateFromImageRequest struct {
 	OSType     string `json:"os_type,omitempty"`
 	Username   string `json:"username,omitempty"`
 	Password   string `json:"password,omitempty"`
+	OrderId    string `json:"order_id,omitempty"`
 }

@@ -15,6 +15,11 @@ type Service interface {
 	DeleteVM(ctx context.Context, vmID string) error
 	SyncVMs(ctx context.Context) error
 
+	// OrderId-based VM Management
+	StoreOrderVMMapping(orderId, vmId string)
+	RemoveOrderVMMapping(orderId string)
+	GetVMIdByOrderId(orderId string) (string, bool)
+
 	// VM Control
 	StartVM(ctx context.Context, vmID string) (*VM, error)
 	StopVM(ctx context.Context, vmID string) (*VM, error)
@@ -23,9 +28,6 @@ type Service interface {
 	ResetVM(ctx context.Context, vmID string) (*VM, error)
 
 	GetSystemInfo(ctx context.Context) (*VMSystemInfo, error)
-
-	// ISO Management
-	ListOSTypes(ctx context.Context) ([]string, error)
 
 	// SSH Token Management
 	GenerateSSHToken(ctx context.Context, vmID string, username string, password string) (*SSHTokenResponse, error)
@@ -36,32 +38,11 @@ type Service interface {
 	Stop(ctx context.Context) error
 }
 
-// StorageManager defines the interface for file storage operations
-type StorageManager interface {
-	// ISO Management
-	DownloadFile(ctx context.Context, url, destPath string) error
-	GetFileInfo(filePath string) (*ISOInfo, error)
-	ListFiles(dirPath string) ([]string, error)
-	DeleteFile(filePath string) error
-	FileExists(filePath string) bool
-	GetFileSize(filePath string) (int64, error)
-	CalculateChecksum(filePath string) (string, error)
-
-	// ISO OS Type Management
-	DetermineOSTypeAndISO(ctx context.Context, req VMCreateRequest) (string, string, error)
-	GetSupportedOSTypes() []string
-}
-
 type VBoxManageExecutor interface {
 	CreateVM(vmName string, osType string) error
 	ConfigureVMHardware(vmName string, cpuCount int, memoryMB int) error
 	ConfigureNetwork(vmName string, networkType string) error
-	GenerateCloudInitFiles(vmName, hostname, username, password string) (metaDataPath, userDataPath, cloudInitDir string, err error)
-	GenerateCloneVMCloudInitFiles(vmName, hostname, username, password string) (metaDataPath, userDataPath, cloudInitDir string, err error)
-	GenerateCloudInitISO(cloudInitDir string) (string, error)
-	AttachCloudInitISO(vmName, isoPath string) error
 	SetupStorage(vmName string, req VMCreateRequest, isoPath string, cloudInitISO string) error
-
 	StartVM(vmId string, headless bool) error
 	StopVM(vmId string) error
 	PauseVM(vmId string) error
