@@ -5,7 +5,7 @@ source "$CURDIR"/kubectl_retry.sh
 
 ROOK_DEPLOY_TIMEOUT=${ROOK_DEPLOY_TIMEOUT:-6000}
 rootdir="$(dirname "$0")/.."
-ROOK_PATH=${rootdir}/pkg/k8s/rook/prod
+ROOK_PATH=${rootdir}/pkg/k8s/rook/dev
 
 if [ -z "$ROOK_PATH" ]; then
 	echo "ROOK_PATH is not set"
@@ -17,11 +17,10 @@ rook_files=(
 	"${ROOK_PATH}/common.yaml"
 	"${ROOK_PATH}/operator.yaml"
 	"${ROOK_PATH}/cluster.yaml"
+	"${ROOK_PATH}/pool.yaml"
 	"${ROOK_PATH}/toolbox.yaml"
-	"${ROOK_PATH}/subnet-nodes-pool.yaml"
-	"${ROOK_PATH}/subnet-deployments-pool.yaml"
-	"${ROOK_PATH}/subnet-nodes-storageclass.yaml"
-	"${ROOK_PATH}/subnet-deployments-storageclass.yaml"
+	"${ROOK_PATH}/csi/rbd/storageclass.yaml"
+	"${ROOK_PATH}/csi/cephfs/storageclass.yaml"
 )
 
 for idx in "${!rook_files[@]}"; do
@@ -57,6 +56,15 @@ rook_version() {
 
 function deploy_rook() {
 	for idx in "${!rook_files[@]}"; do
+		# Delete immutable StorageClasses before re-applying
+		case "${rook_files[idx]}" in
+			*rbd/storageclass.yaml)
+				kubectl get storageclass rook-ceph-block &>/dev/null && kubectl delete storageclass rook-ceph-block || true
+				;;
+			*cephfs/storageclass.yaml)
+				kubectl get storageclass rook-cephfs &>/dev/null && kubectl delete storageclass rook-cephfs || true
+				;;
+		esac
 		kubectl_retry apply -f "${rook_files[idx]}"
 	done
 
@@ -64,8 +72,8 @@ function deploy_rook() {
 	if ! kubectl_retry -n rook-ceph get cephclusters -oyaml | grep 'items: \[\]' &>/dev/null; then
 
 
-		if [[ $(check_ceph_cluster_health) -ne 0 ]]; then
-			echo ""
+		if check_ceph_cluster_health; then
+			echo "CEPH cluster is healthy"
 		else
 			echo "CEPH cluster not in a healthy state (timeout)"
 		fi
