@@ -2,7 +2,9 @@
 version: v1
 cluster_storage:
   - default
-  - v1
+  - rook-cephfs
+  - rook-ceph-block
+
 exclude:
   nodes: []
   node_storage: []
