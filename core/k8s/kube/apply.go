@@ -5,6 +5,7 @@ package kube
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"reflect"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -189,6 +190,40 @@ func applyDeployment(ctx context.Context, kc kubernetes.Interface, b builder.Dep
 		if err == nil {
 			nobj, err = kc.AppsV1().Deployments(b.NS()).Create(ctx, nobj, metav1.CreateOptions{})
 		}
+	}
+
+	return nobj, uobj, oobj, err
+}
+
+func applyPVC(ctx context.Context, kc kubernetes.Interface, pvc corev1.PersistentVolumeClaim) (*corev1.PersistentVolumeClaim, *corev1.PersistentVolumeClaim, *corev1.PersistentVolumeClaim, error) {
+	// Ensure PVC has a namespace set
+	if pvc.Namespace == "" {
+		return nil, nil, nil, fmt.Errorf("PVC %s has no namespace set", pvc.Name)
+	}
+
+	oobj, err := kc.CoreV1().PersistentVolumeClaims(pvc.Namespace).Get(ctx, pvc.Name, metav1.GetOptions{})
+
+	var nobj *corev1.PersistentVolumeClaim
+	var uobj *corev1.PersistentVolumeClaim
+
+	switch {
+	case err == nil:
+		// PVC exists, update it
+		uobj = oobj.DeepCopy()
+		uobj.Spec = pvc.Spec
+		uobj.Labels = pvc.Labels
+		uobj.Annotations = pvc.Annotations
+
+		if !reflect.DeepEqual(&uobj.Spec, &oobj.Spec) ||
+			!reflect.DeepEqual(uobj.Labels, oobj.Labels) ||
+			!reflect.DeepEqual(uobj.Annotations, oobj.Annotations) {
+			uobj, err = kc.CoreV1().PersistentVolumeClaims(pvc.Namespace).Update(ctx, uobj, metav1.UpdateOptions{})
+		}
+	case errors.IsNotFound(err):
+		// PVC doesn't exist, create it
+		nobj = &pvc
+		nobj.Namespace = pvc.Namespace
+		nobj, err = kc.CoreV1().PersistentVolumeClaims(pvc.Namespace).Create(ctx, nobj, metav1.CreateOptions{})
 	}
 
 	return nobj, uobj, oobj, err

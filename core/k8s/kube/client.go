@@ -181,6 +181,7 @@ type deploymentService struct {
 	localService  builder.Service
 	globalService builder.Service
 	credentials   builder.ServiceCredentials
+	pvcs          []corev1.PersistentVolumeClaim
 }
 
 type deploymentApplies struct {
@@ -188,6 +189,7 @@ type deploymentApplies struct {
 	netPol    builder.NetPol
 	cmanifest builder.Manifest
 	services  []*deploymentService
+	pvcs      []corev1.PersistentVolumeClaim
 }
 
 type previousObj struct {
@@ -215,6 +217,9 @@ type previousObj struct {
 	nGlobalServices []*corev1.Service
 	uGlobalServices []*corev1.Service
 	oGlobalServices []*corev1.Service
+	nPVCs           []corev1.PersistentVolumeClaim
+	uPVCs           []corev1.PersistentVolumeClaim
+	oPVCs           []corev1.PersistentVolumeClaim
 }
 
 func (p *previousObj) recover(ctx context.Context, kc kubernetes.Interface, ac subnetclient.Interface) []error {
@@ -460,6 +465,7 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 		}
 
 		persistent := false
+		shared := false
 		for i := range service.Resources.Storage {
 			attrVal := service.Resources.Storage[i].Attributes.Find(sdl.StorageAttributePersistent)
 			if persistent, _ = attrVal.AsBool(); persistent {
@@ -467,10 +473,25 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 			}
 		}
 
-		if persistent {
+		// Check if any storage is marked as shared
+		for i := range service.Resources.Storage {
+			attrVal := service.Resources.Storage[i].Attributes.Find(sdl.StorageAttributeShared)
+			if shared, _ = attrVal.AsBool(); shared {
+				break
+			}
+		}
+
+		// Use StatefulSet for persistent storage that is NOT shared
+		// Use Deployment for persistent storage that IS shared or for ephemeral storage
+		if persistent && !shared {
 			svc.statefulSet = builder.BuildStatefulSet(workload)
 		} else {
 			svc.deployment = builder.NewDeployment(workload)
+
+			// For shared persistent storage, create PVCs
+			if persistent && shared {
+				svc.pvcs = workload.PersistentVolumeClaims()
+			}
 		}
 
 		applies.services = append(applies.services, svc)
@@ -585,10 +606,31 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 				po.nDeployments = append(po.nDeployments, nobj)
 			}
 			if uobj != nil {
-				po.uDeployments = append(po.uDeployments, uobj)
+				po.uDeployments = append(po.uDeployments, nobj)
 			}
 			if oobj != nil {
-				po.oDeployments = append(po.oDeployments, oobj)
+				po.oDeployments = append(po.oDeployments, nobj)
+			}
+		}
+
+		// Apply PVCs for shared persistent storage
+		if len(applyObjs.pvcs) > 0 {
+			for _, pvc := range applyObjs.pvcs {
+				nobj, uobj, oobj, err := applyPVC(ctx, c.kc, pvc)
+				if err != nil {
+					c.log.Error("applying PVC", "err", err, "lease", lid, "service", service.Name, "pvc", pvc.Name)
+					return err
+				}
+
+				if nobj != nil {
+					po.nPVCs = append(po.nPVCs, *nobj)
+				}
+				if uobj != nil {
+					po.uPVCs = append(po.uPVCs, *uobj)
+				}
+				if oobj != nil {
+					po.oPVCs = append(po.oPVCs, *oobj)
+				}
 			}
 		}
 

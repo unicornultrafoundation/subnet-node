@@ -16,6 +16,7 @@ const (
 	StorageAttributeClass      = "class"
 	StorageAttributeMount      = "mount"
 	StorageAttributeReadOnly   = "readOnly" // we might not need it at this point of time
+	StorageAttributeShared     = "shared"   // allows persistent storage to be shared between pods
 	StorageClassDefault        = "default"
 	StorageClassRAM            = "ram"
 )
@@ -47,15 +48,16 @@ type v2ResourceStorageArray []v2ResourceStorage
 type validateAttrFn func(string, *string) error
 
 var allowedStorageClasses = map[string]bool{
-	"default":       true,
-	"ceph-shared":   true,
-	"cephfs-shared": true,
-	StorageClassRAM: true,
+	"default":         true,
+	"rook-cephfs":     true,
+	"rook-ceph-block": true,
+	StorageClassRAM:   true,
 }
 
 var validateStorageAttributes = map[string]validateAttrFn{
 	StorageAttributePersistent: validateAttributeBool,
 	StorageAttributeClass:      validateAttributeStorageClass,
+	StorageAttributeShared:     validateAttributeBool,
 }
 
 func validateAttributeBool(key string, val *string) error {
@@ -174,6 +176,10 @@ func (sdl *v2StorageAttributes) UnmarshalYAML(node *yaml.Node) error {
 		if persistent != valueFalse {
 			return errStorageRAMClass
 		}
+	case "rook-cephfs", "rook-ceph-block":
+		// Allow both persistent: true and persistent: false for Ceph storage classes
+		// This enables shared persistent storage when persistent: true and shared: true
+		break
 	default:
 		if persistent == valueFalse {
 			return errStorageEphemeralClass

@@ -154,13 +154,62 @@ func (b *Workload) container() corev1.Container {
 
 	if service.Params != nil {
 		for _, params := range service.Params.Storage {
-			kcontainer.VolumeMounts = append(kcontainer.VolumeMounts, corev1.VolumeMount{
-				// matches VolumeName in persistentVolumeClaims below
-				Name:      fmt.Sprintf("%s-%s", service.Name, params.Name),
-				ReadOnly:  params.ReadOnly,
-				MountPath: params.Mount,
-			})
+			// Check if this storage is marked as shared persistent
+			isSharedPersistent := false
+			for _, storage := range service.Resources.Storage {
+				if storage.Name == params.Name {
+					persistent, ok := storage.Attributes.Find(sdl.StorageAttributePersistent).AsBool()
+					if ok && persistent {
+						shared, ok := storage.Attributes.Find(sdl.StorageAttributeShared).AsBool()
+						if ok && shared {
+							isSharedPersistent = true
+							break
+						}
+					}
+				}
+			}
+
+			// Only create volume mounts for non-shared persistent storage
+			// Shared persistent storage will be handled by the logic below
+			if !isSharedPersistent {
+				kcontainer.VolumeMounts = append(kcontainer.VolumeMounts, corev1.VolumeMount{
+					// matches VolumeName in persistentVolumeClaims below
+					Name:      fmt.Sprintf("%s-%s", service.Name, params.Name),
+					ReadOnly:  params.ReadOnly,
+					MountPath: params.Mount,
+				})
+			}
 		}
+	}
+
+	// Add volume mounts for shared persistent storage
+	for _, storage := range service.Resources.Storage {
+		persistent, ok := storage.Attributes.Find(sdl.StorageAttributePersistent).AsBool()
+		if !ok || !persistent {
+			continue
+		}
+
+		shared, ok := storage.Attributes.Find(sdl.StorageAttributeShared).AsBool()
+		if !ok || !shared {
+			continue
+		}
+
+		// Find the mount path from service params or use a default
+		mountPath := fmt.Sprintf("/data/%s", storage.Name)
+		if service.Params != nil {
+			for _, params := range service.Params.Storage {
+				if params.Name == storage.Name {
+					mountPath = params.Mount
+					break
+				}
+			}
+		}
+
+		kcontainer.VolumeMounts = append(kcontainer.VolumeMounts, corev1.VolumeMount{
+			Name:      fmt.Sprintf("%s-%s-shared", service.Name, storage.Name),
+			ReadOnly:  false,
+			MountPath: mountPath,
+		})
 	}
 
 	envVarsAdded := make(map[string]int)
@@ -185,33 +234,53 @@ func (b *Workload) container() corev1.Container {
 	return kcontainer
 }
 
-// Return RAM volumes
+// Return RAM volumes and shared persistent volumes
 func (b *Workload) volumes() []corev1.Volume {
 	var volumes []corev1.Volume // nolint:prealloc
 
 	service := &b.group.Services[b.serviceIdx]
 
 	for _, storage := range service.Resources.Storage {
-		// Only RAM volumes
+		// Handle RAM volumes
 		sclass, ok := storage.Attributes.Find(sdl.StorageAttributeClass).AsString()
-		if !ok || sclass != sdl.StorageClassRAM {
+		if ok && sclass == sdl.StorageClassRAM {
+			// No persistent volumes for RAM
+			persistent, ok := storage.Attributes.Find(sdl.StorageAttributePersistent).AsBool()
+			if !ok || persistent {
+				continue
+			}
+
+			size := resource.NewQuantity(storage.Quantity.Val.Int64(), resource.DecimalSI).DeepCopy()
+
+			volumes = append(volumes, corev1.Volume{
+				Name: fmt.Sprintf("%s-%s", service.Name, storage.Name),
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{
+						Medium:    corev1.StorageMediumMemory,
+						SizeLimit: &size,
+					},
+				},
+			})
 			continue
 		}
 
-		// No persistent volumes
+		// Handle shared persistent volumes
 		persistent, ok := storage.Attributes.Find(sdl.StorageAttributePersistent).AsBool()
-		if !ok || persistent {
+		if !ok || !persistent {
 			continue
 		}
 
-		size := resource.NewQuantity(storage.Quantity.Val.Int64(), resource.DecimalSI).DeepCopy()
+		shared, ok := storage.Attributes.Find(sdl.StorageAttributeShared).AsBool()
+		if !ok || !shared {
+			continue
+		}
 
+		// Create volume for shared persistent storage
 		volumes = append(volumes, corev1.Volume{
-			Name: fmt.Sprintf("%s-%s", service.Name, storage.Name),
+			Name: fmt.Sprintf("%s-%s-shared", service.Name, storage.Name),
 			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{
-					Medium:    corev1.StorageMediumMemory,
-					SizeLimit: &size,
+				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+					ClaimName: fmt.Sprintf("%s-%s-shared", service.Name, storage.Name),
 				},
 			},
 		})
@@ -231,6 +300,98 @@ func (b *Workload) persistentVolumeClaims() []corev1.PersistentVolumeClaim {
 			continue
 		}
 
+		// Check if this storage is marked as shared
+		attr = storage.Attributes.Find(sdl.StorageAttributeShared)
+		shared := false
+		if attr != nil {
+			shared, _ = attr.AsBool()
+		}
+
+		volumeMode := corev1.PersistentVolumeFilesystem
+		// Determine access mode based on storage class and shared attribute
+		accessModes := []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce}
+
+		// Check if this is a shared storage class that supports ReadWriteMany
+		attr = storage.Attributes.Find(sdl.StorageAttributeClass)
+		if class, valid := attr.AsString(); valid {
+			// Storage classes that support ReadWriteMany
+			sharedStorageClasses := map[string]bool{
+				"rook-cephfs": true,
+			}
+
+			// Enable ReadWriteMany for storage classes that support it
+			if sharedStorageClasses[class] {
+				accessModes = []corev1.PersistentVolumeAccessMode{corev1.ReadWriteMany}
+			}
+		}
+
+		// For shared storage, create a single PVC with a fixed name
+		// For non-shared storage, create PVCs with service-storage naming pattern
+		var pvcName string
+		if shared {
+			pvcName = fmt.Sprintf("%s-%s-shared", service.Name, storage.Name)
+		} else {
+			pvcName = fmt.Sprintf("%s-%s", service.Name, storage.Name)
+		}
+
+		pvc := corev1.PersistentVolumeClaim{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      pvcName,
+				Namespace: b.NS(),
+				Labels:    b.labels(),
+			},
+			Spec: corev1.PersistentVolumeClaimSpec{
+				AccessModes: accessModes,
+				Resources: corev1.VolumeResourceRequirements{
+					Limits:   make(corev1.ResourceList),
+					Requests: make(corev1.ResourceList),
+				},
+				VolumeMode:       &volumeMode,
+				StorageClassName: nil,
+				DataSource:       nil, // bind to existing pvc. Subnet does not support it. yet
+			},
+		}
+
+		pvc.Spec.Resources.Requests[corev1.ResourceStorage] = resource.NewQuantity(int64(storage.Quantity.Value()), resource.DecimalSI).DeepCopy() // nolint: gosec
+
+		attr = storage.Attributes.Find(sdl.StorageAttributeClass)
+		if class, valid := attr.AsString(); valid && class != sdl.StorageClassDefault {
+			pvc.Spec.StorageClassName = &class
+		}
+
+		pvcs = append(pvcs, pvc)
+	}
+
+	return pvcs
+}
+
+// PersistentVolumeClaims returns the persistent volume claims for this workload
+func (b *Workload) PersistentVolumeClaims() []corev1.PersistentVolumeClaim {
+	return b.persistentVolumeClaims()
+}
+
+// Get non-shared PVCs for StatefulSets (excludes shared persistent storage)
+func (b *Workload) nonSharedPersistentVolumeClaims() []corev1.PersistentVolumeClaim {
+	var pvcs []corev1.PersistentVolumeClaim // nolint:prealloc
+
+	service := &b.group.Services[b.serviceIdx]
+
+	for _, storage := range service.Resources.Storage {
+		attr := storage.Attributes.Find(sdl.StorageAttributePersistent)
+		if persistent, valid := attr.AsBool(); !valid || !persistent {
+			continue
+		}
+
+		// Skip shared persistent storage
+		attr = storage.Attributes.Find(sdl.StorageAttributeShared)
+		shared := false
+		if attr != nil {
+			shared, _ = attr.AsBool()
+		}
+		if shared {
+			continue
+		}
+
 		volumeMode := corev1.PersistentVolumeFilesystem
 		// Determine access mode based on storage class
 		accessModes := []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce}
@@ -240,8 +401,7 @@ func (b *Workload) persistentVolumeClaims() []corev1.PersistentVolumeClaim {
 		if class, valid := attr.AsString(); valid {
 			// Storage classes that support ReadWriteMany
 			sharedStorageClasses := map[string]bool{
-				"ceph-shared":   true,
-				"cephfs-shared": true,
+				"rook-cephfs": true,
 			}
 
 			// Enable ReadWriteMany for storage classes that support it

@@ -71,7 +71,7 @@ func (b *statefulSet) Create() (*appsv1.StatefulSet, error) { // nolint:golint,u
 					Volumes:                      b.volumesObjs,
 				},
 			},
-			VolumeClaimTemplates: b.pvcsObjs,
+			VolumeClaimTemplates: b.nonSharedPersistentVolumeClaims(),
 		},
 	}
 
@@ -90,7 +90,7 @@ func (b *statefulSet) Update(obj *appsv1.StatefulSet) (*appsv1.StatefulSet, erro
 	uobj.Spec.Template.Spec.Containers = []corev1.Container{b.container()}
 	uobj.Spec.Template.Spec.ImagePullSecrets = b.secretsRefs
 	uobj.Spec.Template.Spec.Volumes = b.volumesObjs
-	uobj.Spec.VolumeClaimTemplates = b.pvcsObjs
+	uobj.Spec.VolumeClaimTemplates = b.nonSharedPersistentVolumeClaims()
 
 	return uobj, nil
 }
