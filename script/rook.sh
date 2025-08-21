@@ -6,18 +6,37 @@ source "$CURDIR"/kubectl_retry.sh
 ROOK_DEPLOY_TIMEOUT=${ROOK_DEPLOY_TIMEOUT:-6000}
 rootdir="$(dirname "$0")/.."
 
-# Parse --profile flag (default: prod). Also respect ROOK_PROFILE env var.
+# Default profile if none provided via flags or env
 ROOK_PROFILE_DEFAULT=prod
-ROOK_PROFILE="${ROOK_PROFILE:-$ROOK_PROFILE_DEFAULT}"
-while [[ "$1" == --profile=* || "$1" == "-p" ]]; do
-	if [[ "$1" == --profile=* ]]; then
-		ROOK_PROFILE="${1#*=}"
-		shift
-	elif [[ "$1" == "-p" ]]; then
-		ROOK_PROFILE="$2"
-		shift 2
-	fi
+
+# Parse flags anywhere in the argv and rebuild positional args
+ARGS=()
+while [[ $# -gt 0 ]]; do
+	case "$1" in
+		--profile=*)
+			ROOK_PROFILE="${1#*=}"
+			shift
+			;;
+		--profile)
+			ROOK_PROFILE="$2"
+			shift 2
+			;;
+		-p)
+			ROOK_PROFILE="$2"
+			shift 2
+			;;
+		*)
+			ARGS+=("$1")
+			shift
+			;;
+	esac
 done
+# restore remaining args as positionals for the command switch
+set -- "${ARGS[@]}"
+# Ensure default profile when none provided via flags or env
+if [ -z "$ROOK_PROFILE" ]; then
+  ROOK_PROFILE="$ROOK_PROFILE_DEFAULT"
+fi
 
 # Core manifests now live under pkg/k8s/rook/core; fallback to dev for missing files
 ROOK_CORE_PATH=${rootdir}/pkg/k8s/rook/core
