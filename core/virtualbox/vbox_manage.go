@@ -1,6 +1,7 @@
 package virtualbox
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
 	"path/filepath"
@@ -656,4 +657,25 @@ func (e *VBoxManageExecutor) SetupSSHPortForward(vmName string, hostPort int, gu
 	rule := fmt.Sprintf("ssh,tcp,,%d,,%d", hostPort, guestPort)
 	_, err := e.executeCommand("modifyvm", vmName, "--natpf1", rule)
 	return err
+}
+
+// ListAvailableMetrics lists available metrics for a VM
+func (e *VBoxManageExecutor) ListAvailableMetrics(vmId string) (string, error) {
+	vboxLog.Debugf("Listing available metrics for VM: %s", vmId)
+	return e.executeCommand("metrics", "list", vmId)
+}
+
+// StartMetricsCollection starts collecting metrics for a VM with streaming support
+func (e *VBoxManageExecutor) StartMetricsCollection(ctx context.Context, vmId string, metrics []string, period int) (*exec.Cmd, error) {
+	vboxLog.Infof("Starting metrics collection for VM: %s with period: %d seconds", vmId, period)
+
+	// Join metrics with commas
+	metricsString := strings.Join(metrics, ",")
+
+	// Create command with context for proper cancellation
+	cmd := exec.CommandContext(ctx, "VBoxManage", "metrics", "collect", "--period", fmt.Sprintf("%d", period), vmId, metricsString)
+
+	vboxLog.Debugf("Metrics collection command: VBoxManage metrics collect --period %d %s %s", period, vmId, metricsString)
+
+	return cmd, nil
 }

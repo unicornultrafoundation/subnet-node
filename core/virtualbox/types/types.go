@@ -200,3 +200,16 @@ type VMCreateFromImageRequest struct {
 	Password   string `json:"password,omitempty"`
 	OrderId    string `json:"order_id,omitempty"`
 }
+
+// VMMetricValue represents a metric value
+type VMMetricValue struct {
+	Value float64 `json:"value"`
+	Unit  string  `json:"unit,omitempty"`
+}
+
+// VMMetricsSnapshot represents all metrics for a specific timestamp
+type VMMetricsSnapshot struct {
+	Timestamp string                   `json:"timestamp"`
+	VMId      string                   `json:"vm_id"`
+	Metrics   map[string]VMMetricValue `json:"metrics"`
+}

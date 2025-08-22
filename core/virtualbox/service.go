@@ -1,12 +1,14 @@
 package virtualbox
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -15,6 +17,7 @@ import (
 
 	"encoding/json"
 
+	"github.com/gorilla/websocket"
 	"github.com/ipfs/go-datastore"
 	"github.com/ipfs/go-datastore/query"
 
@@ -1181,6 +1184,386 @@ func (s *VirtualboxService) performVMSync(ctx context.Context) error {
 	return nil
 }
 
+func (s *VirtualboxService) CollectMetrics(ctx context.Context, vmId string, conn *websocket.Conn, period int) error {
+	// Add panic recovery to the entire function
+	defer func() {
+		if r := recover(); r != nil {
+			serviceLog.Errorf("Panic in CollectMetrics for VM %s: %v", vmId, r)
+		}
+	}()
+
+	serviceLog.Infof("Starting metrics collection for VM: %s with period: %d seconds", vmId, period)
+
+	// Check available metrics using VBoxManageExecutor
+	checkOutput, err := s.vboxExec.ListAvailableMetrics(vmId)
+	if err != nil {
+		serviceLog.Errorf("Error checking available metrics: %v", err)
+	} else {
+		serviceLog.Debugf("Available metrics:\n%s", checkOutput)
+	}
+
+	// Define all metrics to collect - based on what we know works
+	allMetrics := []string{
+		"CPU/Load/User",
+		"CPU/Load/Kernel",
+		"RAM/Usage/Used",
+		"Disk/Usage/Used",
+		"Net/Rate/Rx",
+		"Net/Rate/Tx",
+	}
+
+	// Start VBoxManage metrics collect command using VBoxManageExecutor
+	cmd, err := s.vboxExec.StartMetricsCollection(ctx, vmId, allMetrics, period)
+	if err != nil {
+		return fmt.Errorf("error starting metrics collection: %w", err)
+	}
+
+	// Create pipes to capture output
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("error creating stdout pipe: %w", err)
+	}
+
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return fmt.Errorf("error creating stderr pipe: %w", err)
+	}
+
+	// Start the command
+	err = cmd.Start()
+	if err != nil {
+		return fmt.Errorf("error starting VBoxManage: %w", err)
+	}
+
+	// Ensure the process is cleaned up when the function returns
+	defer func() {
+		if cmd.Process != nil {
+			serviceLog.Debugf("Cleaning up VBoxManage process for VM: %s", vmId)
+
+			// Try graceful termination first
+			if err := cmd.Process.Signal(os.Interrupt); err != nil {
+				serviceLog.Debugf("Process already terminated or error sending interrupt: %v", err)
+			} else {
+				// Give it a moment to terminate gracefully
+				time.Sleep(1 * time.Second)
+			}
+
+			// Force kill if still running
+			if err := cmd.Process.Kill(); err != nil {
+				serviceLog.Debugf("Process already terminated or error killing: %v", err)
+			}
+
+			// Wait a bit more to ensure process is fully terminated
+			time.Sleep(500 * time.Millisecond)
+		}
+	}()
+
+	// Create a context to signal when WebSocket disconnects
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	// Set up WebSocket close handler to detect disconnections
+	originalCloseHandler := conn.CloseHandler()
+	conn.SetCloseHandler(func(code int, text string) error {
+		serviceLog.Debugf("WebSocket close handler triggered for VM: %s (code: %d, text: %s)", vmId, code, text)
+		cancel() // Cancel context instead of sending to channel
+		if originalCloseHandler != nil {
+			return originalCloseHandler(code, text)
+		}
+		return nil
+	})
+
+	// Set up pong handler to detect disconnections
+	conn.SetPongHandler(func(string) error {
+		return conn.SetReadDeadline(time.Now().Add(30 * time.Second))
+	})
+
+	conn.SetReadDeadline(time.Now().Add(30 * time.Second))
+
+	// Safe WebSocket write function with panic recovery
+	safeWriteMessage := func(messageType int, data []byte) error {
+		defer func() {
+			if r := recover(); r != nil {
+				serviceLog.Errorf("Panic in WebSocket write for VM %s: %v", vmId, r)
+			}
+		}()
+
+		// Set a write deadline to prevent hanging
+		if err := conn.SetWriteDeadline(time.Now().Add(5 * time.Second)); err != nil {
+			return err
+		}
+
+		err := conn.WriteMessage(messageType, data)
+
+		// Reset write deadline
+		conn.SetWriteDeadline(time.Time{})
+
+		return err
+	}
+
+	// Monitor WebSocket connection in a goroutine with better error handling
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				serviceLog.Errorf("Panic in VM status monitoring goroutine for VM %s: %v", vmId, r)
+				cancel() // Cancel context on panic
+			}
+		}()
+
+		ticker := time.NewTicker(1 * time.Second) // Check every 1 second for faster detection
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				serviceLog.Debugf("Context cancelled, stopping WebSocket monitoring for VM: %s", vmId)
+				return
+			case <-ticker.C:
+				// Check if VM is still running
+				vmState, err := s.vboxExec.GetVMStatus(vmId)
+				if err != nil {
+					serviceLog.Warnf("Failed to get VM status for %s: %v", vmId, err)
+					// If we can't get VM status, assume it's stopped and terminate
+					serviceLog.Infof("VM %s status check failed, terminating metrics collection", vmId)
+					cancel() // Cancel context on error
+					return
+				} else if vmState != "running" {
+					serviceLog.Infof("VM %s is no longer running (status: %s), terminating metrics collection", vmId, vmState)
+
+					// Send error message to WebSocket client before disconnecting
+					errorData := map[string]string{
+						"type":    "error",
+						"message": fmt.Sprintf("VM stopped during metrics collection. Status: %s", vmState),
+					}
+					jsonData, _ := json.Marshal(errorData)
+					if err := safeWriteMessage(websocket.TextMessage, jsonData); err != nil {
+						serviceLog.Debugf("Failed to send VM stopped error to WebSocket: %v", err)
+					} else {
+						// Small delay to ensure message is delivered
+						time.Sleep(100 * time.Millisecond)
+					}
+
+					cancel() // Cancel context on VM stopped
+					return
+				}
+
+				// Set a shorter write deadline to detect disconnection faster
+				if err := conn.SetWriteDeadline(time.Now().Add(500 * time.Millisecond)); err != nil {
+					serviceLog.Debugf("WebSocket disconnected, terminating VBoxManage process for VM: %s", vmId)
+					cancel() // Cancel context on WebSocket disconnect
+					return
+				}
+
+				// Send ping to check connection
+				if err := safeWriteMessage(websocket.PingMessage, nil); err != nil {
+					serviceLog.Debugf("WebSocket disconnected, terminating VBoxManage process for VM: %s", vmId)
+					cancel() // Cancel context on WebSocket disconnect
+					return
+				}
+
+				// Reset write deadline
+				if err := conn.SetWriteDeadline(time.Time{}); err != nil {
+					serviceLog.Debugf("WebSocket disconnected, terminating VBoxManage process for VM: %s", vmId)
+					cancel() // Cancel context on WebSocket disconnect
+					return
+				}
+			}
+		}
+	}()
+
+	// Start a background goroutine to actively read from WebSocket to detect disconnections immediately
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				serviceLog.Errorf("Panic in WebSocket read goroutine for VM %s: %v", vmId, r)
+				cancel() // Cancel context on panic
+			}
+		}()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+
+			// Set read deadline to prevent hanging
+			if err := conn.SetReadDeadline(time.Now().Add(30 * time.Second)); err != nil {
+				serviceLog.Debugf("Failed to set read deadline for VM %s: %v", vmId, err)
+				cancel() // Cancel context on error
+				return
+			}
+
+			_, _, err := conn.ReadMessage()
+			if err != nil {
+				if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+					serviceLog.Debugf("WebSocket read error (client disconnected): %v", err)
+				} else {
+					serviceLog.Debugf("WebSocket closed normally: %v", err)
+				}
+				cancel() // Cancel context on WebSocket disconnect
+				return
+			}
+		}
+	}()
+
+	// Read stdout in a goroutine
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				serviceLog.Errorf("Panic in stdout reading goroutine for VM %s: %v", vmId, r)
+				cancel() // Cancel context on panic
+			}
+		}()
+
+		scanner := bufio.NewScanner(stdout)
+		var currentSnapshot *vbtypes.VMMetricsSnapshot
+		var currentTimestamp string
+
+		for scanner.Scan() {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+
+			line := scanner.Text()
+			serviceLog.Debugf("VBoxManage output: %s", line)
+
+			// Parse the line into structured data
+			metricData, err := parseVBoxManageOutput(line)
+			if err != nil {
+				serviceLog.Warnf("Error parsing line: %v", err)
+				continue
+			}
+
+			// Skip if it's a header or empty line
+			if metricData == nil {
+				serviceLog.Debugf("Skipping line (header or empty): %s", line)
+				continue
+			}
+
+			serviceLog.Debugf("Successfully parsed metric: %s = %f %s", metricData.Metric, metricData.Value, metricData.Unit)
+
+			// Check if this is a new timestamp (new snapshot)
+			if currentTimestamp != metricData.Timestamp {
+				// Send previous snapshot if it exists
+				if currentSnapshot != nil {
+					jsonData, err := json.Marshal(currentSnapshot)
+					if err != nil {
+						serviceLog.Errorf("Error marshaling snapshot JSON: %v", err)
+					} else {
+						// Send complete snapshot to WebSocket client
+						if err := safeWriteMessage(websocket.TextMessage, jsonData); err != nil {
+							serviceLog.Debugf("WebSocket write error (client likely disconnected): %v", err)
+							cancel() // Cancel context on error
+							return
+						}
+						serviceLog.Debugf("Sent complete snapshot for timestamp %s with %d metrics", currentSnapshot.Timestamp, len(currentSnapshot.Metrics))
+					}
+				}
+
+				// Start new snapshot
+				currentTimestamp = metricData.Timestamp
+				currentSnapshot = &vbtypes.VMMetricsSnapshot{
+					Timestamp: metricData.Timestamp,
+					VMId:      vmId,
+					Metrics:   make(map[string]vbtypes.VMMetricValue),
+				}
+			}
+
+			// Add metric to current snapshot (only value and unit, no redundant timestamp/metric name)
+			currentSnapshot.Metrics[metricData.Metric] = vbtypes.VMMetricValue{
+				Value: metricData.Value,
+				Unit:  metricData.Unit,
+			}
+		}
+
+		// Send the last snapshot if it exists
+		if currentSnapshot != nil {
+			jsonData, err := json.Marshal(currentSnapshot)
+			if err != nil {
+				serviceLog.Errorf("Error marshaling final snapshot JSON: %v", err)
+			} else {
+				if err := safeWriteMessage(websocket.TextMessage, jsonData); err != nil {
+					serviceLog.Debugf("WebSocket write error on final snapshot (client likely disconnected): %v", err)
+				}
+			}
+		}
+
+		if err := scanner.Err(); err != nil {
+			serviceLog.Errorf("Error reading stdout: %v", err)
+		}
+	}()
+
+	// Read stderr in a goroutine
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				serviceLog.Errorf("Panic in stderr reading goroutine for VM %s: %v", vmId, r)
+				cancel() // Cancel context on panic
+			}
+		}()
+
+		scanner := bufio.NewScanner(stderr)
+		for scanner.Scan() {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+
+			line := scanner.Text()
+
+			// Send error messages to WebSocket client as well
+			errorData := map[string]string{
+				"type":    "error",
+				"message": line,
+			}
+			jsonData, _ := json.Marshal(errorData)
+			if err := safeWriteMessage(websocket.TextMessage, jsonData); err != nil {
+				serviceLog.Debugf("WebSocket write error on stderr (client likely disconnected): %v", err)
+				cancel() // Cancel context on error
+				return
+			}
+		}
+		if err := scanner.Err(); err != nil {
+			serviceLog.Errorf("Error reading stderr: %v", err)
+		}
+	}()
+
+	// Wait for either completion or WebSocket disconnect
+	select {
+	case <-ctx.Done():
+		serviceLog.Infof("WebSocket disconnected, terminating VBoxManage metrics collection for VM: %s", vmId)
+	case <-time.After(24 * time.Hour): // Safety timeout
+		serviceLog.Infof("Safety timeout reached, terminating VBoxManage metrics collection for VM: %s", vmId)
+	}
+
+	// Wait for the process to finish with timeout
+	processDone := make(chan error, 1)
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				serviceLog.Errorf("Panic in process wait goroutine for VM %s: %v", vmId, r)
+			}
+		}()
+		processDone <- cmd.Wait()
+	}()
+
+	select {
+	case err := <-processDone:
+		if err != nil {
+			serviceLog.Debugf("VBoxManage process finished with error: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		serviceLog.Debugf("Timeout waiting for VBoxManage process to finish for VM: %s", vmId)
+	}
+
+	serviceLog.Infof("Metrics collection stopped for VM: %s", vmId)
+	return nil
+}
+
 // getAvailablePort finds an available TCP port on the host
 func getAvailablePort() (int, error) {
 	l, err := net.Listen("tcp", ":0")
@@ -1241,4 +1624,88 @@ func parseIntOrDefault(value string, defaultValue int) int {
 	}
 
 	return num
+}
+
+// metricParseData is a temporary struct for parsing VBoxManage output
+type metricParseData struct {
+	Timestamp string
+	Metric    string
+	Value     float64
+	Unit      string
+}
+
+func parseVBoxManageOutput(line string) (*metricParseData, error) {
+	// Skip header lines and empty lines
+	line = strings.TrimSpace(line)
+	if line == "" || strings.Contains(line, "----") {
+		return nil, nil
+	}
+
+	// Skip header lines that don't start with a timestamp
+	// VBoxManage metrics output starts with timestamp like "04:19:01.615"
+	if !regexp.MustCompile(`^\d{2}:\d{2}:\d{2}\.\d{3}`).MatchString(line) {
+		// This is not a metric data line, skip it
+		return nil, nil
+	}
+
+	// Parse the format: "04:19:01.615 vm-1       CPU/Load/User        5.11%" or "04:19:01.615 vm-1       RAM/Usage/Used       118816 kB"
+	// Using regex to handle variable spacing and different units including kB, MB, B/s
+	re := regexp.MustCompile(`^(\d{2}:\d{2}:\d{2}\.\d{3})\s+(\S+)\s+([^\s]+(?:\s+[^\s]+)*)\s+([\d.]+)\s*([%]|[kK]?[bB]|[mM]?[bB]|[gG]?[bB]|[bB]/s|[kK][bB]/s|[mM][bB]/s|[gG][bB]/s)?$`)
+	matches := re.FindStringSubmatch(line)
+
+	if len(matches) != 6 {
+		return nil, fmt.Errorf("could not parse line: %s", line)
+	}
+
+	timestamp := matches[1]
+	metric := strings.TrimSpace(matches[3])
+	valueStr := matches[4]
+	unit := matches[5]
+
+	// Convert value to float64
+	value, err := strconv.ParseFloat(valueStr, 64)
+	if err != nil {
+		return nil, fmt.Errorf("could not parse value '%s': %v", valueStr, err)
+	}
+
+	// Convert timestamp to full datetime
+	now := time.Now()
+	timeStr := fmt.Sprintf("%04d-%02d-%02d %s", now.Year(), now.Month(), now.Day(), timestamp)
+	parsedTime, err := time.Parse("2006-01-02 15:04:05.000", timeStr)
+	if err != nil {
+		return nil, fmt.Errorf("could not parse timestamp '%s': %v", timeStr, err)
+	}
+
+	// Normalize units for better consistency
+	normalizedUnit := normalizeUnit(unit)
+
+	return &metricParseData{
+		Timestamp: parsedTime.Format(time.RFC3339),
+		Metric:    metric,
+		Value:     value,
+		Unit:      normalizedUnit,
+	}, nil
+}
+
+func normalizeUnit(unit string) string {
+	switch strings.ToLower(unit) {
+	case "%":
+		return "%"
+	case "kb", "k":
+		return "KB"
+	case "mb", "m":
+		return "MB"
+	case "gb", "g":
+		return "GB"
+	case "b/s":
+		return "B/s"
+	case "kb/s", "k/s":
+		return "KB/s"
+	case "mb/s", "m/s":
+		return "MB/s"
+	case "gb/s", "g/s":
+		return "GB/s"
+	default:
+		return unit
+	}
 }

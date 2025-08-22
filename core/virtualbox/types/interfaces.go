@@ -2,6 +2,9 @@ package types
 
 import (
 	"context"
+	"os/exec"
+
+	"github.com/gorilla/websocket"
 )
 
 // Service defines the interface for VirtualBox operations
@@ -33,6 +36,9 @@ type Service interface {
 	GenerateSSHToken(ctx context.Context, vmID string, username string, password string) (*SSHTokenResponse, error)
 	ValidateAndConsumeSSHToken(token string) (*SSHAccessToken, error)
 
+	// Metrics Collection
+	CollectMetrics(ctx context.Context, vmId string, conn *websocket.Conn, period int) error // Returns concise metrics data without redundant fields
+
 	// Service Lifecycle
 	Start(ctx context.Context) error
 	Stop(ctx context.Context) error
@@ -52,4 +58,8 @@ type VBoxManageExecutor interface {
 	GetVMStatus(vmId string) (string, error)
 	ListVMs() ([]string, error)
 	CheckVBoxManageVersion() (string, error)
+
+	// Metrics Collection
+	ListAvailableMetrics(vmId string) (string, error)
+	StartMetricsCollection(ctx context.Context, vmId string, metrics []string, period int) (*exec.Cmd, error)
 }

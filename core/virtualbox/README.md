@@ -442,3 +442,97 @@ Each architecture receives optimized settings for:
 - Graphics controller
 - USB controller
 - Audio configuration
+
+## VM Metrics Collection
+
+### Features
+
+- **Real-time streaming** via WebSocket
+- **Configurable intervals** (1-60 seconds)
+- **CPU, Memory, Disk, Network** monitoring
+- **Automatic cleanup** on disconnection
+- **Graceful process termination**
+- **VM status validation** - only works with running VMs
+- **User-friendly error messages** - clear feedback when VM is not running
+- **Runtime VM monitoring** - disconnects and notifies when VM stops during collection
+
+### API
+
+```
+GET /ws/v1/virtualbox/{orderId}/metrics?period={seconds}
+```
+
+**Examples:**
+
+```bash
+ws://localhost:8081/ws/v1/virtualbox/1/metrics          # 1s default
+ws://localhost:8081/ws/v1/virtualbox/1/metrics?period=5 # 5s interval
+```
+
+### Metrics Collected
+
+```go
+allMetrics := []string{
+    "CPU/Load/User",      // User CPU %
+    "CPU/Load/Kernel",    // Kernel CPU %
+    "RAM/Usage/Used",     // Memory KB
+    "Disk/Usage/Used",    // Disk KB
+    "Net/Rate/Rx",        // Network Rx B/s
+    "Net/Rate/Tx",        // Network Tx B/s
+}
+```
+
+### Data Format
+
+```json
+{
+  "timestamp": "2025-08-22T07:58:54Z",
+  "vm_id": "c00dca9a-688a-4878-bdac-3c5a0237f05d",
+  "metrics": {
+    "CPU/Load/User": { "value": 5.11, "unit": "%" },
+    "RAM/Usage/Used": { "value": 118816, "unit": "KB" }
+  }
+}
+```
+
+### Flow
+
+```
+Client WebSocket → Parse Period → Start VBoxManage → Stream Data → Detect Disconnect → Terminate Process
+```
+
+### Client Example
+
+```javascript
+const ws = new WebSocket(
+  "ws://localhost:8081/ws/v1/virtualbox/1/metrics?period=5"
+);
+ws.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+
+  if (data.type === "error") {
+    console.error("Error:", data.message);
+    // Example: "VM stopped during metrics collection. Status: poweroff"
+    return;
+  }
+
+  console.log("CPU:", data.metrics["CPU/Load/User"].value + "%");
+};
+```
+
+### Error Messages
+
+**When VM is not running:**
+
+```
+HTTP 400: "Cannot collect metrics: VM is not running. Current status: poweroff. Please start the VM first."
+```
+
+**When VM stops during collection:**
+
+```json
+{
+  "type": "error",
+  "message": "VM stopped during metrics collection. Status: poweroff"
+}
+```

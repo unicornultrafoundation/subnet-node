@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/gorilla/websocket"
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/core/virtualbox"
 	"github.com/unicornultrafoundation/subnet-node/core/virtualbox/ssh_connection"
@@ -357,6 +359,7 @@ func (api *VirtualBoxAPI) WebSocketRouter() *chi.Mux {
 	r.Use(authMiddleware.Middleware())
 
 	r.Get("/{orderId}/ssh", api.vmSSHWebSocketHandler)
+	r.Get("/{orderId}/metrics", api.getVMMetricsHandler)
 
 	return r
 }
@@ -508,6 +511,75 @@ func (api *VirtualBoxAPI) vmSSHWebSocketHandler(w http.ResponseWriter, r *http.R
 	// Wait for context cancellation (client disconnect or error)
 	<-ctx.Done()
 	logger.Info("SSH WebSocket connection closed")
+}
+
+func (api *VirtualBoxAPI) getVMMetricsHandler(w http.ResponseWriter, r *http.Request) {
+	orderId := chi.URLParam(r, "orderId")
+	if orderId == "" {
+		api.sendErrorResponse(w, "orderId is required", http.StatusBadRequest)
+		return
+	}
+
+	vmId, exists := api.vboxService.GetVMIdByOrderId(orderId)
+	if !exists {
+		api.sendErrorResponse(w, "VM not found for this orderId", http.StatusNotFound)
+		return
+	}
+
+	// Parse period from query parameter, default to 1 if not provided
+	periodStr := r.URL.Query().Get("period")
+	period := 1 // default value
+	if periodStr != "" {
+		if parsedPeriod, err := strconv.Atoi(periodStr); err == nil && parsedPeriod > 0 {
+			// Validate period is within reasonable bounds (1-60 seconds)
+			if parsedPeriod > 60 {
+				api.sendErrorResponse(w, "Period must be between 1 and 60 seconds", http.StatusBadRequest)
+				return
+			}
+			period = parsedPeriod
+		} else {
+			api.sendErrorResponse(w, "Invalid period parameter. Must be a positive integer", http.StatusBadRequest)
+			return
+		}
+	}
+
+	logger := logrus.WithField("orderId", orderId).WithField("vmId", vmId).WithField("period", period)
+
+	conn, err := ws.SetupWebSocketForMetrics(w, r, logger)
+	if err != nil {
+		logger.WithError(err).Error("Failed to upgrade WebSocket connection")
+		return
+	}
+
+	defer conn.Close()
+
+	// Check if VM is running after WebSocket connection is established
+	vm, err := api.vboxService.GetVM(r.Context(), vmId)
+	if err != nil {
+		errorData := map[string]string{
+			"type":    "error",
+			"message": fmt.Sprintf("Failed to get VM: %v", err),
+		}
+		jsonData, _ := json.Marshal(errorData)
+		conn.WriteMessage(websocket.TextMessage, jsonData)
+		return
+	}
+
+	if vm.Status != vbtypes.Running {
+		errorData := map[string]string{
+			"type":    "error",
+			"message": fmt.Sprintf("VM is not running. Status: %s", vm.Status),
+		}
+		jsonData, _ := json.Marshal(errorData)
+		conn.WriteMessage(websocket.TextMessage, jsonData)
+		return
+	}
+
+	err = api.vboxService.CollectMetrics(r.Context(), vmId, conn, period)
+	if err != nil {
+		logger.WithError(err).Error("Failed to collect metrics")
+		return
+	}
 }
 
 func (api *VirtualBoxAPI) createVMFromImage(w http.ResponseWriter, r *http.Request) {
