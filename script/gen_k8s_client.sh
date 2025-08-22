@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
+# Generate k8s client code from apis
+# Usage: ./gen_k8s_client.sh
 
-ROOT_DIR=$(pwd)
+ROOT_DIR="$(dirname "$0")/.."
 AP_DEVCACHE_BIN="${ROOT_DIR}/vendor/k8s.io/code-generator"
 
 function run_k8s_gen() {
@@ -27,8 +29,4 @@ function run_k8s_gen() {
 	unset GOFLAGS
 }
 
-case "$1" in
-	k8s-gen)
-		run_k8s_gen
-		;;
-esac
+run_k8s_gen
