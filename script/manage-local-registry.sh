@@ -1,6 +1,7 @@
 #!/bin/bash
 
 # Local Docker Registry Management Script
+# Usage: ./manage-local-registry.sh {start|stop|status|push|pull|list}
 
 REGISTRY_NAME="local-registry"
 REGISTRY_PORT="5000"
@@ -8,9 +9,14 @@ REGISTRY_URL="localhost:${REGISTRY_PORT}"
 
 case "$1" in
     "start")
-        echo "Starting local Docker registry..."
-        docker run -d -p ${REGISTRY_PORT}:5000 --name ${REGISTRY_NAME} registry:2
-        echo "Registry started at http://${REGISTRY_URL}"
+        echo "Checking if local Docker registry is already running..."
+        if docker ps | grep -q ${REGISTRY_NAME}; then
+            echo "✅ Registry is already running at http://${REGISTRY_URL}"
+        else
+            echo "Starting local Docker registry..."
+            docker run -d -p ${REGISTRY_PORT}:5000 --name ${REGISTRY_NAME} registry:2
+            echo "Registry started at http://${REGISTRY_URL}"
+        fi
         ;;
     "stop")
         echo "Stopping local Docker registry..."
