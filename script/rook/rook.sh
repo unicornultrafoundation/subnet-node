@@ -4,7 +4,7 @@ CURDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 source "$CURDIR"/kubectl_retry.sh
 
 ROOK_DEPLOY_TIMEOUT=${ROOK_DEPLOY_TIMEOUT:-6000}
-rootdir="$(dirname "$0")/.."
+rootdir="$(dirname "$0")/../.."
 
 # Default profile if none provided via flags or env
 ROOK_PROFILE_DEFAULT=prod
@@ -164,6 +164,8 @@ function deploy_rook() {
 }
 
 function teardown_rook() {
+	echo "Tearing down Rook/Ceph Kubernetes resources..."
+	
 	# Delete profile files first (reverse), then core (with fallback resolution)
 	for ((idx=${#profile_files[@]}-1 ; idx>=0 ; idx--)) ; do
 		f="${profile_files[idx]}"
@@ -177,6 +179,64 @@ function teardown_rook() {
 			kubectl_retry delete -f "$resolved" || true
 		fi
 	done
+	
+	echo "Cleaning up physical storage..."
+	cleanup_physical_storage
+}
+
+function cleanup_physical_storage() {
+	# Clean up loop devices created by setup-loop-osd
+	if [ -n "${LOOP_OSD_IMAGE_PATH:-}" ] && [ -f "${LOOP_OSD_IMAGE_PATH}" ]; then
+		echo "Removing loop device for: ${LOOP_OSD_IMAGE_PATH}"
+		
+		# Find and remove loop devices associated with this image
+		for loop_dev in /dev/loop*; do
+			if [ -b "$loop_dev" ]; then
+				# Check if this loop device is using our image
+				if losetup "$loop_dev" 2>/dev/null | grep -q "${LOOP_OSD_IMAGE_PATH}"; then
+					echo "Removing loop device: $loop_dev"
+					# Unmount if mounted
+					mount | grep "$loop_dev" | awk '{print $3}' | xargs -r sudo umount 2>/dev/null || true
+					# Remove loop device
+					sudo losetup -d "$loop_dev" 2>/dev/null || true
+				fi
+			fi
+		done
+		
+		# Remove the image file
+		echo "Removing loop OSD image: ${LOOP_OSD_IMAGE_PATH}"
+		sudo rm -f "${LOOP_OSD_IMAGE_PATH}" 2>/dev/null || true
+	fi
+	
+	# Clean up any remaining loop devices that might be orphaned
+	echo "Checking for orphaned loop devices..."
+	for loop_dev in /dev/loop*; do
+		if [ -b "$loop_dev" ]; then
+			# Check if it's still in use
+			if ! losetup "$loop_dev" >/dev/null 2>&1; then
+				continue
+			fi
+			
+			# Check if it's associated with Ceph/Rook
+			loop_info=$(losetup "$loop_dev" 2>/dev/null)
+			if echo "$loop_info" | grep -q "ceph\|rook\|osd"; then
+				echo "Removing orphaned Ceph loop device: $loop_dev"
+				mount | grep "$loop_dev" | awk '{print $3}' | xargs -r sudo umount 2>/dev/null || true
+				sudo losetup -d "$loop_dev" 2>/dev/null || true
+			fi
+		fi
+	done
+	
+	# Clean up any Ceph-related mount points
+	echo "Cleaning up Ceph mount points..."
+	mount | grep -E "(ceph|rook|osd)" | awk '{print $3}' | while read mount_point; do
+		if [ -d "$mount_point" ]; then
+			echo "Unmounting: $mount_point"
+			sudo umount "$mount_point" 2>/dev/null || true
+		fi
+	done
+	
+	echo "Physical storage cleanup completed"
 }
 
 function check_ceph_cluster_health() {
