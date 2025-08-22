@@ -40,4 +40,4 @@ ENV PATH="/app:${PATH}"
 ENTRYPOINT ["./k8s-services"]
 
 # Set the default command (can be overridden)
-CMD ["--help"] 
+CMD ["--help"]

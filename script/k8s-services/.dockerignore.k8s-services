@@ -1,0 +1,23 @@
+# Use repo-root context; ignore unnecessary paths
+.git/
+build/
+bin/
+dist/
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+*.log
+test/
+e2e/
+*_test.go
+docs/
+README.md
+*.tmp
+*.temp
+__debug_bin*
+vendor/
+go.sum
+
