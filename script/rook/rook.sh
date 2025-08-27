@@ -1,4 +1,14 @@
 #!/bin/bash -E
+#
+# Rook/Ceph deployment script with automatic encryption support
+# 
+# This script automatically applies KMS configuration for encryption if available.
+# Encryption is enabled when kms-config.yaml is found in the profile directory
+# or dev fallback. The script applies KMS config after the operator is ready
+# but before CSI components.
+# 
+# Note: CSI encryption RBAC rules are automatically applied from core files
+# to ensure encryption works properly on every deployment.
 
 CURDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 source "$CURDIR"/kubectl_retry.sh
@@ -71,6 +81,7 @@ core_files=(
 	"${ROOK_CORE_PATH}/crds.yaml"
 	"${ROOK_CORE_PATH}/common.yaml"
 	"${ROOK_CORE_PATH}/toolbox.yaml"
+	"${ROOK_CORE_PATH}/csi-encryption-rbac.yaml"
 )
 
 # Profile-specific manifests (cluster/pool/filesystem/storageclasses)
@@ -81,6 +92,13 @@ profile_files=(
 	"${ROOK_PROFILE_PATH}/filesystem.yaml"
 	"${ROOK_PROFILE_PATH}/csi/rbd/storageclass.yaml"
 	"${ROOK_PROFILE_PATH}/csi/cephfs/storageclass.yaml"
+)
+
+# KMS configuration for encryption (apply after operator but before CSI)
+# Try profile-specific KMS config first, then fall back to dev
+kms_files=(
+	"${ROOK_PROFILE_PATH}/kms-config.yaml"
+	"${ROOK_DEV_PATH}/kms-config.yaml"
 )
 
 # For dev profile, also apply config override to set pool defaults to 1
@@ -129,6 +147,22 @@ function deploy_rook() {
 	# Wait for operator to be ready
 	kubectl -n rook-ceph rollout status deploy/rook-ceph-operator --timeout=300s || true
 
+	# Apply KMS configuration for encryption (after operator is ready)
+	echo "Applying KMS configuration for encryption..."
+	local kms_applied=false
+	for f in "${kms_files[@]}"; do
+		if resolved=$(resolve_manifest_path "$f"); then
+			echo "Applying KMS config: $resolved"
+			kubectl_retry apply -f "$resolved"
+			kms_applied=true
+			break  # Only apply the first available KMS config
+		fi
+	done
+	
+	if [ "$kms_applied" = false ]; then
+		echo "Warning: No KMS config found (encryption will not work)" >&2
+	fi
+
 	# Delete immutable StorageClasses before re-applying profile SCs and apply profile manifests (with fallback)
 	for f in "${profile_files[@]}"; do
 		case "$f" in
@@ -165,6 +199,16 @@ function deploy_rook() {
 
 function teardown_rook() {
 	echo "Tearing down Rook/Ceph Kubernetes resources..."
+	
+	# Delete KMS configuration first (reverse order)
+	for ((idx=${#kms_files[@]}-1 ; idx>=0 ; idx--)) ; do
+		f="${kms_files[idx]}"
+		if resolved=$(resolve_manifest_path "$f"); then
+			echo "Removing KMS config: $resolved"
+			kubectl_retry delete -f "$resolved" || true
+			break  # Only remove the first available KMS config
+		fi
+	done
 	
 	# Delete profile files first (reverse), then core (with fallback resolution)
 	for ((idx=${#profile_files[@]}-1 ; idx>=0 ; idx--)) ; do
@@ -450,6 +494,20 @@ function preflight() {
 			ok=false
 		fi
 	done
+	
+	# Check KMS configuration (optional but recommended for encryption)
+	local kms_found=false
+	for f in "${kms_files[@]}"; do
+		if resolved=$(resolve_manifest_path "$f"); then
+			echo "KMS config found: $resolved"
+			kms_found=true
+			break  # Only report the first available KMS config
+		fi
+	done
+	
+	if [ "$kms_found" = false ]; then
+		echo "Warning: No KMS config found (encryption will not work)" >&2
+	fi
 	# Use profile-specific cluster.yaml
 	local cluster_yaml="${ROOK_PROFILE_PATH}/cluster.yaml"
 	if resolved=$(resolve_manifest_path "$cluster_yaml"); then
@@ -508,11 +566,13 @@ ceph-status)
 *)
 	echo " $0 [--profile prod|dev] [command]
 Available Commands:
-  deploy             Deploy a rook
+  deploy             Deploy a rook (with encryption if KMS config available)
   teardown           Teardown a rook
   health             Check cluster health
   preflight          Run environment checks for deploying Rook/Ceph
   setup-loop-osd     Create a loop device and configure cluster to use it (for Colima/single-node)
-  ceph-status        Show 'ceph -s' from toolbox" >&2
+  ceph-status        Show 'ceph -s' from toolbox
+
+Note: Encryption is automatically enabled if kms-config.yaml is found in the profile directory or dev fallback." >&2
 	;;
 esac

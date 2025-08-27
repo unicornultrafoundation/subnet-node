@@ -17,6 +17,10 @@ parameters:
   csi.storage.k8s.io/controller-publish-secret-namespace: rook-ceph
   csi.storage.k8s.io/node-stage-secret-name: rook-csi-cephfs-node
   csi.storage.k8s.io/node-stage-secret-namespace: rook-ceph
+  # Enable encryption for each volume with encryption keys from KMS
+  encrypted: "true"
+  # Use the metadata-based KMS configuration for encryption
+  encryptionKMSID: "user-secret-metadata"
 reclaimPolicy: Delete
 allowVolumeExpansion: true
 

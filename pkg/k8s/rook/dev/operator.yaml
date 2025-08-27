@@ -44,7 +44,7 @@ data:
   ROOK_CSI_DISABLE_DRIVER: "false"
 
   # Set to true to enable Ceph CSI pvc encryption support.
-  CSI_ENABLE_ENCRYPTION: "false"
+  CSI_ENABLE_ENCRYPTION: "true"
 
   # Set to true to enable host networking for CSI CephFS and RBD nodeplugins. This may be necessary
   # in some network configurations where the SDN does not provide access to an external cluster or
@@ -617,7 +617,7 @@ spec:
       serviceAccountName: rook-ceph-system
       containers:
         - name: rook-ceph-operator
-          image: docker.io/rook/ceph:master
+          image: docker.io/rook/ceph:v1.14.12
           args: ["ceph", "operator"]
           securityContext:
             runAsNonRoot: true

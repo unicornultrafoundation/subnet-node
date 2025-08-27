@@ -17,6 +17,8 @@ spec:
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
   name: rook-ceph-block
   labels:
     subnet.node: "true"
@@ -50,12 +52,12 @@ parameters:
 
   # (optional) Set it to true to encrypt each volume with encryption keys
   # from a key management system (KMS)
-  # encrypted: "true"
+  encrypted: "true"
 
   # (optional) Use external key management system (KMS) for encryption key by
   # specifying a unique ID matching a KMS ConfigMap. The ID is only used for
   # correlation to configmap entry.
-  # encryptionKMSID: <kms-config-id>
+  encryptionKMSID: "user-secret-metadata"
 
   # RBD image format. Defaults to "2".
   imageFormat: "2"
