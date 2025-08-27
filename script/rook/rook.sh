@@ -163,6 +163,7 @@ function deploy_rook() {
 		echo "Warning: No KMS config found (encryption will not work)" >&2
 	fi
 
+
 	# Delete immutable StorageClasses before re-applying profile SCs and apply profile manifests (with fallback)
 	for f in "${profile_files[@]}"; do
 		case "$f" in
@@ -180,6 +181,20 @@ function deploy_rook() {
 			return 1
 		fi
 	done
+
+	# In dev profile, automatically setup a loop OSD if none is Ready (after CRs/SCs are applied)
+	if [[ "$ROOK_PROFILE" == "dev" ]]; then
+		# Check if there are any Ready OSD pods with proper status
+		if ! kubectl -n rook-ceph get pods -l app=rook-ceph-osd --no-headers 2>/dev/null | awk '$2 ~ /^[0-9]+\/[0-9]+$/ && $3 == "Running" {exit 1}'; then
+			echo "No Ready OSD detected; running setup-loop-osd for dev profile..."
+			setup_loop_osd || {
+				echo "setup-loop-osd failed" >&2
+				return 1
+			}
+		else
+			echo "OSD already Ready; skipping setup-loop-osd."
+		fi
+	fi
 
 	# Health checks
 	if ! kubectl_retry -n rook-ceph get cephclusters -oyaml | grep 'items: \[\]' &>/dev/null; then
