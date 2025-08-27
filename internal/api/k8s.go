@@ -27,6 +27,7 @@ import (
 	ctypes "github.com/unicornultrafoundation/subnet-node/core/k8s/types/v1"
 	apclient "github.com/unicornultrafoundation/subnet-node/core/k8s/types/v1/provider/client"
 	wsutil "github.com/unicornultrafoundation/subnet-node/internal/api/ws"
+	crd "github.com/unicornultrafoundation/subnet-node/pkg/k8s/apis/subnet.node/v1"
 	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/apitypes"
 	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/sdl"
 	dtypes "github.com/unicornultrafoundation/subnet-node/proto/subnet/k8s/deployment/v1"
@@ -79,6 +80,7 @@ type K8sService interface {
 	DeleteDeployment(lid mtypes.LeaseID) error
 	GetLeaseStatus(ctx context.Context, leaseID mtypes.LeaseID) (apclient.LeaseStatus, error)
 	ServiceStatus(context.Context, mtypes.LeaseID, string) (*apclient.ServiceStatus, error)
+	GetManifestGroup(ctx context.Context, leaseID mtypes.LeaseID) (bool, crd.ManifestGroup, error)
 
 	// WebSocket routes
 	Exec(ctx context.Context,
@@ -122,6 +124,7 @@ func (h *K8sHandler) Router() *chi.Mux {
 		r.Get("/api/v1/leases", h.getAllLeaseStatusHandler)
 		r.Delete("/api/v1/leases/{owner}/{dseq}", h.deleteDeploymentHandler)
 		r.Get("/api/v1/leases/{owner}/{dseq}", h.getLeaseStatusHandler)
+		r.Get("/api/v1/leases/{owner}/{dseq}/manifest", h.getLeaseManifestHandler)
 	})
 
 	return r
@@ -228,6 +231,47 @@ func (h *K8sHandler) getLeaseStatusHandler(w http.ResponseWriter, r *http.Reques
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(leaseStatus)
+}
+
+func (h *K8sHandler) getLeaseManifestHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	owner := chi.URLParam(r, "owner")
+	if owner == "" || !common.IsHexAddress(owner) {
+		h.sendErrorResponse(w, "Invalid owner address", http.StatusBadRequest)
+		return
+	}
+
+	dseq, err := strconv.ParseUint(chi.URLParam(r, "dseq"), 10, 64)
+	if err != nil {
+		h.sendErrorResponse(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	leaseID := mtypes.LeaseID{
+		Owner:    strings.ToLower(owner),
+		DSeq:     dseq,
+		Provider: strings.ToLower(h.providerAddress.Hex()),
+	}
+
+	found, grp, err := h.deployer.GetManifestGroup(ctx, leaseID)
+	if err != nil {
+		h.sendErrorResponse(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if !found {
+		h.sendErrorResponse(w, "lease not found", http.StatusNotFound)
+		return
+	}
+
+	mgrp, _, err := grp.FromCRD()
+	if err != nil {
+		h.sendErrorResponse(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(mgrp)
 }
 
 func (h *K8sHandler) deleteDeploymentHandler(w http.ResponseWriter, r *http.Request) {

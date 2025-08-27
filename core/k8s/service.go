@@ -124,6 +124,9 @@ type Service interface {
 
 	// LeaseLogs returns the logs of a lease
 	LeaseLogs(context.Context, mtypes.LeaseID, string, bool, *int64) ([]*ctypes.ServiceLog, error)
+
+	// GetManifestGroup returns the manifest group of a lease
+	GetManifestGroup(ctx context.Context, leaseID mtypes.LeaseID) (bool, crd.ManifestGroup, error)
 }
 
 // NewService returns new Service instance
@@ -320,6 +323,10 @@ func (s *service) LeaseLogs(ctx context.Context, leaseID mtypes.LeaseID, service
 
 func (s *service) ServiceStatus(ctx context.Context, leaseID mtypes.LeaseID, service string) (*apclient.ServiceStatus, error) {
 	return s.client.ServiceStatus(ctx, leaseID, service)
+}
+
+func (s *service) GetManifestGroup(ctx context.Context, leaseID mtypes.LeaseID) (bool, crd.ManifestGroup, error) {
+	return s.client.GetManifestGroup(ctx, leaseID)
 }
 
 func (s *service) run(ctx context.Context, deployments []ctypes.IDeployment) {
