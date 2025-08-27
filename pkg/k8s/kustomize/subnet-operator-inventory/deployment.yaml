@@ -30,7 +30,7 @@ spec:
       serviceAccountName: operator-inventory
       containers:
         - name: operator-inventory
-          image: k8s-services:latest
+          image: u2udepin/k8s-services:latest
           args:
             - "operator"
             - "inventory"

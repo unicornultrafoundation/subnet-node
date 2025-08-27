@@ -78,7 +78,8 @@ kube-setup:
 	@script/kube/setup-kube.sh
 .PHONY: kube-setup
 
-# Build image and then setup kube
+# Build image and then setup kube 
+# (only for local development - need to update the image from u2udepin/k8s-services:latest to k8s-services:latest)
 k8s-services-build-and-kube-setup: k8s-services-build
 	@echo "Building k8s-services image..."
 	@$(MAKE) k8s-services-build
