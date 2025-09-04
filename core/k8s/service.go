@@ -8,6 +8,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/sirupsen/logrus"
 	tpubsub "github.com/troian/pubsub"
+	"github.com/unicornultrafoundation/subnet-node/config"
 	apclient "github.com/unicornultrafoundation/subnet-node/core/k8s/types/v1/provider/client"
 	"k8s.io/client-go/tools/remotecommand"
 
@@ -127,6 +128,16 @@ type Service interface {
 
 	// GetManifestGroup returns the manifest group of a lease
 	GetManifestGroup(ctx context.Context, leaseID mtypes.LeaseID) (bool, crd.ManifestGroup, error)
+}
+
+func NewServiceFromConfig(
+	ctx context.Context,
+	session session.Session,
+	bus pubsub.Bus,
+	client Client,
+	cfg *config.C,
+) (Service, error) {
+	return NewService(ctx, session, bus, client, NewConfig(cfg))
 }
 
 // NewService returns new Service instance

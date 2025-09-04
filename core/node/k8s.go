@@ -15,7 +15,6 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/core/account"
 	"github.com/unicornultrafoundation/subnet-node/core/k8s"
 	"github.com/unicornultrafoundation/subnet-node/core/k8s/kube"
-	"github.com/unicornultrafoundation/subnet-node/core/k8s/kube/builder"
 
 	kubeinventory "github.com/unicornultrafoundation/subnet-node/core/k8s/kube/operators/clients/inventory"
 	cfromctx "github.com/unicornultrafoundation/subnet-node/core/k8s/types/v1/fromctx"
@@ -61,17 +60,15 @@ func K8sService(lc fx.Lifecycle, cfg *config.C, account *account.AccountService)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create inventory client: %w", err)
 	}
-
 	ctx = context.WithValue(ctx, cfromctx.CtxKeyClientInventory, inventory)
 
 	group, ctx := errgroup.WithContext(ctx)
+	ctx = context.WithValue(ctx, fromctx.CtxKeyErrGroup, group)
 
 	startupch := make(chan struct{}, 1)
 	ctx = context.WithValue(ctx, fromctx.CtxKeyStartupCh, (chan<- struct{})(startupch))
 
 	pctx, pcancel := context.WithCancel(ctx)
-
-	ctx = context.WithValue(ctx, fromctx.CtxKeyErrGroup, group)
 	ctx = context.WithValue(ctx, fromctx.CtxKeyPubSub, tpubsub.New(pctx, 1000))
 
 	go func() {
@@ -85,9 +82,8 @@ func K8sService(lc fx.Lifecycle, cfg *config.C, account *account.AccountService)
 
 		_ = group.Wait()
 	}()
-	kubeSettings := builder.NewDefaultSettings()
 
-	client, err := kube.NewClient(ctx, logger, "subnet-services")
+	client, err := kube.NewClient(ctx, logger, "subnet-services", cfg.GetString("vpn.virtual_ip", "localhost"))
 	if err != nil {
 		return nil, err
 	}
@@ -97,15 +93,10 @@ func K8sService(lc fx.Lifecycle, cfg *config.C, account *account.AccountService)
 		Owner: strings.ToLower(providerID.Hex()),
 	}
 
-	session := session.New(logger, nil, provider, 0)
+	session := session.New(logger, provider)
 	bus := pubsub.NewBus()
-	k8sCfg := k8s.NewDefaultConfig()
-	k8sCfg.InventoryExternalPortQuantity = 10000
-	k8sCfg.ClusterSettings = map[interface{}]interface{}{
-		builder.SettingsKey: kubeSettings,
-	}
 
-	service, err := k8s.NewService(ctx, session, bus, client, k8sCfg)
+	service, err := k8s.NewServiceFromConfig(ctx, session, bus, client, cfg)
 	if err != nil {
 		return nil, err
 	}
