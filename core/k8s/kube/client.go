@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"runtime/debug"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/sirupsen/logrus"
@@ -51,6 +52,7 @@ type client struct {
 	ns                string
 	log               *logrus.Logger
 	kubeContentConfig *restclient.Config
+	virtualIP         string
 }
 
 func (c *client) String() string {
@@ -65,7 +67,7 @@ func wrapKubeCall[T any](label string, fn func() (T, error)) (T, error) {
 
 // NewClient returns new Kubernetes Client instance with provided logger, host and ns. Returns error in-case of failure
 // configPath may be the empty string
-func NewClient(ctx context.Context, log *logrus.Logger, ns string) (Client, error) {
+func NewClient(ctx context.Context, log *logrus.Logger, ns string, virtualIP string) (Client, error) {
 	kubecfg, err := fromctx.KubeConfigFromCtx(ctx)
 	if err != nil {
 		return nil, err
@@ -95,6 +97,7 @@ func NewClient(ctx context.Context, log *logrus.Logger, ns string) (Client, erro
 		ns:                ns,
 		log:               log,
 		kubeContentConfig: kubecfg,
+		virtualIP:         virtualIP,
 	}
 
 	return cl, nil
@@ -904,25 +907,23 @@ func (c *client) LeaseStatus(ctx context.Context, lid mtypes.LeaseID) (map[strin
 	if err != nil {
 		return nil, err
 	}
-	labelSelector := &strings.Builder{}
-	kubeSelectorForLease(labelSelector, lid)
-	// Note: this is a separate call to the Kubernetes API to get this data. It could
-	// be a separate method on the interface entirely
-	phResult, err := wrapKubeCall("providerhosts-list", func() (*crd.ProviderHostList, error) {
-		return c.ac.SubnetV1().ProviderHosts(c.ns).List(ctx, metav1.ListOptions{
-			LabelSelector: labelSelector.String(),
-		})
-	})
+
+	// Map external ports to URIs if the virtual IP is set
+	if c.virtualIP == "" || c.virtualIP == "localhost" {
+		return serviceStatus, nil
+	}
+
+	forwardedPortSvcs, err := c.ForwardedPortStatus(ctx, lid)
 	if err != nil {
 		return nil, err
 	}
 
-	// For each provider host entry, update the status of each service to indicate
-	// the presently assigned hostnames
-	for _, ph := range phResult.Items {
-		entry, ok := serviceStatus[ph.Spec.ServiceName]
-		if ok {
-			entry.URIs = append(entry.URIs, ph.Spec.Hostname)
+	for svcName, forwardedPorts := range forwardedPortSvcs {
+		for _, port := range forwardedPorts {
+			if port.ExternalPort == 0 {
+				continue
+			}
+			serviceStatus[svcName].URIs = append(serviceStatus[svcName].URIs, c.virtualIP+":"+strconv.Itoa(int(port.ExternalPort)))
 		}
 	}
 
