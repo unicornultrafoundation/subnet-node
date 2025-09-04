@@ -468,7 +468,7 @@ loop:
 			for _, r := range state.reservations {
 				if !r.allocated {
 					if err := state.inventory.Adjust(r); err != nil {
-						is.log.Error("adjust inventory for pending reservation", "error", err.Error())
+						is.log.WithError(err).Error("Adjust inventory for pending reservation")
 					}
 				}
 			}

@@ -21,10 +21,3 @@ func accumEndpointsOfResources(r atypes.Resources, kind atypes.Endpoint_Kind, ac
 		}
 	}
 }
-
-func GetEndpointQuantityOfResourceUnits(r atypes.Resources, kind atypes.Endpoint_Kind) uint {
-	endpoints := make(map[uint32]struct{})
-	accumEndpointsOfResources(r, kind, endpoints)
-
-	return uint(len(endpoints))
-}

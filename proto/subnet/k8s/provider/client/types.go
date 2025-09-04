@@ -84,7 +84,7 @@ type LeaseStatus struct {
 	Messages       []string                         `json:"errors,omitempty"`
 	Services       map[string]*ServiceStatus        `json:"services"`
 	ForwardedPorts map[string][]ForwardedPortStatus `json:"forwarded_ports"` // Container services that are externally accessible
-	IPs            map[string][]LeasedIPStatus      `json:"ips"`
+	IPs            map[string][]LeasedIPStatus      `json:"ips,omitempty"`
 }
 
 // LeaseEventObject represents the object associated with a lease event,

@@ -32,6 +32,7 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/sdl"
 	dtypes "github.com/unicornultrafoundation/subnet-node/proto/subnet/k8s/deployment/v1"
 	mtypes "github.com/unicornultrafoundation/subnet-node/proto/subnet/k8s/market/v1"
+	pclient "github.com/unicornultrafoundation/subnet-node/proto/subnet/k8s/provider/client"
 	provider "github.com/unicornultrafoundation/subnet-node/proto/subnet/k8s/provider/v1"
 	"k8s.io/client-go/tools/remotecommand"
 )
@@ -678,7 +679,7 @@ func wsLogWriter(ctx context.Context, ws *websocket.Conn, cfg wsStreamConfig) {
 
 	var scanners sync.WaitGroup
 
-	logch := make(chan apclient.ServiceLogMessage)
+	logch := make(chan pclient.ServiceLogMessage)
 
 	scanners.Add(len(logs))
 
@@ -687,7 +688,7 @@ func wsLogWriter(ctx context.Context, ws *websocket.Conn, cfg wsStreamConfig) {
 			defer scanners.Done()
 
 			for scan.Scan() && ctx.Err() == nil {
-				logch <- apclient.ServiceLogMessage{
+				logch <- pclient.ServiceLogMessage{
 					Name:    name,
 					Message: scan.Text(),
 				}

@@ -82,14 +82,14 @@ func (s *Service) Submit(ctx context.Context, deploymentID dtypes.DeploymentID, 
 		Groups:     groups,
 	}
 
-	s.logger.Debug("publishing manifest received for lease", "lease_id", lease.LeaseID)
+	s.logger.WithField("lease_id", lease.LeaseID).Debug("Publishing manifest received for lease")
 	if err := s.bus.Publish(event.ManifestReceived{
 		LeaseID:    lease.LeaseID,
 		Group:      lease.Group,
 		Manifest:   &manifest,
 		Deployment: &deploymentResponse,
 	}); err != nil {
-		s.logger.Error("publishing event", "err", err, "lease", lease.LeaseID)
+		s.logger.WithError(err).WithField("lease", lease.LeaseID).Error("Publishing event")
 	}
 
 	return nil

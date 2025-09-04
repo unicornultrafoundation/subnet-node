@@ -334,67 +334,6 @@ func makeInventoryScaffold(t *testing.T, leaseQty uint) *inventoryScaffold {
 	return scaffold
 }
 
-func makeGroupForInventoryTest(sharedHTTP, nodePort, leasedIP bool) manifest.Group {
-	groupServices := make([]manifest.Service, 1)
-
-	serviceEndpoints := make([]types.Endpoint, 0)
-	seqno := uint32(0)
-	if sharedHTTP {
-		serviceEndpoint := types.Endpoint{
-			Kind:           types.Endpoint_SHARED_HTTP,
-			SequenceNumber: seqno,
-		}
-		serviceEndpoints = append(serviceEndpoints, serviceEndpoint)
-	}
-
-	if nodePort {
-		serviceEndpoint := types.Endpoint{
-			Kind:           types.Endpoint_RANDOM_PORT,
-			SequenceNumber: seqno,
-		}
-		serviceEndpoints = append(serviceEndpoints, serviceEndpoint)
-	}
-
-	if leasedIP {
-		serviceEndpoint := types.Endpoint{
-			Kind:           types.Endpoint_LEASED_IP,
-			SequenceNumber: seqno,
-		}
-		serviceEndpoints = append(serviceEndpoints, serviceEndpoint)
-	}
-
-	deploymentRequirements := types.Resources{
-		ID: 1,
-		CPU: &types.CPU{
-			Units: types.NewResourceValue(4000),
-		},
-		GPU: &types.GPU{
-			Units: types.NewResourceValue(0),
-		},
-		Memory: &types.Memory{
-			Quantity: types.NewResourceValue(30 * unit.Gi),
-		},
-		Storage: types.Volumes{
-			types.Storage{
-				Name:     "default",
-				Quantity: types.NewResourceValue((100 * unit.Gi) - 1*unit.Mi),
-			},
-		},
-	}
-	deploymentRequirements.Endpoints = serviceEndpoints
-
-	groupServices[0] = manifest.Service{
-		Count:     1,
-		Resources: deploymentRequirements,
-	}
-	group := manifest.Group{
-		Name:     "nameForGroup",
-		Services: groupServices,
-	}
-
-	return group
-}
-
 // following test needs refactoring it reports incorrect inventory
 func TestInventory_OverReservations(t *testing.T) {
 	scaffold := makeInventoryScaffold(t, 10)

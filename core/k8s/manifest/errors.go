@@ -11,5 +11,4 @@ var (
 	ErrNoManifestForDeployment = errors.New("manifest not yet received for that deployment")
 	ErrNoLeaseForDeployment    = errors.New("no lease for deployment")
 	errNoGroupForLease         = errors.New("group not found")
-	errManifestRejected        = errors.New("manifest rejected")
 )

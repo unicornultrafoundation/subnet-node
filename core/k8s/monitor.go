@@ -85,7 +85,7 @@ loop:
 			runch = nil
 
 			if err := result.Error(); err != nil {
-				m.log.WithField("err", err).Error("Monitor check")
+				m.log.WithError(err).Error("Monitor check")
 			}
 
 			var currStatus event.ClusterDeploymentStatus
@@ -149,7 +149,7 @@ func (m *deploymentMonitor) doCheck(ctx context.Context) (bool, error) {
 	status, err := m.client.LeaseStatus(ctx, m.deployment.LeaseID())
 
 	if err != nil {
-		m.log.WithField("err", err).Error("Lease status")
+		m.log.WithError(err).Error("Lease status")
 		return false, err
 	}
 
@@ -198,7 +198,7 @@ func (m *deploymentMonitor) publishStatus(status event.ClusterDeploymentStatus) 
 		Group:   m.deployment.ManifestGroup(),
 		Status:  status,
 	}); err != nil {
-		m.log.Error("publishing manifest group deployed event", "err", err, "status", status)
+		m.log.WithError(err).WithField("status", status).Error("Publishing manifest group deployed event")
 	}
 }
 

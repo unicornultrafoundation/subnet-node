@@ -198,26 +198,6 @@ func (_c *Service_FindActiveLease_Call) RunAndReturn(run func(context.Context, c
 	return _c
 }
 
-// HostnameService provides a mock function with no fields
-func (_m *Service) HostnameService() v1beta3.HostnameServiceClient {
-	ret := _m.Called()
-
-	if len(ret) == 0 {
-		panic("no return value specified for HostnameService")
-	}
-
-	var r0 v1beta3.HostnameServiceClient
-	if rf, ok := ret.Get(0).(func() v1beta3.HostnameServiceClient); ok {
-		r0 = rf()
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(v1beta3.HostnameServiceClient)
-		}
-	}
-
-	return r0
-}
-
 // Service_HostnameService_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'HostnameService'
 type Service_HostnameService_Call struct {
 	*mock.Call
@@ -232,16 +212,6 @@ func (_c *Service_HostnameService_Call) Run(run func()) *Service_HostnameService
 	_c.Call.Run(func(args mock.Arguments) {
 		run()
 	})
-	return _c
-}
-
-func (_c *Service_HostnameService_Call) Return(_a0 v1beta3.HostnameServiceClient) *Service_HostnameService_Call {
-	_c.Call.Return(_a0)
-	return _c
-}
-
-func (_c *Service_HostnameService_Call) RunAndReturn(run func() v1beta3.HostnameServiceClient) *Service_HostnameService_Call {
-	_c.Call.Return(run)
 	return _c
 }
 

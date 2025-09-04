@@ -46,7 +46,7 @@ const (
 
 const (
 	runtimeClassNoneValue = "none"
-	runtimeClassNvidia    = "nvidia"
+	// runtimeClassNvidia    = "nvidia"
 )
 
 const (

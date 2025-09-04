@@ -46,7 +46,6 @@ type service struct {
 	sub     pubsub.Subscriber
 
 	inventory *inventoryService
-	// hostnames *hostnameService
 
 	checkDeploymentExistsRequestCh chan checkDeploymentExistsRequest
 	statusch                       chan chan<- *apclient.ClusterStatus
@@ -172,9 +171,8 @@ func NewService(
 	manifestService := manifest.NewService(bus, log, session.Provider().Address())
 
 	s := &service{
-		session: session,
-		client:  client,
-		// hostnames:                      hostnames,
+		session:                        session,
+		client:                         client,
 		bus:                            bus,
 		sub:                            sub,
 		inventory:                      inventory,
@@ -368,7 +366,7 @@ loop:
 	for {
 		select {
 		case err := <-s.lc.ShutdownRequest():
-			s.log.Debug("received shutdown request", "err", err)
+			s.log.WithError(err).Debug("Received shutdown request")
 			s.lc.ShutdownInitiated(err)
 			break loop
 		case ev := <-s.sub.Events():
@@ -402,12 +400,12 @@ loop:
 					// If the lease is already managed, update the deployment
 					deployment, err := getDeployment(ev.LeaseID, mgroup)
 					if err != nil {
-						s.log.WithField("lease", ev.LeaseID).WithField("group-name", mgroup.Name).WithField("err", err).Error("Error getting deployment")
+						s.log.WithField("lease", ev.LeaseID).WithField("group-name", mgroup.Name).WithError(err).Error("Error getting deployment")
 						break
 					}
 
 					if err := manager.update(deployment); err != nil {
-						s.log.WithField("lease", ev.LeaseID).WithField("group-name", mgroup.Name).WithField("err", err).Error("Error updating deployment")
+						s.log.WithField("lease", ev.LeaseID).WithField("group-name", mgroup.Name).WithError(err).Error("Error updating deployment")
 					}
 					break
 				}
@@ -415,14 +413,14 @@ loop:
 				// If the lease is new, reserve the inventory
 				_, err := s.Reserve(ev.LeaseID.OrderID(), mgroup)
 				if err != nil {
-					s.log.WithField("lease", ev.LeaseID).WithField("group-name", mgroup.Name).WithField("err", err).Error("Error reserving inventory")
+					s.log.WithField("lease", ev.LeaseID).WithField("group-name", mgroup.Name).WithError(err).Error("Error reserving inventory")
 					break
 				}
 
 				// Create a new deployment manager
 				deployment, err := getDeployment(ev.LeaseID, mgroup)
 				if err != nil {
-					s.log.WithField("lease", ev.LeaseID).WithField("group-name", mgroup.Name).WithField("err", err).Error("Error getting deployment")
+					s.log.WithField("lease", ev.LeaseID).WithField("group-name", mgroup.Name).WithError(err).Error("Error getting deployment")
 					break
 				}
 				s.managers[key] = newDeploymentManager(s, deployment, true)
@@ -462,11 +460,11 @@ loop:
 			}
 			bus.Pub(msg, []string{ptypes.PubSubTopicClusterStatus}, tpubsub.WithRetain())
 		case dm := <-s.managerch:
-			s.log.Info("manager done", "lease", dm.deployment.LeaseID())
+			s.log.WithField("lease", dm.deployment.LeaseID()).Info("Manager done")
 
 			// unreserve resources
 			if err := s.inventory.unreserve(dm.deployment.LeaseID().OrderID()); err != nil {
-				s.log.WithField("lease", dm.deployment.LeaseID()).WithField("err", err).Error("Error unreserving inventory")
+				s.log.WithField("lease", dm.deployment.LeaseID()).WithError(err).Error("Error unreserving inventory")
 			}
 
 			delete(s.managers, mtypes.LeaseIDToKey(dm.deployment.LeaseID()))
@@ -476,16 +474,16 @@ loop:
 		}
 	}
 
-	s.log.Debug("draining deployment managers...", "qty", len(s.managers))
+	s.log.WithField("qty", len(s.managers)).Debug("Draining deployment managers...")
 	for _, manager := range s.managers {
 		if manager != nil {
 			manager := <-s.managerch
-			s.log.Debug("manager done", "lease", manager.deployment.LeaseID())
+			s.log.WithField("lease", manager.deployment.LeaseID()).Debug("Manager done")
 		}
 	}
 
 	<-s.inventory.done()
-	s.session.Log().Info("shutdown complete")
+	s.session.Log().Info("Shutdown complete")
 }
 
 func (s *service) doCheckDeploymentExists(req checkDeploymentExistsRequest) {
@@ -503,17 +501,17 @@ func (s *service) doCheckDeploymentExists(req checkDeploymentExistsRequest) {
 func (s *service) teardownLease(lid mtypes.LeaseID) {
 	if manager := s.managers[mtypes.LeaseIDToKey(lid)]; manager != nil {
 		if err := manager.teardown(); err != nil {
-			s.log.Error("tearing down lease deployment", "err", err, "lease", lid)
+			s.log.WithField("lease", lid).WithError(err).Error("Tearing down lease deployment")
 		}
 		return
 	}
 
 	// unreserve resources if no manager present yet.
 	if lid.Provider == s.session.Provider().Owner {
-		s.log.Info("unreserving unmanaged order", "lease", lid)
+		s.log.WithField("lease", lid).Info("Unreserving unmanaged order")
 		err := s.inventory.unreserve(lid.OrderID())
 		if err != nil && !errors.Is(errReservationNotFound, err) {
-			s.log.Error("unreserve failed", "lease", lid, "err", err)
+			s.log.WithField("lease", lid).WithError(err).Error("Unreserve failed")
 		}
 	}
 }
@@ -525,7 +523,7 @@ func findDeployments(
 ) ([]ctypes.IDeployment, error) {
 	deployments, err := client.Deployments(ctx)
 	if err != nil {
-		log.Error("fetching deployments", "err", err)
+		log.WithError(err).Error("Fetching deployments")
 		return nil, err
 	}
 

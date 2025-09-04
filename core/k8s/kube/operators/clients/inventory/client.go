@@ -382,7 +382,7 @@ func inventoryRun(ctx context.Context, endpoint string, invch chan<- inventorySt
 
 	}()
 
-	log.Info("dialing inventory operator", "endpoint", endpoint)
+	log.WithField("endpoint", endpoint).Info("Dialing inventory operator")
 
 	client := inventoryV1.NewClusterRPCClient(conn)
 

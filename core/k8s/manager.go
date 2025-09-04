@@ -12,7 +12,6 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/pubsub"
-	mani "github.com/unicornultrafoundation/subnet-node/proto/subnet/k8s/manifest/v1"
 	mtypes "github.com/unicornultrafoundation/subnet-node/proto/subnet/k8s/market/v1"
 
 	ctypes "github.com/unicornultrafoundation/subnet-node/core/k8s/types/v1"
@@ -90,7 +89,7 @@ func newDeploymentManager(s *service, deployment ctypes.IDeployment, isNewLease 
 
 	err := s.bus.Publish(event.LeaseAddFundsMonitor{LeaseID: lid, IsNewLease: isNewLease})
 	if err != nil {
-		s.log.Error("unable to publish LeaseAddFundsMonitor event", "error", err, "lease", lid)
+		s.log.WithError(err).WithField("lease", lid).Error("Unable to publish LeaseAddFundsMonitor event")
 	}
 
 	return dm
@@ -263,7 +262,7 @@ func (dm *deploymentManager) startDeploy(ctx context.Context) <-chan error {
 		}
 		err = dm.bus.Publish(ev)
 		if err != nil {
-			dm.log.Error("failed publishing event", "err", err)
+			dm.log.WithError(err).Error("Failed publishing event")
 		}
 
 		close(chErr)
@@ -279,11 +278,6 @@ func (dm *deploymentManager) startTeardown() <-chan error {
 		// Don't use a context tied to the lifecycle, as we don't want to cancel Kubernetes operations
 		return dm.doTeardown(context.Background())
 	})
-}
-
-type serviceExposeWithServiceName struct {
-	expose mani.ServiceExpose
-	name   string
 }
 
 func (dm *deploymentManager) doDeploy(ctx context.Context) error {

@@ -6,6 +6,7 @@ import (
 	cryptorand "crypto/rand"
 	"crypto/sha256"
 	"math/rand"
+	"strings"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -90,10 +91,16 @@ func BidIDForAccount(t testing.TB, owner, provider common.Address) mtypes.BidID 
 
 func LeaseID(t testing.TB) mtypes.LeaseID {
 	t.Helper()
-	return mtypes.MakeLeaseID(BidID(t))
+	id := mtypes.MakeLeaseID(BidID(t))
+	id.Owner = strings.ToLower(id.Owner)
+	id.Provider = strings.ToLower(id.Provider)
+	return id
 }
 
 func LeaseIDForAccount(t testing.TB, owner, provider common.Address) mtypes.LeaseID {
 	t.Helper()
-	return mtypes.MakeLeaseID(BidIDForAccount(t, owner, provider))
+	id := mtypes.MakeLeaseID(BidIDForAccount(t, owner, provider))
+	id.Owner = strings.ToLower(id.Owner)
+	id.Provider = strings.ToLower(id.Provider)
+	return id
 }
