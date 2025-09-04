@@ -6,11 +6,11 @@ import (
 )
 
 type ManifestGroup struct {
-	Group    string
-	Services *apclient.ServiceStatus
+	Group    string                  `json:"group"`
+	Services *apclient.ServiceStatus `json:"services"`
 }
 
 type DeploymentStatus struct {
-	LeaseID        mtypes.LeaseID
-	ManifestGroups []ManifestGroup
+	LeaseID        mtypes.LeaseID  `json:"lease_id"`
+	ManifestGroups []ManifestGroup `json:"manifest_groups"`
 }
