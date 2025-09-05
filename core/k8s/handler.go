@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/unicornultrafoundation/subnet-node/core/k8s/kube/builder"
 	apclient "github.com/unicornultrafoundation/subnet-node/core/k8s/types/v1/provider/client"
@@ -98,21 +97,10 @@ portManifestGroupSearchLoop:
 }
 
 func (s *service) DeleteDeployment(lid mtypes.LeaseID) error {
-	managerKey := mtypes.LeaseIDToKey(lid)
-	if manager := s.managers[managerKey]; manager != nil {
-		if err := manager.teardown(); err != nil {
-			return fmt.Errorf("tearing down lease deployment: %w", err)
-		}
-		return nil
-	}
-
-	// unreserve resources if no manager present yet.
-	if strings.EqualFold(lid.Provider, s.session.Provider().Address().Hex()) {
-		s.log.WithField("lease", lid).Info("Unreserving unmanaged order")
-		err := s.inventory.unreserve(lid.OrderID())
-		if err != nil && !errors.Is(errReservationNotFound, err) {
-			return fmt.Errorf("unreserve failed: %w", err)
-		}
+	if err := s.bus.Publish(mtypes.EventLeaseClosed{
+		ID: lid,
+	}); err != nil {
+		return fmt.Errorf("send lease closed request failed: %w", err)
 	}
 
 	return nil
