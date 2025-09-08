@@ -3,6 +3,8 @@ package rest
 import (
 	inventoryV1 "github.com/unicornultrafoundation/subnet-node/proto/subnet/k8s/inventory/v1"
 	manifest "github.com/unicornultrafoundation/subnet-node/proto/subnet/k8s/manifest/v1"
+
+	etypes "github.com/unicornultrafoundation/subnet-node/core/k8s/types/v1/expiry"
 )
 
 // ClusterStatus represents the current state of the provider's cluster, including
@@ -53,4 +55,6 @@ type LeaseStatus struct {
 	Services       map[string]*ServiceStatus        `json:"services"`
 	ForwardedPorts map[string][]ForwardedPortStatus `json:"forwarded_ports"` // Container services that are externally accessible
 	IPs            map[string][]LeasedIPStatus      `json:"ips,omitempty"`
+	TimeLeft       int64                            `json:"time_left,omitempty"`
+	Status         etypes.DeploymentExpiryStatus    `json:"status,omitempty"`
 }

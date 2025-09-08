@@ -21,6 +21,7 @@ import (
 	netv1 "k8s.io/api/networking/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/version"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
@@ -1166,4 +1167,106 @@ func (c *client) KubeVersion() (*version.Info, error) {
 	return wrapKubeCall("discovery-serverversion", func() (*version.Info, error) {
 		return c.kc.Discovery().ServerVersion()
 	})
+}
+
+func (c *client) ScaleServices(ctx context.Context, leaseID mtypes.LeaseID, serviceReplicas map[string]int32) error {
+	if err := c.leaseExists(ctx, leaseID); err != nil {
+		return err
+	}
+
+	ns := builder.LidNS(leaseID)
+
+	// Get all deployments for the lease
+	deployments, err := wrapKubeCall("deployments-list", func() (*appsv1.DeploymentList, error) {
+		return c.kc.AppsV1().Deployments(ns).List(ctx, metav1.ListOptions{})
+	})
+	if err != nil {
+		c.log.Error("deployments list", "err", err)
+		return fmt.Errorf("%s: %w", kubeclienterrors.ErrInternalError.Error(), err)
+	}
+
+	// Scale each deployment based on service name
+	for _, deployment := range deployments.Items {
+		// Extract service name from deployment labels or name
+		serviceName := deployment.Labels[builder.SubnetNodeManifestServiceLabelName]
+		if serviceName == "" {
+			// Fallback to deployment name if no service label
+			serviceName = deployment.Name
+		}
+
+		replicas, exists := serviceReplicas[serviceName]
+		if !exists {
+			c.log.Debug("No replica count specified for service", "service", serviceName)
+			continue
+		}
+
+		patch := map[string]interface{}{
+			"spec": map[string]interface{}{
+				"replicas": replicas,
+			},
+		}
+
+		patchData, err := json.Marshal(patch)
+		if err != nil {
+			return fmt.Errorf("failed to marshal patch: %w", err)
+		}
+
+		_, err = wrapKubeCall("deployment-patch", func() (*appsv1.Deployment, error) {
+			return c.kc.AppsV1().Deployments(ns).Patch(ctx, deployment.Name, k8stypes.MergePatchType, patchData, metav1.PatchOptions{})
+		})
+		if err != nil {
+			c.log.Error("deployment patch", "err", err, "name", deployment.Name, "service", serviceName)
+			return fmt.Errorf("failed to scale deployment %s (service %s): %w", deployment.Name, serviceName, err)
+		}
+
+		c.log.Info("Scaled deployment", "name", deployment.Name, "service", serviceName, "replicas", replicas)
+	}
+
+	// Get all statefulsets for the lease
+	statefulsets, err := wrapKubeCall("statefulsets-list", func() (*appsv1.StatefulSetList, error) {
+		return c.kc.AppsV1().StatefulSets(ns).List(ctx, metav1.ListOptions{})
+	})
+	if err != nil {
+		c.log.Error("statefulsets list", "err", err)
+		return fmt.Errorf("%s: %w", kubeclienterrors.ErrInternalError.Error(), err)
+	}
+
+	// Scale each statefulset based on service name
+	for _, statefulset := range statefulsets.Items {
+		// Extract service name from statefulset labels or name
+		serviceName := statefulset.Labels[builder.SubnetNodeManifestServiceLabelName]
+		if serviceName == "" {
+			// Fallback to statefulset name if no service label
+			serviceName = statefulset.Name
+		}
+
+		replicas, exists := serviceReplicas[serviceName]
+		if !exists {
+			c.log.Debug("No replica count specified for service", "service", serviceName)
+			continue
+		}
+
+		patch := map[string]interface{}{
+			"spec": map[string]interface{}{
+				"replicas": replicas,
+			},
+		}
+
+		patchData, err := json.Marshal(patch)
+		if err != nil {
+			return fmt.Errorf("failed to marshal patch: %w", err)
+		}
+
+		_, err = wrapKubeCall("statefulset-patch", func() (*appsv1.StatefulSet, error) {
+			return c.kc.AppsV1().StatefulSets(ns).Patch(ctx, statefulset.Name, k8stypes.MergePatchType, patchData, metav1.PatchOptions{})
+		})
+		if err != nil {
+			c.log.Error("statefulset patch", "err", err, "name", statefulset.Name, "service", serviceName)
+			return fmt.Errorf("failed to scale statefulset %s (service %s): %w", statefulset.Name, serviceName, err)
+		}
+
+		c.log.Info("Scaled statefulset", "name", statefulset.Name, "service", serviceName, "replicas", replicas)
+	}
+
+	return nil
 }

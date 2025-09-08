@@ -2,6 +2,7 @@ package k8s
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/runner"
 
 	ctypes "github.com/unicornultrafoundation/subnet-node/core/k8s/types/v1"
+	etypes "github.com/unicornultrafoundation/subnet-node/core/k8s/types/v1/expiry"
 	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/event"
 	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/session"
 	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/tools/fromctx"
@@ -29,18 +31,25 @@ type deploymentMonitor struct {
 	log      *logrus.Logger
 	lc       lifecycle.Lifecycle
 
+	expiryService *expiryService
+
 	config Config
+
+	// Reference to the deployment manager for accessing scaling state
+	manager *deploymentManager
 }
 
 func newDeploymentMonitor(dm *deploymentManager) *deploymentMonitor {
 	m := &deploymentMonitor{
-		bus:        dm.bus,
-		session:    dm.session,
-		client:     dm.client,
-		deployment: dm.deployment,
-		log:        dm.log.WithField("module", "deployment-monitor").Logger,
-		lc:         lifecycle.New(),
-		config:     dm.config,
+		bus:           dm.bus,
+		session:       dm.session,
+		client:        dm.client,
+		deployment:    dm.deployment,
+		log:           dm.log.WithField("module", "deployment-monitor").Logger,
+		lc:            lifecycle.New(),
+		config:        dm.config,
+		expiryService: dm.expiryService,
+		manager:       dm,
 	}
 
 	go m.lc.WatchChannel(dm.lc.ShuttingDown())
@@ -62,13 +71,15 @@ func (m *deploymentMonitor) run() {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	var (
-		runch   <-chan runner.Result
-		closech <-chan runner.Result
+		runch       <-chan runner.Result
+		runExpirych <-chan runner.Result
+		closech     <-chan runner.Result
 	)
 
 	tickch := m.scheduleRetry()
-
 	prevStatus := event.ClusterDeploymentUnknown
+
+	expiryTickch := m.scheduleExpiryCheck()
 
 loop:
 	for {
@@ -80,6 +91,21 @@ loop:
 		case <-tickch:
 			tickch = nil
 			runch = m.runCheck(ctx)
+
+		case <-expiryTickch:
+			expiryTickch = nil
+			runExpirych = m.runExpiryCheck(ctx)
+
+		case result := <-runExpirych:
+			runExpirych = nil
+			if err := result.Error(); err != nil {
+				m.log.WithError(err).Error("Expiry check")
+			}
+			currExpiryStatus := result.Value().(etypes.DeploymentExpiryInfo)
+
+			m.publishExpiryStatus(currExpiryStatus.Status)
+
+			expiryTickch = m.scheduleExpiryCheck()
 
 		case result := <-runch:
 			runch = nil
@@ -121,8 +147,6 @@ loop:
 			}
 		case <-closech:
 			closech = nil
-
-			// TODO: Add case check lease on-chain status
 		}
 	}
 	cancel()
@@ -153,6 +177,12 @@ func (m *deploymentMonitor) doCheck(ctx context.Context) (bool, error) {
 		return false, err
 	}
 
+	// Check if deployment is scaled down - if so, consider it healthy
+	if m.manager != nil && m.manager.isScaledDown() {
+		m.log.Debug("Deployment is scaled down, considering it healthy")
+		return true, nil
+	}
+
 	badsvc := 0
 
 	for _, spec := range m.deployment.ManifestGroup().Services {
@@ -175,21 +205,30 @@ func (m *deploymentMonitor) doCheck(ctx context.Context) (bool, error) {
 
 func (m *deploymentMonitor) runCloseLease(ctx context.Context) <-chan runner.Result {
 	return runner.Do(func() runner.Result {
-		// TODO: retry, timeout
-		// msg := &mtypes.MsgCloseBid{
-		// 	BidID: m.deployment.LeaseID().BidID(),
-		// }
-		// res, err := m.session.Client().Tx().Broadcast(ctx, []sdk.Msg{msg}, aclient.WithResultCodeAsError())
-		// if err != nil {
-		// 	m.log.Error("closing deployment", "err", err)
-		// } else {
-		// 	m.log.Info("bidding on lease closed")
-		// }
-
 		// Still keep the lease open for debugging purposes
 		res := true
 		return runner.NewResult(res, nil)
 	})
+}
+
+func (m *deploymentMonitor) runExpiryCheck(ctx context.Context) <-chan runner.Result {
+	return runner.Do(func() runner.Result {
+		return runner.NewResult(m.doExpiryCheck(ctx))
+	})
+}
+
+func (m *deploymentMonitor) doExpiryCheck(ctx context.Context) (etypes.DeploymentExpiryInfo, error) {
+	deploymentID := fmt.Sprintf("%d", m.deployment.LeaseID().DSeq)
+	return m.expiryService.CheckDeploymentExpiry(ctx, deploymentID)
+}
+
+func (m *deploymentMonitor) publishExpiryStatus(status etypes.DeploymentExpiryStatus) {
+	if err := m.bus.Publish(etypes.DeploymentExpiry{
+		LeaseID: m.deployment.LeaseID(),
+		Status:  status,
+	}); err != nil {
+		m.log.WithError(err).WithField("status", status).Error("Publish expiry status event failed")
+	}
 }
 
 func (m *deploymentMonitor) publishStatus(status event.ClusterDeploymentStatus) {
@@ -208,6 +247,10 @@ func (m *deploymentMonitor) scheduleRetry() <-chan time.Time {
 
 func (m *deploymentMonitor) scheduleHealthcheck() <-chan time.Time {
 	return m.schedule(m.config.MonitorHealthcheckPeriod, m.config.MonitorHealthcheckPeriodJitter)
+}
+
+func (m *deploymentMonitor) scheduleExpiryCheck() <-chan time.Time {
+	return m.schedule(m.config.MonitorExpiryCheckPeriod, m.config.MonitorExpiryCheckPeriodJitter)
 }
 
 func (m *deploymentMonitor) schedule(minTime, jitter time.Duration) <-chan time.Time {

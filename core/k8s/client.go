@@ -73,6 +73,9 @@ type Client interface {
 	KubeVersion() (*version.Info, error)
 
 	ForwardedPortStatus(ctx context.Context, leaseID mtypes.LeaseID) (map[string][]apclient.ForwardedPortStatus, error)
+
+	// ScaleServices scales multiple services to their specified replica counts
+	ScaleServices(ctx context.Context, leaseID mtypes.LeaseID, serviceReplicas map[string]int32) error
 }
 
 func ErrorIsOkToSendToClient(err error) bool {
@@ -248,4 +251,8 @@ func (c *nullClient) KubeVersion() (*version.Info, error) {
 
 func (c *nullClient) ForwardedPortStatus(_ context.Context, _ mtypes.LeaseID) (map[string][]apclient.ForwardedPortStatus, error) {
 	return nil, errNotImplemented
+}
+
+func (c *nullClient) ScaleServices(_ context.Context, _ mtypes.LeaseID, _ map[string]int32) error {
+	return errNotImplemented
 }

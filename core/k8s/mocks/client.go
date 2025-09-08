@@ -676,6 +676,54 @@ func (_c *Client_TeardownLease_Call) RunAndReturn(run func(context.Context, v1be
 	return _c
 }
 
+// ScaleServices provides a mock function with given fields: _a0, _a1, _a2
+func (_m *Client) ScaleServices(_a0 context.Context, _a1 v1beta4.LeaseID, _a2 map[string]int32) error {
+	ret := _m.Called(_a0, _a1, _a2)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ScaleServices")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, v1beta4.LeaseID, map[string]int32) error); ok {
+		r0 = rf(_a0, _a1, _a2)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// Client_ScaleServices_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ScaleServices'
+type Client_ScaleServices_Call struct {
+	*mock.Call
+}
+
+// ScaleServices is a helper method to define mock.On call
+//   - _a0 context.Context
+//   - _a1 v1beta4.LeaseID
+//   - _a2 map[string]int32
+func (_e *Client_Expecter) ScaleServices(_a0 interface{}, _a1 interface{}, _a2 interface{}) *Client_ScaleServices_Call {
+	return &Client_ScaleServices_Call{Call: _e.mock.On("ScaleServices", _a0, _a1, _a2)}
+}
+
+func (_c *Client_ScaleServices_Call) Run(run func(_a0 context.Context, _a1 v1beta4.LeaseID, _a2 map[string]int32)) *Client_ScaleServices_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(v1beta4.LeaseID), args[2].(map[string]int32))
+	})
+	return _c
+}
+
+func (_c *Client_ScaleServices_Call) Return(_a0 error) *Client_ScaleServices_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Client_ScaleServices_Call) RunAndReturn(run func(context.Context, v1beta4.LeaseID, map[string]int32) error) *Client_ScaleServices_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // NewClient creates a new instance of Client. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
 // The first argument is typically a *testing.T value.
 func NewClient(t interface {

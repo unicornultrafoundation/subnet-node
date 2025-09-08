@@ -2,12 +2,15 @@ package k8s
 
 import (
 	"context"
+	"fmt"
 	"io"
 
 	"github.com/boz/go-lifecycle"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/sirupsen/logrus"
 	tpubsub "github.com/troian/pubsub"
+	"github.com/unicornultrafoundation/subnet-node/bidengine"
 	"github.com/unicornultrafoundation/subnet-node/config"
 	apclient "github.com/unicornultrafoundation/subnet-node/core/k8s/types/v1/provider/client"
 	"k8s.io/client-go/tools/remotecommand"
@@ -24,6 +27,7 @@ import (
 
 	"github.com/unicornultrafoundation/subnet-node/core/k8s/manifest"
 	ctypes "github.com/unicornultrafoundation/subnet-node/core/k8s/types/v1"
+	etypes "github.com/unicornultrafoundation/subnet-node/core/k8s/types/v1/expiry"
 	crd "github.com/unicornultrafoundation/subnet-node/pkg/k8s/apis/subnet.node/v1"
 	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/event"
 	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/session"
@@ -40,10 +44,11 @@ var (
 )
 
 type service struct {
-	session session.Session
-	client  Client
-	bus     pubsub.Bus
-	sub     pubsub.Subscriber
+	session   session.Session
+	client    Client
+	bus       pubsub.Bus
+	sub       pubsub.Subscriber
+	bidengine *bidengine.BidEngine
 
 	inventory *inventoryService
 
@@ -60,6 +65,8 @@ type service struct {
 	config Config
 
 	manifestService *manifest.Service
+	ethClient       *ethclient.Client
+	expiryService   *expiryService
 }
 
 type checkDeploymentExistsRequest struct {
@@ -127,6 +134,12 @@ type Service interface {
 
 	// GetManifestGroup returns the manifest group of a lease
 	GetManifestGroup(ctx context.Context, leaseID mtypes.LeaseID) (bool, crd.ManifestGroup, error)
+
+	// ScaleToZero scales all deployments and statefulsets in a lease to 0 replicas
+	ScaleToZero(ctx context.Context, leaseID mtypes.LeaseID) error
+
+	// ScaleBack scales all deployments and statefulsets in a lease back to their original replica counts
+	ScaleBack(ctx context.Context, leaseID mtypes.LeaseID) error
 }
 
 func NewServiceFromConfig(
@@ -135,8 +148,10 @@ func NewServiceFromConfig(
 	bus pubsub.Bus,
 	client Client,
 	cfg *config.C,
+	bidengine *bidengine.BidEngine,
+	ethClient *ethclient.Client,
 ) (Service, error) {
-	return NewService(ctx, session, bus, client, NewConfig(cfg))
+	return NewService(ctx, session, bus, client, NewConfig(cfg), bidengine, ethClient)
 }
 
 // NewService returns new Service instance
@@ -146,6 +161,8 @@ func NewService(
 	bus pubsub.Bus,
 	client Client,
 	cfg Config,
+	bidengine *bidengine.BidEngine,
+	ethClient *ethclient.Client,
 ) (Service, error) {
 	log := session.Log().WithField("module", "provider-cluster").WithField("cmp", "service").Logger
 
@@ -169,6 +186,7 @@ func NewService(
 	}
 
 	manifestService := manifest.NewService(bus, log, session.Provider().Address())
+	expiryService := newExpiryService(bidengine.GetBidMarket(), ethClient)
 
 	s := &service{
 		session:                        session,
@@ -185,6 +203,9 @@ func NewService(
 		lc:                             lc,
 		config:                         cfg,
 		manifestService:                manifestService,
+		bidengine:                      bidengine,
+		ethClient:                      ethClient,
+		expiryService:                  expiryService,
 	}
 
 	go s.lc.WatchContext(ctx)
@@ -338,6 +359,95 @@ func (s *service) GetManifestGroup(ctx context.Context, leaseID mtypes.LeaseID) 
 	return s.client.GetManifestGroup(ctx, leaseID)
 }
 
+func (s *service) ScaleToZero(ctx context.Context, leaseID mtypes.LeaseID) error {
+	// Find the deployment manager for this lease
+	key := mtypes.LeaseIDToKey(leaseID)
+	manager := s.managers[key]
+	if manager == nil {
+		return fmt.Errorf("no deployment manager found for lease %s", leaseID)
+	}
+
+	// Check if we can scale down
+	if !manager.canScaleDown() {
+		currentState := manager.getScalingState()
+		s.log.WithField("lease", leaseID).WithField("currentState", currentState).Debug("Deployment already scaled down, ignoring scale to zero request")
+		return nil
+	}
+
+	s.log.WithField("lease", leaseID).Info("Lease expired, scaling down...")
+
+	// Transition to scaling down state
+	if err := manager.setScalingState(ScalingStateScalingDown); err != nil {
+		return fmt.Errorf("failed to transition to scaling down state: %w", err)
+	}
+
+	// Get all service names from the manifest and scale them all to zero
+	zeroReplicas := make(map[string]int32)
+	for _, service := range manager.deployment.ManifestGroup().Services {
+		zeroReplicas[service.Name] = 0
+	}
+
+	// Scale all services to zero in one call
+	if err := s.client.ScaleServices(ctx, leaseID, zeroReplicas); err != nil {
+		// Revert state on failure
+		manager.setScalingState(ScalingStateActive)
+		s.log.WithField("lease", leaseID).WithError(err).Error("Failed to scale services to zero")
+		return err
+	}
+
+	// Transition to scaled down state
+	if err := manager.setScalingState(ScalingStateScaledDown); err != nil {
+		s.log.WithField("lease", leaseID).WithError(err).Error("Failed to transition to scaled down state")
+		return err
+	}
+
+	s.log.WithField("lease", leaseID).Info("Successfully scaled lease to zero")
+	return nil
+}
+
+func (s *service) ScaleBack(ctx context.Context, leaseID mtypes.LeaseID) error {
+	// Find the deployment manager for this lease
+	key := mtypes.LeaseIDToKey(leaseID)
+	manager := s.managers[key]
+	if manager == nil {
+		return fmt.Errorf("no deployment manager found for lease %s", leaseID)
+	}
+
+	// Check if we can scale up
+	if !manager.canScaleUp() {
+		currentState := manager.getScalingState()
+		s.log.WithField("lease", leaseID).WithField("currentState", currentState).Debug("Deployment already scaled up, ignoring scale back request")
+		return nil
+	}
+
+	s.log.WithField("lease", leaseID).Info("Lease active, scaling back...")
+
+	// Transition to scaling up state
+	if err := manager.setScalingState(ScalingStateScalingUp); err != nil {
+		return fmt.Errorf("failed to transition to scaling up state: %w", err)
+	}
+
+	// Get original replica counts from the manifest
+	originalReplicas := manager.getOriginalReplicas()
+
+	// Scale all services back to their original counts
+	if err := s.client.ScaleServices(ctx, leaseID, originalReplicas); err != nil {
+		// Revert state on failure
+		manager.setScalingState(ScalingStateScaledDown)
+		s.log.WithField("lease", leaseID).WithError(err).Error("Failed to scale services back to original counts")
+		return err
+	}
+
+	// Transition to active state
+	if err := manager.setScalingState(ScalingStateActive); err != nil {
+		s.log.WithField("lease", leaseID).WithError(err).Error("Failed to transition to active state")
+		return err
+	}
+
+	s.log.WithField("lease", leaseID).Info("Successfully scaled lease back to original replica counts")
+	return nil
+}
+
 func (s *service) run(ctx context.Context, deployments []ctypes.IDeployment) {
 	defer s.lc.ShutdownCompleted()
 	defer s.sub.Close()
@@ -347,7 +457,7 @@ func (s *service) run(ctx context.Context, deployments []ctypes.IDeployment) {
 	inventorych := bus.Sub(ptypes.PubSubTopicInventoryStatus)
 
 	for _, deployment := range deployments {
-		s.managers[mtypes.LeaseIDToKey(deployment.LeaseID())] = newDeploymentManager(s, deployment, false)
+		s.managers[mtypes.LeaseIDToKey(deployment.LeaseID())] = newDeploymentManager(s, deployment, false, s.expiryService)
 	}
 
 	signalch := make(chan struct{}, 1)
@@ -423,13 +533,41 @@ loop:
 					s.log.WithField("lease", ev.LeaseID).WithField("group-name", mgroup.Name).WithError(err).Error("Error getting deployment")
 					break
 				}
-				s.managers[key] = newDeploymentManager(s, deployment, true)
+				s.managers[key] = newDeploymentManager(s, deployment, true, s.expiryService)
 
 				trySignal()
 			case mtypes.EventLeaseClosed:
 				_ = s.bus.Publish(event.LeaseRemoveFundsMonitor{LeaseID: ev.ID})
 				s.teardownLease(ev.ID)
+			case etypes.DeploymentExpiry:
+				leaseID := ev.LeaseID
+				manager := s.managers[mtypes.LeaseIDToKey(leaseID)]
+				if manager == nil {
+					break
+				}
+
+				status := ev.Status
+				switch status {
+				case etypes.DeploymentExpiryStatusDeleted:
+					s.log.WithField("lease", leaseID).Info("Deployment deleted. Closing lease...")
+					if err := s.bus.Publish(mtypes.EventLeaseClosed{
+						ID: leaseID,
+					}); err != nil {
+						s.log.WithError(err).Error("Send lease closed request failed")
+					}
+				case etypes.DeploymentExpiryStatusActive:
+					// Scale back the lease if it is active and should be scaled back
+					if err := s.ScaleBack(ctx, leaseID); err != nil {
+						s.log.WithError(err).WithField("lease", leaseID).Error("Failed to scale back lease")
+					}
+				case etypes.DeploymentExpiryStatusExpired:
+					// Scale to zero the lease if it is expired and should be scaled to zero
+					if err := s.ScaleToZero(ctx, leaseID); err != nil {
+						s.log.WithError(err).WithField("lease", leaseID).Error("Failed to scale to zero lease")
+					}
+				}
 			}
+
 		case ch := <-s.statusch:
 			ch <- &apclient.ClusterStatus{
 				Leases: uint32(len(s.managers)), // nolint: gosec

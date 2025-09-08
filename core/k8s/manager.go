@@ -15,10 +15,40 @@ import (
 	mtypes "github.com/unicornultrafoundation/subnet-node/proto/subnet/k8s/market/v1"
 
 	ctypes "github.com/unicornultrafoundation/subnet-node/core/k8s/types/v1"
+	etypes "github.com/unicornultrafoundation/subnet-node/core/k8s/types/v1/expiry"
 	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/event"
 	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/session"
 	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/tools/fromctx"
 )
+
+// ScalingState represents the current scaling state of a deployment
+type ScalingState int
+
+const (
+	// ScalingStateActive indicates the deployment is running normally
+	ScalingStateActive ScalingState = iota
+	// ScalingStateScalingDown indicates the deployment is being scaled down
+	ScalingStateScalingDown
+	// ScalingStateScaledDown indicates the deployment has been scaled to zero
+	ScalingStateScaledDown
+	// ScalingStateScalingUp indicates the deployment is being scaled back up
+	ScalingStateScalingUp
+)
+
+func (s ScalingState) String() string {
+	switch s {
+	case ScalingStateActive:
+		return "active"
+	case ScalingStateScalingDown:
+		return "scaling-down"
+	case ScalingStateScaledDown:
+		return "scaled-down"
+	case ScalingStateScalingUp:
+		return "scaling-up"
+	default:
+		return "unknown"
+	}
+}
 
 var (
 	ErrLeaseInactive = errors.New("inactive Lease")
@@ -54,9 +84,15 @@ type deploymentManager struct {
 	isNewLease          bool
 	serviceShuttingDown <-chan struct{}
 	messages            []string
+	expiryService       *expiryService
+
+	// Scaling state management
+	scalingState     ScalingState
+	originalReplicas map[string]int32
+	scalingMutex     sync.RWMutex
 }
 
-func newDeploymentManager(s *service, deployment ctypes.IDeployment, isNewLease bool) *deploymentManager {
+func newDeploymentManager(s *service, deployment ctypes.IDeployment, isNewLease bool, expiryService *expiryService) *deploymentManager {
 	lid := deployment.LeaseID()
 	mgroup := deployment.ManifestGroup()
 	logger := s.log.WithField("module", "deployment-manager").WithField("lease", lid).WithField("manifest-group", mgroup.GetName()).Logger
@@ -76,6 +112,10 @@ func newDeploymentManager(s *service, deployment ctypes.IDeployment, isNewLease 
 		serviceShuttingDown: s.lc.ShuttingDown(),
 		isNewLease:          isNewLease,
 		currentHostnames:    make(map[string]struct{}),
+		expiryService:       expiryService,
+		scalingState:        ScalingStateActive,
+		originalReplicas:    make(map[string]int32),
+		scalingMutex:        sync.RWMutex{},
 	}
 
 	go dm.lc.WatchChannel(s.lc.ShuttingDown())
@@ -223,7 +263,7 @@ loop:
 		dm.log.WithError(teardownErr).Error("lease teardown failed")
 	}
 
-	dm.log.Info("Shutdown complete")
+	dm.log.WithField("lease", dm.deployment.LeaseID()).Info("Shutdown complete")
 }
 
 func (dm *deploymentManager) startMonitor() {
@@ -364,14 +404,32 @@ func (dm *deploymentManager) doTeardown(ctx context.Context) error {
 }
 
 func (dm *deploymentManager) checkLeaseActive(ctx context.Context) error {
-	// TODO - remove this once we have a way to check if the lease is active
 	lease := mtypes.QueryLeaseResponse{
 		Lease: mtypes.Lease{
 			State: mtypes.LeaseActive,
 		},
 	}
 
-	// TODO: Check if the lease is active on-chain
+	// Check if the lease is active on-chain
+	deploymentID := fmt.Sprintf("%d", dm.deployment.LeaseID().DSeq)
+	status, err := dm.expiryService.CheckDeploymentExpiry(ctx, deploymentID)
+	if err != nil {
+		dm.log.WithError(err).Error("error checking deployment expiry")
+		return err
+	}
+	if status.Status != etypes.DeploymentExpiryStatusActive {
+		lease.Lease.State = mtypes.LeaseClosed
+	}
+
+	if status.Status == etypes.DeploymentExpiryStatusDeleted {
+		// If the lease is expired and deleted, we should close the lease
+		dm.log.WithField("lease", dm.deployment.LeaseID()).Info("Deployment deleted. Closing lease...")
+		if err := dm.bus.Publish(mtypes.EventLeaseClosed{
+			ID: dm.deployment.LeaseID(),
+		}); err != nil {
+			dm.log.WithError(err).Error("Send lease closed request failed")
+		}
+	}
 
 	if lease.GetLease().State != mtypes.LeaseActive {
 		dm.log.Error("lease not active, not deploying")
@@ -401,4 +459,87 @@ func TieContextToChannel(parentCtx context.Context, donech <-chan struct{}) (con
 	}()
 
 	return ctx, cancel
+}
+
+// setScalingState transitions the deployment to a new scaling state
+func (dm *deploymentManager) setScalingState(newState ScalingState) error {
+	dm.scalingMutex.Lock()
+	defer dm.scalingMutex.Unlock()
+
+	oldState := dm.scalingState
+
+	// Validate state transition
+	if !dm.isValidStateTransition(oldState, newState) {
+		return fmt.Errorf("invalid state transition from %s to %s", oldState, newState)
+	}
+
+	// Store original replica counts when starting to scale down
+	if newState == ScalingStateScalingDown {
+		dm.originalReplicas = make(map[string]int32)
+		for _, service := range dm.deployment.ManifestGroup().Services {
+			dm.originalReplicas[service.Name] = int32(service.Count)
+		}
+		dm.log.WithField("originalReplicas", dm.originalReplicas).Debug("Stored original replica counts")
+	}
+
+	dm.scalingState = newState
+	dm.log.WithField("oldState", oldState).WithField("newState", newState).Debug("Updated scaling state")
+	return nil
+}
+
+// isValidStateTransition validates if a state transition is allowed
+func (dm *deploymentManager) isValidStateTransition(from, to ScalingState) bool {
+	switch from {
+	case ScalingStateActive:
+		return to == ScalingStateScalingDown
+	case ScalingStateScalingDown:
+		return to == ScalingStateScaledDown || to == ScalingStateActive // Allow cancellation
+	case ScalingStateScaledDown:
+		return to == ScalingStateScalingUp
+	case ScalingStateScalingUp:
+		return to == ScalingStateActive || to == ScalingStateScaledDown // Allow cancellation
+	default:
+		return false
+	}
+}
+
+// getScalingState returns the current scaling state
+func (dm *deploymentManager) getScalingState() ScalingState {
+	dm.scalingMutex.RLock()
+	defer dm.scalingMutex.RUnlock()
+	return dm.scalingState
+}
+
+// getOriginalReplicas returns the original replica counts for each service
+func (dm *deploymentManager) getOriginalReplicas() map[string]int32 {
+	dm.scalingMutex.RLock()
+	defer dm.scalingMutex.RUnlock()
+
+	// Return a copy to prevent external modification
+	result := make(map[string]int32)
+	for service, replicas := range dm.originalReplicas {
+		result[service] = replicas
+	}
+	return result
+}
+
+// isScaledDown returns whether the deployment is currently scaled down
+func (dm *deploymentManager) isScaledDown() bool {
+	dm.scalingMutex.RLock()
+	defer dm.scalingMutex.RUnlock()
+	return dm.scalingState == ScalingStateScaledDown
+}
+
+// canScaleDown returns whether the deployment can be scaled down
+func (dm *deploymentManager) canScaleDown() bool {
+	dm.scalingMutex.RLock()
+	defer dm.scalingMutex.RUnlock()
+	return dm.scalingState == ScalingStateActive || dm.scalingState == ScalingStateScalingUp
+}
+
+// canScaleUp returns whether the deployment can be scaled up
+func (dm *deploymentManager) canScaleUp() bool {
+	dm.scalingMutex.RLock()
+	defer dm.scalingMutex.RUnlock()
+	return dm.scalingState == ScalingStateScaledDown || dm.scalingState == ScalingStateScalingDown
 }

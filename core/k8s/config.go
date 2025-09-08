@@ -20,6 +20,8 @@ type Config struct {
 	MonitorRetryPeriodJitter        time.Duration
 	MonitorHealthcheckPeriod        time.Duration
 	MonitorHealthcheckPeriodJitter  time.Duration
+	MonitorExpiryCheckPeriod        time.Duration
+	MonitorExpiryCheckPeriodJitter  time.Duration
 	ClusterSettings                 map[interface{}]interface{}
 }
 
@@ -39,6 +41,8 @@ func NewConfig(cfg *config.C) Config {
 	config.MonitorRetryPeriodJitter = cfg.GetDuration("deployer.monitor_retry_period_jitter", time.Second*15)
 	config.MonitorHealthcheckPeriod = cfg.GetDuration("deployer.monitor_healthcheck_period", time.Second*10)
 	config.MonitorHealthcheckPeriodJitter = cfg.GetDuration("deployer.monitor_healthcheck_period_jitter", time.Second*5)
+	config.MonitorExpiryCheckPeriod = cfg.GetDuration("deployer.monitor_expiry_check_period", time.Second*30)
+	config.MonitorExpiryCheckPeriodJitter = cfg.GetDuration("deployer.monitor_expiry_check_period_jitter", time.Second*5)
 
 	return config
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/unicornultrafoundation/subnet-node/core/k8s/kube/builder"
+	etypes "github.com/unicornultrafoundation/subnet-node/core/k8s/types/v1/expiry"
 	apclient "github.com/unicornultrafoundation/subnet-node/core/k8s/types/v1/provider/client"
 	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/apitypes"
 	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/sdl"
@@ -17,6 +18,18 @@ import (
 )
 
 func (s *service) RequestDeployment(ctx context.Context, deploymentID dtypes.DeploymentID, sdlManifest sdl.SDL) error {
+	// Check if the deployment already has a active lease
+	status, err := s.expiryService.CheckDeploymentExpiry(ctx, fmt.Sprintf("%d", deploymentID.DSeq))
+	if err != nil {
+		return err
+	}
+	if status.Status != etypes.DeploymentExpiryStatusActive {
+		message := fmt.Sprintf("Deployment does not have a active lease with ID %d. Lease status: %s", deploymentID.DSeq, status.Status)
+		if status.Status == etypes.DeploymentExpiryStatusExpired {
+			message = fmt.Sprintf("Lease %s is expired. You need to add more funds to this lease to keep it active or it will be deleted in %d seconds", deploymentID.DSeq, status.TimeLeft)
+		}
+		return errors.New(message)
+	}
 	return s.manifestService.Submit(ctx, deploymentID, sdlManifest)
 }
 
@@ -40,9 +53,16 @@ func (s *service) GetAllLeaseStatus(ctx context.Context) ([]apitypes.DeploymentS
 			})
 		}
 
+		expiryStatus, err := s.expiryService.CheckDeploymentExpiry(ctx, fmt.Sprintf("%d", leaseID.DSeq))
+		if err != nil {
+			return nil, fmt.Errorf("failed to check deployment expiry: %w", err)
+		}
+
 		deploymentStatuses = append(deploymentStatuses, apitypes.DeploymentStatus{
 			LeaseID:        leaseID,
 			ManifestGroups: manifestGroups,
+			Status:         expiryStatus.Status,
+			TimeLeft:       expiryStatus.TimeLeft,
 		})
 	}
 	return deploymentStatuses, nil
@@ -92,6 +112,13 @@ portManifestGroupSearchLoop:
 		}
 		return result, err
 	}
+
+	expiryStatus, err := s.expiryService.CheckDeploymentExpiry(ctx, fmt.Sprintf("%d", leaseID.DSeq))
+	if err != nil {
+		return result, err
+	}
+	result.Status = expiryStatus.Status
+	result.TimeLeft = expiryStatus.TimeLeft
 
 	return result, nil
 }

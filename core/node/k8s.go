@@ -11,6 +11,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	tpubsub "github.com/troian/pubsub"
+	"github.com/unicornultrafoundation/subnet-node/bidengine"
 	"github.com/unicornultrafoundation/subnet-node/config"
 	"github.com/unicornultrafoundation/subnet-node/core/account"
 	"github.com/unicornultrafoundation/subnet-node/core/k8s"
@@ -28,7 +29,7 @@ import (
 )
 
 // DeployerService provides a lifecycle-managed Deployer service
-func K8sService(lc fx.Lifecycle, cfg *config.C, account *account.AccountService) (k8s.Service, error) {
+func K8sService(lc fx.Lifecycle, cfg *config.C, account *account.AccountService, bidengine *bidengine.BidEngine) (k8s.Service, error) {
 	ctx := context.Background()
 	logger := logrus.New().WithField("service", "k8s").Logger
 	ctx = context.WithValue(ctx, fromctx.CtxKeyLogc, logger)
@@ -96,7 +97,7 @@ func K8sService(lc fx.Lifecycle, cfg *config.C, account *account.AccountService)
 	session := session.New(logger, provider)
 	bus := pubsub.NewBus()
 
-	service, err := k8s.NewServiceFromConfig(ctx, session, bus, client, cfg)
+	service, err := k8s.NewServiceFromConfig(ctx, session, bus, client, cfg, bidengine, account.GetClient())
 	if err != nil {
 		return nil, err
 	}
