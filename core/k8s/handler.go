@@ -26,7 +26,7 @@ func (s *service) RequestDeployment(ctx context.Context, deploymentID dtypes.Dep
 	if status.Status != etypes.DeploymentExpiryStatusActive {
 		message := fmt.Sprintf("Deployment does not have a active lease with ID %d. Lease status: %s", deploymentID.DSeq, status.Status)
 		if status.Status == etypes.DeploymentExpiryStatusExpired {
-			message = fmt.Sprintf("Lease %s is expired. You need to add more funds to this lease to keep it active or it will be deleted in %d seconds", deploymentID.DSeq, status.TimeLeft)
+			message = fmt.Sprintf("Lease %d is expired. You need to add more funds to this lease to keep it active or it will be deleted in %d seconds", deploymentID.DSeq, status.TimeLeft)
 		}
 		return errors.New(message)
 	}
