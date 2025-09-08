@@ -30,6 +30,9 @@ import (
 
 // DeployerService provides a lifecycle-managed Deployer service
 func K8sService(lc fx.Lifecycle, cfg *config.C, account *account.AccountService, bidengine *bidengine.BidEngine) (k8s.Service, error) {
+	if !cfg.GetBool("deployer.enable", false) {
+		return nil, nil
+	}
 	ctx := context.Background()
 	logger := logrus.New().WithField("service", "k8s").Logger
 	ctx = context.WithValue(ctx, fromctx.CtxKeyLogc, logger)
