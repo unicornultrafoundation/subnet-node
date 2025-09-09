@@ -66,17 +66,17 @@ kustomize-deploy-subnet-operator-inventory:
 ###                         k8s-services & Setup                            ###
 ###############################################################################
 
-# Build local k8s-services image using Dockerfile at script/k8s-services/
-k8s-services-build:
-	@echo "Building local k8s-services image"
-	@script/k8s-services/build-k8s-services.sh
-.PHONY: k8s-services-build
-
 # Run kube setup (namespace, CRDs, operator, policies)
 kube-setup:
 	@echo "Running kube setup"
 	@script/kube/setup-kube.sh
 .PHONY: kube-setup
+
+# Build local k8s-services image using Dockerfile at script/k8s-services/
+k8s-services-build:
+	@echo "Building local k8s-services image"
+	@script/k8s-services/build-k8s-services.sh
+.PHONY: k8s-services-build
 
 # Build image and then setup kube 
 # (only for local development - need to update the image from u2udepin/k8s-services:latest to k8s-services:latest)
@@ -92,10 +92,11 @@ k8s-services-build-and-kube-setup: k8s-services-build
 .PHONY: k8s-services-build-and-kube-setup
 
 ###############################################################################
-###                                 Rook                                     ###
+###                                 Rook                                    ###
 ###############################################################################
 
 # Deploy Rook/Ceph; override profile via ROOK_PROFILE=dev (default: prod)
+# NOTE: This is now experimental, use at your own risk
 ROOK_PROFILE ?= prod
 
 rook-setup:
