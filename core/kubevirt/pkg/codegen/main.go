@@ -5,6 +5,7 @@ import (
 
 	controllergen "github.com/rancher/wrangler/v3/pkg/controller-gen"
 	"github.com/rancher/wrangler/v3/pkg/controller-gen/args"
+	corev1 "k8s.io/api/core/v1"
 	kubevirtv1 "kubevirt.io/api/core/v1"
 )
 
@@ -23,6 +24,12 @@ func main() {
 				},
 				GenerateTypes:   false,
 				GenerateClients: true,
+			},
+			corev1.GroupName: {
+				Types: []interface{}{
+					corev1.PersistentVolume{},
+					corev1.ResourceQuota{},
+				},
 			},
 		},
 	})
