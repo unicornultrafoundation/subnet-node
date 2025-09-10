@@ -5,10 +5,11 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/operator"
 )
 
-func NewRootCmd() *cobra.Command {
+func k8sCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:          "k8s-services",
 		Short:        "K8s services commands",
+		Long:         "Commands to run k8s sub-services",
 		SilenceUsage: true,
 	}
 

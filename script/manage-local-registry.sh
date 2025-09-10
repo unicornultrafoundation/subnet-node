@@ -37,7 +37,7 @@ case "$1" in
     "push")
         if [ -z "$2" ]; then
             echo "Usage: $0 push <image-name> [tag]"
-            echo "Example: $0 push k8s-services latest"
+            echo "Example: $0 push subnet-node latest"
             exit 1
         fi
         IMAGE_NAME=$2
@@ -50,7 +50,7 @@ case "$1" in
     "pull")
         if [ -z "$2" ]; then
             echo "Usage: $0 pull <image-name> [tag]"
-            echo "Example: $0 pull k8s-services latest"
+            echo "Example: $0 pull subnet-node latest"
             exit 1
         fi
         IMAGE_NAME=$2
@@ -78,8 +78,8 @@ case "$1" in
         echo ""
         echo "Examples:"
         echo "  $0 start"
-        echo "  $0 push k8s-services latest"
-        echo "  $0 pull k8s-services latest"
+        echo "  $0 push subnet-node latest"
+        echo "  $0 pull subnet-node latest"
         echo "  $0 status"
         ;;
 esac 

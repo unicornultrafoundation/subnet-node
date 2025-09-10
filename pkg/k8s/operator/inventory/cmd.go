@@ -277,7 +277,7 @@ func Cmd() *cobra.Command {
 		panic(err)
 	}
 
-	cmd.Flags().String(FlagDiscoveryImage, "u2udepin/k8s-services:latest", "hardware discovery docker image")
+	cmd.Flags().String(FlagDiscoveryImage, "u2udepin/subnet-node:latest", "hardware discovery docker image")
 	if err = viper.BindPFlag(FlagDiscoveryImage, cmd.Flags().Lookup(FlagDiscoveryImage)); err != nil {
 		panic(err)
 	}

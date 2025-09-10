@@ -36,13 +36,16 @@ require (
 	github.com/davidlazar/go-crypto v0.0.0-20200604182044-b73af7476f6c // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.0 // indirect
 	github.com/distribution/reference v0.6.0 // indirect
+	github.com/docker/go-connections v0.5.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
+	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/ebitengine/purego v0.8.1 // indirect
 	github.com/elastic/gosigar v0.14.3 // indirect
 	github.com/emicklei/go-restful/v3 v3.12.1 // indirect
 	github.com/ethereum/c-kzg-4844 v1.0.0 // indirect
 	github.com/ethereum/go-verkle v0.1.1-0.20240829091221-dffa7562dbe9 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
+	github.com/flynn/noise v1.1.0 // indirect
 	github.com/francoispqt/gojay v1.2.13 // indirect
 	github.com/fxamacker/cbor/v2 v2.7.0 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.6 // indirect
@@ -64,6 +67,7 @@ require (
 	github.com/google/gnostic-models v0.6.9 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/pprof v0.0.0-20241210010833-40e02aabc2ad // indirect
+	github.com/google/uuid v1.6.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.26.3 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
@@ -72,6 +76,7 @@ require (
 	github.com/hashicorp/go-secure-stdlib/parseutil v0.2.0 // indirect
 	github.com/hashicorp/go-secure-stdlib/strutil v0.1.2 // indirect
 	github.com/hashicorp/go-sockaddr v1.0.7 // indirect
+	github.com/hashicorp/golang-lru v1.0.2 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/hashicorp/hcl v1.0.1-vault-7 // indirect
 	github.com/hashicorp/vault/api v1.20.0 // indirect
@@ -201,6 +206,7 @@ require (
 	github.com/ryanuber/go-glob v1.0.0 // indirect
 	github.com/sagikazarmark/locafero v0.7.0 // indirect
 	github.com/samber/lo v1.47.0 // indirect
+	github.com/shirou/gopsutil v3.21.4-0.20210419000835-c7a38de76ee5+incompatible // indirect
 	github.com/sourcegraph/conc v0.3.0 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	github.com/spf13/afero v1.12.0 // indirect
@@ -264,8 +270,6 @@ require (
 	contrib.go.opencensus.io/exporter/prometheus v0.4.2
 	dario.cat/mergo v1.0.1
 	github.com/Khan/genqlient v0.8.0
-	github.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be
-	github.com/armon/go-radix v1.0.0
 	github.com/avast/retry-go/v4 v4.6.1
 	github.com/blang/semver/v4 v4.0.0
 	github.com/boz/go-lifecycle v0.1.1
@@ -275,21 +279,16 @@ require (
 	github.com/deckarep/golang-set/v2 v2.6.0
 	github.com/desertbit/timer v1.0.1
 	github.com/docker/docker v28.3.3+incompatible
-	github.com/docker/go-connections v0.5.0
-	github.com/dustin/go-humanize v1.0.1
 	github.com/ethereum/go-ethereum v1.14.12
-	github.com/flynn/noise v1.1.0
 	github.com/fsnotify/fsnotify v1.8.0
 	github.com/gaissmai/bart v0.20.4
 	github.com/go-chi/chi/v5 v5.2.2
 	github.com/golang/protobuf v1.5.4
 	github.com/google/gopacket v1.1.19
-	github.com/google/uuid v1.6.0
 	github.com/gorilla/mux v1.8.1
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674
 	github.com/grpc-ecosystem/grpc-gateway v1.16.0
 	github.com/hashicorp/go-multierror v1.1.1
-	github.com/hashicorp/golang-lru v1.0.2
 	github.com/ipfs/boxo v0.24.3
 	github.com/ipfs/go-cid v0.5.0
 	github.com/ipfs/go-datastore v0.8.2
@@ -313,8 +312,6 @@ require (
 	github.com/libp2p/go-libp2p-record v0.2.0
 	github.com/libp2p/go-libp2p-routing-helpers v0.7.4
 	github.com/libp2p/go-socket-activation v0.1.0
-	github.com/miekg/pkcs11 v1.1.1
-	github.com/moby/moby v28.0.1+incompatible
 	github.com/multiformats/go-multiaddr v0.13.0
 	github.com/multiformats/go-multiaddr-dns v0.4.1
 	github.com/multiformats/go-multihash v0.2.3
@@ -327,13 +324,11 @@ require (
 	github.com/rook/rook v1.14.12
 	github.com/rook/rook/pkg/apis v0.0.0-20231204200402-5287527732f7
 	github.com/sasha-s/go-deadlock v0.3.5
-	github.com/shirou/gopsutil v3.21.4-0.20210419000835-c7a38de76ee5+incompatible
 	github.com/shirou/gopsutil/v4 v4.24.10
 	github.com/showwin/speedtest-go v1.7.9
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/pflag v1.0.7
 	github.com/spf13/viper v1.20.0
-	github.com/stefanberger/go-pkcs11uri v0.0.0-20230803200340-78284954bff6
 	github.com/stretchr/testify v1.10.0
 	github.com/syndtr/goleveldb v1.0.1-0.20210819022825-2ae1ddf74ef7
 	github.com/troian/pubsub v0.1.2

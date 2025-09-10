@@ -30,8 +30,9 @@ spec:
       serviceAccountName: operator-inventory
       containers:
         - name: operator-inventory
-          image: u2udepin/k8s-services:latest
+          image: u2udepin/subnet-node:latest
           args:
+            - "k8s-services"
             - "operator"
             - "inventory"
           imagePullPolicy: IfNotPresent
