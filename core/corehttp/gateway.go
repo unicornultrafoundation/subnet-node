@@ -14,20 +14,19 @@ import (
 
 func GatewayOption() ServeOption {
 	return func(n *core.SubnetNode, _ net.Listener, mux *http.ServeMux) (*http.ServeMux, error) {
-		cfg := n.Repo.Config()
-		ethclient := n.Account.GetClient()
-		bmAddress := common.HexToAddress(cfg.GetString("contracts.bid_market", config.DefaultBidMarketAddr))
-		if bmAddress == (common.Address{}) {
-			return nil, fmt.Errorf("bid market address not found in config")
-		}
-
-		bidMarket, err := contracts.NewBidMarketContract(ethclient, bmAddress, nil)
-		if err != nil {
-			return nil, err
-		}
-
 		// Add deployment handler if deployer is enabled
 		if n.Deployer != nil {
+			cfg := n.Repo.Config()
+			ethclient := n.Account.GetClient()
+			bmAddress := common.HexToAddress(cfg.GetString("contracts.bid_market", config.DefaultBidMarketAddr))
+			if bmAddress == (common.Address{}) {
+				return nil, fmt.Errorf("bid market address not found in config")
+			}
+
+			bidMarket, err := contracts.NewBidMarketContract(ethclient, bmAddress, nil)
+			if err != nil {
+				return nil, err
+			}
 			deploymentHandler := api.NewDeploymentHandler(n.Deployer, cfg, bidMarket)
 			mux.Handle("/", deploymentHandler.Router())
 		}
