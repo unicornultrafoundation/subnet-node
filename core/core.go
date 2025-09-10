@@ -20,8 +20,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/bidengine"
 	"github.com/unicornultrafoundation/subnet-node/core/account"
-	"github.com/unicornultrafoundation/subnet-node/core/apps"
-	"github.com/unicornultrafoundation/subnet-node/core/apps/verifier"
 	"github.com/unicornultrafoundation/subnet-node/core/deployer"
 	"github.com/unicornultrafoundation/subnet-node/core/node/resource"
 	"github.com/unicornultrafoundation/subnet-node/core/peers"
@@ -40,18 +38,16 @@ type SubnetNode struct {
 	Process goprocess.Process
 
 	// Self
-	Identity peer.ID // the local node's identity
+	Identity peer.ID `optional:"true"` // the local node's identity
 
 	PrivateKey ic.PrivKey `optional:"true"` // the local node's private Key
 
 	Repo repo.Repo
 
 	// Services
-	Peerstore       pstore.Peerstore `optional:"true"` // storage for other Peer instances
-	RecordValidator record.Validator
+	Peerstore       pstore.Peerstore           `optional:"true"` // storage for other Peer instances
+	RecordValidator record.Validator           `optional:"true"`
 	Resource        *resource.Service          `optional:"true"`
-	Apps            *apps.Service              `optional:"true"`
-	Verifier        *verifier.Verifier         `optional:"true"`
 	VPN             *vpn.Service               `optional:"true"`
 	Firewall        firewall.FirewallInterface `optional:"true"`
 	Deployer        *deployer.Service          `optional:"true"`
