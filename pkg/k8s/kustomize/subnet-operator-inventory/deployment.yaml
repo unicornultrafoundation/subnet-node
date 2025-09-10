@@ -31,6 +31,8 @@ spec:
       containers:
         - name: operator-inventory
           image: u2udepin/subnet-node:latest
+          command:
+            - "./subnet"
           args:
             - "k8s-services"
             - "operator"
