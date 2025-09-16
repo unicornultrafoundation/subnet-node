@@ -30,6 +30,12 @@ RUN apt-get update && apt-get install -y \
 # Copy the binary from the builder stage
 COPY --from=builder /app/subnet-node ./subnet
 
+# Make the binary executable
+RUN chmod +x ./subnet
+
+# Add the binary to PATH
+ENV PATH="/root:$PATH"
+
 # Copy default configuration (optional)
 # COPY config.yaml ./config.yaml
 
