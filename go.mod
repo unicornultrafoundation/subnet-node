@@ -69,7 +69,6 @@ require (
 	github.com/google/gnostic-models v0.6.9 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/pprof v0.0.0-20250317173921-a4b03ec1a45e // indirect
-	github.com/gorilla/mux v1.8.1 // indirect
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.24.0 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
@@ -180,10 +179,8 @@ require (
 	github.com/quic-go/qpack v0.5.1 // indirect
 	github.com/quic-go/quic-go v0.48.2 // indirect
 	github.com/quic-go/webtransport-go v0.8.1-0.20241018022711-4ac2c9250e66 // indirect
-	github.com/rancher/apiserver v0.7.2 // indirect
 	github.com/rancher/dynamiclistener v0.7.0 // indirect
 	github.com/rancher/kubernetes-provider-detector v0.1.5 // indirect
-	github.com/rancher/norman v0.7.0 // indirect
 	github.com/rancher/remotedialer v0.4.5-rc.3 // indirect
 	github.com/raulk/go-watchdog v1.3.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
@@ -292,6 +289,7 @@ require (
 	github.com/go-chi/chi/v5 v5.2.2
 	github.com/google/gopacket v1.1.19
 	github.com/google/uuid v1.6.0
+	github.com/gorilla/mux v1.8.1
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/hashicorp/golang-lru v1.0.2
@@ -325,7 +323,9 @@ require (
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/prometheus/client_golang v1.22.0
+	github.com/rancher/apiserver v0.7.2
 	github.com/rancher/lasso v0.2.3
+	github.com/rancher/norman v0.7.0
 	github.com/rancher/steve v0.7.13
 	github.com/rancher/wrangler/v3 v3.2.3
 	github.com/rcrowley/go-metrics v0.0.0-20250401214520-65e299d6c5c9

@@ -9,6 +9,7 @@ import (
 	"github.com/rancher/steve/pkg/stores/proxy"
 	"github.com/rancher/wrangler/v3/pkg/schemas"
 	"github.com/unicornultrafoundation/subnet-node/core/kubevirt/pkg/config"
+	"k8s.io/client-go/kubernetes"
 )
 
 const (
@@ -35,14 +36,21 @@ func RegisterSchema(scaled *config.Scaled, server *server.Server, options config
 	vms := scaled.VirtFactory.Kubevirt().V1().VirtualMachine()
 	vmis := scaled.VirtFactory.Kubevirt().V1().VirtualMachineInstance()
 	vmims := scaled.VirtFactory.Kubevirt().V1().VirtualMachineInstanceMigration()
-	// TODO: add other resources later
+
+	vmformatter := &vmformatter{
+		vmiCache:  scaled.VirtFactory.Kubevirt().V1().VirtualMachineInstance().Cache(),
+		pvcCache:  nil,                    // Will be set if needed
+		nodeCache: nil,                    // Will be set if needed
+		scCache:   nil,                    // Will be set if needed
+		clientSet: kubernetes.Clientset{}, // Will be set if needed
+	}
 
 	vmStore := &vmStore{
 		Store:    proxy.NewProxyStore(server.ClientFactory, nil, server.AccessSetLookup, nil),
 		vms:      scaled.VirtFactory.Kubevirt().V1().VirtualMachine(),
 		vmCache:  scaled.VirtFactory.Kubevirt().V1().VirtualMachine().Cache(),
-		pvcs:     scaled.CoreFactory.Core().V1().PersistentVolumeClaim(),
-		pvcCache: scaled.CoreFactory.Core().V1().PersistentVolumeClaim().Cache(),
+		pvcs:     nil,
+		pvcCache: nil,
 	}
 
 	actionHandler := vmActionHandler{
@@ -75,9 +83,10 @@ func RegisterSchema(scaled *config.Scaled, server *server.Server, options config
 				unpauseVM:  {},
 			}
 		},
-		// Formatter: vmformatter.formatter,
-		Store: vmStore,
+		Formatter: vmformatter.formatter,
+		Store:     vmStore,
 	}
+
 	server.SchemaFactory.AddTemplate(t)
 
 	return nil
