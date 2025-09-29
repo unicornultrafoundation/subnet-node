@@ -16,7 +16,6 @@ type (
 type Options struct {
 	Namespace       string
 	Threadiness     int
-	HTTPListenPort  int
 	HTTPSListenPort int
 
 	RancherEmbedded bool

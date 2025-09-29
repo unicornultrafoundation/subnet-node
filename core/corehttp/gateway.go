@@ -45,7 +45,7 @@ func GatewayOption() ServeOption {
 			}
 
 			options := kubeconfig.Options{
-				HTTPListenPort: cfg.GetInt("kubevirt.http_listen_port", 8082),
+				Namespace: cfg.GetString("kubevirt.namespace", "default"),
 			}
 
 			kubeServer, err := kubeServer.New(ctx, kubeConfig, options)

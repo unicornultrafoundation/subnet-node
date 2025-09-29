@@ -26,7 +26,12 @@ func NewRouter(scaled *config.Scaled, restConfig *rest.Config, options config.Op
 func (r *Router) Routes(h router.Handlers) http.Handler {
 	m := mux.NewRouter()
 
-	// TODO: Add routes
+	// Handle action requests with namespace and name in path
+	m.Path("/{type}/{namespace}/{name}").Queries("action", "{action}").Handler(h.K8sResource)
+
+	// Handle regular resource requests
+	m.Path("/{type}").Queries("action", "{action}").Handler(h.K8sResource)
+	m.Path("/{type}").Handler(h.K8sResource)
 
 	return m
 }
