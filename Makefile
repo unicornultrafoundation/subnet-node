@@ -16,8 +16,22 @@ endif
 
 proto-gen: check-proto-deps
 	@echo "Generating Protobuf files"
-	@go run github.com/bufbuild/buf/cmd/buf generate
+	@go run github.com/bufbuild/buf/cmd/buf generate --exclude-path proto/subnet/k8s
 .PHONY: proto-gen
+
+proto-gen-k8s: check-proto-deps
+	@echo "Generating Protobuf files (k8s only)"
+	cd proto/subnet/k8s && buf generate --exclude-path k8s.io
+	@echo "Cleaning up unused imports in generated Go files"
+	@goimports -w proto/subnet/k8s/
+.PHONY: proto-gen-k8s
+
+mock-gen:
+	@go run github.com/vektra/mockery/v2@latest \
+		--dir=core/k8s/types/v1/clients/ip \
+		--output=core/k8s/types/v1/clients/ip/mocks \
+		--name=Client
+.PHONY: mock-gen
 
 # These targets are provided for convenience and are intended for local
 # execution only.
@@ -42,3 +56,44 @@ proto-check-breaking: check-proto-deps
 proto-check-breaking-ci:
 	@go run github.com/bufbuild/buf/cmd/buf breaking --against $(HTTPS_GIT)#branch=v0.34.x
 .PHONY: proto-check-breaking-ci
+
+kustomize-deploy-subnet-operator-inventory:
+	@echo "Deploying subnet-operator-inventory"
+	@kubectl kustomize pkg/k8s/kustomize/subnet-operator-inventory | kubectl apply -f-
+.PHONY: kustomize-deploy-subnet-operator-inventory
+
+###############################################################################
+###                         K8s Setup                                       ###
+###############################################################################
+
+# Run kube setup (namespace, CRDs, operator, policies)
+kube-setup:
+	@echo "Running kube setup"
+	@script/kube/setup-kube.sh
+.PHONY: kube-setup
+
+# Build image and then setup kube 
+# (only for local development - need to update the image from u2udepin/subnet-node:latest to subnet-node:latest)
+build-and-setup-kube:
+	@echo "Building subnet-node image..."
+	@./setup/build-subnet-image.sh
+	@echo "Ensuring local registry is running..."
+	@./script/manage-local-registry.sh start
+	@echo "Pushing subnet-node to local registry..."
+	@./script/manage-local-registry.sh push subnet-node:latest
+	@echo "Running kube setup..."
+	@$(MAKE) kube-setup
+.PHONY: build-and-setup-kube
+
+###############################################################################
+###                                 Rook                                    ###
+###############################################################################
+
+# Deploy Rook/Ceph; override profile via ROOK_PROFILE=dev (default: prod)
+# NOTE: This is now experimental, use at your own risk
+ROOK_PROFILE ?= prod
+
+rook-setup:
+	@echo "Deploying Rook/Ceph with profile=$(ROOK_PROFILE)"
+	@script/rook/rook.sh --profile $(ROOK_PROFILE) deploy
+.PHONY: rook-setup

@@ -253,6 +253,7 @@ func Subnet(ctx context.Context, bcfg *BuildCfg) fx.Option {
 		SubnetBidEngine(bcfg, cfg),
 		SubnetVPN(bcfg, cfg),
 		SubnetDeployer(bcfg, cfg),
+		SubnetK8s(bcfg, cfg),
 	)
 }
 
@@ -287,5 +288,15 @@ func SubnetDeployer(bcfg *BuildCfg, cfg *config.C) fx.Option {
 
 	return fx.Options(
 		fx.Provide(DeployerService),
+	)
+}
+
+func SubnetK8s(bcfg *BuildCfg, cfg *config.C) fx.Option {
+	if !cfg.GetBool("deployer.enable", false) {
+		return fx.Options()
+	}
+
+	return fx.Options(
+		fx.Provide(K8sService),
 	)
 }

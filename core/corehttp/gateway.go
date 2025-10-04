@@ -31,6 +31,12 @@ func GatewayOption() ServeOption {
 			mux.Handle("/", deploymentHandler.Router())
 		}
 
+		// Add k8s handler if k8s deployer is enabled
+		if n.K8sDeployer != nil {
+			k8sHandler := api.NewK8sHandler(n.K8sDeployer, n.Account)
+			mux.Handle("/k8s/", http.StripPrefix("/k8s", k8sHandler.Router()))
+		}
+
 		return mux, nil
 	}
 }

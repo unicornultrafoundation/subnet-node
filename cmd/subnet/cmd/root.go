@@ -40,6 +40,7 @@ func RootCmd() *cobra.Command {
 	cmd.AddCommand(ninit.InitCmd())
 	cmd.AddCommand(configCmd())
 	cmd.AddCommand(accountCmd())
+	cmd.AddCommand(k8sCmd())
 
 	return cmd
 }

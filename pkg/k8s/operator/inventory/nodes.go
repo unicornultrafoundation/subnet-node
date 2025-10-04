@@ -1,0 +1,209 @@
+package inventory
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"sort"
+
+	"github.com/sirupsen/logrus"
+	"github.com/troian/pubsub"
+	"golang.org/x/sync/errgroup"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/client-go/kubernetes"
+
+	inventoryV1 "github.com/unicornultrafoundation/subnet-node/proto/subnet/k8s/inventory/v1"
+
+	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/tools/fromctx"
+)
+
+type nodeStateEnum int
+
+const (
+	nodeStateRemoved nodeStateEnum = iota
+	nodeStateUpdated
+)
+
+type nodeState struct {
+	state nodeStateEnum
+	name  string
+	node  inventoryV1.Node
+}
+
+type clusterNodes struct {
+	querierNodes
+	ctx        context.Context
+	group      *errgroup.Group
+	log        *logrus.Logger
+	kc         kubernetes.Interface
+	signaldone chan string
+	image      string
+	namespace  string
+}
+
+func newClusterNodes(ctx context.Context, image, namespace string) *clusterNodes {
+	kc := fromctx.MustKubeClientFromCtx(ctx)
+
+	log := fromctx.LogrFromCtx(ctx).WithField("service", "nodes").Logger
+
+	group, ctx := errgroup.WithContext(ctx)
+
+	fd := &clusterNodes{
+		querierNodes: newQuerierNodes(),
+		log:          log,
+		ctx:          ctx,
+		group:        group,
+		kc:           kc,
+		signaldone:   make(chan string, 1),
+		image:        image,
+		namespace:    namespace,
+	}
+
+	leftovers, _ := fd.kc.CoreV1().Pods(namespace).List(fd.ctx, metav1.ListOptions{
+		LabelSelector: "app.kubernetes.io/name=inventory" +
+			",app.kubernetes.io/instance=inventory-hardware-discovery" +
+			",app.kubernetes.io/component=operator" +
+			",app.kubernetes.io/part-of=provider",
+	})
+
+	for _, pod := range leftovers.Items {
+		_ = fd.kc.CoreV1().Pods(namespace).Delete(ctx, pod.Name, metav1.DeleteOptions{})
+	}
+
+	group.Go(fd.connector)
+	group.Go(fd.run)
+
+	return fd
+}
+
+func (cl *clusterNodes) Wait() error {
+	log := fromctx.LogrFromCtx(cl.ctx).WithField("service", "nodes").Logger
+
+	log.Info("waiting for nodes to finish")
+	err := cl.group.Wait()
+	log.Info("all nodes finished")
+
+	return err
+}
+
+func (cl *clusterNodes) connector() error {
+	ctx := cl.ctx
+	bus := fromctx.MustPubSubFromCtx(ctx)
+	log := fromctx.LogrFromCtx(ctx).WithField("service", "nodes").Logger
+
+	events := bus.Sub(topicKubeNodes)
+	nodes := make(map[string]*nodeDiscovery)
+
+	nctx, ncancel := context.WithCancel(ctx)
+	defer func() {
+		log.Info("shutting down node connectors")
+
+		ncancel()
+
+		lctx, lcancel := context.WithCancel(context.Background())
+
+		go func() {
+			for {
+				select {
+				case <-lctx.Done():
+					return
+				case <-cl.signaldone:
+				}
+			}
+		}()
+
+		for name, node := range nodes {
+			log.Info(fmt.Sprintf("shutting down node %s", name))
+			_ = node.shutdown()
+			delete(nodes, name)
+
+			log.Info(fmt.Sprintf("node %s has been shutdown", name))
+		}
+
+		lcancel()
+
+		log.Info("node connectors down")
+	}()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case name := <-cl.signaldone:
+			if node, exists := nodes[name]; exists {
+				delete(nodes, node.name)
+
+				err := node.shutdown()
+				if err != nil && !errors.Is(err, context.Canceled) {
+					log.Error(err, fmt.Sprintf("\"%s\" exited with error. attempting restart", name))
+				}
+			}
+			nodes[name] = newNodeDiscovery(nctx, name, cl.namespace, cl.image, cl.signaldone)
+		case rEvt := <-events:
+			switch evt := rEvt.(type) {
+			case watch.Event:
+				switch obj := evt.Object.(type) {
+				case *corev1.Node:
+					switch evt.Type {
+					case watch.Added:
+						nodes[obj.Name] = newNodeDiscovery(nctx, obj.Name, cl.namespace, cl.image, cl.signaldone)
+					case watch.Deleted:
+						if node, exists := nodes[obj.Name]; exists {
+							_ = node.shutdown()
+							delete(nodes, node.name)
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+func (cl *clusterNodes) run() error {
+	nodes := make(map[string]inventoryV1.Node)
+
+	snapshot := func() inventoryV1.Nodes {
+		res := make(inventoryV1.Nodes, 0, len(nodes))
+
+		for _, nd := range nodes {
+			res = append(res, nd.Dup())
+		}
+
+		sort.Sort(res)
+
+		return res
+	}
+
+	bus := fromctx.MustPubSubFromCtx(cl.ctx)
+
+	events := bus.Sub(topicInventoryNode)
+	defer bus.Unsub(events)
+
+	for {
+		select {
+		case <-cl.ctx.Done():
+			return cl.ctx.Err()
+		case revt := <-events:
+			switch evt := revt.(type) {
+			case nodeState:
+				switch evt.state {
+				case nodeStateUpdated:
+					nodes[evt.name] = evt.node
+				case nodeStateRemoved:
+					delete(nodes, evt.name)
+				}
+
+				bus.Pub(snapshot(), []string{topicInventoryNodes}, pubsub.WithRetain())
+			default:
+			}
+		case req := <-cl.reqch:
+			resp := respNodes{
+				res: snapshot(),
+			}
+
+			req.respCh <- resp
+		}
+	}
+}

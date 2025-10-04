@@ -1,0 +1,26 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: rook-cephfs
+  labels:
+    subnet.node: "true"
+provisioner: rook-ceph.cephfs.csi.ceph.com
+parameters:
+  clusterID: rook-ceph
+  fsName: myfs
+  pool: myfs-replicated
+  csi.storage.k8s.io/provisioner-secret-name: rook-csi-cephfs-provisioner
+  csi.storage.k8s.io/provisioner-secret-namespace: rook-ceph
+  csi.storage.k8s.io/controller-expand-secret-name: rook-csi-cephfs-provisioner
+  csi.storage.k8s.io/controller-expand-secret-namespace: rook-ceph
+  csi.storage.k8s.io/controller-publish-secret-name: rook-csi-cephfs-provisioner
+  csi.storage.k8s.io/controller-publish-secret-namespace: rook-ceph
+  csi.storage.k8s.io/node-stage-secret-name: rook-csi-cephfs-node
+  csi.storage.k8s.io/node-stage-secret-namespace: rook-ceph
+  # Enable encryption for each volume with encryption keys from KMS
+  encrypted: "true"
+  # Use the metadata-based KMS configuration for encryption
+  encryptionKMSID: "user-secret-metadata"
+reclaimPolicy: Delete
+allowVolumeExpansion: true
+

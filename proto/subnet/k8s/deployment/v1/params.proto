@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package subnet.k8s.deployment.v1;
+
+import "gogoproto/gogo.proto";
+
+option go_package = "github.com/unicornultrafoundation/subnet-node/proto/subnet/k8s/deployment/v1";
+
+// Params defines the parameters for the x/deployment package
+message Params {
+ 
+}

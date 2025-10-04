@@ -1,0 +1,17 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: subnet-services
+  labels:
+    name: subnet-services
+    subnet.node: "true"
+    subnet.node/name: subnet-services
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: lease
+  labels:
+    name: lease
+    subnet.node: "true"
