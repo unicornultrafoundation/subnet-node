@@ -16,23 +16,14 @@ var authLog = logrus.WithField("module", "rpc-auth")
 
 // AuthConfig holds authentication configuration
 type AuthConfig struct {
-	Enabled        bool
-	AllowedOwners  []common.Address
-	RequireAuthFor []string // List of RPC methods that require authentication
-	PublicMethods  []string // List of methods that don't require auth
+	Enabled       bool
+	AllowedOwners []common.Address
 }
 
 // DefaultAuthConfig returns the default authentication configuration
 func DefaultAuthConfig() *AuthConfig {
 	return &AuthConfig{
 		Enabled: false,
-		// Default public methods that don't require authentication
-		PublicMethods: []string{
-			"rpc_modules",
-			"web3_clientVersion",
-			"net_version",
-			"eth_chainId",
-		},
 	}
 }
 
@@ -52,29 +43,6 @@ func LoadAuthConfigFromEnv() *AuthConfig {
 			addr = strings.TrimSpace(addr)
 			if addr != "" {
 				config.AllowedOwners = append(config.AllowedOwners, common.HexToAddress(addr))
-			}
-		}
-	}
-
-	// Load methods that require authentication
-	if methodsStr := os.Getenv("RPC_REQUIRE_AUTH_FOR"); methodsStr != "" {
-		methods := strings.Split(methodsStr, ",")
-		for _, method := range methods {
-			method = strings.TrimSpace(method)
-			if method != "" {
-				config.RequireAuthFor = append(config.RequireAuthFor, method)
-			}
-		}
-	}
-
-	// Load public methods (override defaults if provided)
-	if publicStr := os.Getenv("RPC_PUBLIC_METHODS"); publicStr != "" {
-		config.PublicMethods = []string{}
-		methods := strings.Split(publicStr, ",")
-		for _, method := range methods {
-			method = strings.TrimSpace(method)
-			if method != "" {
-				config.PublicMethods = append(config.PublicMethods, method)
 			}
 		}
 	}
@@ -127,56 +95,23 @@ func (a *AuthMiddleware) Wrap(server *Server) http.Handler {
 
 // requiresAuth checks if the request requires authentication
 func (a *AuthMiddleware) requiresAuth(r *http.Request) bool {
-	// Allow OPTIONS requests
+	// Allow OPTIONS requests (CORS preflight)
 	if r.Method == http.MethodOptions {
 		return false
 	}
 
-	// Allow GET requests for health checks
-	if r.Method == http.MethodGet && r.ContentLength == 0 {
+	// Allow GET requests (health checks, status endpoints)
+	if r.Method == http.MethodGet {
 		return false
 	}
 
-	// Try to parse the RPC method from the request body
-	// Note: This reads the body, but we'll need to restore it
-	method := a.extractRPCMethod(r)
-	if method == "" {
-		// If we can't determine the method, require auth to be safe
+	// All POST requests require authentication
+	if r.Method == http.MethodPost {
 		return true
 	}
 
-	// Check if method is in public methods list
-	for _, publicMethod := range a.config.PublicMethods {
-		if method == publicMethod || strings.HasPrefix(method, publicMethod) {
-			return false
-		}
-	}
-
-	// Check if method is specifically marked as requiring auth
-	if len(a.config.RequireAuthFor) > 0 {
-		for _, authMethod := range a.config.RequireAuthFor {
-			if method == authMethod || strings.HasPrefix(method, authMethod) {
-				return true
-			}
-		}
-		// If RequireAuthFor is specified and method is not in it, don't require auth
-		return false
-	}
-
-	// By default, require authentication
+	// Default: require authentication for safety
 	return true
-}
-
-// extractRPCMethod extracts the RPC method from the request
-func (a *AuthMiddleware) extractRPCMethod(r *http.Request) string {
-	// We can check the X-RPC-Method header if set
-	if method := r.Header.Get("X-RPC-Method"); method != "" {
-		return method
-	}
-
-	// For batch requests or if we can't determine, return empty
-	// The actual validation will happen in requiresAuth
-	return ""
 }
 
 // authenticate validates the auth chain in the request
