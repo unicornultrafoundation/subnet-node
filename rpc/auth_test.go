@@ -143,22 +143,22 @@ func TestAuthMiddleware_UpdateConfig(t *testing.T) {
 
 func TestAuthMiddleware_Wrap(t *testing.T) {
 	server := NewServer()
-	
+
 	t.Run("Auth disabled - no middleware", func(t *testing.T) {
 		config := AuthConfig{Enabled: false}
 		middleware := NewAuthMiddleware(config)
 		handler := middleware.Wrap(server)
-		
+
 		if handler == nil {
 			t.Error("Expected non-nil handler")
 		}
 	})
-	
+
 	t.Run("Auth enabled - middleware active", func(t *testing.T) {
 		config := AuthConfig{Enabled: true}
 		middleware := NewAuthMiddleware(config)
 		handler := middleware.Wrap(server)
-		
+
 		if handler == nil {
 			t.Error("Expected non-nil handler")
 		}

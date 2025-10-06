@@ -23,7 +23,7 @@ type AuthConfig struct {
 type AuthMiddleware struct {
 	config         AuthConfig
 	authChainCache map[string]*authchain.AuthChainInfo // Cache for validated auth chains
-	mu             sync.RWMutex                         // Protects config during reload
+	mu             sync.RWMutex                        // Protects config during reload
 }
 
 // NewAuthMiddleware creates a new authentication middleware
