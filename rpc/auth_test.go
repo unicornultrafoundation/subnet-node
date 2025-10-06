@@ -2,14 +2,13 @@ package rpc
 
 import (
 	"net/http"
-	"os"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
 )
 
 func TestAuthMiddleware_requiresAuth(t *testing.T) {
-	middleware := NewAuthMiddleware(&AuthConfig{Enabled: true})
+	middleware := NewAuthMiddleware(AuthConfig{Enabled: true})
 
 	tests := []struct {
 		name         string
@@ -61,13 +60,13 @@ func TestAuthMiddleware_isOwnerAllowed(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		config   *AuthConfig
+		config   AuthConfig
 		address  common.Address
 		expected bool
 	}{
 		{
 			name: "No whitelist - allow all",
-			config: &AuthConfig{
+			config: AuthConfig{
 				Enabled:       true,
 				AllowedOwners: []common.Address{},
 			},
@@ -76,7 +75,7 @@ func TestAuthMiddleware_isOwnerAllowed(t *testing.T) {
 		},
 		{
 			name: "Address in whitelist",
-			config: &AuthConfig{
+			config: AuthConfig{
 				Enabled:       true,
 				AllowedOwners: []common.Address{addr1, addr2},
 			},
@@ -85,7 +84,7 @@ func TestAuthMiddleware_isOwnerAllowed(t *testing.T) {
 		},
 		{
 			name: "Address not in whitelist",
-			config: &AuthConfig{
+			config: AuthConfig{
 				Enabled:       true,
 				AllowedOwners: []common.Address{addr1, addr2},
 			},
@@ -105,80 +104,61 @@ func TestAuthMiddleware_isOwnerAllowed(t *testing.T) {
 	}
 }
 
-func TestLoadAuthConfigFromEnv(t *testing.T) {
-	// Save original env
-	origEnabled := os.Getenv("RPC_AUTH_ENABLED")
-	origOwners := os.Getenv("RPC_ALLOWED_OWNERS")
+func TestAuthMiddleware_UpdateConfig(t *testing.T) {
+	addr1 := common.HexToAddress("0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb")
+	addr2 := common.HexToAddress("0x8ba1f109551bD432803012645Ac136ddd64DBA72")
 
-	defer func() {
-		os.Setenv("RPC_AUTH_ENABLED", origEnabled)
-		os.Setenv("RPC_ALLOWED_OWNERS", origOwners)
-	}()
+	initialConfig := AuthConfig{
+		Enabled:       false,
+		AllowedOwners: []common.Address{addr1},
+	}
 
-	t.Run("Auth enabled", func(t *testing.T) {
-		os.Setenv("RPC_AUTH_ENABLED", "true")
-		os.Setenv("RPC_ALLOWED_OWNERS", "")
+	middleware := NewAuthMiddleware(initialConfig)
 
-		config := LoadAuthConfigFromEnv()
-		if !config.Enabled {
-			t.Error("Expected Enabled to be true")
-		}
-	})
+	// Verify initial config
+	if middleware.config.Enabled {
+		t.Error("Expected initial Enabled to be false")
+	}
+	if len(middleware.config.AllowedOwners) != 1 {
+		t.Errorf("Expected 1 initial owner, got %d", len(middleware.config.AllowedOwners))
+	}
 
-	t.Run("Auth disabled by default", func(t *testing.T) {
-		os.Setenv("RPC_AUTH_ENABLED", "")
-		os.Setenv("RPC_ALLOWED_OWNERS", "")
+	// Update config
+	newConfig := AuthConfig{
+		Enabled:       true,
+		AllowedOwners: []common.Address{addr1, addr2},
+	}
+	middleware.UpdateConfig(newConfig)
 
-		config := LoadAuthConfigFromEnv()
-		if config.Enabled {
-			t.Error("Expected Enabled to be false by default")
-		}
-	})
-
-	t.Run("Parse allowed owners", func(t *testing.T) {
-		os.Setenv("RPC_AUTH_ENABLED", "true")
-		os.Setenv("RPC_ALLOWED_OWNERS", "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb,0x8ba1f109551bD432803012645Ac136ddd64DBA72")
-
-		config := LoadAuthConfigFromEnv()
-		if len(config.AllowedOwners) != 2 {
-			t.Errorf("Expected 2 allowed owners, got %d", len(config.AllowedOwners))
-		}
-	})
-
-	t.Run("No allowed owners - allow all authenticated", func(t *testing.T) {
-		os.Setenv("RPC_AUTH_ENABLED", "true")
-		os.Setenv("RPC_ALLOWED_OWNERS", "")
-
-		config := LoadAuthConfigFromEnv()
-		if len(config.AllowedOwners) != 0 {
-			t.Errorf("Expected 0 allowed owners (allow all), got %d", len(config.AllowedOwners))
-		}
-	})
+	// Verify updated config
+	middleware.mu.RLock()
+	if !middleware.config.Enabled {
+		t.Error("Expected Enabled to be true after update")
+	}
+	if len(middleware.config.AllowedOwners) != 2 {
+		t.Errorf("Expected 2 owners after update, got %d", len(middleware.config.AllowedOwners))
+	}
+	middleware.mu.RUnlock()
 }
 
 func TestAuthMiddleware_Wrap(t *testing.T) {
 	server := NewServer()
-
+	
 	t.Run("Auth disabled - no middleware", func(t *testing.T) {
-		config := &AuthConfig{Enabled: false}
+		config := AuthConfig{Enabled: false}
 		middleware := NewAuthMiddleware(config)
 		handler := middleware.Wrap(server)
-
-		// Should return server directly
-		if handler != server {
-			// This is expected - handler wraps server
-			// Just verify it's not nil
-			if handler == nil {
-				t.Error("Expected non-nil handler")
-			}
+		
+		if handler == nil {
+			t.Error("Expected non-nil handler")
 		}
 	})
-
+	
 	t.Run("Auth enabled - middleware active", func(t *testing.T) {
-		config := &AuthConfig{Enabled: true}
+		config := AuthConfig{Enabled: true}
 		middleware := NewAuthMiddleware(config)
 		handler := middleware.Wrap(server)
-
+		
 		if handler == nil {
 			t.Error("Expected non-nil handler")
 		}

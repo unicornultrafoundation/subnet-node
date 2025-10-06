@@ -4,8 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
-	"strings"
+	"sync"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/sirupsen/logrus"
@@ -20,62 +19,42 @@ type AuthConfig struct {
 	AllowedOwners []common.Address
 }
 
-// DefaultAuthConfig returns the default authentication configuration
-func DefaultAuthConfig() *AuthConfig {
-	return &AuthConfig{
-		Enabled: false,
-	}
-}
-
-// LoadAuthConfigFromEnv loads auth configuration from environment variables
-func LoadAuthConfigFromEnv() *AuthConfig {
-	config := DefaultAuthConfig()
-
-	// Check if authentication is enabled
-	if enabled := os.Getenv("RPC_AUTH_ENABLED"); enabled == "true" || enabled == "1" {
-		config.Enabled = true
-	}
-
-	// Load allowed owner addresses
-	if ownersStr := os.Getenv("RPC_ALLOWED_OWNERS"); ownersStr != "" {
-		addresses := strings.Split(ownersStr, ",")
-		for _, addr := range addresses {
-			addr = strings.TrimSpace(addr)
-			if addr != "" {
-				config.AllowedOwners = append(config.AllowedOwners, common.HexToAddress(addr))
-			}
-		}
-	}
-
-	return config
-}
-
 // AuthMiddleware provides authentication middleware for RPC server
 type AuthMiddleware struct {
-	config         *AuthConfig
+	config         AuthConfig
 	authChainCache map[string]*authchain.AuthChainInfo // Cache for validated auth chains
+	mu             sync.RWMutex                         // Protects config during reload
 }
 
 // NewAuthMiddleware creates a new authentication middleware
-func NewAuthMiddleware(config *AuthConfig) *AuthMiddleware {
-	if config == nil {
-		config = DefaultAuthConfig()
-	}
-
+func NewAuthMiddleware(config AuthConfig) *AuthMiddleware {
 	return &AuthMiddleware{
 		config:         config,
 		authChainCache: make(map[string]*authchain.AuthChainInfo),
 	}
 }
 
+// UpdateConfig updates the auth configuration (for reload)
+func (a *AuthMiddleware) UpdateConfig(config AuthConfig) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.config = config
+}
+
 // Wrap wraps the RPC server with authentication middleware
 func (a *AuthMiddleware) Wrap(server *Server) http.Handler {
-	if !a.config.Enabled {
-		// If authentication is disabled, return the server as-is
-		return server
-	}
-
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Read config with lock
+		a.mu.RLock()
+		enabled := a.config.Enabled
+		a.mu.RUnlock()
+
+		if !enabled {
+			// If authentication is disabled, pass through
+			server.ServeHTTP(w, r)
+			return
+		}
+
 		// Check if authentication is required for this request
 		if !a.requiresAuth(r) {
 			server.ServeHTTP(w, r)
@@ -180,12 +159,16 @@ func (a *AuthMiddleware) authenticate(r *http.Request) error {
 
 // isOwnerAllowed checks if the owner address is in the allowed list
 func (a *AuthMiddleware) isOwnerAllowed(ownerAddr common.Address) bool {
-	if len(a.config.AllowedOwners) == 0 {
+	a.mu.RLock()
+	allowedOwners := a.config.AllowedOwners
+	a.mu.RUnlock()
+
+	if len(allowedOwners) == 0 {
 		// If no specific owners are configured, allow all authenticated users
 		return true
 	}
 
-	for _, allowed := range a.config.AllowedOwners {
+	for _, allowed := range allowedOwners {
 		if ownerAddr == allowed {
 			return true
 		}

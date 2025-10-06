@@ -63,6 +63,20 @@ account:
   keystore_path: "./keystore"
   keystore_password: ""  # Password for keystore file, leave empty to prompt
 
+api:
+  # Auth chain authentication
+  auth:
+    enabled: false  # Enable auth chain authentication for POST requests
+    allowed_owners:  # List of allowed owner addresses (empty = allow all authenticated)
+      # - "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb"
+      # - "0x8ba1f109551bD432803012645Ac136ddd64DBA72"
+  
+  # CORS configuration
+  cors:
+    allowed_origins: ["*"]
+    allowed_methods: ["*"]
+    allowed_headers: ["*"]
+
 logging:
   level: "info"  # log level: debug, info, warn, error
   format: "text" # log format: text, json
