@@ -17,8 +17,16 @@ func APIOption() ServeOption {
 		cfg := n.Repo.Config()
 
 		server := rpc.NewServer()
-		server.RegisterName("version", api.NewVersionAPI()) // Register the VersionAPI
-		smux.Handle(APIPath, WithCORSHeaders(cfg, server))
+		server.RegisterName("version", api.NewVersionAPI())         // Register the VersionAPI
+		server.RegisterName("keystore", api.NewKeystoreAPI(n.Repo)) // Register the KeystoreAPI
+
+		// Load auth configuration from environment
+		authConfig := rpc.LoadAuthConfigFromEnv()
+		authMiddleware := rpc.NewAuthMiddleware(authConfig)
+
+		// Wrap with auth middleware first, then CORS
+		handler := WithCORSHeaders(cfg, authMiddleware.Wrap(server))
+		smux.Handle(APIPath, handler)
 		return smux, nil
 	}
 }
