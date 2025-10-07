@@ -54,7 +54,11 @@ func run(repoPath string, configPath *string, pass string) error {
 		settings["password"] = pass
 	}
 
-	node, err := core.NewNode(context.Background(), &core.BuildCfg{
+	// Create a context for the entire application lifecycle
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	node, err := core.NewNode(ctx, &core.BuildCfg{
 		Repo:   r,
 		Online: true,
 		ExtraOpts: map[string]bool{
@@ -77,6 +81,10 @@ func run(repoPath string, configPath *string, pass string) error {
 		log.Printf("Provider Address: %s", node.Account.GetAddress())
 	}
 	printLibp2pPorts(node)
+
+	// Enable config hot-reload via SIGHUP signal
+	r.Config().CatchHUP(ctx)
+	log.Info("Config hot-reload enabled - send SIGHUP signal to reload configuration")
 
 	// construct api endpoint - every time
 	apiErrc, err := serveHTTPApi(r.Config(), node)

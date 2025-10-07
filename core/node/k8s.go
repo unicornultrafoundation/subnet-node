@@ -12,7 +12,7 @@ import (
 	"github.com/sirupsen/logrus"
 	tpubsub "github.com/troian/pubsub"
 	"github.com/unicornultrafoundation/subnet-node/bidengine"
-	"github.com/unicornultrafoundation/subnet-node/config"
+	snconfig "github.com/unicornultrafoundation/subnet-node/config"
 	"github.com/unicornultrafoundation/subnet-node/core/account"
 	"github.com/unicornultrafoundation/subnet-node/core/k8s"
 	"github.com/unicornultrafoundation/subnet-node/core/k8s/kube"
@@ -29,7 +29,7 @@ import (
 )
 
 // DeployerService provides a lifecycle-managed Deployer service
-func K8sService(lc fx.Lifecycle, cfg *config.C, account *account.AccountService, bidengine *bidengine.BidEngine) (k8s.Service, error) {
+func K8sService(lc fx.Lifecycle, cfg *snconfig.C, account *account.AccountService, bidengine *bidengine.BidEngine) (k8s.Service, error) {
 	if !cfg.GetBool("deployer.enable", false) {
 		return nil, nil
 	}
@@ -104,6 +104,16 @@ func K8sService(lc fx.Lifecycle, cfg *config.C, account *account.AccountService,
 	if err != nil {
 		return nil, err
 	}
+
+	// Register reload callback for K8s/Deployer configuration
+	cfg.RegisterReloadCallback(func(reloadedCfg *snconfig.C) {
+		// Check if deployer configuration has changed
+		if reloadedCfg.HasChanged("deployer") {
+			log := logger.WithField("service", "k8s-deployer")
+			log.Info("K8s/Deployer configuration changed. Note: K8s service requires full restart for config changes to take effect.")
+			log.Info("Please restart the subnet-node process to apply deployer configuration changes.")
+		}
+	})
 
 	lc.Append(fx.Hook{
 		OnStart: func(_ context.Context) error {
