@@ -16,6 +16,8 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/firewall"
 )
 
+var outlog = logrus.WithField("service", "vpn-outbound")
+
 // OutboundConfig contains configuration for the outbound packet service
 type OutboundConfig struct {
 	// MTU for the TUN interface
@@ -32,8 +34,6 @@ type OutboundPacketService struct {
 	dispatcher dispatcher.DispatcherService
 	// Configuration
 	config *OutboundConfig
-	// Logger
-	logger *logrus.Entry
 	// Flag to indicate if the service is closed
 	closed atomic.Bool
 	// Firewall instance
@@ -42,7 +42,6 @@ type OutboundPacketService struct {
 
 // NewOutboundPacketService creates a new outbound packet service
 func NewOutboundPacketService(tunService *TUNService, dispatcher dispatcher.DispatcherService, configService vpnconfig.ConfigService, firewall firewall.FirewallInterface) *OutboundPacketService {
-	logger := logrus.WithField("service", "vpn-outbound")
 
 	return &OutboundPacketService{
 		tunService: tunService,
@@ -51,7 +50,6 @@ func NewOutboundPacketService(tunService *TUNService, dispatcher dispatcher.Disp
 			MTU:            configService.GetMTU(),
 			ctCacheTimeout: configService.GetConntrackCacheTimeout(),
 		},
-		logger:   logger,
 		closed:   atomic.Bool{},
 		firewall: firewall,
 	}
@@ -95,13 +93,13 @@ func (s *OutboundPacketService) listenTUN(ctx context.Context, reader io.ReadWri
 					return
 				}
 
-				s.logger.WithError(err).Error("Error while reading outbound packet")
+				outlog.WithError(err).Error("Error while reading outbound packet")
 				// This only seems to happen when something fatal happens to the fd, so exit.
 				os.Exit(2)
 			}
 
 			// Process the packet
-			s.processOutboundPacket(ctx, packet[:n], queueID, ctCache.Get(s.logger.Logger))
+			s.processOutboundPacket(ctx, packet[:n], queueID, ctCache.Get(outlog.Logger))
 		}
 	}
 }
@@ -112,7 +110,7 @@ func (s *OutboundPacketService) processOutboundPacket(ctx context.Context, packe
 	fwPacket := &firewall.Packet{}
 	err := utils.ParsePacket(packet, false, fwPacket)
 	if err != nil {
-		s.logger.WithError(err).Error("Error while parsing outbound packet")
+		outlog.WithError(err).Error("Error while parsing outbound packet")
 		return
 	}
 
@@ -120,7 +118,7 @@ func (s *OutboundPacketService) processOutboundPacket(ctx context.Context, packe
 	if s.firewall != nil {
 		err := s.firewall.Drop(*fwPacket, false, conntrackCache)
 		if err != nil {
-			s.logger.WithFields(logrus.Fields{
+			outlog.WithFields(logrus.Fields{
 				"error": err,
 				"port":  fwPacket.RemotePort,
 			}).Debug("Packet dropped by firewall")
@@ -131,7 +129,7 @@ func (s *OutboundPacketService) processOutboundPacket(ctx context.Context, packe
 	// Dispatch the packet with the queue ID
 	err = s.dispatcher.DispatchPacket(ctx, packet, fwPacket.RemoteAddr.String(), queueID)
 	if err != nil {
-		s.logger.WithError(err).WithFields(logrus.Fields{
+		outlog.WithError(err).WithFields(logrus.Fields{
 			"queueID": queueID,
 			"remote":  fwPacket.RemoteAddr.String(),
 			"port":    fwPacket.RemotePort,
@@ -144,4 +142,8 @@ func (s *OutboundPacketService) processOutboundPacket(ctx context.Context, packe
 func (s *OutboundPacketService) Close() error {
 	s.closed.Store(true)
 	return nil
+}
+
+func (s *OutboundPacketService) SetTUNService(tunService *TUNService) {
+	s.tunService = tunService
 }

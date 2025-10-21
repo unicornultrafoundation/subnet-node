@@ -4,9 +4,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/sirupsen/logrus"
-	"github.com/unicornultrafoundation/subnet-node/core/vpn/api"
 	vpnconfig "github.com/unicornultrafoundation/subnet-node/core/vpn/config"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/discovery"
 )
@@ -23,9 +23,9 @@ type Config struct {
 // Dispatcher implements the DispatcherService interface
 type Dispatcher struct {
 	// Peer discovery service
-	peerDiscovery *discovery.PeerDiscovery
-	// Stream service for creating new streams
-	streamService api.StreamService
+	peerDiscovery discovery.DiscoveryService
+	// Peer host for creating new streams
+	peerHost host.Host
 	// Configuration service
 	configService vpnconfig.ConfigService
 	// Map of peer ID to stream
@@ -40,13 +40,13 @@ type Dispatcher struct {
 
 // NewDispatcher creates a new dispatcher
 func NewDispatcher(
-	peerDiscovery *discovery.PeerDiscovery,
-	streamService api.StreamService,
+	peerDiscovery discovery.DiscoveryService,
+	peerHost host.Host,
 	configService vpnconfig.ConfigService,
 ) DispatcherService {
 	return &Dispatcher{
 		peerDiscovery: peerDiscovery,
-		streamService: streamService,
+		peerHost:      peerHost,
 		configService: configService,
 		streams:       sync.Map{},
 		stopChan:      make(chan struct{}),
