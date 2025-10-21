@@ -2,6 +2,7 @@ package vpn
 
 import (
 	"context"
+	"net/netip"
 	"sync"
 
 	"github.com/libp2p/go-libp2p/core/host"
@@ -99,6 +100,13 @@ func (s *Service) Stop(ctx context.Context) error {
 		s.inbound = nil
 	}
 
+	if s.tun != nil {
+		err := s.firewall.RemoveNetwork(s.tun.GetCIDR())
+		if err != nil {
+			return err
+		}
+	}
+
 	close(s.stopChan)
 	return nil
 }
@@ -182,10 +190,14 @@ func (s *Service) buildTUN(ip string) (*vpnnetwork.TUNService, error) {
 
 // rebuildStack recreates the TUN and rewires services for the new IP.
 func (s *Service) rebuildStack(newIP string) error {
+	oldCidr := netip.Prefix{}
 	s.mu.RLock()
 	if s.ip == newIP && s.tun != nil {
 		s.mu.RUnlock()
 		return nil
+	}
+	if s.tun != nil {
+		oldCidr = s.tun.GetCIDR()
 	}
 	s.mu.RUnlock()
 
@@ -196,6 +208,13 @@ func (s *Service) rebuildStack(newIP string) error {
 	tun, err := s.buildTUN(newIP)
 	if err != nil {
 		return err
+	}
+
+	if oldCidr.String() != tun.GetCIDR().String() {
+		err := s.firewall.AddNetwork(tun.GetCIDR())
+		if err != nil {
+			return err
+		}
 	}
 
 	s.mu.Lock()

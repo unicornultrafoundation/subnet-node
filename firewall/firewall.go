@@ -22,6 +22,7 @@ import (
 type FirewallInterface interface {
 	AddRule(incoming bool, proto uint8, startPort int32, endPort int32, groups []string, addr, localAddr netip.Prefix) error
 	AddNetwork(network netip.Prefix) error
+	RemoveNetwork(network netip.Prefix) error
 	Drop(fp Packet, incoming bool, localCache ConntrackCache) error
 	ReloadRules(cfg *config.C) error
 }
@@ -285,6 +286,17 @@ func (f *Firewall) AddRule(incoming bool, proto uint8, startPort int32, endPort 
 func (f *Firewall) AddNetwork(network netip.Prefix) error {
 	f.routableNetworks.Insert(network)
 	f.assignedNetworks = append(f.assignedNetworks, network)
+	return nil
+}
+
+func (f *Firewall) RemoveNetwork(network netip.Prefix) error {
+	f.routableNetworks.Delete(network)
+	for i, assignedNetwork := range f.assignedNetworks {
+		if assignedNetwork.String() == network.String() {
+			f.assignedNetworks = append(f.assignedNetworks[:i], f.assignedNetworks[i+1:]...)
+			break
+		}
+	}
 	return nil
 }
 
