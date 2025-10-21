@@ -47,7 +47,11 @@ func NewIPManager(lc fx.Lifecycle, cfg *config.C, host host.Host, dynamicClient 
 
 	// Register callback to update the IP from the config
 	cfg.RegisterReloadCallback(func(c *config.C) {
-		cfgIpCh <- c.GetString("vpn.virtual_ip", "")
+		if c.HasChanged("vpn.virtual_ip") {
+			newIp := c.GetString("vpn.virtual_ip", "")
+			log.WithField("ip", newIp).Info("VPN virtual IP changed, updating IP manager")
+			cfgIpCh <- newIp
+		}
 	})
 
 	i := &IPManagerImpl{

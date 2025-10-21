@@ -285,6 +285,7 @@ func SubnetVPN(bcfg *BuildCfg, cfg *config.C) fx.Option {
 		IPNS,
 		Online(bcfg, cfg),
 		fx.Provide(VPNService),
+		fx.Provide(FirewallService),
 		fx.Provide(ipmanager.NewIPManager),
 		fx.Provide(
 			fx.Annotate(
