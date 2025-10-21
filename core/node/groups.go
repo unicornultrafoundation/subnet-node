@@ -241,7 +241,9 @@ func Storage(bcfg *BuildCfg) fx.Option {
 }
 
 func Core(cfg *config.C) fx.Option {
-	return fx.Options()
+	return fx.Options(
+		fx.Provide(account.EthereumService),
+	)
 }
 
 // IPFS builds a group of fx Options based on the passed BuildCfg
@@ -269,7 +271,6 @@ func SubnetBidEngine(bcfg *BuildCfg, cfg *config.C) fx.Option {
 	}
 
 	return fx.Options(
-		fx.Provide(account.EthereumService),
 		fx.Provide(BidengineService),
 	)
 }
@@ -284,7 +285,6 @@ func SubnetVPN(bcfg *BuildCfg, cfg *config.C) fx.Option {
 		IPNS,
 		Online(bcfg, cfg),
 		fx.Provide(VPNService),
-		fx.Provide(account.EthereumService),
 		fx.Provide(ipmanager.NewIPManager),
 		fx.Provide(
 			fx.Annotate(

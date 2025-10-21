@@ -4,12 +4,16 @@ import (
 	"context"
 	"sync"
 
+	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/config"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/discovery"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/dispatcher"
 	ipmanager "github.com/unicornultrafoundation/subnet-node/core/vpn/ip_manager"
 	vpnnetwork "github.com/unicornultrafoundation/subnet-node/core/vpn/network"
+	"github.com/unicornultrafoundation/subnet-node/firewall"
 )
 
 var log = logrus.WithField("service", "vpn")
@@ -21,6 +25,8 @@ type Service struct {
 	configService    config.ConfigService
 	discoveryService discovery.DiscoveryService
 	dispatcher       dispatcher.DispatcherService
+	peerHost         host.Host
+	firewall         firewall.FirewallInterface
 
 	// runtime state
 	ip string
@@ -38,13 +44,15 @@ type Service struct {
 	stopChan chan struct{}
 }
 
-func NewService(ipManager ipmanager.IPManager, configService config.ConfigService, discoveryService discovery.DiscoveryService, dispatcherService dispatcher.DispatcherService) *Service {
+func NewService(ipManager ipmanager.IPManager, configService config.ConfigService, discoveryService discovery.DiscoveryService, dispatcherService dispatcher.DispatcherService, peerHost host.Host, firewall firewall.FirewallInterface) *Service {
 	s := &Service{
 		ipManager:        ipManager,
 		configService:    configService,
 		discoveryService: discoveryService,
 		dispatcher:       dispatcherService,
 		stopChan:         make(chan struct{}),
+		peerHost:         peerHost,
+		firewall:         firewall,
 	}
 
 	return s
@@ -83,6 +91,13 @@ func (s *Service) Stop(ctx context.Context) error {
 
 	// teardown runtime stack
 	s.teardownStack()
+
+	// drop inbound reference
+	if s.inbound != nil {
+		s.peerHost.RemoveStreamHandler(protocol.ID(s.configService.GetProtocol()))
+		_ = s.inbound.Close()
+		s.inbound = nil
+	}
 
 	close(s.stopChan)
 	return nil
@@ -138,6 +153,7 @@ func (s *Service) teardownStack() {
 		_ = s.outbound.Close()
 		s.outbound = nil
 	}
+
 	// inbound has no long-lived goroutines; keep instance to rebind
 	tun := s.tun
 	s.tun = nil
@@ -186,13 +202,17 @@ func (s *Service) rebuildStack(newIP string) error {
 	s.tun = tun
 	// bind inbound (create once)
 	if s.inbound == nil {
-		s.inbound = vpnnetwork.NewInboundPacketService(s.tun, s.configService, nil)
+		s.inbound = vpnnetwork.NewInboundPacketService(s.tun, s.configService, s.firewall)
+		s.peerHost.SetStreamHandler(protocol.ID(s.configService.GetProtocol()), func(netStream network.Stream) {
+			// Handle the incoming stream as a VPN stream
+			s.inbound.HandleStream(netStream)
+		})
 	} else {
 		s.inbound.SetTUNService(s.tun)
 	}
 	// start fresh outbound with new readers
 	s.clientCtx, s.clientCancel = context.WithCancel(context.Background())
-	s.outbound = vpnnetwork.NewOutboundPacketService(s.tun, s.dispatcher, s.configService, nil)
+	s.outbound = vpnnetwork.NewOutboundPacketService(s.tun, s.dispatcher, s.configService, s.firewall)
 	clientCtx := s.clientCtx
 	outbound := s.outbound
 	s.mu.Unlock()
