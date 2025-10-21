@@ -34,8 +34,6 @@ type InboundPacketService struct {
 
 // NewInboundPacketService creates a new inbound packet service
 func NewInboundPacketService(tunService *TUNService, configService vpnconfig.ConfigService, firewall firewall.FirewallInterface) *InboundPacketService {
-	// Create a new inlog
-
 	return &InboundPacketService{
 		tunService: tunService,
 		config: &InboundConfig{

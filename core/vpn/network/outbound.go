@@ -42,7 +42,6 @@ type OutboundPacketService struct {
 
 // NewOutboundPacketService creates a new outbound packet service
 func NewOutboundPacketService(tunService *TUNService, dispatcher dispatcher.DispatcherService, configService vpnconfig.ConfigService, firewall firewall.FirewallInterface) *OutboundPacketService {
-
 	return &OutboundPacketService{
 		tunService: tunService,
 		dispatcher: dispatcher,
