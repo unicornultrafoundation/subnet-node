@@ -30,7 +30,7 @@ func TestStorageManager_GetOrDownloadUbuntuImage(t *testing.T) {
 	}
 
 	// Validate the downloaded image
-	if err := sm.ValidateImageExists(imagePath); err != nil {
+	if err := sm.validateImageExists(imagePath); err != nil {
 		t.Errorf("Image validation failed: %v", err)
 	}
 
@@ -105,7 +105,7 @@ func TestStorageManager_ValidateImageExists(t *testing.T) {
 	sm := NewStorageManager(tempDir)
 
 	// Test with non-existent file
-	err = sm.ValidateImageExists("/path/to/nonexistent/file.img")
+	err = sm.validateImageExists("/path/to/nonexistent/file.img")
 	if err == nil {
 		t.Error("Expected error for non-existent file")
 	}
@@ -126,7 +126,7 @@ func TestStorageManager_ValidateImageExists(t *testing.T) {
 	tempFile.Close()
 
 	// Test validation
-	if err := sm.ValidateImageExists(tempFile.Name()); err != nil {
+	if err := sm.validateImageExists(tempFile.Name()); err != nil {
 		t.Errorf("Image validation failed for valid file: %v", err)
 	}
 }
@@ -307,7 +307,7 @@ func ExampleStorageManager_GetOrDownloadUbuntuImage() {
 	}
 
 	// Validate the downloaded image
-	if err := sm.ValidateImageExists(imagePath); err != nil {
+	if err := sm.validateImageExists(imagePath); err != nil {
 		// Handle validation error
 		return
 	}

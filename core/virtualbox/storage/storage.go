@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
+	"github.com/unicornultrafoundation/subnet-node/core/virtualbox/cmd_exec"
 )
 
 var storageLog = logrus.WithField("package", "storage")
@@ -19,8 +20,12 @@ var storageLog = logrus.WithField("package", "storage")
 type StorageManager struct {
 	imageGenerator *UbuntuImageGenerator
 	client         *http.Client
-	vmDir          string
-	imagesDir      string // Base directory for storing images
+
+	QemuCmd cmd_exec.Command
+	VBoxCmd cmd_exec.Command
+
+	vmDir     string
+	imagesDir string // Base directory for storing images
 }
 
 // NewStorageManager creates a new storage manager instance
@@ -31,6 +36,8 @@ func NewStorageManager(vmDir string) *StorageManager {
 		client:         &http.Client{}, // No timeout - let the queue system handle timeouts
 		imagesDir:      imagesDir,
 		vmDir:          vmDir,
+		QemuCmd:        cmd_exec.GetQemuCmd(),
+		VBoxCmd:        cmd_exec.GetVBoxCmd(),
 	}
 }
 
@@ -40,7 +47,7 @@ func (sm *StorageManager) GetOrDownloadUbuntuImage(ctx context.Context, version,
 	imagePath := sm.getImagePath(version, arch)
 
 	// Check if image already exists
-	if err := sm.ValidateImageExists(imagePath); err == nil {
+	if err := sm.validateImageExists(imagePath); err == nil {
 		storageLog.Infof("Ubuntu image already exists: %s", imagePath)
 		return imagePath, nil
 	}
@@ -90,7 +97,7 @@ func (sm *StorageManager) ConvertImageToVDI(ctx context.Context, imagePath, vmNa
 	storageLog.Infof("Converting image to VDI: %s -> %s", imagePath, vmName)
 
 	// Validate source image exists
-	if err := sm.ValidateImageExists(imagePath); err != nil {
+	if err := sm.validateImageExists(imagePath); err != nil {
 		return "", fmt.Errorf("source image validation failed: %w", err)
 	}
 
@@ -109,12 +116,9 @@ func (sm *StorageManager) ConvertImageToVDI(ctx context.Context, imagePath, vmNa
 	}
 
 	// Execute qemu-img convert command
-	cmd := exec.CommandContext(ctx, "qemu-img", "convert", "-f", "qcow2", "-O", "vdi", imagePath, vdiPath)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	storageLog.Infof("Executing: %s", cmd.String())
-	if err := cmd.Run(); err != nil {
+	args := []string{"convert", "-f", "qcow2", "-O", "vdi", imagePath, vdiPath}
+	_, _, err := sm.QemuCmd.Run(args...)
+	if err != nil {
 		return "", fmt.Errorf("failed to convert image to VDI: %w", err)
 	}
 
@@ -230,7 +234,7 @@ func (sm *StorageManager) GetAvailableUbuntuVersions() []string {
 }
 
 // ValidateImageExists checks if an image file exists and is valid
-func (sm *StorageManager) ValidateImageExists(imagePath string) error {
+func (sm *StorageManager) validateImageExists(imagePath string) error {
 	// Check if file exists
 	if _, err := os.Stat(imagePath); os.IsNotExist(err) {
 		return fmt.Errorf("image file does not exist: %s", imagePath)
@@ -254,7 +258,6 @@ func (sm *StorageManager) ValidateImageExists(imagePath string) error {
 		return fmt.Errorf("image file seems too small: %d bytes", fileInfo.Size())
 	}
 
-	storageLog.Infof("Image validation passed: %s (%d bytes)", imagePath, fileInfo.Size())
 	return nil
 }
 
