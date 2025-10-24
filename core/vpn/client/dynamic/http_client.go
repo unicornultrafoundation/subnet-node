@@ -214,7 +214,28 @@ func (c *HTTPClient) doRequest(
 	}
 
 	if respBody != nil {
-		if err := json.NewDecoder(res.Body).Decode(respBody); err != nil {
+		// Read entire body to allow flexible decoding (supports optional {"data": ...} envelope)
+		responseBytes, err := io.ReadAll(res.Body)
+		if err != nil {
+			return fmt.Errorf("read response body: %w", err)
+		}
+		if len(responseBytes) == 0 {
+			return nil
+		}
+
+		// Try to unwrap {"data": ...} envelope first
+		var envelope struct {
+			Data json.RawMessage `json:"data"`
+		}
+		if err := json.Unmarshal(responseBytes, &envelope); err == nil && len(envelope.Data) > 0 && string(envelope.Data) != "null" {
+			if err := json.Unmarshal(envelope.Data, respBody); err != nil {
+				return fmt.Errorf("decode enveloped response: %w", err)
+			}
+			return nil
+		}
+
+		// Fallback: decode the response directly into the expected body
+		if err := json.Unmarshal(responseBytes, respBody); err != nil {
 			return fmt.Errorf("decode response: %w", err)
 		}
 	}
