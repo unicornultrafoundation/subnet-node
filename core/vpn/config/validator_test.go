@@ -10,11 +10,12 @@ import (
 func createValidConfig() *VPNConfig {
 	return &VPNConfig{
 		// Basic settings
-		Enable:    true,
-		VirtualIP: "10.0.0.1",
-		Subnet:    24,
-		Routes:    []string{"10.0.0.0/24"},
-		MTU:       1500,
+		Enable:        true,
+		VirtualIP:     "10.0.0.1",
+		Subnet:        24,
+		StaticRoutes:  []string{"100.66.0.0/15"},
+		DynamicRoutes: []string{"100.68.0.0/14"},
+		MTU:           1500,
 
 		// Stream pool settings
 		StreamIdleTimeout:     300 * time.Second,
@@ -67,12 +68,12 @@ func TestValidate(t *testing.T) {
 		},
 		{
 			name:    "missing routes",
-			modify:  func(cfg *VPNConfig) { cfg.Routes = []string{} },
+			modify:  func(cfg *VPNConfig) { cfg.DynamicRoutes = []string{} },
 			wantErr: ErrRoutesNotSet,
 		},
 		{
 			name:    "invalid routes",
-			modify:  func(cfg *VPNConfig) { cfg.Routes = []string{"invalid"} },
+			modify:  func(cfg *VPNConfig) { cfg.StaticRoutes = []string{"invalid"} },
 			wantErr: ErrInvalidRoutes,
 		},
 		{
@@ -154,12 +155,12 @@ func TestValidateAllSettings(t *testing.T) {
 			},
 			{
 				name:    "missing routes",
-				modify:  func(cfg *VPNConfig) { cfg.Routes = []string{} },
+				modify:  func(cfg *VPNConfig) { cfg.StaticRoutes = []string{} },
 				wantErr: ErrRoutesNotSet,
 			},
 			{
 				name:    "invalid routes",
-				modify:  func(cfg *VPNConfig) { cfg.Routes = []string{"invalid"} },
+				modify:  func(cfg *VPNConfig) { cfg.StaticRoutes = []string{"invalid"} },
 				wantErr: ErrInvalidRoutes,
 			},
 			{

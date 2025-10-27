@@ -2,6 +2,7 @@ package vpn
 
 import (
 	"context"
+	"fmt"
 	"net/netip"
 	"sync"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/dispatcher"
 	ipmanager "github.com/unicornultrafoundation/subnet-node/core/vpn/ip_manager"
 	vpnnetwork "github.com/unicornultrafoundation/subnet-node/core/vpn/network"
+	"github.com/unicornultrafoundation/subnet-node/core/vpn/utils"
 	"github.com/unicornultrafoundation/subnet-node/firewall"
 )
 
@@ -174,11 +176,21 @@ func (s *Service) teardownStack() {
 
 // buildTUN constructs a TUN service for the provided IP and sets it up.
 func (s *Service) buildTUN(ip string) (*vpnnetwork.TUNService, error) {
+	var routes []string
+	switch utils.GetIPType(ip) {
+	case utils.DYNAMIC_IP_TYPE:
+		routes = s.configService.GetDynamicRoutes()
+	case utils.STATIC_IP_TYPE:
+		routes = s.configService.GetStaticRoutes()
+	default:
+		return nil, fmt.Errorf("invalid IP type: %s", ip)
+	}
+
 	cfg := &vpnnetwork.TUNConfig{
 		MTU:       s.configService.GetMTU(),
 		VirtualIP: ip,
 		Subnet:    s.configService.GetSubnet(),
-		Routes:    s.configService.GetRoutes(),
+		Routes:    routes,
 		Routines:  s.configService.GetRoutines(),
 	}
 	tun := vpnnetwork.NewTUNService(cfg)

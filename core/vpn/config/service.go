@@ -18,7 +18,8 @@ type ConfigService interface {
 	GetMTU() int
 	GetVirtualIP() string
 	GetSubnet() string
-	GetRoutes() []string
+	GetDynamicRoutes() []string
+	GetStaticRoutes() []string
 	GetProtocol() string
 	GetRoutines() int
 	GetTUNDisabled() bool
@@ -101,11 +102,18 @@ func (c *ConfigServiceImpl) GetSubnet() string {
 	return strconv.Itoa(c.vpnConfig.Subnet)
 }
 
-// GetRoutes returns the routes
-func (c *ConfigServiceImpl) GetRoutes() []string {
+// GetStaticRoutes returns the static routes
+func (c *ConfigServiceImpl) GetStaticRoutes() []string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	return c.vpnConfig.Routes
+	return c.vpnConfig.StaticRoutes
+}
+
+// GetDynamicRoutes returns the dynamic routes
+func (c *ConfigServiceImpl) GetDynamicRoutes() []string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.vpnConfig.DynamicRoutes
 }
 
 // GetProtocol returns the protocol
