@@ -82,6 +82,8 @@ func (s *StaticIPManager) checkIP(ctx context.Context) error {
 	}
 
 	if s.ip == "" {
+		log.WithField("ip", s.ip).Warn("IP is empty, switching to dynamic IP")
+		s.NextState()
 		return fmt.Errorf("IP is empty")
 	}
 
