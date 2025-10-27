@@ -262,5 +262,9 @@ func (d *DynamicIPManager) requestIP(ctx context.Context) error {
 		return fmt.Errorf("client request IP failed: %w", err)
 	}
 
+	if utils.GetTokenIPType(uint32(lease.TokenID)) != utils.DYNAMIC_IP_TYPE {
+		return fmt.Errorf("token ID %d is not in dynamic IP range", lease.TokenID)
+	}
+
 	return d.applyLease(ctx, lease)
 }

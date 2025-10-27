@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/client/static"
+	"github.com/unicornultrafoundation/subnet-node/core/vpn/utils"
 )
 
 const (
@@ -42,14 +43,7 @@ func (s *StaticIPManager) Start(ctx context.Context) error {
 }
 
 func (s *StaticIPManager) start(ctx context.Context) error {
-	// Validate IP format before starting
-	if s.ip == "" {
-		log.Warn("static IP is empty, switching to dynamic IP")
-		s.NextState()
-		return nil
-	}
-
-	// Check IP immediately
+	// Validate IP before starting
 	if err := s.checkIP(ctx); err != nil {
 		log.WithField("ip", s.ip).WithError(err).Error("failed to check IP ownership")
 		return err
@@ -89,6 +83,12 @@ func (s *StaticIPManager) checkIP(ctx context.Context) error {
 
 	if s.ip == "" {
 		return fmt.Errorf("IP is empty")
+	}
+
+	if utils.GetIPType(s.ip) != utils.STATIC_IP_TYPE {
+		log.WithField("ip", s.ip).Warn("IP is not a static IP, switching to dynamic IP")
+		s.NextState()
+		return fmt.Errorf("IP is not a static IP")
 	}
 
 	owned, err := s.client.IsIPOwnedByNode(ctx, s.ip)
