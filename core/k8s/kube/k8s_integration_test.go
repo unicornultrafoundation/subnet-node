@@ -60,7 +60,7 @@ func TestNewClientNSNotFound(t *testing.T) {
 	ctx = context.WithValue(ctx, fromctx.CtxKeyKubeClientSet, kubernetes.Interface(kc))
 	ctx = context.WithValue(ctx, fromctx.CtxKeySubnetClientSet, subnetclientset.Interface(ac))
 
-	cl, err := NewClient(ctx, log, ns, "localhost")
+	cl, err := NewClient(ctx, log, ns)
 	require.True(t, kubeErrors.IsNotFound(err))
 	require.Nil(t, cl)
 }
@@ -106,7 +106,7 @@ func TestNewClient(t *testing.T) {
 	}, metav1.CreateOptions{})
 	require.NoError(t, err)
 
-	cl, err := NewClient(ctx, log, ns, "localhost")
+	cl, err := NewClient(ctx, log, ns)
 
 	require.NoError(t, err)
 
