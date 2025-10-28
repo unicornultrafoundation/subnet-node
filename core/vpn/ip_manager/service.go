@@ -39,6 +39,9 @@ type IPManagerImpl struct {
 	ctx      context.Context
 	cancel   context.CancelFunc
 	stopChan chan struct{}
+
+	// dispatcher lifecycle
+	dispatcherOnce sync.Once
 }
 
 func NewIPManager(lc fx.Lifecycle, cfg *config.C, host host.Host, dynamicClient dynamic.DynamicIPClient, staticClient static.StaticIPClient) IPManager {
@@ -127,7 +130,9 @@ func (i *IPManagerImpl) Stop(ctx context.Context) error {
 	defer i.mu.Unlock()
 
 	// Cancel the manager context
-	i.cancel()
+	if i.cancel != nil {
+		i.cancel()
+	}
 	i.ctx = nil
 	i.cancel = nil
 	close(i.stopChan)
@@ -156,6 +161,8 @@ func (i *IPManagerImpl) start(ctx context.Context, ip string) error {
 	}
 
 	i.stateCh = make(chan IPManagerStateType)
+	// ensure dispatcher is running
+	i.startDispatcher()
 	// Start the new state lifecycle
 	go func() {
 		// Initialize the states
@@ -246,4 +253,48 @@ func (i *IPManagerImpl) isStopped() bool {
 	i.mu.RLock()
 	defer i.mu.RUnlock()
 	return i.stopped
+}
+
+// startDispatcher launches a single goroutine that fans out IP updates to observers
+func (i *IPManagerImpl) startDispatcher() {
+	i.dispatcherOnce.Do(func() {
+		go func() {
+			for {
+				select {
+				case ip := <-i.ipCh:
+					// broadcast to all observers non-blockingly
+					i.mu.RLock()
+					observers := append([]IPManagerObserver(nil), i.observerList...)
+					i.mu.RUnlock()
+					for _, obs := range observers {
+						obs.SendIP(ip)
+					}
+				case <-i.stopChan:
+					return
+				case <-i.ctx.Done():
+					return
+				}
+			}
+		}()
+	})
+}
+
+// removeObserver removes an observer by id; safe to call concurrently
+func (i *IPManagerImpl) removeObserver(id string) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+
+	// filter slice without changing order
+	dst := i.observerList[:0]
+	for _, o := range i.observerList {
+		// type assert to access id
+		if ob, ok := o.(*observer); ok {
+			if ob.id == id {
+				continue
+			}
+		}
+		dst = append(dst, o)
+	}
+	// allow GC of removed observers
+	i.observerList = append([]IPManagerObserver(nil), dst...)
 }

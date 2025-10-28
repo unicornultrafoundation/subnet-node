@@ -3,7 +3,6 @@ package ipmanager
 import (
 	"fmt"
 	"sync"
-	"time"
 
 	"github.com/google/uuid"
 )
@@ -15,17 +14,19 @@ type IPManagerObserver interface {
 }
 
 type observer struct {
-	ipCh   chan string
-	id     string
-	closed bool
-	mu     sync.RWMutex
+	ipCh    chan string
+	id      string
+	closed  bool
+	mu      sync.RWMutex
+	onClose func(string)
 }
 
-func NewObserver() IPManagerObserver {
+func NewObserver(onClose func(string)) IPManagerObserver {
 	return &observer{
-		ipCh:   make(chan string, 10), // Buffered channel to prevent blocking
-		id:     uuid.New().String(),
-		closed: false,
+		ipCh:    make(chan string, 10), // Buffered channel to prevent blocking
+		id:      uuid.New().String(),
+		closed:  false,
+		onClose: onClose,
 	}
 }
 
@@ -50,6 +51,9 @@ func (o *observer) Close() {
 	if !o.closed {
 		close(o.ipCh)
 		o.closed = true
+		if o.onClose != nil {
+			o.onClose(o.id)
+		}
 	}
 }
 
@@ -64,24 +68,12 @@ func (i *IPManagerImpl) WatchIP() (IPManagerObserver, error) {
 		return nil, fmt.Errorf("IP manager is stopped")
 	}
 
-	observer := NewObserver()
+	observer := NewObserver(func(id string) {
+		// Remove the observer when it is closed
+		i.removeObserver(id)
+	})
 	i.observerList = append(i.observerList, observer)
 	i.mu.Unlock()
-
-	// Start observer goroutine with proper context handling
-	go func() {
-		for {
-			select {
-			case ip := <-i.ipCh:
-				observer.SendIP(ip)
-			case <-i.stopChan:
-				return
-			case <-time.After(30 * time.Second):
-				// Periodic check to prevent goroutine leaks
-				continue
-			}
-		}
-	}()
 
 	return observer, nil
 }
