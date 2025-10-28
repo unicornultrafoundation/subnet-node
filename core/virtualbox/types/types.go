@@ -8,6 +8,12 @@ import (
 type VMStatus string
 
 const (
+	// Poweroff indicates that the VM has been powered off
+	Poweroff VMStatus = "poweroff"
+	// Saved indicates that the VM has been saved
+	Saved VMStatus = "saved"
+	// Aborted indicates that the VM has been aborted
+	Aborted VMStatus = "aborted"
 	// Running indicates the VM is currently executing
 	Running VMStatus = "running"
 	// Stopped indicates that the VM has been stopped
@@ -162,17 +168,15 @@ const (
 
 // Job represents a background job
 type Job struct {
-	ID          string                 `json:"id"`
-	EventType   VMEventType            `json:"event_type"`
-	Status      JobStatus              `json:"status"`
-	Request     map[string]interface{} `json:"request"`
-	Result      map[string]interface{} `json:"result,omitempty"`
-	Error       string                 `json:"error,omitempty"`
-	CreatedAt   time.Time              `json:"created_at"`
-	StartedAt   *time.Time             `json:"started_at,omitempty"`
-	CompletedAt *time.Time             `json:"completed_at,omitempty"`
-	VMID        string                 `json:"vm_id,omitempty"`
-	VMName      string                 `json:"vm_name,omitempty"`
+	ID          string      `json:"id"`
+	EventType   VMEventType `json:"event_type"`
+	Status      JobStatus   `json:"status"`
+	Error       string      `json:"error,omitempty"`
+	CreatedAt   time.Time   `json:"created_at"`
+	StartedAt   *time.Time  `json:"started_at,omitempty"`
+	CompletedAt *time.Time  `json:"completed_at,omitempty"`
+	VMID        string      `json:"vm_id,omitempty"`
+	VMName      string      `json:"vm_name,omitempty"`
 }
 
 // JobCreateResponse represents the response when creating a job

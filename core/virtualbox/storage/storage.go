@@ -19,10 +19,9 @@ var storageLog = logrus.WithField("package", "storage")
 // StorageManager handles image downloads and storage operations
 type StorageManager struct {
 	imageGenerator *UbuntuImageGenerator
-	client         *http.Client
+	httpClient     *http.Client
 
 	QemuCmd cmd_exec.Command
-	VBoxCmd cmd_exec.Command
 
 	vmDir     string
 	imagesDir string // Base directory for storing images
@@ -33,11 +32,10 @@ func NewStorageManager(vmDir string) *StorageManager {
 	imagesDir := filepath.Join(vmDir, "Images")
 	return &StorageManager{
 		imageGenerator: NewUbuntuImageGenerator(),
-		client:         &http.Client{}, // No timeout - let the queue system handle timeouts
+		httpClient:     &http.Client{}, // No timeout - let the queue system handle timeouts
 		imagesDir:      imagesDir,
 		vmDir:          vmDir,
 		QemuCmd:        cmd_exec.GetQemuCmd(),
-		VBoxCmd:        cmd_exec.GetVBoxCmd(),
 	}
 }
 
@@ -162,7 +160,7 @@ func (sm *StorageManager) downloadFile(ctx context.Context, url, outputPath stri
 	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; SubnetNode/1.0)")
 
 	// Execute request
-	resp, err := sm.client.Do(req)
+	resp, err := sm.httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to execute request: %w", err)
 	}
@@ -202,8 +200,8 @@ func (sm *StorageManager) downloadFile(ctx context.Context, url, outputPath stri
 				}
 				downloadedBytes += int64(n)
 
-				// Log progress every 10 seconds or every 10MB
-				if time.Since(lastProgressTime) > 10*time.Second || downloadedBytes%(10*1024*1024) < int64(n) {
+				// Log progress every 20 seconds
+				if time.Since(lastProgressTime) > 20*time.Second {
 					if contentLength > 0 {
 						progress := float64(downloadedBytes) / float64(contentLength) * 100
 						storageLog.Infof("Download progress: %.1f%% (%d/%d bytes)",
@@ -222,15 +220,6 @@ func (sm *StorageManager) downloadFile(ctx context.Context, url, outputPath stri
 			}
 		}
 	}
-}
-
-// GetAvailableUbuntuVersions returns a list of available Ubuntu versions
-func (sm *StorageManager) GetAvailableUbuntuVersions() []string {
-	versions := make([]string, 0, len(sm.imageGenerator.versionToCodename))
-	for version := range sm.imageGenerator.versionToCodename {
-		versions = append(versions, version)
-	}
-	return versions
 }
 
 // ValidateImageExists checks if an image file exists and is valid

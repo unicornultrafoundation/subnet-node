@@ -44,7 +44,6 @@ func (jm *JobManager) CreateJob(ctx context.Context, jobType vbtypes.VMEventType
 		ID:        jobID,
 		EventType: jobType,
 		Status:    vbtypes.JobStatusPending,
-		Request:   request,
 		CreatedAt: time.Now(),
 		VMName:    vmName,
 	}
@@ -85,7 +84,7 @@ func (jm *JobManager) GetJob(ctx context.Context, jobID string) (*vbtypes.Job, e
 
 	if job, exists := jm.jobs[jobID]; exists {
 		// Return a sanitized copy without sensitive data
-		return jm.sanitizeJob(job), nil
+		return job, nil
 	}
 
 	return nil, fmt.Errorf("job not found: %s", jobID)
@@ -138,7 +137,6 @@ func (jm *JobManager) CompleteJob(ctx context.Context, jobID string, vmID string
 	}
 
 	job.Status = vbtypes.JobStatusCompleted
-	job.Result = result
 	job.VMID = vmID
 	now := time.Now()
 	job.CompletedAt = &now
@@ -206,11 +204,10 @@ func (jm *JobManager) ListJobs(ctx context.Context) ([]*vbtypes.Job, error) {
 	jm.mu.RLock()
 	defer jm.mu.RUnlock()
 
-	var jobs []*vbtypes.Job
+	jobs := make([]*vbtypes.Job, 0, len(jm.jobs))
 	for _, job := range jm.jobs {
-		jobs = append(jobs, jm.sanitizeJob(job))
+		jobs = append(jobs, job)
 	}
-
 	return jobs, nil
 }
 
@@ -279,40 +276,4 @@ func (jm *JobManager) startJobCleanup(ctx context.Context) {
 			return
 		}
 	}
-}
-
-// sanitizeJob creates a copy of the job with sensitive data removed from the Request field
-func (jm *JobManager) sanitizeJob(job *vbtypes.Job) *vbtypes.Job {
-	if job == nil {
-		return nil
-	}
-
-	// Create a copy of the job
-	sanitizedJob := &vbtypes.Job{
-		ID:          job.ID,
-		EventType:   job.EventType,
-		Status:      job.Status,
-		Result:      job.Result,
-		Error:       job.Error,
-		CreatedAt:   job.CreatedAt,
-		StartedAt:   job.StartedAt,
-		CompletedAt: job.CompletedAt,
-		VMID:        job.VMID,
-		VMName:      job.VMName,
-	}
-
-	// Sanitize the Request field by removing sensitive data
-	if job.Request != nil {
-		sanitizedRequest := make(map[string]interface{})
-		for key, value := range job.Request {
-			// Skip sensitive fields
-			if key == "password" || key == "username" || key == "token" || key == "secret" || key == "key" {
-				continue
-			}
-			sanitizedRequest[key] = value
-		}
-		sanitizedJob.Request = sanitizedRequest
-	}
-
-	return sanitizedJob
 }

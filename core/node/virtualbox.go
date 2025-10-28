@@ -15,7 +15,12 @@ func VirtualBoxService(lc fx.Lifecycle, cfg *config.C, ds datastore.Datastore) (
 		return nil, nil
 	}
 
-	service, err := virtualbox.NewService(ds)
+	vboxConfig, err := virtualbox.GetVirtualBoxConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	service, err := virtualbox.NewService(ds, vboxConfig)
 	if err != nil {
 		return nil, err
 	}

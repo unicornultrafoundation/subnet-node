@@ -172,7 +172,7 @@ func (s *VirtualboxService) performCreateVMFromImage(ctx context.Context, req vb
 	serviceLog.Infof("Creating VM from image: %s", req.Name)
 
 	// Initialize storage manager
-	osStorage := storage.NewStorageManager(s.vmDir)
+	osStorage := storage.NewStorageManager(s.cfg.ImagesDir)
 	arch := runtime.GOARCH
 
 	// Get or create VDI file
@@ -187,21 +187,15 @@ func (s *VirtualboxService) performCreateVMFromImage(ctx context.Context, req vb
 		return nil, fmt.Errorf("failed to generate cloud-init ISO: %w", err)
 	}
 
-	serviceLog.Infof("VDI path: %s", vdiPath)
-	serviceLog.Infof("Cloud-init ISO: %s", cloudInitISO)
-
 	// Validate system resources
-	serviceLog.Infof("Validating system resources...")
 	if err := s.validateResources(ctx, req.CPUCores, req.MemoryMB, req.DiskSizeGB); err != nil {
 		return nil, fmt.Errorf("resource validation failed: %w", err)
 	}
-	serviceLog.Infof("Resource validation passed")
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	// Create VM without OS type
-	serviceLog.Infof("Creating VM without OS type: %s", req.Name)
 	if err := s.vboxExec.CreateVMWithoutOS(req.Name); err != nil {
 		return nil, fmt.Errorf("failed to create VM without OS: %w", err)
 	}
@@ -281,7 +275,7 @@ func (s *VirtualboxService) performCreateVMFromImage(ctx context.Context, req vb
 	}
 
 	// Create VM directory
-	vmFolder := filepath.Join(s.vmDir, req.Name)
+	vmFolder := filepath.Join(s.cfg.BaseFolder, req.Name)
 	serviceLog.Infof("VM directory: %s", vmFolder)
 
 	// Set up SSH port forwarding

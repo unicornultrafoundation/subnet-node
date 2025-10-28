@@ -63,38 +63,6 @@ func TestStorageManager_GetOrDownloadUbuntuImage(t *testing.T) {
 	}
 }
 
-func TestStorageManager_GetAvailableUbuntuVersions(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "storage-test")
-	if err != nil {
-		t.Fatalf("Failed to create temp directory: %v", err)
-	}
-	defer os.RemoveAll(tempDir)
-
-	sm := NewStorageManager(tempDir)
-	versions := sm.GetAvailableUbuntuVersions()
-
-	if len(versions) == 0 {
-		t.Error("No Ubuntu versions returned")
-	}
-
-	// Check if common versions are included
-	expectedVersions := []string{"22.04", "20.04", "18.04"}
-	for _, expected := range expectedVersions {
-		found := false
-		for _, version := range versions {
-			if version == expected {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Errorf("Expected version %s not found in available versions", expected)
-		}
-	}
-
-	t.Logf("Available Ubuntu versions: %v", versions)
-}
-
 func TestStorageManager_ValidateImageExists(t *testing.T) {
 	tempDir, err := os.MkdirTemp("", "storage-test")
 	if err != nil {

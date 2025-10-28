@@ -21,7 +21,10 @@ type Command interface {
 var (
 	// Verbose toggles the library in verbose execution mode.
 	Verbose bool
-
+	// ErrMachineExist holds the error message when the machine already exists.
+	ErrMachineExist = errors.New("machine already exists")
+	// ErrMachineNotExist holds the error message when the machine does not exist.
+	ErrMachineNotExist = errors.New("machine does not exist")
 	// ErrCommandNotFound holds the error message when the VBoxManage commands was not found.
 	ErrCommandNotFound = errors.New("command not found")
 )

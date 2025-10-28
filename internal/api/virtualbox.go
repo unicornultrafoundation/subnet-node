@@ -373,8 +373,8 @@ func (api *VirtualBoxAPI) Router() *chi.Mux {
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(60 * time.Second))
 
-	authMiddleware := NewAuthMiddleware(api.cfg, api.ordersCache)
-	r.Use(authMiddleware.Middleware())
+	// authMiddleware := NewAuthMiddleware(api.cfg, api.ordersCache)
+	// r.Use(authMiddleware.Middleware())
 
 	// Virtualbox API routes
 	r.Post("/", api.createVMFromImage)

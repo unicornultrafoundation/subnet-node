@@ -7,7 +7,6 @@ import (
 	"net"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"regexp"
 	"runtime"
 	"strconv"
@@ -22,8 +21,6 @@ import (
 	"github.com/ipfs/go-datastore/query"
 
 	"github.com/sirupsen/logrus"
-	"github.com/unicornultrafoundation/subnet-node/common/fsutil"
-	"github.com/unicornultrafoundation/subnet-node/config"
 	"github.com/unicornultrafoundation/subnet-node/core/node/resource"
 	"github.com/unicornultrafoundation/subnet-node/core/virtualbox/ssh_connection"
 	vbtypes "github.com/unicornultrafoundation/subnet-node/core/virtualbox/types"
@@ -33,7 +30,7 @@ var serviceLog = logrus.WithField("service", "virtualbox")
 
 // VirtualboxService implements the Service interface
 type VirtualboxService struct {
-	vmDir      string
+	cfg        VirtualBoxConfig
 	mu         sync.RWMutex
 	vboxExec   *VBoxManageExecutor
 	datastore  datastore.Datastore
@@ -51,40 +48,16 @@ type VirtualboxService struct {
 	orderMapMu   sync.RWMutex
 }
 
-// IsVirtualBoxEnabled checks if VirtualBox service is enabled in the configuration
-func IsVirtualBoxEnabled(cfg *config.C) bool {
-	return cfg.GetBool("virtualbox.enable", false)
-}
-
 // NewService creates a new VirtualBox service
-func NewService(ds datastore.Datastore) (*VirtualboxService, error) {
-
-	// Get VM directory
-	vmDir, err := fsutil.ExpandHome("~/VirtualBox VMs")
-	if err != nil {
-		return nil, fmt.Errorf("failed to expand VM directory path: %w", err)
-	}
-
-	// Ensure the VM directory exists
-	if err := fsutil.DirWritable(vmDir); err != nil {
-		return nil, fmt.Errorf("failed to create VM directory: %w", err)
-	}
-
-	// Ensure the ISOs directory exists
-	isosDir := filepath.Join(vmDir, "ISOs")
-	if err := fsutil.DirWritable(isosDir); err != nil {
-		return nil, fmt.Errorf("failed to create ISOs directory: %w", err)
-	}
-	serviceLog.Infof("Ensured ISOs directory exists at: %s", isosDir)
+func NewService(ds datastore.Datastore, cfg VirtualBoxConfig) (*VirtualboxService, error) {
 
 	// Create SSH server and WebSocket handler
 	sshServer := ssh_connection.NewSSHServer()
 	wsHandler := ssh_connection.NewWebSocketHandler(sshServer, serviceLog)
 
 	service := &VirtualboxService{
-		vmDir:     vmDir,
-		stopChan:  make(chan struct{}),
-		vboxExec:  NewVBoxManageExecutor(vmDir),
+		stopChan: make(chan struct{}),
+		// vboxExec:  NewVBoxManageExecutor(vmDir),
 		datastore: ds,
 
 		sshServer: sshServer,
@@ -217,7 +190,7 @@ func (s *VirtualboxService) GetVM(ctx context.Context, vmId string) (*vbtypes.VM
 		CPUCores:   parseIntOrDefault(vmInfo["cpus"], 1),
 		MemoryMB:   parseIntOrDefault(vmInfo["memory"], 1024),
 		DiskSizeGB: parseIntOrDefault(vmInfo["storagebytes"], 0) / (1024 * 1024 * 1024),
-		VMFolder:   filepath.Join(s.vmDir, name),
+		// VMFolder:   filepath.Join(s.vmDir, name),
 	}
 
 	// Set SSH port if available
@@ -782,8 +755,6 @@ func (s *VirtualboxService) StoreOrderVMMapping(orderId, vmId string) {
 
 	s.orderToVMMap[orderId] = vmId
 
-	fmt.Println("s.orderToVMMap", s.orderToVMMap)
-
 	// Persist to datastore
 	go func() {
 		if err := s.storeOrderMapping(context.Background(), orderId, vmId); err != nil {
@@ -1151,7 +1122,7 @@ func (s *VirtualboxService) performVMSync(ctx context.Context) error {
 				Status:   vmStatus,
 				CPUCores: cpuCores,
 				MemoryMB: memoryMB,
-				VMFolder: filepath.Join(s.vmDir, name),
+				// VMFolder: filepath.Join(s.vmDir, name),
 			}
 
 			// Set SSH port if available
