@@ -1,5 +1,34 @@
-Dockerfile
+# Exclude large or permission-restricted paths from Docker build context
 .git/
-!.git/HEAD
-!.git/refs/
-!.git/packed-refs
+build/
+bin/
+dist/
+
+# IDE/editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Tests and docs (not needed for build)
+test/
+e2e/
+*_test.go
+docs/
+README.md
+
+# Temp
+*.tmp
+*.temp
+__debug_bin*
+
+# Vendor/cache if present
+vendor/
+**/.cache/

@@ -1,0 +1,15 @@
+syntax = "proto3";
+package subnet.k8s.market.v1;
+
+import "gogoproto/gogo.proto";
+
+option go_package = "github.com/unicornultrafoundation/subnet-node/proto/subnet/k8s/market/v1";
+
+// Params is the params for the x/market module
+message Params {
+  uint32 order_max_bids = 1 [
+    (gogoproto.customname) = "OrderMaxBids",
+    (gogoproto.jsontag)    = "order_max_bids",
+    (gogoproto.moretags)   = 'yaml:"order_max_bids"'
+  ];
+}

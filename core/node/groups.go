@@ -235,16 +235,7 @@ func Storage(bcfg *BuildCfg) fx.Option {
 }
 
 func Core(cfg *config.C) fx.Option {
-	return fx.Options(
-		fx.Provide(VPNService),
-		fx.Provide(FirewallService),
-		fx.Provide(PeerService),
-		fx.Provide(BidengineService),
-		fx.Provide(DockerService),
-		fx.Provide(account.EthereumService),
-		fx.Provide(DeployerService),
-		fx.Provide(VirtualBoxService),
-	)
+	return fx.Options()
 }
 
 // IPFS builds a group of fx Options based on the passed BuildCfg
@@ -257,10 +248,55 @@ func Subnet(ctx context.Context, bcfg *BuildCfg) fx.Option {
 	return fx.Options(
 		bcfgOpts,
 		fx.Provide(baseProcess),
-		Identity(cfg),
 		Storage(bcfg),
+		Core(cfg),
+		SubnetBidEngine(bcfg, cfg),
+		SubnetVPN(bcfg, cfg),
+		SubnetDeployer(bcfg, cfg),
+		SubnetK8s(bcfg, cfg),
+	)
+}
+
+func SubnetBidEngine(bcfg *BuildCfg, cfg *config.C) fx.Option {
+	if !cfg.GetBool("bidengine.enable", false) {
+		return fx.Options()
+	}
+
+	return fx.Options(
+		fx.Provide(account.EthereumService),
+		fx.Provide(BidengineService),
+	)
+}
+
+func SubnetVPN(bcfg *BuildCfg, cfg *config.C) fx.Option {
+	if !cfg.GetBool("vpn.enable", false) {
+		return fx.Options()
+	}
+
+	return fx.Options(
+		Identity(cfg),
 		IPNS,
 		Online(bcfg, cfg),
-		Core(cfg),
+		fx.Provide(VPNService),
+	)
+}
+
+func SubnetDeployer(bcfg *BuildCfg, cfg *config.C) fx.Option {
+	if !cfg.GetBool("deployer.enable", false) {
+		return fx.Options()
+	}
+
+	return fx.Options(
+		fx.Provide(DeployerService),
+	)
+}
+
+func SubnetK8s(bcfg *BuildCfg, cfg *config.C) fx.Option {
+	if !cfg.GetBool("deployer.enable", false) {
+		return fx.Options()
+	}
+
+	return fx.Options(
+		fx.Provide(K8sService),
 	)
 }

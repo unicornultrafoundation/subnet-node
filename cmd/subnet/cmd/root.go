@@ -1,0 +1,46 @@
+package cmd
+
+import (
+	logging "github.com/ipfs/go-log/v2"
+	"github.com/sirupsen/logrus"
+	"github.com/spf13/cobra"
+	ninit "github.com/unicornultrafoundation/subnet-node/cmd/init"
+	"github.com/unicornultrafoundation/subnet-node/subnet"
+)
+
+func RootCmd() *cobra.Command {
+	var (
+		configPath string
+		dataPath   string
+		debug      bool
+		pass       string
+	)
+
+	cmd := &cobra.Command{
+		Use:   "subnet-node",
+		Short: "Subnet Node",
+		Long:  "Subnet Node - U2U Subnet Node Service",
+		PersistentPreRun: func(cmd *cobra.Command, args []string) {
+			if debug {
+				logrus.SetLevel(logrus.DebugLevel)
+				logging.SetAllLoggers(logging.LevelDebug)
+			}
+		},
+		Run: func(cmd *cobra.Command, args []string) {
+			subnet.Main(dataPath, &configPath, pass)
+		},
+	}
+
+	cmd.PersistentFlags().StringVarP(&configPath, "config", "c", "", "Path to config file or directory")
+	cmd.PersistentFlags().StringVarP(&dataPath, "datadir", "d", "~/.subnet-node", "Path to data directory")
+	cmd.PersistentFlags().BoolVarP(&debug, "debug", "", false, "Enable debug logging")
+	cmd.PersistentFlags().StringVarP(&pass, "password", "p", "", "Password for the account")
+
+	cmd.AddCommand(versionCmd())
+	cmd.AddCommand(ninit.InitCmd())
+	cmd.AddCommand(configCmd())
+	cmd.AddCommand(accountCmd())
+	cmd.AddCommand(k8sCmd())
+
+	return cmd
+}

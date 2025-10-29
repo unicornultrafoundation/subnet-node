@@ -1,0 +1,16 @@
+syntax = "proto3";
+package subnet.k8s.provider.v1;
+
+import "gogoproto/gogo.proto";
+import "provider/v1/provider.proto";
+
+option go_package = "github.com/unicornultrafoundation/subnet-node/proto/subnet/k8s/provider/v1";
+
+// GenesisState defines the basic genesis state used by provider module
+message GenesisState {
+  repeated Provider providers = 1 [
+    (gogoproto.nullable) = false,
+    (gogoproto.jsontag)  = "providers",
+    (gogoproto.moretags) = "yaml:\"providers\""
+  ];
+}

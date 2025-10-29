@@ -194,7 +194,6 @@ type MockAccountService struct {
 	chainID              *big.Int
 	subnetProvider       *contracts.SubnetProvider
 	subnetProviderAddr   string
-	subnetAppStore       *contracts.SubnetAppStore
 	subnetAppStoreAddr   string
 	subnetIPRegistry     account.IPRegistry
 	subnetIPRegistryAddr string
@@ -207,10 +206,6 @@ func (m *MockAccountService) GetClient() *ethclient.Client {
 
 func (m *MockAccountService) Provider() *contracts.SubnetProvider {
 	return m.subnetProvider
-}
-
-func (m *MockAccountService) AppStore() *contracts.SubnetAppStore {
-	return m.subnetAppStore
 }
 
 func (m *MockAccountService) IPRegistry() account.IPRegistry {
@@ -287,8 +282,6 @@ func createMockAccountServiceForPeer(virtualIP, peerID string) account.Service {
 		chainID:              big.NewInt(1),
 		subnetProvider:       &contracts.SubnetProvider{},
 		subnetProviderAddr:   "0x0000000000000000000000000000000000000002",
-		subnetAppStore:       &contracts.SubnetAppStore{},
-		subnetAppStoreAddr:   "0x0000000000000000000000000000000000000001",
 		subnetIPRegistry:     mockIPRegistry,
 		subnetIPRegistryAddr: "0x0000000000000000000000000000000000000003",
 		providerID:           1,

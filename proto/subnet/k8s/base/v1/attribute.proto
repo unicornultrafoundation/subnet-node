@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package subnet.k8s.base.v1;
+
+import "gogoproto/gogo.proto";
+
+option (gogoproto.goproto_stringer_all) = false;
+option (gogoproto.stringer_all)         = false;
+option go_package                       = "github.com/unicornultrafoundation/subnet-node/proto/subnet/k8s/base/v1";
+
+// Attribute represents key value pair
+message Attribute {
+  option (gogoproto.goproto_getters) = false;
+  string key                         = 1 [(gogoproto.moretags) = "yaml:\"key\""];
+  string value                       = 2 [(gogoproto.moretags) = "yaml:\"value\""];
+}
+
+// PlacementRequirements
+message PlacementRequirements {
+  option (gogoproto.goproto_getters) = false;
+
+  // Attribute list of attributes tenant expects from the provider
+  repeated Attribute attributes = 1 [
+    (gogoproto.nullable)     = false,
+    (gogoproto.castrepeated) = "Attributes",
+    (gogoproto.jsontag)      = "attributes",
+    (gogoproto.moretags)     = "yaml:\"attributes\""
+  ];
+}

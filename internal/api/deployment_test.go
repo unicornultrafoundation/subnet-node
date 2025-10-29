@@ -221,7 +221,6 @@ func TestDeploymentHandler_CreateDeploymentHandler_WithoutAuth(t *testing.T) {
 	requestBody := types.DeploymentRequest{
 		OrderID:   "123",
 		Requester: "0x1234567890123456789012345678901234567890",
-		TTL:       60,
 	}
 
 	bodyBytes, _ := json.Marshal(requestBody)
@@ -316,7 +315,6 @@ func TestDeploymentHandler_CreateDeploymentHandler(t *testing.T) {
 	requestBody := types.DeploymentRequest{
 		OrderID:   "123",
 		Requester: ownerAddress,
-		TTL:       60,
 	}
 
 	bodyBytes, _ := json.Marshal(requestBody)

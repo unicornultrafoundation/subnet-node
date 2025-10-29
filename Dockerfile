@@ -1,5 +1,5 @@
 # Stage 1: Build the Subnet binary
-FROM golang:1.23 AS builder
+FROM golang:1.24 AS builder
 
 # Set the working directory inside the container
 WORKDIR /app
@@ -24,11 +24,17 @@ WORKDIR /root
 
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y \
-    ca-certificates && \
+    ca-certificates hwdata && \
     rm -rf /var/lib/apt/lists/*
 
 # Copy the binary from the builder stage
 COPY --from=builder /app/subnet-node ./subnet
+
+# Make the binary executable
+RUN chmod +x ./subnet
+
+# Add the binary to PATH
+ENV PATH="/root:$PATH"
 
 # Copy default configuration (optional)
 # COPY config.yaml ./config.yaml

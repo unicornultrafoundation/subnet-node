@@ -421,7 +421,6 @@ func (h *DeploymentHandler) createDeploymentHandler(w http.ResponseWriter, r *ht
 		OrderID:   req.OrderID,
 		Manifest:  req.Manifest,
 		Requester: userAddress,
-		TTL:       2592000,
 	})
 	if err != nil {
 		h.sendErrorResponse(w, err.Error(), http.StatusInternalServerError)

@@ -1,0 +1,49 @@
+syntax = "proto3";
+package subnet.k8s.provider.v1;
+
+import "gogoproto/gogo.proto";
+import "google/api/annotations.proto";
+import "utils/query/pagination.proto";
+import "provider/v1/provider.proto";
+
+option go_package = "github.com/unicornultrafoundation/subnet-node/proto/subnet/k8s/provider/v1";
+
+// Query defines the gRPC querier service
+service Query {
+  // Providers queries providers
+  rpc Providers(QueryProvidersRequest) returns (QueryProvidersResponse) {
+    option (google.api.http).get = "/subnet/provider/v1beta3/providers";
+  }
+
+  // Provider queries provider details
+  rpc Provider(QueryProviderRequest) returns (QueryProviderResponse) {
+    option (google.api.http).get = "/subnet/provider/v1beta3/providers/{owner}";
+  }
+}
+
+// QueryProvidersRequest is request type for the Query/Providers RPC method
+message QueryProvidersRequest {
+  utils.query.PageRequest pagination = 1;
+}
+
+// QueryProvidersResponse is response type for the Query/Providers RPC method
+message QueryProvidersResponse {
+  repeated Provider providers = 1 [
+    (gogoproto.nullable)     = false,
+    (gogoproto.castrepeated) = "Providers"
+  ];
+
+  utils.query.PageResponse pagination = 2;
+}
+
+// QueryProviderRequest is request type for the Query/Provider RPC method
+message QueryProviderRequest {
+  string owner = 1;
+}
+
+// QueryProviderResponse is response type for the Query/Provider RPC method
+message QueryProviderResponse {
+  Provider provider = 1 [
+    (gogoproto.nullable) = false
+  ];
+}

@@ -1,0 +1,33 @@
+syntax = "proto3";
+package subnet.k8s.deployment.v1;
+
+import "gogoproto/gogo.proto";
+import "deployment/v1/deployment.proto";
+import "deployment/v1/group.proto";
+import "deployment/v1/params.proto";
+
+option go_package = "github.com/unicornultrafoundation/subnet-node/proto/subnet/k8s/deployment/v1";
+
+// GenesisDeployment defines the basic genesis state used by deployment module
+message GenesisDeployment {
+  Deployment deployment = 1 [
+    (gogoproto.nullable) = false,
+    (gogoproto.jsontag)  = "deployment",
+    (gogoproto.moretags) = "yaml:\"deployment\""
+  ];
+
+  repeated Group groups = 2 [
+    (gogoproto.nullable) = false,
+    (gogoproto.jsontag)  = "groups",
+    (gogoproto.moretags) = "yaml:\"groups\""
+  ];
+}
+
+// GenesisState stores slice of genesis deployment instance
+message GenesisState {
+  repeated GenesisDeployment deployments = 1 [
+    (gogoproto.nullable) = false,
+    (gogoproto.jsontag)  = "deployments",
+    (gogoproto.moretags) = "yaml:\"deployments\""
+  ];
+}
