@@ -42,6 +42,7 @@ import (
 // Client interface includes cluster client
 type Client interface {
 	cluster.Client
+	SetVirtualIP(ip string)
 }
 
 var _ Client = (*client)(nil)
@@ -68,7 +69,7 @@ func wrapKubeCall[T any](label string, fn func() (T, error)) (T, error) {
 
 // NewClient returns new Kubernetes Client instance with provided logger, host and ns. Returns error in-case of failure
 // configPath may be the empty string
-func NewClient(ctx context.Context, log *logrus.Logger, ns string, virtualIP string) (Client, error) {
+func NewClient(ctx context.Context, log *logrus.Logger, ns string) (Client, error) {
 	kubecfg, err := fromctx.KubeConfigFromCtx(ctx)
 	if err != nil {
 		return nil, err
@@ -98,7 +99,6 @@ func NewClient(ctx context.Context, log *logrus.Logger, ns string, virtualIP str
 		ns:                ns,
 		log:               log,
 		kubeContentConfig: kubecfg,
-		virtualIP:         virtualIP,
 	}
 
 	return cl, nil
@@ -1269,4 +1269,8 @@ func (c *client) ScaleServices(ctx context.Context, leaseID mtypes.LeaseID, serv
 	}
 
 	return nil
+}
+
+func (c *client) SetVirtualIP(ip string) {
+	c.virtualIP = ip
 }

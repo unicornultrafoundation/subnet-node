@@ -16,6 +16,7 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/core/account"
 	"github.com/unicornultrafoundation/subnet-node/core/k8s"
 	"github.com/unicornultrafoundation/subnet-node/core/k8s/kube"
+	ipmanager "github.com/unicornultrafoundation/subnet-node/core/vpn/ip_manager"
 
 	kubeinventory "github.com/unicornultrafoundation/subnet-node/core/k8s/kube/operators/clients/inventory"
 	cfromctx "github.com/unicornultrafoundation/subnet-node/core/k8s/types/v1/fromctx"
@@ -29,7 +30,7 @@ import (
 )
 
 // DeployerService provides a lifecycle-managed Deployer service
-func K8sService(lc fx.Lifecycle, cfg *config.C, account *account.AccountService, bidengine *bidengine.BidEngine) (k8s.Service, error) {
+func K8sService(lc fx.Lifecycle, cfg *config.C, account *account.AccountService, bidengine *bidengine.BidEngine, ipManager ipmanager.IPManager) (k8s.Service, error) {
 	if !cfg.GetBool("deployer.enable", false) {
 		return nil, nil
 	}
@@ -87,7 +88,7 @@ func K8sService(lc fx.Lifecycle, cfg *config.C, account *account.AccountService,
 		_ = group.Wait()
 	}()
 
-	client, err := kube.NewClient(ctx, logger, "subnet-services", cfg.GetString("vpn.virtual_ip", "localhost"))
+	client, err := kube.NewClient(ctx, logger, "subnet-services")
 	if err != nil {
 		return nil, err
 	}
@@ -105,11 +106,43 @@ func K8sService(lc fx.Lifecycle, cfg *config.C, account *account.AccountService,
 		return nil, err
 	}
 
+	var observer ipmanager.IPManagerObserver
+	if ipManager != nil {
+		observer, err = ipManager.WatchIP()
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		observer = nil
+		logger.Warn("No IP manager provided, consider enabling the VPN to expose the deployment services")
+	}
+	stopCh := make(chan struct{})
+
 	lc.Append(fx.Hook{
 		OnStart: func(_ context.Context) error {
+			// start watching for IP updates
+			if observer != nil {
+				go func() {
+					for {
+						select {
+						case ip := <-observer.GetChannel():
+							// Update the virtual IP in the client
+							client.SetVirtualIP(ip)
+						case <-ctx.Done():
+							return
+						case <-stopCh:
+							return
+						}
+					}
+				}()
+			}
 			return nil
 		},
 		OnStop: func(_ context.Context) error {
+			close(stopCh)
+			if observer != nil {
+				observer.Close()
+			}
 			return service.Close()
 		},
 	})

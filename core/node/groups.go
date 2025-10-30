@@ -12,6 +12,12 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/config"
 	"github.com/unicornultrafoundation/subnet-node/core/account"
 	"github.com/unicornultrafoundation/subnet-node/core/node/libp2p"
+	"github.com/unicornultrafoundation/subnet-node/core/vpn/client/dynamic"
+	"github.com/unicornultrafoundation/subnet-node/core/vpn/client/static"
+	vpnconfig "github.com/unicornultrafoundation/subnet-node/core/vpn/config"
+	"github.com/unicornultrafoundation/subnet-node/core/vpn/discovery"
+	"github.com/unicornultrafoundation/subnet-node/core/vpn/dispatcher"
+	ipmanager "github.com/unicornultrafoundation/subnet-node/core/vpn/ip_manager"
 	"github.com/unicornultrafoundation/subnet-node/p2p"
 	"go.uber.org/fx"
 )
@@ -235,7 +241,9 @@ func Storage(bcfg *BuildCfg) fx.Option {
 }
 
 func Core(cfg *config.C) fx.Option {
-	return fx.Options()
+	return fx.Options(
+		fx.Provide(account.EthereumService),
+	)
 }
 
 // IPFS builds a group of fx Options based on the passed BuildCfg
@@ -263,7 +271,6 @@ func SubnetBidEngine(bcfg *BuildCfg, cfg *config.C) fx.Option {
 	}
 
 	return fx.Options(
-		fx.Provide(account.EthereumService),
 		fx.Provide(BidengineService),
 	)
 }
@@ -278,6 +285,38 @@ func SubnetVPN(bcfg *BuildCfg, cfg *config.C) fx.Option {
 		IPNS,
 		Online(bcfg, cfg),
 		fx.Provide(VPNService),
+		fx.Provide(FirewallService),
+		fx.Provide(ipmanager.NewIPManager),
+		fx.Provide(
+			fx.Annotate(
+				dynamic.NewHTTPClient,
+				fx.As(new(dynamic.DynamicIPClient)),
+			),
+		),
+		fx.Provide(
+			fx.Annotate(
+				static.NewOnchainClient,
+				fx.As(new(static.StaticIPClient)),
+			),
+		),
+		fx.Provide(
+			fx.Annotate(
+				vpnconfig.NewConfigService,
+				fx.As(new(vpnconfig.ConfigService)),
+			),
+		),
+		fx.Provide(
+			fx.Annotate(
+				discovery.NewDiscoveryService,
+				fx.As(new(discovery.DiscoveryService)),
+			),
+		),
+		fx.Provide(
+			fx.Annotate(
+				dispatcher.NewDispatcher,
+				fx.As(new(dispatcher.DispatcherService)),
+			),
+		),
 	)
 }
 

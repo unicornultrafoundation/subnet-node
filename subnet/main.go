@@ -48,6 +48,8 @@ func run(repoPath string, configPath *string, pass string) error {
 
 	defer r.Close()
 
+	r.Config().CatchHUP(context.Background())
+
 	settings := r.Config().Settings
 
 	if pass != "" {

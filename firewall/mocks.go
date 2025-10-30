@@ -41,6 +41,10 @@ func (mf *MockFirewall) AddNetwork(network netip.Prefix) error {
 	return nil
 }
 
+func (mf *MockFirewall) RemoveNetwork(network netip.Prefix) error {
+	return nil
+}
+
 func (mf *MockFirewall) Drop(fp Packet, incoming bool, localCache ConntrackCache) error {
 	return nil
 }

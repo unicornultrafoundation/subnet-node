@@ -75,10 +75,19 @@ func (c *VPNConfig) validateBasicSettings() error {
 	}
 
 	// Validate routes
-	if len(c.Routes) == 0 {
+	if len(c.StaticRoutes) == 0 {
 		return ErrRoutesNotSet
 	} else {
-		for _, route := range c.Routes {
+		for _, route := range c.StaticRoutes {
+			if _, _, err := net.ParseCIDR(route); err != nil {
+				return ErrInvalidRoutes
+			}
+		}
+	}
+	if len(c.DynamicRoutes) == 0 {
+		return ErrRoutesNotSet
+	} else {
+		for _, route := range c.DynamicRoutes {
 			if _, _, err := net.ParseCIDR(route); err != nil {
 				return ErrInvalidRoutes
 			}

@@ -9,6 +9,7 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/core/protocol"
 )
 
 // extractPeerID extracts the peer ID from a stream ID (format: peerID/queueID)
@@ -40,7 +41,7 @@ func (d *Dispatcher) getOrCreateStreamWithID(ctx context.Context, peerID peer.ID
 	}
 
 	// Create a new stream
-	stream, err := d.streamService.CreateNewVPNStream(ctx, peerID)
+	stream, err := d.createNewStream(ctx, peerID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create new VPN stream: %w", err)
 	}
@@ -50,6 +51,14 @@ func (d *Dispatcher) getOrCreateStreamWithID(ctx context.Context, peerID peer.ID
 	d.streams.Store(streamID, stream)
 	d.lastUsed.Store(streamID, now)
 
+	return stream, nil
+}
+
+func (d *Dispatcher) createNewStream(ctx context.Context, peerID peer.ID) (network.Stream, error) {
+	stream, err := d.peerHost.NewStream(ctx, peerID, protocol.ID(d.configService.GetProtocol()))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create new stream: %w", err)
+	}
 	return stream, nil
 }
 

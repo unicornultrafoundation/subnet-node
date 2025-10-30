@@ -12,6 +12,8 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/firewall"
 )
 
+var inlog = logrus.WithField("service", "vpn-inbound")
+
 // InboundConfig contains configuration for the inbound packet service
 type InboundConfig struct {
 	// MTU for the TUN interface
@@ -26,24 +28,18 @@ type InboundPacketService struct {
 	tunService *TUNService
 	// Configuration
 	config *InboundConfig
-	// Logger
-	logger *logrus.Entry
 	// Firewall instance
 	firewall firewall.FirewallInterface
 }
 
 // NewInboundPacketService creates a new inbound packet service
 func NewInboundPacketService(tunService *TUNService, configService vpnconfig.ConfigService, firewall firewall.FirewallInterface) *InboundPacketService {
-	// Create a new logger
-	logger := logrus.WithField("service", "vpn-inbound")
-
 	return &InboundPacketService{
 		tunService: tunService,
 		config: &InboundConfig{
 			MTU:            configService.GetMTU(),
 			ctCacheTimeout: configService.GetConntrackCacheTimeout(),
 		},
-		logger:   logger,
 		firewall: firewall,
 	}
 }
@@ -54,11 +50,11 @@ func (s *InboundPacketService) HandleStream(stream network.Stream) {
 
 	// Get the peer ID
 	peer := stream.Conn().RemotePeer().String()
-	s.logger.WithField("peer", peer).Debug("New VPN stream established")
+	inlog.WithField("peer", peer).Debug("New VPN stream established")
 
 	// Ensure the TUN device is set up
 	if s.tunService.device == nil {
-		s.logger.WithField("peer", peer).Error("TUN device not set up")
+		inlog.WithField("peer", peer).Error("TUN device not set up")
 		return
 	}
 
@@ -75,9 +71,9 @@ func (s *InboundPacketService) HandleStream(stream network.Stream) {
 		_, err := io.ReadAtLeast(stream, combinedBuf[:4], 4)
 		if err != nil {
 			if err != io.EOF {
-				s.logger.WithError(err).WithField("peer", peer).Error("Error reading packet length")
+				inlog.WithError(err).WithField("peer", peer).Error("Error reading packet length")
 			} else {
-				s.logger.WithField("peer", peer).Debug("Stream closed by peer")
+				inlog.WithField("peer", peer).Debug("Stream closed by peer")
 			}
 			return
 		}
@@ -85,7 +81,7 @@ func (s *InboundPacketService) HandleStream(stream network.Stream) {
 		// Parse the packet length
 		packetLength := binary.BigEndian.Uint32(combinedBuf[:4])
 		if packetLength == 0 || packetLength > uint32(s.config.MTU) {
-			s.logger.WithField("length", packetLength).WithField("peer", peer).Error("Invalid packet length")
+			inlog.WithField("length", packetLength).WithField("peer", peer).Error("Invalid packet length")
 			return
 		}
 
@@ -93,9 +89,9 @@ func (s *InboundPacketService) HandleStream(stream network.Stream) {
 		_, err = io.ReadFull(stream, combinedBuf[4:4+packetLength])
 		if err != nil {
 			if err != io.EOF {
-				s.logger.WithError(err).WithField("peer", peer).Error("Error reading packet data")
+				inlog.WithError(err).WithField("peer", peer).Error("Error reading packet data")
 			} else {
-				s.logger.WithField("peer", peer).Debug("Unexpected EOF while reading packet")
+				inlog.WithField("peer", peer).Debug("Unexpected EOF while reading packet")
 			}
 			return
 		}
@@ -105,7 +101,7 @@ func (s *InboundPacketService) HandleStream(stream network.Stream) {
 		packetCopy := make([]byte, packetLength)
 		copy(packetCopy, combinedBuf[4:4+packetLength])
 
-		s.processInboundPacket(packetCopy, fwPacket, peer, ctCache.Get(s.logger.Logger))
+		s.processInboundPacket(packetCopy, fwPacket, peer, ctCache.Get(inlog.Logger))
 	}
 }
 
@@ -114,7 +110,7 @@ func (s *InboundPacketService) processInboundPacket(packet []byte, fwPacket *fir
 	// Parse the packet
 	err := utils.ParsePacket(packet, true, fwPacket)
 	if err != nil {
-		s.logger.WithError(err).Error("Error while parsing inbound packet")
+		inlog.WithError(err).Error("Error while parsing inbound packet")
 		return
 	}
 
@@ -122,7 +118,7 @@ func (s *InboundPacketService) processInboundPacket(packet []byte, fwPacket *fir
 	if s.firewall != nil {
 		err := s.firewall.Drop(*fwPacket, true, conntrackCache)
 		if err != nil {
-			s.logger.WithFields(logrus.Fields{
+			inlog.WithFields(logrus.Fields{
 				"error": err,
 				"peer":  peerID,
 				"port":  fwPacket.RemotePort,
@@ -158,7 +154,7 @@ func (s *InboundPacketService) processInboundPacket(packet []byte, fwPacket *fir
 	// Write the packet to the selected writer
 	_, err = writer.Write(packet)
 	if err != nil {
-		s.logger.WithError(err).Error("Failed to write packet to TUN device")
+		inlog.WithError(err).Error("Failed to write packet to TUN device")
 		return
 	}
 }
@@ -166,4 +162,9 @@ func (s *InboundPacketService) processInboundPacket(packet []byte, fwPacket *fir
 // Close closes the inbound packet service
 func (s *InboundPacketService) Close() error {
 	return nil
+}
+
+// SetTUNService sets the TUN service
+func (s *InboundPacketService) SetTUNService(tunService *TUNService) {
+	s.tunService = tunService
 }

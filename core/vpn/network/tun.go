@@ -103,7 +103,12 @@ func (s *TUNService) SetupTUN() error {
 		s.readers[i] = reader
 	}
 
-	log.Infof("TUN interface created with name %s", device.Name())
+	log.
+		WithField("name", device.Name()).
+		WithField("cidr", cidr).
+		WithField("readers", len(s.readers)).
+		WithField("mtu", s.config.MTU).
+		Info("TUN interface created")
 
 	return nil
 }
