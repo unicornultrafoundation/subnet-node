@@ -36,3 +36,24 @@ func VirtualBoxService(lc fx.Lifecycle, cfg *config.C, ds datastore.Datastore) (
 
 	return service, nil
 }
+
+// VirtualBoxService provides a lifecycle-managed VirtualBox service
+func VirtualBoxServiceV2(lc fx.Lifecycle, cfg *config.C, ds datastore.Datastore) (virtualbox.IVirtualboxService, error) {
+	if !cfg.GetBool("virtualbox.enable", false) {
+		return nil, nil
+	}
+
+	vboxConfig, err := virtualbox.GetVirtualBoxConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	service := virtualbox.NewServiceV2(ds, vboxConfig)
+	lc.Append(fx.Hook{
+		OnStart: func(ctx context.Context) error {
+			return service.Start(ctx)
+		},
+	})
+
+	return service, nil
+}

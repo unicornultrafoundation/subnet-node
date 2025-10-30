@@ -103,10 +103,8 @@ func (sm *StorageManager) ConvertImageToVDI(ctx context.Context, imagePath, vmNa
 	if err := os.MkdirAll(vmFolder, 0755); err != nil {
 		return "", fmt.Errorf("failed to create VM folder: %w", err)
 	}
-
 	// Create VDI filename in the VM folder
 	vdiPath := filepath.Join(vmFolder, vmName+".vdi")
-
 	// Check if VDI already exists
 	if _, err := os.Stat(vdiPath); err == nil {
 		storageLog.Infof("VDI file already exists: %s", vdiPath)

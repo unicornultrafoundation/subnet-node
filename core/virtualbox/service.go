@@ -770,6 +770,7 @@ func (s *VirtualboxService) StoreOrderVMMapping(orderId, vmId string) {
 
 // GetVMIdByOrderId retrieves the vmId for a given orderId
 func (s *VirtualboxService) GetVMIdByOrderId(orderId string) (string, bool) {
+
 	s.orderMapMu.RLock()
 	defer s.orderMapMu.RUnlock()
 

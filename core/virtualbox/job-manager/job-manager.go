@@ -6,6 +6,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ipfs/go-datastore"
+
+	vbox_service "github.com/unicornultrafoundation/subnet-node/core/virtualbox/service"
+	storage "github.com/unicornultrafoundation/subnet-node/core/virtualbox/storage_v2"
 	vbtypes "github.com/unicornultrafoundation/subnet-node/core/virtualbox/types"
 )
 
@@ -14,26 +18,42 @@ type JobManager struct {
 	requestChannel chan *vbtypes.VMRequest
 
 	jobs map[string]*vbtypes.Job
+
+	orderToVMMap *map[string]string
+	orderMapMu   sync.RWMutex
+
+	datastore datastore.Datastore
+
+	storageManager *storage.ImageStorage
+	vboxService    *vbox_service.VBoxService
+
+	stopChan chan struct{}
 }
 
 // jobManager with 100 request channel buffer
-func NewJobManager() *JobManager {
-	return &JobManager{
+func NewJobManager(storageManager *storage.ImageStorage, vboxService *vbox_service.VBoxService, orderToVMMap *map[string]string, datastore datastore.Datastore) *JobManager {
+
+	jobManager := JobManager{
 		requestChannel: make(chan *vbtypes.VMRequest, 100),
 		jobs:           make(map[string]*vbtypes.Job),
+		orderToVMMap:   orderToVMMap,
+		orderMapMu:     sync.RWMutex{},
+		datastore:      datastore,
+		stopChan:       make(chan struct{}),
+		storageManager: storageManager,
+		vboxService:    vboxService,
 	}
-}
-
-func (jm *JobManager) GetRequestChannel() chan *vbtypes.VMRequest {
-	return jm.requestChannel
+	jobManager.Start(context.Background())
+	return &jobManager
 }
 
 func (jm *JobManager) Start(ctx context.Context) error {
 	go jm.startJobCleanup(ctx)
+	go jm.startWorker(ctx)
 	return nil
 }
 
-func (jm *JobManager) CreateJob(ctx context.Context, jobType vbtypes.VMEventType, request map[string]interface{}, vmName string) (*vbtypes.Job, error) {
+func (jm *JobManager) CreateJob(ctx context.Context, jobType vbtypes.VMEventType, request interface{}, vmName string) (*vbtypes.Job, error) {
 	jm.mu.Lock()
 	defer jm.mu.Unlock()
 

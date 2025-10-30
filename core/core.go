@@ -56,6 +56,7 @@ type SubnetNode struct {
 	Deployer        *deployer.Service             `optional:"true"`
 	K8sDeployer     k8s.Service                   `optional:"true"`
 	VirtualBox      *virtualbox.VirtualboxService `optional:"true"`
+	VirtualBoxV2    virtualbox.IVirtualboxService `optional:"true"`
 
 	Account *account.AccountService `optional:"true"`
 	Peers   *peers.Service          `optional:"true"`

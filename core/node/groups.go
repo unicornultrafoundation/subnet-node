@@ -254,6 +254,7 @@ func Subnet(ctx context.Context, bcfg *BuildCfg) fx.Option {
 		SubnetVPN(bcfg, cfg),
 		SubnetDeployer(bcfg, cfg),
 		SubnetK8s(bcfg, cfg),
+		SubnetVirtualBox(bcfg, cfg),
 	)
 }
 
@@ -298,5 +299,16 @@ func SubnetK8s(bcfg *BuildCfg, cfg *config.C) fx.Option {
 
 	return fx.Options(
 		fx.Provide(K8sService),
+	)
+}
+
+func SubnetVirtualBox(bcfg *BuildCfg, cfg *config.C) fx.Option {
+	if !cfg.GetBool("virtualbox.enable", false) {
+		return fx.Options()
+	}
+
+	return fx.Options(
+		fx.Provide(VirtualBoxService),
+		fx.Provide(VirtualBoxServiceV2),
 	)
 }
