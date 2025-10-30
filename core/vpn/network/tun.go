@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/netip"
+	"os"
 
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/config"
@@ -64,6 +65,10 @@ func NewTUNService(config *TUNConfig) *TUNService {
 // SetupTUN initializes a TUN device using overlay package
 func (s *TUNService) SetupTUN() error {
 	// Create overlay configuration
+	if os.Geteuid() != 0 {
+		return fmt.Errorf("root privileges required to create TUN device. Please run this process as root (e.g., using sudo) or grant CAP_NET_ADMIN and CAP_NET_RAW capabilities")
+	}
+
 	cfg, cidr, err := s.createOverlayConfig()
 	if err != nil {
 		return err

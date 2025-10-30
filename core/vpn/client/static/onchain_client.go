@@ -6,19 +6,19 @@ import (
 	"math/big"
 
 	"github.com/libp2p/go-libp2p/core/host"
-	"github.com/unicornultrafoundation/subnet-node/core/account"
+	"github.com/unicornultrafoundation/subnet-node/core/ethereum"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/utils"
 )
 
 type OnchainClient struct {
-	accountService *account.AccountService
-	peerID         string
+	ethService *ethereum.EthereumService
+	peerID     string
 }
 
 var _ StaticIPClient = (*OnchainClient)(nil)
 
-func NewOnchainClient(accountService *account.AccountService, host host.Host) StaticIPClient {
-	return &OnchainClient{accountService: accountService, peerID: host.ID().String()}
+func NewOnchainClient(eth *ethereum.EthereumService, host host.Host) StaticIPClient {
+	return &OnchainClient{ethService: eth, peerID: host.ID().String()}
 }
 
 func (c *OnchainClient) GetPeerID(ctx context.Context, ip string) (string, error) {
@@ -27,7 +27,7 @@ func (c *OnchainClient) GetPeerID(ctx context.Context, ip string) (string, error
 		return "", fmt.Errorf("invalid IP: %s", ip)
 	}
 
-	return c.accountService.IPRegistry().GetPeer(nil, big.NewInt(int64(tokenID)))
+	return c.ethService.IPRegistry().GetPeer(nil, big.NewInt(int64(tokenID)))
 }
 
 func (c *OnchainClient) IsIPOwnedByNode(ctx context.Context, ip string) (bool, error) {

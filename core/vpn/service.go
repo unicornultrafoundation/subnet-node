@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/netip"
 	"sync"
+	"os"
 
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
@@ -62,6 +63,9 @@ func NewService(ipManager ipmanager.IPManager, configService config.ConfigServic
 }
 
 func (s *Service) Start(ctx context.Context) error {
+    if os.Geteuid() != 0 {
+        return fmt.Errorf("VPN requires elevated privileges to manage TUN. Run as root or grant CAP_NET_ADMIN and CAP_NET_RAW (e.g., sudo setcap cap_net_admin,cap_net_raw+eip <binary>)")
+    }
 	observer, err := s.ipManager.WatchIP()
 	if err != nil {
 		return err

@@ -20,6 +20,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/bidengine"
 	"github.com/unicornultrafoundation/subnet-node/core/account"
+	"github.com/unicornultrafoundation/subnet-node/core/ethereum"
 	"github.com/unicornultrafoundation/subnet-node/core/deployer"
 	"github.com/unicornultrafoundation/subnet-node/core/k8s"
 	"github.com/unicornultrafoundation/subnet-node/core/node/resource"
@@ -57,7 +58,8 @@ type SubnetNode struct {
 	K8sDeployer     k8s.Service                   `optional:"true"`
 	VirtualBox      *virtualbox.VirtualboxService `optional:"true"`
 
-	Account *account.AccountService `optional:"true"`
+    Account   *account.AccountService   `optional:"true"`
+    Ethereum  *ethereum.EthereumService `optional:"true"`
 	Peers   *peers.Service          `optional:"true"`
 
 	// Online

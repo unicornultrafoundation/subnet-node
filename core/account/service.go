@@ -21,6 +21,7 @@ import (
 	signer "github.com/unicornultrafoundation/subnet-node/common/signer"
 	"github.com/unicornultrafoundation/subnet-node/config"
 	"github.com/unicornultrafoundation/subnet-node/core/contracts"
+	"github.com/unicornultrafoundation/subnet-node/core/ethereum"
 	"github.com/unicornultrafoundation/subnet-node/repo"
 	"go.uber.org/fx"
 )
@@ -55,13 +56,9 @@ type AccountService struct {
 
 // ServiceConfig holds configuration for the AccountService
 type ServiceConfig struct {
-	RPCURL               string
-	ChainID              int64
-	SubnetIPRegistryAddr string
-	SubnetProviderAddr   string
-	Password             string
-	ClientTimeout        time.Duration
-	MaxRetries           int
+	Password      string
+	ClientTimeout time.Duration
+	MaxRetries    int
 }
 
 // readPasswordFromFile reads password from a file if the path is provided
@@ -94,25 +91,11 @@ func NewServiceConfig(cfg *config.C) (*ServiceConfig, error) {
 	}
 
 	sc := &ServiceConfig{
-		RPCURL:               cfg.GetString("account.rpc", config.DefaultRPC),
-		ChainID:              int64(cfg.GetInt("account.chainid", config.DefaultChainID)),
-		SubnetIPRegistryAddr: cfg.GetString("apps.subnet_ip_registry", config.DefaultSubnetIP),
-		SubnetProviderAddr:   cfg.GetString("apps.subnet_provider", config.DefaultSubnetProviderAddr),
-		Password:             password,
-		ClientTimeout:        cfg.GetDuration("account.client_timeout", 30*time.Second),
-		MaxRetries:           cfg.GetInt("account.max_retries", 3),
+		Password:      password,
+		ClientTimeout: cfg.GetDuration("account.client_timeout", 30*time.Second),
+		MaxRetries:    cfg.GetInt("account.max_retries", 3),
 	}
 
-	// Validate configuration
-	if sc.RPCURL == "" {
-		return nil, fmt.Errorf("RPC URL cannot be empty")
-	}
-	if sc.ChainID <= 0 {
-		return nil, fmt.Errorf("invalid chain ID: %d", sc.ChainID)
-	}
-	if sc.SubnetIPRegistryAddr == "" {
-		return nil, fmt.Errorf("subnet IP registry address cannot be empty")
-	}
 	if sc.Password == "" {
 		return nil, fmt.Errorf("account password cannot be empty")
 	}
@@ -121,7 +104,7 @@ func NewServiceConfig(cfg *config.C) (*ServiceConfig, error) {
 }
 
 // NewAccountService initializes a new AccountService
-func NewAccountService(cfg *config.C, ks *keystore.KeyStore) (*AccountService, error) {
+func NewAccountService(cfg *config.C, ks *keystore.KeyStore, eth *ethereum.EthereumService) (*AccountService, error) {
 	serviceConfig, err := NewServiceConfig(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("invalid service configuration: %w", err)
@@ -130,46 +113,11 @@ func NewAccountService(cfg *config.C, ks *keystore.KeyStore) (*AccountService, e
 	// Create context for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
 
-	// Create ethclient with timeout
-	client, err := ethclient.DialContext(ctx, serviceConfig.RPCURL)
-	if err != nil {
-		cancel()
-		return nil, fmt.Errorf("failed to connect to RPC endpoint %s: %w", serviceConfig.RPCURL, err)
-	}
-
-	// Validate chain ID
-	chainID := big.NewInt(serviceConfig.ChainID)
-	networkChainID, err := client.ChainID(ctx)
-	if err != nil {
-		cancel()
-		return nil, fmt.Errorf("failed to get network chain ID: %w", err)
-	}
-	if chainID.Cmp(networkChainID) != 0 {
-		log.Warnf("Configured chain ID (%s) differs from network chain ID (%s)", chainID.String(), networkChainID.String())
-	}
-
-	// Initialize IP registry contract
-	subnetIPRegistry, err := contracts.NewSubnetIPRegistry(
-		common.HexToAddress(serviceConfig.SubnetIPRegistryAddr),
-		client,
-	)
-	if err != nil {
-		cancel()
-		return nil, fmt.Errorf("failed to initialize IP registry contract: %w", err)
-	}
-
-	// Initialize provider contract if address is provided
-	var subnetProvider *contracts.SubnetProvider
-	if serviceConfig.SubnetProviderAddr != "" {
-		subnetProvider, err = contracts.NewSubnetProvider(
-			common.HexToAddress(serviceConfig.SubnetProviderAddr),
-			client,
-		)
-		if err != nil {
-			cancel()
-			return nil, fmt.Errorf("failed to initialize provider contract: %w", err)
-		}
-	}
+	// Reuse ethereum service wiring
+	client := eth.GetClient()
+	chainID := eth.GetChainID()
+	subnetIPRegistry := eth.IPRegistry()
+	subnetProvider := eth.Provider()
 
 	// Ensure keystore has at least one account
 	if len(ks.Accounts()) == 0 {
@@ -185,9 +133,9 @@ func NewAccountService(cfg *config.C, ks *keystore.KeyStore) (*AccountService, e
 		client:               client,
 		chainID:              chainID,
 		subnetProvider:       subnetProvider,
-		subnetProviderAddr:   serviceConfig.SubnetProviderAddr,
+		subnetProviderAddr:   eth.ProviderAddr(),
 		subnetIPRegistry:     subnetIPRegistry,
-		subnetIPRegistryAddr: serviceConfig.SubnetIPRegistryAddr,
+		subnetIPRegistryAddr: eth.IPRegistryAddr(),
 		cfg:                  cfg,
 		clientTimeout:        serviceConfig.ClientTimeout,
 		maxRetries:           serviceConfig.MaxRetries,
@@ -228,9 +176,7 @@ func (s *AccountService) registerReloadCallback(cfg *config.C) {
 }
 
 // GetClient retrieves the ethclient instance
-func (s *AccountService) GetClient() *ethclient.Client {
-	return s.client
-}
+func (s *AccountService) GetClient() *ethclient.Client { return s.client }
 
 func (s *AccountService) Provider() *contracts.SubnetProvider {
 	return s.subnetProvider
@@ -414,7 +360,7 @@ func (s *AccountService) SignAndSendTransaction(toAddress string, value *big.Int
 }
 
 // EthereumService provides a lifecycle-managed Ethereum service
-func EthereumService(lc fx.Lifecycle, cfg *config.C, rp repo.Repo) (*AccountService, error) {
+func ServiceFx(lc fx.Lifecycle, cfg *config.C, rp repo.Repo, eth *ethereum.EthereumService) (*AccountService, error) {
 	repoPath := filepath.Clean(rp.Path())
 	ksDir := filepath.Join(repoPath, "keystore")
 
@@ -425,7 +371,7 @@ func EthereumService(lc fx.Lifecycle, cfg *config.C, rp repo.Repo) (*AccountServ
 
 	ks := keystore.NewKeyStore(ksDir, keystore.StandardScryptN, keystore.StandardScryptP)
 
-	service, err := NewAccountService(cfg, ks)
+	service, err := NewAccountService(cfg, ks, eth)
 	if err != nil {
 		return nil, err
 	}
@@ -438,9 +384,6 @@ func EthereumService(lc fx.Lifecycle, cfg *config.C, rp repo.Repo) (*AccountServ
 		OnStop: func(ctx context.Context) error {
 			log.Info("EthereumService stopping...")
 			service.cancel()
-			if service.client != nil {
-				service.client.Close()
-			}
 			log.Info("EthereumService stopped")
 			return nil
 		},

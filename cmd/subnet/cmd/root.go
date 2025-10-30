@@ -41,6 +41,7 @@ func RootCmd() *cobra.Command {
 	cmd.AddCommand(configCmd())
 	cmd.AddCommand(accountCmd())
 	cmd.AddCommand(k8sCmd())
+	cmd.AddCommand(vpnCmd())
 
 	return cmd
 }

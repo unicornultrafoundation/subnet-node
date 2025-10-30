@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/ethereum/go-ethereum/common"
+    gethclient "github.com/ethereum/go-ethereum/ethclient"
 	"github.com/unicornultrafoundation/subnet-node/bidengine/contracts"
 	"github.com/unicornultrafoundation/subnet-node/config"
 	"github.com/unicornultrafoundation/subnet-node/core"
@@ -15,7 +16,14 @@ import (
 func GatewayOption() ServeOption {
 	return func(n *core.SubnetNode, _ net.Listener, mux *http.ServeMux) (*http.ServeMux, error) {
 		cfg := n.Repo.Config()
-		ethclient := n.Account.GetClient()
+        var ethclient *gethclient.Client
+        if n.Account != nil {
+            ethclient = n.Account.GetClient()
+        } else if n.Ethereum != nil {
+            ethclient = n.Ethereum.GetClient()
+        } else {
+            return nil, fmt.Errorf("no Ethereum service available")
+        }
 		bmAddress := common.HexToAddress(cfg.GetString("contracts.bid_market", config.DefaultBidMarketAddr))
 		if bmAddress == (common.Address{}) {
 			return nil, fmt.Errorf("bid market address not found in config")
@@ -34,16 +42,23 @@ func GatewayOption() ServeOption {
 			mux.Handle("/ws/v1/virtualbox/", http.StripPrefix("/ws/v1/virtualbox", virtualBoxAPI.WebSocketRouter()))
 		}
 
-		// Add deployment handler if deployer is enabled (register second with root path)
+        // Add deployment handler if deployer is enabled (register second with root path)
 		if n.Deployer != nil {
 			cfg := n.Repo.Config()
-			ethclient := n.Account.GetClient()
+            var ethclient2 *gethclient.Client
+            if n.Account != nil {
+                ethclient2 = n.Account.GetClient()
+            } else if n.Ethereum != nil {
+                ethclient2 = n.Ethereum.GetClient()
+            } else {
+                return nil, fmt.Errorf("no Ethereum service available")
+            }
 			bmAddress := common.HexToAddress(cfg.GetString("contracts.bid_market", config.DefaultBidMarketAddr))
 			if bmAddress == (common.Address{}) {
 				return nil, fmt.Errorf("bid market address not found in config")
 			}
 
-			bidMarket, err := contracts.NewBidMarketContract(ethclient, bmAddress, nil)
+            bidMarket, err := contracts.NewBidMarketContract(ethclient2, bmAddress, nil)
 			if err != nil {
 				return nil, err
 			}
