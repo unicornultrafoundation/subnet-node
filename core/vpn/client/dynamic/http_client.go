@@ -46,7 +46,7 @@ func NewHTTPClient(cfg *config.C, host host.Host) (DynamicIPClient, error) {
 	}
 	pubkeyString := base64.StdEncoding.EncodeToString(pubkeyBytes)
 
-	serverURL := cfg.GetString("vpn.dhcp_url", "")
+	serverURL := cfg.GetString("vpn.dhcp_url", config.DefaultVPNDHCPURL)
 
 	if serverURL == "" {
 		return nil, fmt.Errorf("vpn.dhcp_url is not configured")

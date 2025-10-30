@@ -113,7 +113,7 @@ func logAndUnwrapFxError(fxAppErr error) error {
 		return nil
 	}
 
-	log.Error("constructing the node: ", fxAppErr)
+    // Avoid double-logging; return a concise error and let the caller decide how to log
 
 	err := fxAppErr
 	for {

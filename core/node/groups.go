@@ -11,6 +11,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/config"
 	"github.com/unicornultrafoundation/subnet-node/core/account"
+	"github.com/unicornultrafoundation/subnet-node/core/ethereum"
 	"github.com/unicornultrafoundation/subnet-node/core/node/libp2p"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/client/dynamic"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn/client/static"
@@ -242,7 +243,7 @@ func Storage(bcfg *BuildCfg) fx.Option {
 
 func Core(cfg *config.C) fx.Option {
 	return fx.Options(
-		fx.Provide(account.EthereumService),
+		fx.Provide(ethereum.ServiceFx),
 	)
 }
 
@@ -271,6 +272,7 @@ func SubnetBidEngine(bcfg *BuildCfg, cfg *config.C) fx.Option {
 	}
 
 	return fx.Options(
+        fx.Provide(account.ServiceFx),
 		fx.Provide(BidengineService),
 	)
 }
@@ -336,6 +338,7 @@ func SubnetK8s(bcfg *BuildCfg, cfg *config.C) fx.Option {
 	}
 
 	return fx.Options(
+        fx.Provide(account.ServiceFx),
 		fx.Provide(K8sService),
 	)
 }
