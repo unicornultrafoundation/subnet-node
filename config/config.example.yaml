@@ -1,56 +1,56 @@
 blockchain:
   rpc_url: "https://rpc.u2u.network"
-  chain_id: 1000  # Unicorn Ultra chain ID
+  chain_id: 1000 # Unicorn Ultra chain ID
 
 contracts:
-  provider: "0x123456789abcdef123456789abcdef123456789a"  # Provider contract address
-  bid_market: "0xabcdef123456789abcdef123456789abcdef1234"  # Bid Market contract address
+  provider: "0x123456789abcdef123456789abcdef123456789a" # Provider contract address
+  bid_market: "0xabcdef123456789abcdef123456789abcdef1234" # Bid Market contract address
 
 bidengine:
   # Bid pricing configuration
-  min_bid_percent: 70  # Minimum bid as a percentage of max price
-  max_bid_percent: 95  # Maximum bid as a percentage of max price
-  price_factor: 1      # General scaling factor for bids
-  min_profit: 1000000000  # Minimum profit in wei (1 Gwei)
-  max_profit: 1000000000000000000  # Maximum profit in wei (1 ETH)
-  
+  min_bid_percent: 70 # Minimum bid as a percentage of max price
+  max_bid_percent: 95 # Maximum bid as a percentage of max price
+  price_factor: 1 # General scaling factor for bids
+  min_profit: 1000000000 # Minimum profit in wei (1 Gwei)
+  max_profit: 1000000000000000000 # Maximum profit in wei (1 ETH)
+
   # Operational parameters
-  max_concurrent_bids: 10      # Maximum number of concurrent bids
-  bid_timeout: "30s"           # Timeout for bid operations
-  order_sync_interval: "30s"   # Interval for syncing orders
-  bid_check_interval: "60s"    # Interval for checking bid status
-  
+  max_concurrent_bids: 10 # Maximum number of concurrent bids
+  bid_timeout: "30s" # Timeout for bid operations
+  order_sync_interval: "30s" # Interval for syncing orders
+  bid_check_interval: "60s" # Interval for checking bid status
+
   # Minimum resource requirements to consider
   min_requirements:
-    cpu_cores: 1       # Minimum CPU cores
-    memory_mb: 1024    # Minimum memory in MB
-    disk_gb: 10        # Minimum disk space in GB
-    gpu_cores: 0       # Minimum GPU cores
-    upload_speed: 0    # Minimum upload speed
-    download_speed: 0  # Minimum download speed
+    cpu_cores: 1 # Minimum CPU cores
+    memory_mb: 1024 # Minimum memory in MB
+    disk_gb: 10 # Minimum disk space in GB
+    gpu_cores: 0 # Minimum GPU cores
+    upload_speed: 0 # Minimum upload speed
+    download_speed: 0 # Minimum download speed
 
   # Resource cost parameters in wei
   resource_cost:
-    cpu_core: 1000000000000000      # 0.001 ETH per CPU core
-    memory_gb: 2000000000000000     # 0.002 ETH per GB of RAM
-    disk_gb: 100000000000000        # 0.0001 ETH per GB of disk
-    gpu_core: 5000000000000000      # 0.005 ETH per GPU core
-    upload_speed: 50000000000000    # 0.00005 ETH per upload speed unit
-    download_speed: 50000000000000  # 0.00005 ETH per download speed unit
+    cpu_core: 1000000000000000 # 0.001 ETH per CPU core
+    memory_gb: 2000000000000000 # 0.002 ETH per GB of RAM
+    disk_gb: 100000000000000 # 0.0001 ETH per GB of disk
+    gpu_core: 5000000000000000 # 0.005 ETH per GPU core
+    upload_speed: 50000000000000 # 0.00005 ETH per upload speed unit
+    download_speed: 50000000000000 # 0.00005 ETH per download speed unit
 
   # Machine type multipliers (denominated in percentage, e.g. 10 means 1.0, 15 means 1.5)
   machine_type_multipliers:
-    shared: 10      # 1.0x multiplier for shared resources
-    vm: 15          # 1.5x multiplier for virtual machines
-    bare_metal: 25  # 2.5x multiplier for bare metal servers
+    shared: 10 # 1.0x multiplier for shared resources
+    vm: 15 # 1.5x multiplier for virtual machines
+    bare_metal: 25 # 2.5x multiplier for bare metal servers
 
   # Bidding strategy
   strategy:
-    min_profit_margin: 0.05    # 5% minimum profit margin
-    max_profit_margin: 0.20    # 20% maximum profit margin
-    competitive_factor: 0.10   # 10% competitive factor
-    market_adjustment: 0.05    # 5% market adjustment
-    
+    min_profit_margin: 0.05 # 5% minimum profit margin
+    max_profit_margin: 0.20 # 20% maximum profit margin
+    competitive_factor: 0.10 # 10% competitive factor
+    market_adjustment: 0.05 # 5% market adjustment
+
     # Resource weights for pricing
     resource_weights:
       cpu: 0.25
@@ -61,10 +61,13 @@ bidengine:
 
 account:
   keystore_path: "./keystore"
-  keystore_password: ""  # Password for keystore file, leave empty to prompt
+  keystore_password: "" # Password for keystore file, leave empty to prompt
 
 logging:
-  level: "info"  # log level: debug, info, warn, error
+  level: "info" # log level: debug, info, warn, error
   format: "text" # log format: text, json
   output: "stdout" # log output: stdout, file
   file_path: "logs/subnet-node.log" # log file path when output is file
+
+virtualbox:
+  enable: false

@@ -24,6 +24,7 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/core/k8s"
 	"github.com/unicornultrafoundation/subnet-node/core/node/resource"
 	"github.com/unicornultrafoundation/subnet-node/core/peers"
+	"github.com/unicornultrafoundation/subnet-node/core/virtualbox"
 	"github.com/unicornultrafoundation/subnet-node/core/vpn"
 	"github.com/unicornultrafoundation/subnet-node/firewall"
 	"github.com/unicornultrafoundation/subnet-node/p2p"
@@ -46,13 +47,15 @@ type SubnetNode struct {
 	Repo repo.Repo
 
 	// Services
-	Peerstore       pstore.Peerstore           `optional:"true"` // storage for other Peer instances
-	RecordValidator record.Validator           `optional:"true"`
-	Resource        *resource.Service          `optional:"true"`
-	VPN             *vpn.Service               `optional:"true"`
-	Firewall        firewall.FirewallInterface `optional:"true"`
-	Deployer        *deployer.Service          `optional:"true"`
-	K8sDeployer     k8s.Service                `optional:"true"`
+
+	Peerstore       pstore.Peerstore              `optional:"true"` // storage for other Peer instances
+	RecordValidator record.Validator              `optional:"true"`
+	Resource        *resource.Service             `optional:"true"`
+	VPN             *vpn.Service                  `optional:"true"`
+	Firewall        firewall.FirewallInterface    `optional:"true"`
+	Deployer        *deployer.Service             `optional:"true"`
+	K8sDeployer     k8s.Service                   `optional:"true"`
+	VirtualBox      *virtualbox.VirtualboxService `optional:"true"`
 
 	Account *account.AccountService `optional:"true"`
 	Peers   *peers.Service          `optional:"true"`

@@ -51,6 +51,46 @@ func SetupWebSocket(w http.ResponseWriter, r *http.Request, logger *logrus.Entry
 	return conn, nil
 }
 
+// Add a helper to setup the websocket connection
+func SetupWebSocketForVirtualBox(w http.ResponseWriter, r *http.Request, logger *logrus.Entry) (*websocket.Conn, error) {
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		logger.WithError(err).Error("Failed to upgrade WebSocket connection")
+		// Return a proper error response instead of letting the handler continue
+		http.Error(w, fmt.Sprintf("WebSocket upgrade failed: %v", err), http.StatusBadRequest)
+		return nil, err
+	}
+
+	logger.Debug("WebSocket connection established for VirtualBox")
+
+	return conn, nil
+}
+
+// SetupWebSocketForMetrics sets up a WebSocket connection specifically for metrics streaming
+// with read deadlines for faster disconnection detection
+func SetupWebSocketForMetrics(w http.ResponseWriter, r *http.Request, logger *logrus.Entry) (*websocket.Conn, error) {
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		logger.WithError(err).Error("Failed to upgrade WebSocket connection")
+		// Return a proper error response instead of letting the handler continue
+		http.Error(w, fmt.Sprintf("WebSocket upgrade failed: %v", err), http.StatusBadRequest)
+		return nil, err
+	}
+
+	// Set up connection with proper read deadline and handlers for faster disconnection detection
+	conn.SetReadLimit(512)                                 // Limit message size
+	conn.SetReadDeadline(time.Now().Add(30 * time.Second)) // Initial read deadline
+
+	// Set up pong handler to reset read deadline
+	conn.SetPongHandler(func(string) error {
+		return conn.SetReadDeadline(time.Now().Add(30 * time.Second))
+	})
+
+	logger.Debug("WebSocket connection established for VirtualBox metrics")
+
+	return conn, nil
+}
+
 // SetupWebSocketWithPingHandler sets up a WebSocket connection with ping handling
 func SetupWebSocketWithPingHandler(w http.ResponseWriter, r *http.Request, logger *logrus.Entry) (*websocket.Conn, error) {
 	conn, err := SetupWebSocket(w, r, logger)
