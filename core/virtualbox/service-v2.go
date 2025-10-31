@@ -23,6 +23,14 @@ type IVirtualboxService interface {
 	GetVMByOrderId(ctx context.Context, orderId string) (*vbtypes.VM, error)
 	GetVMIdByOrderId(orderId string) (string, bool)
 	DeleteVM(ctx context.Context, vmID string) error
+	StartVM(ctx context.Context, vmID string) error
+	UpdateVM(ctx context.Context, vmID string, req vbtypes.VMUpdateRequest) error
+	StopVM(ctx context.Context, vmID string) error
+	PauseVM(ctx context.Context, vmID string) error
+	ResumeVM(ctx context.Context, vmID string) error
+	ResetVM(ctx context.Context, vmID string) error
+	GetJobProgress(ctx context.Context, jobID string) (*vbtypes.Job, error)
+	ListJobs(ctx context.Context) ([]*vbtypes.Job, error)
 }
 
 type virtualboxService struct {
@@ -67,7 +75,6 @@ func (s *virtualboxService) Start(ctx context.Context) error {
 // Add the request into the job manager and return the job id
 // The job manager will handle the request and create the VM in the background
 func (s *virtualboxService) CreateVM(ctx context.Context, req vbtypes.VMCreateFromImageRequest) (*vbtypes.JobCreateResponse, error) {
-	fmt.Println("createVM new flow")
 
 	job, err := s.jobManager.CreateJob(ctx, vbtypes.VMEventCreateVM, req, req.Name)
 	if err != nil {
@@ -80,8 +87,6 @@ func (s *virtualboxService) CreateVM(ctx context.Context, req vbtypes.VMCreateFr
 }
 
 func (s *virtualboxService) GetVM(ctx context.Context, vmID string) (*vbtypes.VM, error) {
-
-	fmt.Println("getVM new flow")
 
 	vm, err := s.vBoxService.GetVM(vmID)
 	if err != nil {
@@ -147,4 +152,41 @@ func (s *virtualboxService) DeleteVM(ctx context.Context, vmID string) error {
 		return fmt.Errorf("failed to delete VM: %w", err)
 	}
 	return nil
+}
+
+func (s *virtualboxService) StartVM(ctx context.Context, vmID string) error {
+
+	err := s.vBoxService.StartVM(vmID)
+	if err != nil {
+		return fmt.Errorf("failed to start VM: %w", err)
+	}
+	return nil
+}
+
+func (s *virtualboxService) UpdateVM(ctx context.Context, vmID string, req vbtypes.VMUpdateRequest) error {
+	return s.vBoxService.UpdateVM(vmID, req.CPUCores, req.MemoryMB, req.DiskSizeGB)
+}
+
+func (s *virtualboxService) StopVM(ctx context.Context, vmID string) error {
+	return s.vBoxService.StopVM(vmID)
+}
+
+func (s *virtualboxService) PauseVM(ctx context.Context, vmID string) error {
+	return s.vBoxService.PauseVM(vmID)
+}
+
+func (s *virtualboxService) ResumeVM(ctx context.Context, vmID string) error {
+	return s.vBoxService.ResumeVM(vmID)
+}
+
+func (s *virtualboxService) ResetVM(ctx context.Context, vmID string) error {
+	return s.vBoxService.ResetVM(vmID)
+}
+
+func (s *virtualboxService) GetJobProgress(ctx context.Context, jobID string) (*vbtypes.Job, error) {
+	return s.jobManager.GetJobProgress(ctx, jobID)
+}
+
+func (s *virtualboxService) ListJobs(ctx context.Context) ([]*vbtypes.Job, error) {
+	return s.jobManager.ListJobs(ctx)
 }

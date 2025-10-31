@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
-	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -704,38 +703,6 @@ func (s *VirtualboxService) syncSSHServerWithRunningVMs(ctx context.Context) err
 
 	serviceLog.Infof("SSHServer sync completed. Registered %d running VMs", len(vms))
 	return nil
-}
-
-// GetSystemInfo gets system information
-func (s *VirtualboxService) GetSystemInfo(ctx context.Context) (*vbtypes.VMSystemInfo, error) {
-	// Get system resources using the direct resource function
-	resourceInfo, err := resource.GetResource()
-	if err != nil {
-		serviceLog.Warnf("Failed to get system resources: %v", err)
-		// Fallback to basic information
-		info := &vbtypes.VMSystemInfo{
-			HostOS:          runtime.GOOS,
-			HostArch:        runtime.GOARCH,
-			AvailableCPUs:   runtime.NumCPU(),
-			AvailableRAMMB:  0,
-			AvailableDiskGB: 0,
-		}
-		return info, nil
-	}
-
-	// Convert resource info to appropriate units
-	availableRAMMB := int(resourceInfo.Memory.Total / (1024 * 1024))          // Convert bytes to MB
-	availableDiskGB := int(resourceInfo.Storage.Total / (1024 * 1024 * 1024)) // Convert bytes to GB
-
-	info := &vbtypes.VMSystemInfo{
-		HostOS:          runtime.GOOS,
-		HostArch:        runtime.GOARCH,
-		AvailableCPUs:   resourceInfo.CPU.Count,
-		AvailableRAMMB:  availableRAMMB,
-		AvailableDiskGB: availableDiskGB,
-	}
-
-	return info, nil
 }
 
 // GetSSHServer returns the SSH server instance

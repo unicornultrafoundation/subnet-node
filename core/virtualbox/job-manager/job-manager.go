@@ -130,6 +130,45 @@ func (jm *JobManager) MarkJobAsFailed(ctx context.Context, jobID string, errorMs
 	return nil
 }
 
+func (jm *JobManager) ListJobs(ctx context.Context) ([]*vbtypes.Job, error) {
+	jm.mu.RLock()
+	defer jm.mu.RUnlock()
+
+	jobs := make([]*vbtypes.Job, 0, len(jm.jobs))
+	for _, job := range jm.jobs {
+		jobs = append(jobs, job)
+	}
+	return jobs, nil
+}
+
+func (jm *JobManager) GetJobProgress(ctx context.Context, jobID string) (*vbtypes.Job, error) {
+	jm.mu.RLock()
+	defer jm.mu.RUnlock()
+
+	job, exists := jm.jobs[jobID]
+	if !exists {
+		return nil, fmt.Errorf("job not found: %s", jobID)
+	}
+	return job, nil
+}
+
+func (jm *JobManager) CompleteJob(ctx context.Context, jobID string, vmID string, result map[string]interface{}) error {
+	jm.mu.Lock()
+	defer jm.mu.Unlock()
+
+	job, exists := jm.jobs[jobID]
+	if !exists {
+		return fmt.Errorf("job not found: %s", jobID)
+	}
+
+	job.Status = vbtypes.JobStatusCompleted
+	job.VMID = vmID
+	now := time.Now()
+	job.CompletedAt = &now
+
+	return nil
+}
+
 // startJobCleanup starts the background job cleanup routine
 func (jm *JobManager) startJobCleanup(ctx context.Context) {
 	ticker := time.NewTicker(1 * time.Hour) // Run every hour

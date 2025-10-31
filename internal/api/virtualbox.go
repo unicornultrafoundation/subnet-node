@@ -47,22 +47,18 @@ func (api *VirtualBoxAPI) Router() *chi.Mux {
 	// r.Use(authMiddleware.Middleware())
 
 	// Virtualbox API routes
-	r.Post("/", api.createVMFromImage)
+	r.Post("/", api.createVMFromExistedImage)
 	r.Get("/{orderId}", api.getVMHandler) // Get specific VM by orderId
 	r.Delete("/{orderId}", api.deleteVMHandler)
 
 	// startVm, stopVm, pauseVm, resumeVm, resetVm
+	// updateVM: it based on orderId
 	r.Post("/{orderId}/start", api.startVMHandler)
 	r.Post("/{orderId}/stop", api.stopVMHandler)
 	r.Post("/{orderId}/pause", api.pauseVMHandler)
 	r.Post("/{orderId}/resume", api.resumeVMHandler)
 	r.Post("/{orderId}/reset", api.resetVMHandler)
 
-	// v2
-	r.Post("/v2/create", api.createVMFromExistedImage)
-	r.Get("/v2/", api.getVMHandlerV2)          // Get all VMs
-	r.Get("/v2/{orderId}", api.getVMHandlerV2) // Get specific VM by orderId
-	r.Delete("/v2/{orderId}", api.deleteVMHandlerV2)
 	// generateSSHToken
 	r.Post("/{orderId}/ssh/token", api.generateSSHTokenHandler)
 
@@ -111,7 +107,7 @@ func (api *VirtualBoxAPI) createVMFromExistedImage(w http.ResponseWriter, r *htt
 	json.NewEncoder(w).Encode(jobResponse)
 }
 
-func (api *VirtualBoxAPI) getVMHandlerV2(w http.ResponseWriter, r *http.Request) {
+func (api *VirtualBoxAPI) getVMHandler(w http.ResponseWriter, r *http.Request) {
 	orderId := chi.URLParam(r, "orderId")
 	if orderId == "" {
 		api.sendErrorResponse(w, "orderId is required", http.StatusBadRequest)
@@ -141,7 +137,7 @@ func (api *VirtualBoxAPI) getVMHandlerV2(w http.ResponseWriter, r *http.Request)
 	}
 }
 
-func (api *VirtualBoxAPI) deleteVMHandlerV2(w http.ResponseWriter, r *http.Request) {
+func (api *VirtualBoxAPI) deleteVMHandler(w http.ResponseWriter, r *http.Request) {
 	orderId := chi.URLParam(r, "orderId")
 	if orderId == "" {
 		api.sendErrorResponse(w, "orderId is required", http.StatusBadRequest)
@@ -166,7 +162,6 @@ func (api *VirtualBoxAPI) deleteVMHandlerV2(w http.ResponseWriter, r *http.Reque
 
 }
 
-// startVMHandler handles POST requests to start a VM
 func (api *VirtualBoxAPI) startVMHandler(w http.ResponseWriter, r *http.Request) {
 	orderId := chi.URLParam(r, "orderId")
 	if orderId == "" {
@@ -174,25 +169,52 @@ func (api *VirtualBoxAPI) startVMHandler(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Get vmId from orderId
-	vmId, exists := api.vboxService.GetVMIdByOrderId(orderId)
+	vmId, exists := api.newVboxService.GetVMIdByOrderId(orderId)
 	if !exists {
 		api.sendErrorResponse(w, "VM not found for this orderId", http.StatusNotFound)
 		return
 	}
 
-	vm, err := api.vboxService.StartVM(r.Context(), vmId)
+	err := api.newVboxService.StartVM(context.Background(), vmId)
 	if err != nil {
 		api.sendErrorResponse(w, fmt.Sprintf("Failed to start VM: %v", err), http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(vm)
 }
 
-// stopVMHandler handles POST requests to stop a VM
+func (api *VirtualBoxAPI) updateVMHandler(w http.ResponseWriter, r *http.Request) {
+	orderId := chi.URLParam(r, "orderId")
+	if orderId == "" {
+		api.sendErrorResponse(w, "orderId is required", http.StatusBadRequest)
+		return
+	}
+
+	var req vbtypes.VMUpdateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		api.sendErrorResponse(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	vmId, exists := api.newVboxService.GetVMIdByOrderId(orderId)
+	if !exists {
+		api.sendErrorResponse(w, "VM not found for this orderId", http.StatusNotFound)
+		return
+	}
+
+	err := api.newVboxService.UpdateVM(context.Background(), vmId, req)
+	if err != nil {
+		api.sendErrorResponse(w, fmt.Sprintf("Failed to update VM: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": "VM updated successfully"})
+
+}
+
 func (api *VirtualBoxAPI) stopVMHandler(w http.ResponseWriter, r *http.Request) {
 	orderId := chi.URLParam(r, "orderId")
 	if orderId == "" {
@@ -200,14 +222,13 @@ func (api *VirtualBoxAPI) stopVMHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Get vmId from orderId
-	vmId, exists := api.vboxService.GetVMIdByOrderId(orderId)
+	vmId, exists := api.newVboxService.GetVMIdByOrderId(orderId)
 	if !exists {
 		api.sendErrorResponse(w, "VM not found for this orderId", http.StatusNotFound)
 		return
 	}
 
-	vm, err := api.vboxService.StopVM(r.Context(), vmId)
+	err := api.newVboxService.StopVM(context.Background(), vmId)
 	if err != nil {
 		api.sendErrorResponse(w, fmt.Sprintf("Failed to stop VM: %v", err), http.StatusInternalServerError)
 		return
@@ -215,25 +236,23 @@ func (api *VirtualBoxAPI) stopVMHandler(w http.ResponseWriter, r *http.Request) 
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(vm)
+	json.NewEncoder(w).Encode(map[string]string{"message": "VM stopped successfully"})
+
 }
 
-// pauseVMHandler handles POST requests to pause a VM
 func (api *VirtualBoxAPI) pauseVMHandler(w http.ResponseWriter, r *http.Request) {
 	orderId := chi.URLParam(r, "orderId")
 	if orderId == "" {
 		api.sendErrorResponse(w, "orderId is required", http.StatusBadRequest)
 		return
 	}
-
-	// Get vmId from orderId
-	vmId, exists := api.vboxService.GetVMIdByOrderId(orderId)
+	vmId, exists := api.newVboxService.GetVMIdByOrderId(orderId)
 	if !exists {
 		api.sendErrorResponse(w, "VM not found for this orderId", http.StatusNotFound)
 		return
 	}
 
-	vm, err := api.vboxService.PauseVM(r.Context(), vmId)
+	err := api.newVboxService.PauseVM(context.Background(), vmId)
 	if err != nil {
 		api.sendErrorResponse(w, fmt.Sprintf("Failed to pause VM: %v", err), http.StatusInternalServerError)
 		return
@@ -241,25 +260,22 @@ func (api *VirtualBoxAPI) pauseVMHandler(w http.ResponseWriter, r *http.Request)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(vm)
-}
+	json.NewEncoder(w).Encode(map[string]string{"message": "VM paused successfully"})
 
-// resumeVMHandler handles POST requests to resume a VM
+}
 func (api *VirtualBoxAPI) resumeVMHandler(w http.ResponseWriter, r *http.Request) {
 	orderId := chi.URLParam(r, "orderId")
 	if orderId == "" {
 		api.sendErrorResponse(w, "orderId is required", http.StatusBadRequest)
 		return
 	}
-
-	// Get vmId from orderId
-	vmId, exists := api.vboxService.GetVMIdByOrderId(orderId)
+	vmId, exists := api.newVboxService.GetVMIdByOrderId(orderId)
 	if !exists {
 		api.sendErrorResponse(w, "VM not found for this orderId", http.StatusNotFound)
 		return
 	}
 
-	vm, err := api.vboxService.ResumeVM(r.Context(), vmId)
+	err := api.newVboxService.ResumeVM(context.Background(), vmId)
 	if err != nil {
 		api.sendErrorResponse(w, fmt.Sprintf("Failed to resume VM: %v", err), http.StatusInternalServerError)
 		return
@@ -267,25 +283,22 @@ func (api *VirtualBoxAPI) resumeVMHandler(w http.ResponseWriter, r *http.Request
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(vm)
+	json.NewEncoder(w).Encode(map[string]string{"message": "VM resumed successfully"})
 }
 
-// resetVMHandler handles POST requests to reset a VM
 func (api *VirtualBoxAPI) resetVMHandler(w http.ResponseWriter, r *http.Request) {
 	orderId := chi.URLParam(r, "orderId")
 	if orderId == "" {
 		api.sendErrorResponse(w, "orderId is required", http.StatusBadRequest)
 		return
 	}
-
-	// Get vmId from orderId
-	vmId, exists := api.vboxService.GetVMIdByOrderId(orderId)
+	vmId, exists := api.newVboxService.GetVMIdByOrderId(orderId)
 	if !exists {
 		api.sendErrorResponse(w, "VM not found for this orderId", http.StatusNotFound)
 		return
 	}
 
-	vm, err := api.vboxService.ResetVM(r.Context(), vmId)
+	err := api.newVboxService.ResetVM(context.Background(), vmId)
 	if err != nil {
 		api.sendErrorResponse(w, fmt.Sprintf("Failed to reset VM: %v", err), http.StatusInternalServerError)
 		return
@@ -293,7 +306,7 @@ func (api *VirtualBoxAPI) resetVMHandler(w http.ResponseWriter, r *http.Request)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(vm)
+	json.NewEncoder(w).Encode(map[string]string{"message": "VM reset successfully"})
 }
 
 // getJobHandler handles GET requests to get the progress of a job
@@ -301,7 +314,7 @@ func (api *VirtualBoxAPI) getJobHandler(w http.ResponseWriter, r *http.Request) 
 	jobID := chi.URLParam(r, "jobID")
 	if jobID != "" {
 
-		job, err := api.vboxService.GetJobProgress(r.Context(), jobID)
+		job, err := api.newVboxService.GetJobProgress(r.Context(), jobID)
 		if err != nil {
 			api.sendErrorResponse(w, fmt.Sprintf("Failed to get job progress: %v", err), http.StatusInternalServerError)
 			return
@@ -314,7 +327,7 @@ func (api *VirtualBoxAPI) getJobHandler(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// get all jobs
-	jobs, err := api.vboxService.ListJobs(r.Context())
+	jobs, err := api.newVboxService.ListJobs(r.Context())
 	if err != nil {
 		api.sendErrorResponse(w, fmt.Sprintf("Failed to get jobs: %v", err), http.StatusInternalServerError)
 		return

@@ -150,6 +150,32 @@ func (s *VBoxService) DeleteVM(vmId string) error {
 	return nil
 }
 
+func (s *VBoxService) StartVM(vmId string) error {
+	var args []string
+
+	vm, err := s.GetVM(vmId)
+	if err != nil {
+		return fmt.Errorf("failed to get VM: %w", err)
+	}
+
+	switch vm.Status {
+	case vbtypes.Paused:
+		args = append(args, "controlvm", vm.Name, "resume")
+	case vbtypes.Poweroff, vbtypes.Aborted, vbtypes.Saved:
+		args = append(args, "startvm", vm.Name, "--type", "headless")
+	case vbtypes.Running:
+		return nil
+	default:
+		return fmt.Errorf("unknown VM status: %s", vm.Status)
+	}
+
+	_, _, err = s.vBoxCmd.Run(args...)
+	if err != nil {
+		return fmt.Errorf("failed to start VM: %w", err)
+	}
+	return nil
+}
+
 // detectDiskSizeGB finds the primary disk medium from VM properties and queries its size via VBoxManage showmediuminfo.
 func (s *VBoxService) detectDiskSizeGB(props map[string]string) (int, error) {
 	// Try to find any attached HDD medium path from props like "SATA-0-0"="/path/to/disk.vdi"
@@ -309,6 +335,51 @@ func (s *VBoxService) createVM(name string) (*vbtypes.VM, error) {
 	}
 
 	return s.GetVM(name)
+}
+
+func (s *VBoxService) UpdateVM(vmName string, cpuCount int, memoryMB int, diskSizeGB int) error {
+	vm, err := s.GetVM(vmName)
+	if err != nil {
+		return fmt.Errorf("failed to get VM: %w", err)
+	}
+
+	if vm.CPUCores != cpuCount {
+		if err := s.setCPUs(vmName, cpuCount); err != nil {
+			return fmt.Errorf("failed to set CPU count: %w", err)
+		}
+	}
+	if vm.MemoryMB != memoryMB {
+		if err := s.setMemory(vmName, memoryMB); err != nil {
+			return fmt.Errorf("failed to set memory: %w", err)
+		}
+	}
+	if vm.DiskSizeGB != diskSizeGB {
+		if err := s.ResizeVDI(vmName, diskSizeGB); err != nil {
+			return fmt.Errorf("failed to resize disk: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func (s *VBoxService) StopVM(vmName string) error {
+	_, _, err := s.vBoxCmd.Run("controlvm", vmName, "poweroff")
+	return err
+}
+
+func (s *VBoxService) PauseVM(vmName string) error {
+	_, _, err := s.vBoxCmd.Run("controlvm", vmName, "pause")
+	return err
+}
+
+func (s *VBoxService) ResumeVM(vmName string) error {
+	_, _, err := s.vBoxCmd.Run("controlvm", vmName, "resume")
+	return err
+}
+
+func (s *VBoxService) ResetVM(vmName string) error {
+	_, _, err := s.vBoxCmd.Run("controlvm", vmName, "reset")
+	return err
 }
 
 func (s *VBoxService) ConfigureVMHardware(vmName string, cpuCount int, memoryMB int) error {

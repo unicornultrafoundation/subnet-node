@@ -66,52 +66,57 @@ func (jm *JobManager) handleCreateVMRequest(ctx context.Context, request *vbtype
 	}
 
 	// Perform the actual VM creation
-
-	jm.mu.Lock()
-	defer jm.mu.Unlock()
+	// Note: Do NOT hold the lock during time-consuming VM operations
+	// This allows GetJobProgress to work concurrently
 
 	// create VM without OS type
 	vm, err := jm.vboxService.CreateVMWithoutOS(reqData.Name)
 
-	fmt.Println("vm", vm)
 	if err != nil {
 		jobLog.WithField("jobID", request.Data["jobID"].(string)).Error("VM creation failed: " + err.Error())
+		_ = jm.MarkJobAsFailed(ctx, request.Data["jobID"].(string), "VM creation failed: "+err.Error())
 		return
 	}
 
 	vdiPath, err := jm.storageManager.GetOrCreateVDI(ctx, reqData.Version, runtime.GOARCH, reqData.Name)
 	if err != nil {
 		jobLog.WithField("jobID", request.Data["jobID"].(string)).Error("VDI creation failed: " + err.Error())
+		_ = jm.MarkJobAsFailed(ctx, request.Data["jobID"].(string), "VDI creation failed: "+err.Error())
 		return
 	}
 
 	cloudInitISO, err := jm.storageManager.GenerateCloudInitISO(ctx, reqData.Name, reqData.Username, reqData.Password)
 	if err != nil {
 		jobLog.WithField("jobID", request.Data["jobID"].(string)).Error("Cloud init ISO generation failed: " + err.Error())
+		_ = jm.MarkJobAsFailed(ctx, request.Data["jobID"].(string), "Cloud init ISO generation failed: "+err.Error())
 		return
 	}
 
 	// Configure VM hardware
 	if err := jm.vboxService.ConfigureVMHardware(vm.Name, reqData.CPUCores, reqData.MemoryMB); err != nil {
 		jobLog.WithField("jobID", request.Data["jobID"].(string)).Error("VM hardware configuration failed: " + err.Error())
+		_ = jm.MarkJobAsFailed(ctx, request.Data["jobID"].(string), "VM hardware configuration failed: "+err.Error())
 		return
 	}
 
 	// Configure network adapter
 	if err := jm.vboxService.ConfigureNetwork(vm.Name, "nat"); err != nil {
 		jobLog.WithField("jobID", request.Data["jobID"].(string)).Error("Network configuration failed: " + err.Error())
+		_ = jm.MarkJobAsFailed(ctx, request.Data["jobID"].(string), "Network configuration failed: "+err.Error())
 		return
 	}
 
 	// Resize VDI file to match requested disk size
 	if err := jm.vboxService.ResizeVDI(vdiPath, reqData.DiskSizeGB); err != nil {
 		jobLog.WithField("jobID", request.Data["jobID"].(string)).Error("VDI resizing failed: " + err.Error())
+		_ = jm.MarkJobAsFailed(ctx, request.Data["jobID"].(string), "VDI resizing failed: "+err.Error())
 		return
 	}
 
 	// Attach existing VDI file using VirtioSCSI
 	if err := jm.vboxService.AttachExistingVDI(vm.Name, vdiPath); err != nil {
 		jobLog.WithField("jobID", request.Data["jobID"].(string)).Error("VDI attachment failed: " + err.Error())
+		_ = jm.MarkJobAsFailed(ctx, request.Data["jobID"].(string), "VDI attachment failed: "+err.Error())
 		return
 	}
 
@@ -119,6 +124,7 @@ func (jm *JobManager) handleCreateVMRequest(ctx context.Context, request *vbtype
 	if cloudInitISO != "" {
 		if err := jm.vboxService.AttachCloudInitISOVirtioSCSI(vm.Name, cloudInitISO); err != nil {
 			jobLog.WithField("jobID", request.Data["jobID"].(string)).Error("Cloud init ISO attachment failed: " + err.Error())
+			_ = jm.MarkJobAsFailed(ctx, request.Data["jobID"].(string), "Cloud init ISO attachment failed: "+err.Error())
 			return
 		}
 	}
@@ -126,6 +132,14 @@ func (jm *JobManager) handleCreateVMRequest(ctx context.Context, request *vbtype
 	// Store the orderId to vmId mapping
 	if err := jm.storeOrderVMMapping(reqData.OrderId, vm.ID); err != nil {
 		jobLog.WithField("jobID", request.Data["jobID"].(string)).Error("Failed to store order to VM mapping: " + err.Error())
+		_ = jm.MarkJobAsFailed(ctx, request.Data["jobID"].(string), "Failed to store order to VM mapping: "+err.Error())
+		return
+	}
+
+	// update job status to completed
+	// Now CompleteJob can acquire the lock without waiting, and GetJobProgress can work concurrently
+	if err := jm.CompleteJob(ctx, request.Data["jobID"].(string), vm.ID, map[string]interface{}{}); err != nil {
+		jobLog.WithField("jobID", request.Data["jobID"].(string)).Error("Failed to update job status: " + err.Error())
 		return
 	}
 
@@ -153,7 +167,7 @@ func extractVMCreateFromImageRequest(data interface{}) (*vbtypes.VMCreateFromIma
 	}
 }
 
-func (jm *JobManager) validateResources(ctx context.Context, vmCPUCores int, vmMemoryMB int, vmDiskSizeGB int) error {
+func (jm *JobManager) validateResources(_ context.Context, vmCPUCores int, vmMemoryMB int, vmDiskSizeGB int) error {
 	resourceInfo, err := resource.GetResource()
 	if err != nil {
 		return fmt.Errorf("failed to get resource info: %w", err)

@@ -94,9 +94,6 @@ func (is *ImageStorage) ConvertImageToVDI(ctx context.Context, imagePath, vdiPat
 		return "", fmt.Errorf("source image validation failed: %w", err)
 	}
 
-	fmt.Println("imagePath", imagePath)
-	fmt.Println("vdiPath", vdiPath)
-
 	// Execute qemu-img convert command
 	args := []string{"convert", "-f", "qcow2", "-O", "vdi", imagePath, vdiPath}
 	_, _, err := is.QemuCmd.Run(args...)
