@@ -9,7 +9,7 @@ import (
 	"github.com/ipfs/go-datastore"
 
 	vbox_service "github.com/unicornultrafoundation/subnet-node/core/virtualbox/service"
-	storage "github.com/unicornultrafoundation/subnet-node/core/virtualbox/storage_v2"
+	"github.com/unicornultrafoundation/subnet-node/core/virtualbox/storage"
 	vbtypes "github.com/unicornultrafoundation/subnet-node/core/virtualbox/types"
 )
 

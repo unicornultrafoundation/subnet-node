@@ -309,6 +309,5 @@ func SubnetVirtualBox(bcfg *BuildCfg, cfg *config.C) fx.Option {
 
 	return fx.Options(
 		fx.Provide(VirtualBoxService),
-		fx.Provide(VirtualBoxServiceV2),
 	)
 }

@@ -16,22 +16,18 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/core/virtualbox/ssh_connection"
 	vbtypes "github.com/unicornultrafoundation/subnet-node/core/virtualbox/types"
 	"github.com/unicornultrafoundation/subnet-node/internal/api/ws"
-
-	vbox_service "github.com/unicornultrafoundation/subnet-node/core/virtualbox/service"
 )
 
 type VirtualBoxAPI struct {
-	vboxService    *virtualbox.VirtualboxService
-	newVboxService virtualbox.IVirtualboxService
-	vbService      *vbox_service.VBoxService
-	cfg            ConfigProvider
-	ordersCache    *OrdersWithCache
+	vboxService virtualbox.IVirtualboxService
+	cfg         ConfigProvider
+	ordersCache *OrdersWithCache
 }
 
 // NewVirtualBoxAPI creates a new instance of VirtualBoxAPI.
-func NewVirtualBoxAPI(vboxService *virtualbox.VirtualboxService, newVboxService virtualbox.IVirtualboxService, cfg ConfigProvider, bidMarket BidMarketContract) *VirtualBoxAPI {
+func NewVirtualBoxAPI(vboxService virtualbox.IVirtualboxService, cfg ConfigProvider, bidMarket BidMarketContract) *VirtualBoxAPI {
 
-	return &VirtualBoxAPI{vboxService: vboxService, newVboxService: newVboxService, cfg: cfg, ordersCache: NewOrdersWithCache(bidMarket)}
+	return &VirtualBoxAPI{vboxService: vboxService, cfg: cfg, ordersCache: NewOrdersWithCache(bidMarket)}
 }
 
 // Router returns the chi router with all VirtualBox routes
@@ -96,7 +92,7 @@ func (api *VirtualBoxAPI) createVMFromExistedImage(w http.ResponseWriter, r *htt
 	}
 
 	// Create the VM using the determined OS type
-	jobResponse, err := api.newVboxService.CreateVM(r.Context(), vbReq)
+	jobResponse, err := api.vboxService.CreateVM(r.Context(), vbReq)
 	if err != nil {
 		api.sendErrorResponse(w, "Failed to create VM", http.StatusInternalServerError)
 		return
@@ -116,7 +112,7 @@ func (api *VirtualBoxAPI) getVMHandler(w http.ResponseWriter, r *http.Request) {
 
 	// if orderId exist, return the VM, if not return all VMs
 	if orderId != "" {
-		vm, err := api.newVboxService.GetVMByOrderId(r.Context(), orderId)
+		vm, err := api.vboxService.GetVMByOrderId(r.Context(), orderId)
 		if err != nil {
 			api.sendErrorResponse(w, fmt.Sprintf("Failed to get VM: %v", err), http.StatusInternalServerError)
 			return
@@ -125,7 +121,7 @@ func (api *VirtualBoxAPI) getVMHandler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(vm)
 	} else {
-		vms, err := api.newVboxService.GetVMs(r.Context())
+		vms, err := api.vboxService.GetVMs(r.Context())
 		if err != nil {
 			api.sendErrorResponse(w, fmt.Sprintf("Failed to get VMs: %v", err), http.StatusInternalServerError)
 			return
@@ -144,13 +140,13 @@ func (api *VirtualBoxAPI) deleteVMHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	vmId, exists := api.newVboxService.GetVMIdByOrderId(orderId)
+	vmId, exists := api.vboxService.GetVMIdByOrderId(orderId)
 	if !exists {
 		api.sendErrorResponse(w, "VM not found for this orderId", http.StatusNotFound)
 		return
 	}
 
-	err := api.newVboxService.DeleteVM(context.Background(), vmId)
+	err := api.vboxService.DeleteVM(context.Background(), vmId)
 	if err != nil {
 		api.sendErrorResponse(w, fmt.Sprintf("Failed to delete VM: %v", err), http.StatusInternalServerError)
 		return
@@ -169,13 +165,13 @@ func (api *VirtualBoxAPI) startVMHandler(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	vmId, exists := api.newVboxService.GetVMIdByOrderId(orderId)
+	vmId, exists := api.vboxService.GetVMIdByOrderId(orderId)
 	if !exists {
 		api.sendErrorResponse(w, "VM not found for this orderId", http.StatusNotFound)
 		return
 	}
 
-	err := api.newVboxService.StartVM(context.Background(), vmId)
+	err := api.vboxService.StartVM(context.Background(), vmId)
 	if err != nil {
 		api.sendErrorResponse(w, fmt.Sprintf("Failed to start VM: %v", err), http.StatusInternalServerError)
 		return
@@ -197,13 +193,13 @@ func (api *VirtualBoxAPI) updateVMHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	vmId, exists := api.newVboxService.GetVMIdByOrderId(orderId)
+	vmId, exists := api.vboxService.GetVMIdByOrderId(orderId)
 	if !exists {
 		api.sendErrorResponse(w, "VM not found for this orderId", http.StatusNotFound)
 		return
 	}
 
-	err := api.newVboxService.UpdateVM(context.Background(), vmId, req)
+	err := api.vboxService.UpdateVM(context.Background(), vmId, req)
 	if err != nil {
 		api.sendErrorResponse(w, fmt.Sprintf("Failed to update VM: %v", err), http.StatusInternalServerError)
 		return
@@ -222,13 +218,13 @@ func (api *VirtualBoxAPI) stopVMHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	vmId, exists := api.newVboxService.GetVMIdByOrderId(orderId)
+	vmId, exists := api.vboxService.GetVMIdByOrderId(orderId)
 	if !exists {
 		api.sendErrorResponse(w, "VM not found for this orderId", http.StatusNotFound)
 		return
 	}
 
-	err := api.newVboxService.StopVM(context.Background(), vmId)
+	err := api.vboxService.StopVM(context.Background(), vmId)
 	if err != nil {
 		api.sendErrorResponse(w, fmt.Sprintf("Failed to stop VM: %v", err), http.StatusInternalServerError)
 		return
@@ -246,13 +242,13 @@ func (api *VirtualBoxAPI) pauseVMHandler(w http.ResponseWriter, r *http.Request)
 		api.sendErrorResponse(w, "orderId is required", http.StatusBadRequest)
 		return
 	}
-	vmId, exists := api.newVboxService.GetVMIdByOrderId(orderId)
+	vmId, exists := api.vboxService.GetVMIdByOrderId(orderId)
 	if !exists {
 		api.sendErrorResponse(w, "VM not found for this orderId", http.StatusNotFound)
 		return
 	}
 
-	err := api.newVboxService.PauseVM(context.Background(), vmId)
+	err := api.vboxService.PauseVM(context.Background(), vmId)
 	if err != nil {
 		api.sendErrorResponse(w, fmt.Sprintf("Failed to pause VM: %v", err), http.StatusInternalServerError)
 		return
@@ -269,13 +265,13 @@ func (api *VirtualBoxAPI) resumeVMHandler(w http.ResponseWriter, r *http.Request
 		api.sendErrorResponse(w, "orderId is required", http.StatusBadRequest)
 		return
 	}
-	vmId, exists := api.newVboxService.GetVMIdByOrderId(orderId)
+	vmId, exists := api.vboxService.GetVMIdByOrderId(orderId)
 	if !exists {
 		api.sendErrorResponse(w, "VM not found for this orderId", http.StatusNotFound)
 		return
 	}
 
-	err := api.newVboxService.ResumeVM(context.Background(), vmId)
+	err := api.vboxService.ResumeVM(context.Background(), vmId)
 	if err != nil {
 		api.sendErrorResponse(w, fmt.Sprintf("Failed to resume VM: %v", err), http.StatusInternalServerError)
 		return
@@ -292,13 +288,13 @@ func (api *VirtualBoxAPI) resetVMHandler(w http.ResponseWriter, r *http.Request)
 		api.sendErrorResponse(w, "orderId is required", http.StatusBadRequest)
 		return
 	}
-	vmId, exists := api.newVboxService.GetVMIdByOrderId(orderId)
+	vmId, exists := api.vboxService.GetVMIdByOrderId(orderId)
 	if !exists {
 		api.sendErrorResponse(w, "VM not found for this orderId", http.StatusNotFound)
 		return
 	}
 
-	err := api.newVboxService.ResetVM(context.Background(), vmId)
+	err := api.vboxService.ResetVM(context.Background(), vmId)
 	if err != nil {
 		api.sendErrorResponse(w, fmt.Sprintf("Failed to reset VM: %v", err), http.StatusInternalServerError)
 		return
@@ -314,7 +310,7 @@ func (api *VirtualBoxAPI) getJobHandler(w http.ResponseWriter, r *http.Request) 
 	jobID := chi.URLParam(r, "jobID")
 	if jobID != "" {
 
-		job, err := api.newVboxService.GetJobProgress(r.Context(), jobID)
+		job, err := api.vboxService.GetJobProgress(r.Context(), jobID)
 		if err != nil {
 			api.sendErrorResponse(w, fmt.Sprintf("Failed to get job progress: %v", err), http.StatusInternalServerError)
 			return
@@ -327,7 +323,7 @@ func (api *VirtualBoxAPI) getJobHandler(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// get all jobs
-	jobs, err := api.newVboxService.ListJobs(r.Context())
+	jobs, err := api.vboxService.ListJobs(r.Context())
 	if err != nil {
 		api.sendErrorResponse(w, fmt.Sprintf("Failed to get jobs: %v", err), http.StatusInternalServerError)
 		return
@@ -374,8 +370,8 @@ func (api *VirtualBoxAPI) generateSSHTokenHandler(w http.ResponseWriter, r *http
 func (api *VirtualBoxAPI) WebSocketRouter() *chi.Mux {
 	r := chi.NewRouter()
 
-	authMiddleware := NewAuthMiddleware(api.cfg, api.ordersCache)
-	r.Use(authMiddleware.Middleware())
+	// authMiddleware := NewAuthMiddleware(api.cfg, api.ordersCache)
+	// r.Use(authMiddleware.Middleware())
 
 	r.Get("/{orderId}/ssh", api.vmSSHWebSocketHandler)
 	r.Get("/{orderId}/metrics", api.getVMMetricsHandler)

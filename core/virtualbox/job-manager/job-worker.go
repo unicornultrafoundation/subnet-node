@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"runtime"
+	"strconv"
 
 	"github.com/ipfs/go-datastore"
-	"github.com/unicornultrafoundation/subnet-node/core/node/resource"
-
 	"github.com/sirupsen/logrus"
+	"github.com/unicornultrafoundation/subnet-node/core/node/resource"
+	vbox_service "github.com/unicornultrafoundation/subnet-node/core/virtualbox/service"
 	vbtypes "github.com/unicornultrafoundation/subnet-node/core/virtualbox/types"
 )
 
@@ -136,6 +138,13 @@ func (jm *JobManager) handleCreateVMRequest(ctx context.Context, request *vbtype
 		return
 	}
 
+	// Add NAT port forwarding rule for SSH
+	if err := jm.AddNATPFToVM(vm); err != nil {
+		jobLog.WithField("jobID", request.Data["jobID"].(string)).Error("Failed to add NAT port forwarding rule: " + err.Error())
+		_ = jm.MarkJobAsFailed(ctx, request.Data["jobID"].(string), "Failed to add NAT port forwarding rule: "+err.Error())
+		return
+	}
+
 	// update job status to completed
 	// Now CompleteJob can acquire the lock without waiting, and GetJobProgress can work concurrently
 	if err := jm.CompleteJob(ctx, request.Data["jobID"].(string), vm.ID, map[string]interface{}{}); err != nil {
@@ -143,6 +152,29 @@ func (jm *JobManager) handleCreateVMRequest(ctx context.Context, request *vbtype
 		return
 	}
 
+}
+
+func (jm *JobManager) AddNATPFToVM(vm *vbtypes.VM) error {
+
+	availablePort, err := getAvailablePort()
+	if err != nil {
+		return fmt.Errorf("failed to get available port: %w", err)
+	}
+
+	rule := vbox_service.PFRule{
+		Proto:     vbox_service.PFTCP,
+		HostIP:    nil,
+		GuestIP:   nil,
+		HostPort:  availablePort,
+		GuestPort: 22,
+	}
+
+	if err := jm.vboxService.AddNATPF(1, vm.Name, "ssh", rule); err != nil {
+		fmt.Println("err", err.Error())
+		return fmt.Errorf("failed to add NAT port forwarding rule: %w", err)
+	}
+
+	return nil
 }
 
 func extractVMCreateFromImageRequest(data interface{}) (*vbtypes.VMCreateFromImageRequest, error) {
@@ -323,4 +355,23 @@ func (jm *JobManager) storeOrderVMMapping(orderId, vmId string) error {
 	key := datastore.NewKey("virtualbox/order_mapping/" + orderId)
 	return jm.datastore.Put(context.Background(), key, data)
 
+}
+
+// getAvailablePort finds an available TCP port on the host
+func getAvailablePort() (uint16, error) {
+	l, err := net.Listen("tcp", ":0")
+	if err != nil {
+		return 0, err
+	}
+	defer l.Close()
+	addr := l.Addr().String()
+	_, portStr, err := net.SplitHostPort(addr)
+	if err != nil {
+		return 0, err
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		return 0, err
+	}
+	return uint16(port), nil
 }

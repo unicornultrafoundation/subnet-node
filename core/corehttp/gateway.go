@@ -28,7 +28,7 @@ func GatewayOption() ServeOption {
 
 		// Add VirtualBox API routes if VirtualBox is enabled
 		if n.VirtualBox != nil {
-			virtualBoxAPI := api.NewVirtualBoxAPI(n.VirtualBox, n.VirtualBoxV2, cfg, bidMarket)
+			virtualBoxAPI := api.NewVirtualBoxAPI(n.VirtualBox, cfg, bidMarket)
 
 			mux.Handle("/api/v1/virtualbox/", http.StripPrefix("/api/v1/virtualbox", virtualBoxAPI.Router()))
 			mux.Handle("/ws/v1/virtualbox/", http.StripPrefix("/ws/v1/virtualbox", virtualBoxAPI.WebSocketRouter()))

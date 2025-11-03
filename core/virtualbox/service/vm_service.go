@@ -2,8 +2,10 @@ package vbox_service
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -107,6 +109,17 @@ func (s *VBoxService) GetVM(vmId string) (*vbtypes.VM, error) {
 		return def[0]
 	}
 
+	// extract port forwarding from VM info
+	portForwarding := sp("Forwarding(0)")
+	parts := strings.Split(portForwarding, ",")
+	var hostPort int
+	if len(parts) >= 5 {
+		hostPort, err = strconv.Atoi(parts[3])
+		if err != nil {
+			perr = err
+		}
+	}
+
 	/* Extract basic info */
 	vm := &vbtypes.VM{
 		ID:       sp("UUID"),
@@ -115,7 +128,7 @@ func (s *VBoxService) GetVM(vmId string) (*vbtypes.VM, error) {
 		CPUCores: int(up("cpus")),
 		MemoryMB: int(up("memory")),
 		// IPAddress: sp("IPAddress"),
-		// SSHPort: up("SSHPort"),
+		SSHPort:  hostPort,
 		VMFolder: sp("CfgFile"),
 	}
 
@@ -129,6 +142,24 @@ func (s *VBoxService) GetVM(vmId string) (*vbtypes.VM, error) {
 	}
 
 	return vm, nil
+}
+
+func (s *VBoxService) GetVMStatus(vmId string) (string, error) {
+	stdout, _, err := s.vBoxCmd.Run("showvminfo", vmId, "--machinereadable")
+	if err != nil {
+		return "", fmt.Errorf("failed to get VM status: %w", err)
+	}
+	// Parse the output to find VMState
+	lines := strings.Split(stdout, "\n")
+	for _, line := range lines {
+		if strings.HasPrefix(line, "VMState=") {
+			parts := strings.SplitN(line, "=", 2)
+			if len(parts) == 2 {
+				return strings.Trim(parts[1], `"`), nil
+			}
+		}
+	}
+	return "unknown", nil
 }
 
 func (s *VBoxService) DeleteVM(vmId string) error {
@@ -637,4 +668,29 @@ func (s *VBoxService) powerOff(vm *vbtypes.VM) error {
 	}
 	_, _, err := s.vBoxCmd.Run("controlvm", vm.Name, "poweroff")
 	return err
+}
+
+func (s *VBoxService) ListAvailableMetrics(vmId string) (string, error) {
+	stdout, _, err := s.vBoxCmd.Run("metrics", "list", vmId)
+	if err != nil {
+		return "", fmt.Errorf("unable to list metrics: %w", err)
+	}
+	return stdout, nil
+}
+
+// AddNATPF adds a NAT port forarding rule to the n-th NIC with the given name.
+func (s *VBoxService) AddNATPF(n int, vmName string, name string, rule PFRule) error {
+	_, _, err := s.vBoxCmd.Run("modifyvm", vmName, fmt.Sprintf("--natpf%d", n), fmt.Sprintf("%s,%s", name, rule.Format()))
+	return err
+}
+
+// DelNATPF deletes the NAT port forwarding rule with the given name from the n-th NIC.
+func (s *VBoxService) DelNATPF(n int, vmName string, name string) error {
+	_, _, err := s.vBoxCmd.Run("controlvm", vmName, fmt.Sprintf("natpf%d", n), "delete", name)
+	return err
+}
+
+func (s *VBoxService) CollectMetricsCmd(ctx context.Context, vmId string, metrics []string, period int) (*exec.Cmd, error) {
+	cmd := exec.CommandContext(ctx, "VBoxManage", "metrics", "collect", "--period", fmt.Sprintf("%d", period), vmId, strings.Join(metrics, ","))
+	return cmd, nil
 }
