@@ -253,12 +253,12 @@ func (s *virtualboxService) GenerateSSHToken(ctx context.Context, vmID string, u
 		return nil, fmt.Errorf("VM is not running")
 	}
 
-	if vm.SSHPort == 0 {
-		// Add NAT port forwarding rule for SSH
-		err = s.jobManager.AddNATPFToVM(vm)
-		if err != nil {
-			return nil, fmt.Errorf("failed to add NAT port forwarding rule: %w", err)
+	_, exists := s.sshServer.GetVMConfig(vmID)
+	if !exists {
+		if vm.SSHPort == 0 {
+			return nil, fmt.Errorf("VM not found in SSH configuration")
 		}
+		s.sshServer.AddVMConfig(vmID, "127.0.0.1", strconv.Itoa(vm.SSHPort))
 	}
 
 	// Use the WebSocket handler to generate the token

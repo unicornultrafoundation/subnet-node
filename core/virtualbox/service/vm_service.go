@@ -14,6 +14,7 @@ import (
 	"sync"
 
 	"github.com/unicornultrafoundation/subnet-node/core/virtualbox/hardware_detector"
+	"github.com/unicornultrafoundation/subnet-node/core/virtualbox/storage"
 
 	"github.com/sirupsen/logrus"
 
@@ -693,4 +694,44 @@ func (s *VBoxService) DelNATPF(n int, vmName string, name string) error {
 func (s *VBoxService) CollectMetricsCmd(ctx context.Context, vmId string, metrics []string, period int) (*exec.Cmd, error) {
 	cmd := exec.CommandContext(ctx, "VBoxManage", "metrics", "collect", "--period", fmt.Sprintf("%d", period), vmId, strings.Join(metrics, ","))
 	return cmd, nil
+}
+
+// AddStorageCtl adds a storage controller to the VM
+func (s *VBoxService) AddStorageCtl(vmName, controller string) error {
+	_, _, err := s.vBoxCmd.Run("storagectl", vmName, "--name", controller, "--add", controller)
+	return err
+}
+
+func (s *VBoxService) AddStorageController(vmName string, name string, ctl storage.StorageController) error {
+	args := []string{"storagectl", vmName, "--name", name}
+	if ctl.SysBus != "" {
+		args = append(args, "--add", string(ctl.SysBus))
+	}
+	if ctl.Ports > 0 {
+		args = append(args, "--portcount", fmt.Sprintf("%d", ctl.Ports))
+	}
+	if ctl.Chipset != "" {
+		args = append(args, "--controller", string(ctl.Chipset))
+	}
+	args = append(args, "--hostiocache", bool2string(ctl.HostIOCache))
+	args = append(args, "--bootable", bool2string(ctl.Bootable))
+	_, _, err := s.vBoxCmd.Run(args...)
+	return err
+}
+
+func (s *VBoxService) CloneVDI(input, output string) error {
+	_, _, err := s.vBoxCmd.Run("clonehd", input, output)
+	return err
+}
+
+///
+// HELPER FUNCTIONS
+//
+
+// Convert bool to "on"/"off"
+func bool2string(b bool) string {
+	if b {
+		return "on"
+	}
+	return "off"
 }
