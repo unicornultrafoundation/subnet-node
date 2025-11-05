@@ -719,6 +719,59 @@ func (s *VBoxService) AddStorageController(vmName string, name string, ctl stora
 	return err
 }
 
+func (s *VBoxService) SetNIC(vmName string, n int, nic NIC) error {
+	args := []string{"modifyvm", vmName,
+		fmt.Sprintf("--nic%d", n), string(nic.Network),
+		fmt.Sprintf("--nictype%d", n), string(nic.Hardware),
+		fmt.Sprintf("--cableconnected%d", n), "on",
+	}
+
+	if nic.Network == NICNetHostonly {
+		args = append(args, fmt.Sprintf("--hostonlyadapter%d", n), nic.HostInterface)
+	} else if nic.Network == NICNetBridged {
+		args = append(args, fmt.Sprintf("--bridgeadapter%d", n), nic.HostInterface)
+	}
+
+	if nic.MacAddr != "" {
+		args = append(args, fmt.Sprintf("--macaddress%d", n), nic.MacAddr)
+	}
+
+	_, _, err := s.vBoxCmd.Run(args...)
+	return err
+}
+
+func (s *VBoxService) CloneVM(baseVmName, newVMName string, register bool) error {
+	args := []string{"clonevm", baseVmName, "--name", newVMName}
+	if register {
+		args = append(args, "--register")
+	}
+	_, _, err := s.vBoxCmd.Run(args...)
+	return err
+}
+
+func (s *VBoxService) TakeSnapshotVM(vmName string, snapshotName string) error {
+	_, _, err := s.vBoxCmd.Run("snapshot", vmName, "take", snapshotName)
+	return err
+}
+
+func (s *VBoxService) RestoreSnapshot(vmName string, snapshotName string) error {
+	_, _, err := s.vBoxCmd.Run("snapshot", vmName, "restore", snapshotName)
+	return err
+}
+
+func (s *VBoxService) DeleteSnapshot(vmName string, snapshotName string) error {
+	_, _, err := s.vBoxCmd.Run("snapshot", vmName, "delete", snapshotName)
+	return err
+}
+
+func (s *VBoxService) ListSnapshots(vmName string) ([]string, error) {
+	stdout, _, err := s.vBoxCmd.Run("snapshot", vmName, "list")
+	if err != nil {
+		return nil, fmt.Errorf("unable to list snapshots: %w", err)
+	}
+	return strings.Split(stdout, "\n"), nil
+}
+
 func (s *VBoxService) CloneVDI(input, output string) error {
 	_, _, err := s.vBoxCmd.Run("clonehd", input, output)
 	return err

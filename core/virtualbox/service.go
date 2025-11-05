@@ -39,10 +39,20 @@ type IVirtualboxService interface {
 	PauseVM(ctx context.Context, vmID string) error
 	ResumeVM(ctx context.Context, vmID string) error
 	ResetVM(ctx context.Context, vmID string) error
+	CloneVM(ctx context.Context, baseVmName string, newVMName string, register bool) error
+
+	TakeSnapshotVM(ctx context.Context, vmID string, snapshotName string) error
+	RestoreSnapshot(ctx context.Context, vmID string, snapshotName string) error
+	DeleteSnapshot(ctx context.Context, vmID string, snapshotName string) error
+	ListSnapshots(ctx context.Context, vmID string) ([]string, error)
+
 	GetJobProgress(ctx context.Context, jobID string) (*vbtypes.Job, error)
 	ListJobs(ctx context.Context) ([]*vbtypes.Job, error)
 	GenerateSSHToken(ctx context.Context, vmID string, username string, password string) (*vbtypes.SSHTokenResponse, error)
 	ValidateAndConsumeSSHToken(token string) (*vbtypes.SSHAccessToken, error)
+	AddNATPF(ctx context.Context, vmID string, portNumber int, portName string, hostPort uint16, guestPort uint16, proto string) error
+	DeleteNATPF(ctx context.Context, vmID string, portNumber int, portName string) error
+	SetNIC(ctx context.Context, vmID string, n int, network string, hardware string, hostInterface string, macAddr string) error
 	GetSSHServer() *ssh_connection.SSHServer
 	CollectMetrics(ctx context.Context, vmId string, conn *websocket.Conn, period int) error
 }
@@ -125,10 +135,6 @@ func (s *virtualboxService) GetVM(ctx context.Context, vmID string) (*vbtypes.VM
 	vm, err := s.vBoxService.GetVM(vmID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get VM: %w", err)
-	}
-
-	if vm.Status == vbtypes.Running && vm.SSHPort == 0 {
-		// get NAT
 	}
 
 	return vm, nil
@@ -278,6 +284,58 @@ func (s *virtualboxService) GetJobProgress(ctx context.Context, jobID string) (*
 
 func (s *virtualboxService) ListJobs(ctx context.Context) ([]*vbtypes.Job, error) {
 	return s.jobManager.ListJobs(ctx)
+}
+
+func (s *virtualboxService) AddNATPF(ctx context.Context, vmID string, portNumber int, portName string, hostPort uint16, guestPort uint16, proto string) error {
+
+	var protoValue vbox_service.PFProto
+	if proto != "" {
+		protoValue = vbox_service.PFProto(proto)
+	} else {
+		protoValue = vbox_service.PFTCP
+	}
+
+	rule := vbox_service.PFRule{
+		Proto:     protoValue,
+		HostIP:    nil,
+		GuestIP:   nil,
+		HostPort:  hostPort,
+		GuestPort: guestPort,
+	}
+	return s.vBoxService.AddNATPF(portNumber, vmID, portName, rule)
+}
+
+func (s *virtualboxService) DeleteNATPF(ctx context.Context, vmID string, portNumber int, portName string) error {
+	return s.vBoxService.DelNATPF(portNumber, vmID, portName)
+}
+
+func (s *virtualboxService) SetNIC(ctx context.Context, vmID string, n int, network string, hardware string, hostInterface string, macAddr string) error {
+	return s.vBoxService.SetNIC(vmID, n, vbox_service.NIC{
+		Network:       vbox_service.NICNetwork(network),
+		Hardware:      vbox_service.NICHardware(hardware),
+		HostInterface: hostInterface,
+		MacAddr:       macAddr,
+	})
+}
+
+func (s *virtualboxService) CloneVM(ctx context.Context, baseVmName string, newVMName string, register bool) error {
+	return s.vBoxService.CloneVM(baseVmName, newVMName, register)
+}
+
+func (s *virtualboxService) TakeSnapshotVM(ctx context.Context, vmID string, snapshotName string) error {
+	return s.vBoxService.TakeSnapshotVM(vmID, snapshotName)
+}
+
+func (s *virtualboxService) RestoreSnapshot(ctx context.Context, vmID string, snapshotName string) error {
+	return s.vBoxService.RestoreSnapshot(vmID, snapshotName)
+}
+
+func (s *virtualboxService) DeleteSnapshot(ctx context.Context, vmID string, snapshotName string) error {
+	return s.vBoxService.DeleteSnapshot(vmID, snapshotName)
+}
+
+func (s *virtualboxService) ListSnapshots(ctx context.Context, vmID string) ([]string, error) {
+	return s.vBoxService.ListSnapshots(vmID)
 }
 
 func (s *virtualboxService) syncSSHServerWithRunningVMs(ctx context.Context) error {

@@ -54,6 +54,20 @@ func (api *VirtualBoxAPI) Router() *chi.Mux {
 	r.Post("/{orderId}/pause", api.pauseVMHandler)
 	r.Post("/{orderId}/resume", api.resumeVMHandler)
 	r.Post("/{orderId}/reset", api.resetVMHandler)
+	r.Post("/{orderId}/clone", api.cloneVMHandler)
+
+	// snapshot
+	r.Post("/{orderId}/snapshot", api.takeSnapshotHandler)
+	r.Post("/{orderId}/snapshot/restore", api.restoreSnapshotHandler)
+	r.Delete("/{orderId}/snapshot", api.deleteSnapshotHandler)
+	r.Get("/{orderId}/snapshots", api.listSnapshotsHandler)
+
+	// add port forwarding rule
+	r.Post("/{orderId}/natpf/{portNumber}", api.addNATPFHandler)
+	r.Delete("/{orderId}/natpf/{portNumber}", api.deleteNATPFHandler)
+
+	// set NIC
+	r.Post("/{orderId}/nic/{n}", api.setNICHandler)
 
 	// generateSSHToken
 	r.Post("/{orderId}/ssh/token", api.generateSSHTokenHandler)
@@ -307,6 +321,36 @@ func (api *VirtualBoxAPI) resetVMHandler(w http.ResponseWriter, r *http.Request)
 	json.NewEncoder(w).Encode(map[string]string{"message": "VM reset successfully"})
 }
 
+func (api *VirtualBoxAPI) cloneVMHandler(w http.ResponseWriter, r *http.Request) {
+	orderId := chi.URLParam(r, "orderId")
+	if orderId == "" {
+		api.sendErrorResponse(w, "orderId is required", http.StatusBadRequest)
+		return
+	}
+
+	vmId, exists := api.vboxService.GetVMIdByOrderId(orderId)
+	if !exists {
+		api.sendErrorResponse(w, "VM not found for this orderId", http.StatusNotFound)
+		return
+	}
+	var req vbtypes.CloneVMRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		api.sendErrorResponse(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	err := api.vboxService.CloneVM(context.Background(), vmId, req.NewVMName, req.Register)
+	if err != nil {
+		api.sendErrorResponse(w, fmt.Sprintf("Failed to clone VM: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": "VM cloned successfully"})
+	return
+}
+
 // getJobHandler handles GET requests to get the progress of a job
 func (api *VirtualBoxAPI) getJobHandler(w http.ResponseWriter, r *http.Request) {
 	jobID := chi.URLParam(r, "jobID")
@@ -372,8 +416,8 @@ func (api *VirtualBoxAPI) generateSSHTokenHandler(w http.ResponseWriter, r *http
 func (api *VirtualBoxAPI) WebSocketRouter() *chi.Mux {
 	r := chi.NewRouter()
 
-	// authMiddleware := NewAuthMiddleware(api.cfg, api.ordersCache)
-	// r.Use(authMiddleware.Middleware())
+	authMiddleware := NewAuthMiddleware(api.cfg, api.ordersCache)
+	r.Use(authMiddleware.Middleware())
 
 	r.Get("/{orderId}/ssh", api.vmSSHWebSocketHandler)
 	r.Get("/{orderId}/metrics", api.getVMMetricsHandler)
@@ -576,4 +620,251 @@ func (api *VirtualBoxAPI) sendErrorResponse(w http.ResponseWriter, message strin
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
 	json.NewEncoder(w).Encode(response)
+}
+
+func (api *VirtualBoxAPI) addNATPFHandler(w http.ResponseWriter, r *http.Request) {
+	orderId := chi.URLParam(r, "orderId")
+	if orderId == "" {
+		api.sendErrorResponse(w, "orderId is required", http.StatusBadRequest)
+		return
+	}
+
+	portNumber := chi.URLParam(r, "portNumber")
+	if portNumber == "" {
+		api.sendErrorResponse(w, "portNumber is required", http.StatusBadRequest)
+		return
+	}
+
+	portNumberInt, err := strconv.Atoi(portNumber)
+	if err != nil {
+		api.sendErrorResponse(w, "Invalid portNumber parameter. Must be a positive integer", http.StatusBadRequest)
+		return
+	}
+
+	vmId, exists := api.vboxService.GetVMIdByOrderId(orderId)
+	if !exists {
+		api.sendErrorResponse(w, "VM not found for this orderId", http.StatusNotFound)
+		return
+	}
+
+	var req vbtypes.AddNATPFRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		api.sendErrorResponse(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	err = api.vboxService.AddNATPF(r.Context(), vmId, portNumberInt, req.PortName, req.HostPort, req.GuestPort, req.Proto)
+	if err != nil {
+		api.sendErrorResponse(w, fmt.Sprintf("Failed to add NAT port forwarding rule: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": "NAT port forwarding rule added successfully"})
+	return
+}
+
+func (api *VirtualBoxAPI) deleteNATPFHandler(w http.ResponseWriter, r *http.Request) {
+	orderId := chi.URLParam(r, "orderId")
+	if orderId == "" {
+		api.sendErrorResponse(w, "orderId is required", http.StatusBadRequest)
+		return
+	}
+
+	vmId, exists := api.vboxService.GetVMIdByOrderId(orderId)
+	if !exists {
+		api.sendErrorResponse(w, "VM not found for this orderId", http.StatusNotFound)
+		return
+	}
+
+	portNumber := chi.URLParam(r, "portNumber")
+	if portNumber == "" {
+		api.sendErrorResponse(w, "portNumber is required", http.StatusBadRequest)
+		return
+	}
+
+	portNumberInt, err := strconv.Atoi(portNumber)
+	if err != nil {
+		api.sendErrorResponse(w, "Invalid portNumber parameter. Must be a positive integer", http.StatusBadRequest)
+		return
+	}
+
+	var req vbtypes.DeleteNATPFRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		api.sendErrorResponse(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	err = api.vboxService.DeleteNATPF(r.Context(), vmId, portNumberInt, req.PortName)
+	if err != nil {
+		api.sendErrorResponse(w, fmt.Sprintf("Failed to delete NAT port forwarding rule: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": "NAT port forwarding rule deleted successfully"})
+	return
+}
+
+func (api *VirtualBoxAPI) setNICHandler(w http.ResponseWriter, r *http.Request) {
+	orderId := chi.URLParam(r, "orderId")
+	if orderId == "" {
+		api.sendErrorResponse(w, "orderId is required", http.StatusBadRequest)
+		return
+	}
+
+	vmId, exists := api.vboxService.GetVMIdByOrderId(orderId)
+	if !exists {
+		api.sendErrorResponse(w, "VM not found for this orderId", http.StatusNotFound)
+		return
+	}
+
+	n := chi.URLParam(r, "n")
+	if n == "" {
+		api.sendErrorResponse(w, "n is required", http.StatusBadRequest)
+		return
+	}
+
+	nInt, err := strconv.Atoi(n)
+	if err != nil {
+		api.sendErrorResponse(w, "Invalid n parameter. Must be a positive integer", http.StatusBadRequest)
+		return
+	}
+
+	var req vbtypes.SetNICRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		api.sendErrorResponse(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	err = api.vboxService.SetNIC(r.Context(), vmId, nInt, req.Network, req.Hardware, req.HostInterface, req.MacAddr)
+	if err != nil {
+		api.sendErrorResponse(w, fmt.Sprintf("Failed to set NIC: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": "NIC set successfully"})
+	return
+}
+
+func (api *VirtualBoxAPI) takeSnapshotHandler(w http.ResponseWriter, r *http.Request) {
+	orderId := chi.URLParam(r, "orderId")
+	if orderId == "" {
+		api.sendErrorResponse(w, "orderId is required", http.StatusBadRequest)
+		return
+	}
+
+	vmId, exists := api.vboxService.GetVMIdByOrderId(orderId)
+	if !exists {
+		api.sendErrorResponse(w, "VM not found for this orderId", http.StatusNotFound)
+		return
+	}
+
+	var req vbtypes.SnapshotVMRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		api.sendErrorResponse(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	err := api.vboxService.TakeSnapshotVM(r.Context(), vmId, req.SnapshotName)
+	if err != nil {
+		api.sendErrorResponse(w, fmt.Sprintf("Failed to take snapshot: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": "Snapshot taken successfully"})
+	return
+}
+
+func (api *VirtualBoxAPI) restoreSnapshotHandler(w http.ResponseWriter, r *http.Request) {
+	orderId := chi.URLParam(r, "orderId")
+	if orderId == "" {
+		api.sendErrorResponse(w, "orderId is required", http.StatusBadRequest)
+		return
+	}
+
+	vmId, exists := api.vboxService.GetVMIdByOrderId(orderId)
+	if !exists {
+		api.sendErrorResponse(w, "VM not found for this orderId", http.StatusNotFound)
+		return
+	}
+
+	var req vbtypes.SnapshotVMRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		api.sendErrorResponse(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	err := api.vboxService.RestoreSnapshot(r.Context(), vmId, req.SnapshotName)
+	if err != nil {
+		api.sendErrorResponse(w, fmt.Sprintf("Failed to restore snapshot: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": "Snapshot restored successfully"})
+	return
+}
+
+func (api *VirtualBoxAPI) deleteSnapshotHandler(w http.ResponseWriter, r *http.Request) {
+	orderId := chi.URLParam(r, "orderId")
+	if orderId == "" {
+		api.sendErrorResponse(w, "orderId is required", http.StatusBadRequest)
+		return
+	}
+
+	vmId, exists := api.vboxService.GetVMIdByOrderId(orderId)
+	if !exists {
+		api.sendErrorResponse(w, "VM not found for this orderId", http.StatusNotFound)
+		return
+	}
+
+	var req vbtypes.SnapshotVMRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		api.sendErrorResponse(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	err := api.vboxService.DeleteSnapshot(r.Context(), vmId, req.SnapshotName)
+	if err != nil {
+		api.sendErrorResponse(w, fmt.Sprintf("Failed to delete snapshot: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": "Snapshot deleted successfully"})
+	return
+}
+
+func (api *VirtualBoxAPI) listSnapshotsHandler(w http.ResponseWriter, r *http.Request) {
+	orderId := chi.URLParam(r, "orderId")
+	if orderId == "" {
+		api.sendErrorResponse(w, "orderId is required", http.StatusBadRequest)
+		return
+	}
+
+	vmId, exists := api.vboxService.GetVMIdByOrderId(orderId)
+	if !exists {
+		api.sendErrorResponse(w, "VM not found for this orderId", http.StatusNotFound)
+		return
+	}
+
+	snapshots, err := api.vboxService.ListSnapshots(r.Context(), vmId)
+	if err != nil {
+		api.sendErrorResponse(w, fmt.Sprintf("Failed to list snapshots: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(snapshots)
+	return
 }
