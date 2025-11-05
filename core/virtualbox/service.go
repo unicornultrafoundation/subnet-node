@@ -33,8 +33,8 @@ type IVirtualboxService interface {
 	GetVMByOrderId(ctx context.Context, orderId string) (*vbtypes.VM, error)
 	GetVMIdByOrderId(orderId string) (string, bool)
 	DeleteVM(ctx context.Context, vmID string) error
-	StartVM(ctx context.Context, vmID string) error
-	UpdateVM(ctx context.Context, vmID string, req vbtypes.VMUpdateRequest) error
+	StartVM(ctx context.Context, vmID string) (*vbtypes.VM, error)
+	UpdateVM(ctx context.Context, vmID string, req vbtypes.VMUpdateRequest) (*vbtypes.VM, error)
 	StopVM(ctx context.Context, vmID string) error
 	PauseVM(ctx context.Context, vmID string) error
 	ResumeVM(ctx context.Context, vmID string) error
@@ -102,6 +102,13 @@ func (s *virtualboxService) Start(ctx context.Context) error {
 // Add the request into the job manager and return the job id
 // The job manager will handle the request and create the VM in the background
 func (s *virtualboxService) CreateVM(ctx context.Context, req vbtypes.VMCreateFromImageRequest) (*vbtypes.JobCreateResponse, error) {
+
+	// check if the VM already exists
+	vm, _ := s.GetVMByOrderId(ctx, req.OrderId)
+
+	if vm != nil {
+		return nil, fmt.Errorf("VM already exists")
+	}
 
 	job, err := s.jobManager.CreateJob(ctx, vbtypes.VMEventCreateVM, req, req.Name)
 	if err != nil {
@@ -186,32 +193,82 @@ func (s *virtualboxService) DeleteVM(ctx context.Context, vmID string) error {
 	return nil
 }
 
-func (s *virtualboxService) StartVM(ctx context.Context, vmID string) error {
+func (s *virtualboxService) StartVM(ctx context.Context, vmID string) (*vbtypes.VM, error) {
 
 	err := s.vBoxService.StartVM(vmID)
 	if err != nil {
-		return fmt.Errorf("failed to start VM: %w", err)
+		return nil, fmt.Errorf("failed to start VM: %w", err)
 	}
-	return nil
+	vm, err := s.GetVM(ctx, vmID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get VM: %w", err)
+	}
+	return vm, nil
 }
 
-func (s *virtualboxService) UpdateVM(ctx context.Context, vmID string, req vbtypes.VMUpdateRequest) error {
-	return s.vBoxService.UpdateVM(vmID, req.CPUCores, req.MemoryMB, req.DiskSizeGB)
+func (s *virtualboxService) UpdateVM(ctx context.Context, vmID string, req vbtypes.VMUpdateRequest) (*vbtypes.VM, error) {
+	err := s.vBoxService.UpdateVM(vmID, req.CPUCores, req.MemoryMB, req.DiskSizeGB)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update VM: %w", err)
+	}
+	vm, err := s.GetVM(ctx, vmID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get VM: %w", err)
+	}
+	return vm, nil
 }
 
 func (s *virtualboxService) StopVM(ctx context.Context, vmID string) error {
+	vm, err := s.GetVM(ctx, vmID)
+	if err != nil {
+		return fmt.Errorf("failed to get VM: %w", err)
+	}
+
+	if vm.Status != vbtypes.Running {
+		return fmt.Errorf("VM is not running, current status: %s", vm.Status)
+	}
+
 	return s.vBoxService.StopVM(vmID)
 }
 
 func (s *virtualboxService) PauseVM(ctx context.Context, vmID string) error {
+	vm, err := s.GetVM(ctx, vmID)
+	if err != nil {
+		return fmt.Errorf("failed to get VM: %w", err)
+	}
+
+	if vm.Status != vbtypes.Running {
+		return fmt.Errorf("VM is not running, current status: %s", vm.Status)
+	}
+
 	return s.vBoxService.PauseVM(vmID)
 }
 
 func (s *virtualboxService) ResumeVM(ctx context.Context, vmID string) error {
+
+	vm, err := s.GetVM(ctx, vmID)
+	if err != nil {
+		return fmt.Errorf("failed to get VM: %w", err)
+	}
+
+	if vm.Status != vbtypes.Paused {
+		return fmt.Errorf("VM is not paused, current status: %s", vm.Status)
+	}
+
 	return s.vBoxService.ResumeVM(vmID)
 }
 
 func (s *virtualboxService) ResetVM(ctx context.Context, vmID string) error {
+
+	vm, err := s.GetVM(ctx, vmID)
+	if err != nil {
+		return fmt.Errorf("failed to get VM: %w", err)
+	}
+
+	if vm.Status != vbtypes.Running {
+		return fmt.Errorf("VM is not running, current status: %s", vm.Status)
+	}
+
 	return s.vBoxService.ResetVM(vmID)
 }
 

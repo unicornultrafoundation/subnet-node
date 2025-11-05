@@ -39,8 +39,8 @@ func (api *VirtualBoxAPI) Router() *chi.Mux {
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(60 * time.Second))
 
-	// authMiddleware := NewAuthMiddleware(api.cfg, api.ordersCache)
-	// r.Use(authMiddleware.Middleware())
+	authMiddleware := NewAuthMiddleware(api.cfg, api.ordersCache)
+	r.Use(authMiddleware.Middleware())
 
 	// Virtualbox API routes
 	r.Post("/", api.createVMFromExistedImage)
@@ -94,7 +94,7 @@ func (api *VirtualBoxAPI) createVMFromExistedImage(w http.ResponseWriter, r *htt
 	// Create the VM using the determined OS type
 	jobResponse, err := api.vboxService.CreateVM(r.Context(), vbReq)
 	if err != nil {
-		api.sendErrorResponse(w, "Failed to create VM", http.StatusInternalServerError)
+		api.sendErrorResponse(w, fmt.Sprintf("Failed to create VM: %v", err), http.StatusInternalServerError)
 		return
 	}
 
@@ -171,13 +171,15 @@ func (api *VirtualBoxAPI) startVMHandler(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	err := api.vboxService.StartVM(context.Background(), vmId)
+	vm, err := api.vboxService.StartVM(context.Background(), vmId)
 	if err != nil {
 		api.sendErrorResponse(w, fmt.Sprintf("Failed to start VM: %v", err), http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(vm)
 }
 
 func (api *VirtualBoxAPI) updateVMHandler(w http.ResponseWriter, r *http.Request) {
@@ -199,7 +201,7 @@ func (api *VirtualBoxAPI) updateVMHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	err := api.vboxService.UpdateVM(context.Background(), vmId, req)
+	vm, err := api.vboxService.UpdateVM(context.Background(), vmId, req)
 	if err != nil {
 		api.sendErrorResponse(w, fmt.Sprintf("Failed to update VM: %v", err), http.StatusInternalServerError)
 		return
@@ -207,7 +209,7 @@ func (api *VirtualBoxAPI) updateVMHandler(w http.ResponseWriter, r *http.Request
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"message": "VM updated successfully"})
+	json.NewEncoder(w).Encode(vm)
 
 }
 
