@@ -39,9 +39,15 @@ func AddOperatorFlags(cmd *cobra.Command) {
 	if err := viper.BindPFlag(FlagK8sManifestNS, cmd.Flags().Lookup(FlagK8sManifestNS)); err != nil {
 		panic(err)
 	}
+	if err := viper.BindEnv(FlagK8sManifestNS, "AP_K8S_MANIFEST_NS"); err != nil {
+		panic(err)
+	}
 
 	cmd.Flags().Duration(FlagPruneInterval, 10*time.Minute, "data pruning interval")
 	if err := viper.BindPFlag(FlagPruneInterval, cmd.Flags().Lookup(FlagPruneInterval)); err != nil {
+		panic(err)
+	}
+	if err := viper.BindEnv(FlagPruneInterval, "AP_PRUNE_INTERVAL"); err != nil {
 		panic(err)
 	}
 
@@ -49,9 +55,15 @@ func AddOperatorFlags(cmd *cobra.Command) {
 	if err := viper.BindPFlag(FlagWebRefreshInterval, cmd.Flags().Lookup(FlagWebRefreshInterval)); err != nil {
 		panic(err)
 	}
+	if err := viper.BindEnv(FlagWebRefreshInterval, "AP_WEB_REFRESH_INTERVAL"); err != nil {
+		panic(err)
+	}
 
 	cmd.Flags().Duration(FlagRetryDelay, 3*time.Second, "retry delay")
 	if err := viper.BindPFlag(FlagRetryDelay, cmd.Flags().Lookup(FlagRetryDelay)); err != nil {
+		panic(err)
+	}
+	if err := viper.BindEnv(FlagRetryDelay, "AP_RETRY_DELAY"); err != nil {
 		panic(err)
 	}
 }

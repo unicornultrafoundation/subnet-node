@@ -32,14 +32,23 @@ func AddIgnoreListFlags(cmd *cobra.Command) {
 	if err := viper.BindPFlag(FlagIgnoreListEntryLimit, cmd.Flags().Lookup(FlagIgnoreListEntryLimit)); err != nil {
 		panic(err)
 	}
+	if err := viper.BindEnv(FlagIgnoreListEntryLimit, "AP_IGNORE_LIST_ENTRY_LIMIT"); err != nil {
+		panic(err)
+	}
 
 	cmd.Flags().Duration(FlagIgnoreListAgeLimit, time.Hour*726, "ignore list entry age limit")
 	if err := viper.BindPFlag(FlagIgnoreListAgeLimit, cmd.Flags().Lookup(FlagIgnoreListAgeLimit)); err != nil {
 		panic(err)
 	}
+	if err := viper.BindEnv(FlagIgnoreListAgeLimit, "AP_IGNORE_LIST_AGE_LIMIT"); err != nil {
+		panic(err)
+	}
 
 	cmd.Flags().Uint(FlagEventFailureLimit, 3, "event failure limit before it is ignored")
 	if err := viper.BindPFlag(FlagEventFailureLimit, cmd.Flags().Lookup(FlagEventFailureLimit)); err != nil {
+		panic(err)
+	}
+	if err := viper.BindEnv(FlagEventFailureLimit, "AP_EVENT_FAILURE_LIMIT"); err != nil {
 		panic(err)
 	}
 }
