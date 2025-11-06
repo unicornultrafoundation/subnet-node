@@ -1,7 +1,7 @@
 package storage
 
-var userDataTemplate = `
-#cloud-config
+var userDataTemplate = `#cloud-config
+
 users:
   - name: %s
     plain_text_passwd: %s
@@ -15,9 +15,8 @@ chpasswd:
   expire: false
 
 ssh_pwauth: true
-	`
+`
 
-var metaDataTemplate = `
-instance-id: %s
+var metaDataTemplate = `instance-id: %s
 local-hostname: %s
 `

@@ -187,8 +187,8 @@ func (is *ImageStorage) downloadFile(ctx context.Context, url, outputPath string
 				}
 				downloadedBytes += int64(n)
 
-				// Log progress every 20 seconds
-				if time.Since(lastProgressTime) > 20*time.Second {
+				// Log progress every 10 seconds
+				if time.Since(lastProgressTime) > 10*time.Second {
 					if contentLength > 0 {
 						progress := float64(downloadedBytes) / float64(contentLength) * 100
 						imageStorageLog.Infof("Download progress: %.1f%% (%d/%d bytes)",
@@ -197,6 +197,10 @@ func (is *ImageStorage) downloadFile(ctx context.Context, url, outputPath string
 						imageStorageLog.Infof("Downloaded: %d bytes", downloadedBytes)
 					}
 					lastProgressTime = time.Now()
+				}
+				// print when file is downloaded
+				if downloadedBytes == contentLength {
+					imageStorageLog.Infof("File downloaded: %d bytes", downloadedBytes)
 				}
 			}
 			if err != nil {

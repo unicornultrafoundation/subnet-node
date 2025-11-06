@@ -6,6 +6,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ipfs/go-datastore"
+
+	vbox_service "github.com/unicornultrafoundation/subnet-node/core/virtualbox/service"
+	"github.com/unicornultrafoundation/subnet-node/core/virtualbox/storage"
 	vbtypes "github.com/unicornultrafoundation/subnet-node/core/virtualbox/types"
 )
 
@@ -14,26 +18,42 @@ type JobManager struct {
 	requestChannel chan *vbtypes.VMRequest
 
 	jobs map[string]*vbtypes.Job
+
+	orderToVMMap *map[string]string
+	orderMapMu   sync.RWMutex
+
+	datastore datastore.Datastore
+
+	storageManager *storage.ImageStorage
+	vboxService    *vbox_service.VBoxService
+
+	stopChan chan struct{}
 }
 
 // jobManager with 100 request channel buffer
-func NewJobManager() *JobManager {
-	return &JobManager{
+func NewJobManager(storageManager *storage.ImageStorage, vboxService *vbox_service.VBoxService, orderToVMMap *map[string]string, datastore datastore.Datastore) *JobManager {
+
+	jobManager := JobManager{
 		requestChannel: make(chan *vbtypes.VMRequest, 100),
 		jobs:           make(map[string]*vbtypes.Job),
+		orderToVMMap:   orderToVMMap,
+		orderMapMu:     sync.RWMutex{},
+		datastore:      datastore,
+		stopChan:       make(chan struct{}),
+		storageManager: storageManager,
+		vboxService:    vboxService,
 	}
-}
-
-func (jm *JobManager) GetRequestChannel() chan *vbtypes.VMRequest {
-	return jm.requestChannel
+	jobManager.Start(context.Background())
+	return &jobManager
 }
 
 func (jm *JobManager) Start(ctx context.Context) error {
 	go jm.startJobCleanup(ctx)
+	go jm.startWorker(ctx)
 	return nil
 }
 
-func (jm *JobManager) CreateJob(ctx context.Context, jobType vbtypes.VMEventType, request map[string]interface{}, vmName string) (*vbtypes.Job, error) {
+func (jm *JobManager) CreateJob(ctx context.Context, jobType vbtypes.VMEventType, request interface{}, vmName string) (*vbtypes.Job, error) {
 	jm.mu.Lock()
 	defer jm.mu.Unlock()
 
@@ -104,6 +124,45 @@ func (jm *JobManager) MarkJobAsFailed(ctx context.Context, jobID string, errorMs
 
 	job.Status = vbtypes.JobStatusFailed
 	job.Error = errorMsg
+	now := time.Now()
+	job.CompletedAt = &now
+
+	return nil
+}
+
+func (jm *JobManager) ListJobs(ctx context.Context) ([]*vbtypes.Job, error) {
+	jm.mu.RLock()
+	defer jm.mu.RUnlock()
+
+	jobs := make([]*vbtypes.Job, 0, len(jm.jobs))
+	for _, job := range jm.jobs {
+		jobs = append(jobs, job)
+	}
+	return jobs, nil
+}
+
+func (jm *JobManager) GetJobProgress(ctx context.Context, jobID string) (*vbtypes.Job, error) {
+	jm.mu.RLock()
+	defer jm.mu.RUnlock()
+
+	job, exists := jm.jobs[jobID]
+	if !exists {
+		return nil, fmt.Errorf("job not found: %s", jobID)
+	}
+	return job, nil
+}
+
+func (jm *JobManager) CompleteJob(ctx context.Context, jobID string, vmID string, result map[string]interface{}) error {
+	jm.mu.Lock()
+	defer jm.mu.Unlock()
+
+	job, exists := jm.jobs[jobID]
+	if !exists {
+		return fmt.Errorf("job not found: %s", jobID)
+	}
+
+	job.Status = vbtypes.JobStatusCompleted
+	job.VMID = vmID
 	now := time.Now()
 	job.CompletedAt = &now
 

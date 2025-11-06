@@ -205,6 +205,15 @@ type VMCreateFromImageRequest struct {
 	OrderId    string `json:"order_id,omitempty"`
 }
 
+type CloneVMRequest struct {
+	NewVMName string `json:"new_vm_name"`
+	Register  bool   `json:"register,omitempty"`
+}
+
+type SnapshotVMRequest struct {
+	SnapshotName string `json:"snapshot_name"`
+}
+
 // VMMetricValue represents a metric value
 type VMMetricValue struct {
 	Value float64 `json:"value"`
@@ -216,4 +225,21 @@ type VMMetricsSnapshot struct {
 	Timestamp string                   `json:"timestamp"`
 	VMId      string                   `json:"vm_id"`
 	Metrics   map[string]VMMetricValue `json:"metrics"`
+}
+
+type AddNATPFRequest struct {
+	PortName  string `json:"port_name"`
+	Proto     string `json:"proto,omitempty"`
+	GuestPort uint16 `json:"guest_port"`
+}
+
+type DeleteNATPFRequest struct {
+	PortName string `json:"port_name"`
+}
+
+type SetNICRequest struct {
+	Network       string `json:"network"`
+	Hardware      string `json:"hardware"`
+	HostInterface string `json:"host_interface"`
+	MacAddr       string `json:"mac_addr"`
 }

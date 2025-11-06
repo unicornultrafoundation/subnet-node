@@ -56,7 +56,7 @@ type SubnetNode struct {
 	Firewall        firewall.FirewallInterface    `optional:"true"`
 	Deployer        *deployer.Service             `optional:"true"`
 	K8sDeployer     k8s.Service                   `optional:"true"`
-	VirtualBox      *virtualbox.VirtualboxService `optional:"true"`
+	VirtualBox      virtualbox.IVirtualboxService `optional:"true"`
 
     Account   *account.AccountService   `optional:"true"`
     Ethereum  *ethereum.EthereumService `optional:"true"`
