@@ -56,15 +56,16 @@ func (api *VirtualBoxAPI) Router() *chi.Mux {
 	r.Post("/{orderId}/reset", api.resetVMHandler)
 	r.Post("/{orderId}/clone", api.cloneVMHandler)
 
+	// port forwarding
+	r.Get("/{orderId}/natpf", api.getVMPortForwardingsHandler)
+	r.Post("/{orderId}/natpf", api.addNATPFHandler)
+	r.Delete("/{orderId}/natpf", api.deleteNATPFHandler)
+
 	// snapshot
 	r.Post("/{orderId}/snapshot", api.takeSnapshotHandler)
 	r.Post("/{orderId}/snapshot/restore", api.restoreSnapshotHandler)
 	r.Delete("/{orderId}/snapshot", api.deleteSnapshotHandler)
 	r.Get("/{orderId}/snapshots", api.listSnapshotsHandler)
-
-	// add port forwarding rule
-	r.Post("/{orderId}/natpf/{portNumber}", api.addNATPFHandler)
-	r.Delete("/{orderId}/natpf/{portNumber}", api.deleteNATPFHandler)
 
 	// set NIC
 	r.Post("/{orderId}/nic/{n}", api.setNICHandler)
@@ -629,17 +630,8 @@ func (api *VirtualBoxAPI) addNATPFHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	portNumber := chi.URLParam(r, "portNumber")
-	if portNumber == "" {
-		api.sendErrorResponse(w, "portNumber is required", http.StatusBadRequest)
-		return
-	}
-
-	portNumberInt, err := strconv.Atoi(portNumber)
-	if err != nil {
-		api.sendErrorResponse(w, "Invalid portNumber parameter. Must be a positive integer", http.StatusBadRequest)
-		return
-	}
+	// support 1 adapter, add later multiple adapters if needed
+	adapterNumber := 1
 
 	vmId, exists := api.vboxService.GetVMIdByOrderId(orderId)
 	if !exists {
@@ -653,15 +645,22 @@ func (api *VirtualBoxAPI) addNATPFHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	err = api.vboxService.AddNATPF(r.Context(), vmId, portNumberInt, req.PortName, req.HostPort, req.GuestPort, req.Proto)
+	err := api.vboxService.AddNATPF(r.Context(), vmId, adapterNumber, req.PortName, req.Proto, req.GuestPort)
 	if err != nil {
 		api.sendErrorResponse(w, fmt.Sprintf("Failed to add NAT port forwarding rule: %v", err), http.StatusInternalServerError)
 		return
 	}
 
+	// return VM port forwarding rule
+	portForwarding, err := api.vboxService.GetVMPortForwarding(r.Context(), vmId)
+	if err != nil {
+		api.sendErrorResponse(w, fmt.Sprintf("Failed to get NAT port forwarding rule: %v", err), http.StatusInternalServerError)
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"message": "NAT port forwarding rule added successfully"})
+	json.NewEncoder(w).Encode(portForwarding)
 	return
 }
 
@@ -678,17 +677,8 @@ func (api *VirtualBoxAPI) deleteNATPFHandler(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	portNumber := chi.URLParam(r, "portNumber")
-	if portNumber == "" {
-		api.sendErrorResponse(w, "portNumber is required", http.StatusBadRequest)
-		return
-	}
-
-	portNumberInt, err := strconv.Atoi(portNumber)
-	if err != nil {
-		api.sendErrorResponse(w, "Invalid portNumber parameter. Must be a positive integer", http.StatusBadRequest)
-		return
-	}
+	// support 1 adapter, add later multiple adapters if needed
+	adapterNumber := 1
 
 	var req vbtypes.DeleteNATPFRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -696,7 +686,7 @@ func (api *VirtualBoxAPI) deleteNATPFHandler(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	err = api.vboxService.DeleteNATPF(r.Context(), vmId, portNumberInt, req.PortName)
+	err := api.vboxService.DeleteNATPF(r.Context(), vmId, adapterNumber, req.PortName)
 	if err != nil {
 		api.sendErrorResponse(w, fmt.Sprintf("Failed to delete NAT port forwarding rule: %v", err), http.StatusInternalServerError)
 		return
@@ -866,5 +856,30 @@ func (api *VirtualBoxAPI) listSnapshotsHandler(w http.ResponseWriter, r *http.Re
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(snapshots)
+	return
+}
+
+func (api *VirtualBoxAPI) getVMPortForwardingsHandler(w http.ResponseWriter, r *http.Request) {
+	orderId := chi.URLParam(r, "orderId")
+	if orderId == "" {
+		api.sendErrorResponse(w, "orderId is required", http.StatusBadRequest)
+		return
+	}
+
+	vmId, exists := api.vboxService.GetVMIdByOrderId(orderId)
+	if !exists {
+		api.sendErrorResponse(w, "VM not found for this orderId", http.StatusNotFound)
+		return
+	}
+
+	portForwardings, err := api.vboxService.GetVMPortForwarding(r.Context(), vmId)
+	if err != nil {
+		api.sendErrorResponse(w, fmt.Sprintf("Failed to get port forwarding: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(portForwardings)
 	return
 }

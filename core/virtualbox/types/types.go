@@ -229,9 +229,8 @@ type VMMetricsSnapshot struct {
 
 type AddNATPFRequest struct {
 	PortName  string `json:"port_name"`
-	HostPort  uint16 `json:"host_port"`
-	GuestPort uint16 `json:"guest_port"`
 	Proto     string `json:"proto,omitempty"`
+	GuestPort uint16 `json:"guest_port"`
 }
 
 type DeleteNATPFRequest struct {

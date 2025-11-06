@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -680,14 +681,14 @@ func (s *VBoxService) ListAvailableMetrics(vmId string) (string, error) {
 }
 
 // AddNATPF adds a NAT port forarding rule to the n-th NIC with the given name.
-func (s *VBoxService) AddNATPF(n int, vmName string, name string, rule PFRule) error {
-	_, _, err := s.vBoxCmd.Run("modifyvm", vmName, fmt.Sprintf("--natpf%d", n), fmt.Sprintf("%s,%s", name, rule.Format()))
+func (s *VBoxService) AddNATPF(adapterNumber int, vmName string, rule PFRule) error {
+	_, _, err := s.vBoxCmd.Run("modifyvm", vmName, fmt.Sprintf("--natpf%d", adapterNumber), rule.Format())
 	return err
 }
 
 // DelNATPF deletes the NAT port forwarding rule with the given name from the n-th NIC.
-func (s *VBoxService) DelNATPF(n int, vmName string, name string) error {
-	_, _, err := s.vBoxCmd.Run("controlvm", vmName, fmt.Sprintf("natpf%d", n), "delete", name)
+func (s *VBoxService) DelNATPF(adapterNumber int, vmName string, name string) error {
+	_, _, err := s.vBoxCmd.Run("modifyvm", vmName, fmt.Sprintf("--natpf%d", adapterNumber), "delete", name)
 	return err
 }
 
@@ -775,6 +776,100 @@ func (s *VBoxService) ListSnapshots(vmName string) ([]string, error) {
 func (s *VBoxService) CloneVDI(input, output string) error {
 	_, _, err := s.vBoxCmd.Run("clonehd", input, output)
 	return err
+}
+
+func (s *VBoxService) GetVMPortForwarding(vmId string) ([]PFRule, error) {
+	stdout, _, err := s.vBoxCmd.Run("showvminfo", vmId, "--machinereadable")
+	if err != nil {
+		return nil, fmt.Errorf("unable to get port forwarding: %w", err)
+	}
+
+	var rules []PFRule
+	lines := strings.Split(stdout, "\n")
+
+	for _, line := range lines {
+		if !strings.HasPrefix(line, "Forwarding(") {
+			continue
+		}
+
+		// Extract the quoted value after Forwarding(index)="..."
+		// Format: Forwarding(0)="ssh,tcp,,50323,,22"
+		startIdx := strings.Index(line, "=\"")
+		if startIdx == -1 {
+			continue
+		}
+
+		endIdx := strings.LastIndex(line, "\"")
+		if endIdx == -1 || endIdx <= startIdx+1 {
+			continue
+		}
+
+		// Extract the value between quotes
+		value := line[startIdx+2 : endIdx]
+
+		// Split by comma: name, protocol, hostIP, hostPort, guestIP, guestPort
+		parts := strings.Split(value, ",")
+		if len(parts) != 6 {
+			continue
+		}
+
+		// Parse protocol
+		proto := strings.ToLower(strings.TrimSpace(parts[1]))
+		var pfProto PFProto
+		switch proto {
+		case "tcp":
+			pfProto = PFTCP
+		case "udp":
+			pfProto = PFUDP
+		default:
+			continue // Skip invalid protocol
+		}
+
+		// Parse hostIP (parts[2])
+		var hostIP net.IP
+		if hostIPStr := strings.TrimSpace(parts[2]); hostIPStr != "" {
+			hostIP = net.ParseIP(hostIPStr)
+			if hostIP == nil {
+				continue // Skip invalid IP
+			}
+		}
+
+		portName := strings.TrimSpace(parts[0])
+
+		// Parse hostPort (parts[3])
+		hostPort, err := strconv.ParseUint(strings.TrimSpace(parts[3]), 10, 16)
+		if err != nil {
+			continue // Skip invalid port
+		}
+
+		// Parse guestIP (parts[4])
+		var guestIP net.IP
+		if guestIPStr := strings.TrimSpace(parts[4]); guestIPStr != "" {
+			guestIP = net.ParseIP(guestIPStr)
+			if guestIP == nil {
+				continue // Skip invalid IP
+			}
+		}
+
+		// Parse guestPort (parts[5])
+		guestPort, err := strconv.ParseUint(strings.TrimSpace(parts[5]), 10, 16)
+		if err != nil {
+			continue // Skip invalid port
+		}
+
+		rule := PFRule{
+			PortName:  portName,
+			Proto:     pfProto,
+			HostIP:    hostIP,
+			GuestIP:   guestIP,
+			HostPort:  uint16(hostPort),
+			GuestPort: uint16(guestPort),
+		}
+
+		rules = append(rules, rule)
+	}
+
+	return rules, nil
 }
 
 ///

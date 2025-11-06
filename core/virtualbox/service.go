@@ -6,9 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"regexp"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -21,6 +19,7 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/core/virtualbox/ssh_connection"
 	"github.com/unicornultrafoundation/subnet-node/core/virtualbox/storage"
 	vbtypes "github.com/unicornultrafoundation/subnet-node/core/virtualbox/types"
+	"github.com/unicornultrafoundation/subnet-node/core/virtualbox/util"
 )
 
 var serviceLog = logrus.WithField("service", "virtualbox")
@@ -41,6 +40,8 @@ type IVirtualboxService interface {
 	ResetVM(ctx context.Context, vmID string) error
 	CloneVM(ctx context.Context, baseVmName string, newVMName string, register bool) error
 
+	GetVMPortForwarding(ctx context.Context, vmID string) ([]vbox_service.PFRule, error)
+
 	TakeSnapshotVM(ctx context.Context, vmID string, snapshotName string) error
 	RestoreSnapshot(ctx context.Context, vmID string, snapshotName string) error
 	DeleteSnapshot(ctx context.Context, vmID string, snapshotName string) error
@@ -50,8 +51,8 @@ type IVirtualboxService interface {
 	ListJobs(ctx context.Context) ([]*vbtypes.Job, error)
 	GenerateSSHToken(ctx context.Context, vmID string, username string, password string) (*vbtypes.SSHTokenResponse, error)
 	ValidateAndConsumeSSHToken(token string) (*vbtypes.SSHAccessToken, error)
-	AddNATPF(ctx context.Context, vmID string, portNumber int, portName string, hostPort uint16, guestPort uint16, proto string) error
-	DeleteNATPF(ctx context.Context, vmID string, portNumber int, portName string) error
+	AddNATPF(ctx context.Context, vmID string, adapterNumber int, portName string, proto string, guestPort uint16) error
+	DeleteNATPF(ctx context.Context, vmID string, adapterNumber int, portName string) error
 	SetNIC(ctx context.Context, vmID string, n int, network string, hardware string, hostInterface string, macAddr string) error
 	GetSSHServer() *ssh_connection.SSHServer
 	CollectMetrics(ctx context.Context, vmId string, conn *websocket.Conn, period int) error
@@ -286,7 +287,7 @@ func (s *virtualboxService) ListJobs(ctx context.Context) ([]*vbtypes.Job, error
 	return s.jobManager.ListJobs(ctx)
 }
 
-func (s *virtualboxService) AddNATPF(ctx context.Context, vmID string, portNumber int, portName string, hostPort uint16, guestPort uint16, proto string) error {
+func (s *virtualboxService) AddNATPF(ctx context.Context, vmID string, adapterNumber int, portName string, proto string, guestPort uint16) error {
 
 	var protoValue vbox_service.PFProto
 	if proto != "" {
@@ -294,19 +295,25 @@ func (s *virtualboxService) AddNATPF(ctx context.Context, vmID string, portNumbe
 	} else {
 		protoValue = vbox_service.PFTCP
 	}
+	// find available TCP port in range 20000-30000
+	availablePort, err := util.FindAvailableTCPPort(20000, 30000)
+	if err != nil {
+		return fmt.Errorf("failed to get available port: %w", err)
+	}
 
 	rule := vbox_service.PFRule{
+		PortName:  portName,
 		Proto:     protoValue,
 		HostIP:    nil,
 		GuestIP:   nil,
-		HostPort:  hostPort,
+		HostPort:  uint16(availablePort),
 		GuestPort: guestPort,
 	}
-	return s.vBoxService.AddNATPF(portNumber, vmID, portName, rule)
+	return s.vBoxService.AddNATPF(adapterNumber, vmID, rule)
 }
 
-func (s *virtualboxService) DeleteNATPF(ctx context.Context, vmID string, portNumber int, portName string) error {
-	return s.vBoxService.DelNATPF(portNumber, vmID, portName)
+func (s *virtualboxService) DeleteNATPF(ctx context.Context, vmID string, adapterNumber int, portName string) error {
+	return s.vBoxService.DelNATPF(adapterNumber, vmID, portName)
 }
 
 func (s *virtualboxService) SetNIC(ctx context.Context, vmID string, n int, network string, hardware string, hostInterface string, macAddr string) error {
@@ -336,6 +343,10 @@ func (s *virtualboxService) DeleteSnapshot(ctx context.Context, vmID string, sna
 
 func (s *virtualboxService) ListSnapshots(ctx context.Context, vmID string) ([]string, error) {
 	return s.vBoxService.ListSnapshots(vmID)
+}
+
+func (s *virtualboxService) GetVMPortForwarding(ctx context.Context, vmID string) ([]vbox_service.PFRule, error) {
+	return s.vBoxService.GetVMPortForwarding(vmID)
 }
 
 func (s *virtualboxService) syncSSHServerWithRunningVMs(ctx context.Context) error {
@@ -658,7 +669,7 @@ func (s *virtualboxService) CollectMetrics(ctx context.Context, vmId string, con
 			serviceLog.Debugf("VBoxManage output: %s", line)
 
 			// Parse the line into structured data
-			metricData, err := parseVBoxManageOutput(line)
+			metricData, err := util.ParseVBoxManageOutput(line)
 			if err != nil {
 				serviceLog.Warnf("Error parsing line: %v", err)
 				continue
@@ -789,88 +800,4 @@ func (s *virtualboxService) CollectMetrics(ctx context.Context, vmId string, con
 
 	serviceLog.Infof("Metrics collection stopped for VM: %s", vmId)
 	return nil
-}
-
-// metricParseData is a temporary struct for parsing VBoxManage output
-type metricParseData struct {
-	Timestamp string
-	Metric    string
-	Value     float64
-	Unit      string
-}
-
-func parseVBoxManageOutput(line string) (*metricParseData, error) {
-	// Skip header lines and empty lines
-	line = strings.TrimSpace(line)
-	if line == "" || strings.Contains(line, "----") {
-		return nil, nil
-	}
-
-	// Skip header lines that don't start with a timestamp
-	// VBoxManage metrics output starts with timestamp like "04:19:01.615"
-	if !regexp.MustCompile(`^\d{2}:\d{2}:\d{2}\.\d{3}`).MatchString(line) {
-		// This is not a metric data line, skip it
-		return nil, nil
-	}
-
-	// Parse the format: "04:19:01.615 vm-1       CPU/Load/User        5.11%" or "04:19:01.615 vm-1       RAM/Usage/Used       118816 kB"
-	// Using regex to handle variable spacing and different units including kB, MB, B/s
-	re := regexp.MustCompile(`^(\d{2}:\d{2}:\d{2}\.\d{3})\s+(\S+)\s+([^\s]+(?:\s+[^\s]+)*)\s+([\d.]+)\s*([%]|[kK]?[bB]|[mM]?[bB]|[gG]?[bB]|[bB]/s|[kK][bB]/s|[mM][bB]/s|[gG][bB]/s)?$`)
-	matches := re.FindStringSubmatch(line)
-
-	if len(matches) != 6 {
-		return nil, fmt.Errorf("could not parse line: %s", line)
-	}
-
-	timestamp := matches[1]
-	metric := strings.TrimSpace(matches[3])
-	valueStr := matches[4]
-	unit := matches[5]
-
-	// Convert value to float64
-	value, err := strconv.ParseFloat(valueStr, 64)
-	if err != nil {
-		return nil, fmt.Errorf("could not parse value '%s': %v", valueStr, err)
-	}
-
-	// Convert timestamp to full datetime
-	now := time.Now()
-	timeStr := fmt.Sprintf("%04d-%02d-%02d %s", now.Year(), now.Month(), now.Day(), timestamp)
-	parsedTime, err := time.Parse("2006-01-02 15:04:05.000", timeStr)
-	if err != nil {
-		return nil, fmt.Errorf("could not parse timestamp '%s': %v", timeStr, err)
-	}
-
-	// Normalize units for better consistency
-	normalizedUnit := normalizeUnit(unit)
-
-	return &metricParseData{
-		Timestamp: parsedTime.Format(time.RFC3339),
-		Metric:    metric,
-		Value:     value,
-		Unit:      normalizedUnit,
-	}, nil
-}
-
-func normalizeUnit(unit string) string {
-	switch strings.ToLower(unit) {
-	case "%":
-		return "%"
-	case "kb", "k":
-		return "KB"
-	case "mb", "m":
-		return "MB"
-	case "gb", "g":
-		return "GB"
-	case "b/s":
-		return "B/s"
-	case "kb/s", "k/s":
-		return "KB/s"
-	case "mb/s", "m/s":
-		return "MB/s"
-	case "gb/s", "g/s":
-		return "GB/s"
-	default:
-		return unit
-	}
 }

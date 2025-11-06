@@ -4,15 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net"
 	"runtime"
-	"strconv"
 
 	"github.com/ipfs/go-datastore"
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/core/node/resource"
 	vbox_service "github.com/unicornultrafoundation/subnet-node/core/virtualbox/service"
 	vbtypes "github.com/unicornultrafoundation/subnet-node/core/virtualbox/types"
+	"github.com/unicornultrafoundation/subnet-node/core/virtualbox/util"
 )
 
 var jobLog = logrus.WithField("service", "virtualbox-job-manager")
@@ -156,20 +155,21 @@ func (jm *JobManager) handleCreateVMRequest(ctx context.Context, request *vbtype
 
 func (jm *JobManager) AddNATPFToVM(vm *vbtypes.VM) error {
 
-	availablePort, err := getAvailablePort()
+	availablePort, err := util.FindAvailableTCPPort(20000, 30000)
 	if err != nil {
 		return fmt.Errorf("failed to get available port: %w", err)
 	}
 
 	rule := vbox_service.PFRule{
+		PortName:  "ssh",
 		Proto:     vbox_service.PFTCP,
 		HostIP:    nil,
 		GuestIP:   nil,
-		HostPort:  availablePort,
+		HostPort:  uint16(availablePort),
 		GuestPort: 22,
 	}
 
-	if err := jm.vboxService.AddNATPF(1, vm.Name, "ssh", rule); err != nil {
+	if err := jm.vboxService.AddNATPF(1, vm.Name, rule); err != nil {
 		fmt.Println("err", err.Error())
 		return fmt.Errorf("failed to add NAT port forwarding rule: %w", err)
 	}
@@ -355,23 +355,4 @@ func (jm *JobManager) storeOrderVMMapping(orderId, vmId string) error {
 	key := datastore.NewKey("virtualbox/order_mapping/" + orderId)
 	return jm.datastore.Put(context.Background(), key, data)
 
-}
-
-// getAvailablePort finds an available TCP port on the host
-func getAvailablePort() (uint16, error) {
-	l, err := net.Listen("tcp", ":0")
-	if err != nil {
-		return 0, err
-	}
-	defer l.Close()
-	addr := l.Addr().String()
-	_, portStr, err := net.SplitHostPort(addr)
-	if err != nil {
-		return 0, err
-	}
-	port, err := strconv.Atoi(portStr)
-	if err != nil {
-		return 0, err
-	}
-	return uint16(port), nil
 }
