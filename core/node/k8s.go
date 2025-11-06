@@ -18,15 +18,23 @@ import (
 	"github.com/unicornultrafoundation/subnet-node/core/k8s/kube"
 	ipmanager "github.com/unicornultrafoundation/subnet-node/core/vpn/ip_manager"
 
+	kubehostname "github.com/unicornultrafoundation/subnet-node/core/k8s/kube/operators/clients/hostname"
 	kubeinventory "github.com/unicornultrafoundation/subnet-node/core/k8s/kube/operators/clients/inventory"
 	cfromctx "github.com/unicornultrafoundation/subnet-node/core/k8s/types/v1/fromctx"
 	subnetclientset "github.com/unicornultrafoundation/subnet-node/pkg/k8s/client/clientset/versioned"
 
+	providerflags "github.com/unicornultrafoundation/subnet-node/pkg/k8s/operator/common"
+	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/operator/waiter"
 	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/pubsub"
 	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/session"
 	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/tools/fromctx"
 	ptypes "github.com/unicornultrafoundation/subnet-node/proto/subnet/k8s/provider/v1"
 	"go.uber.org/fx"
+)
+
+const (
+	serviceIPOperator       = "ip-operator"
+	serviceHostnameOperator = "hostname-operator"
 )
 
 // DeployerService provides a lifecycle-managed Deployer service
@@ -61,11 +69,26 @@ func K8sService(lc fx.Lifecycle, cfg *config.C, account *account.AccountService,
 	}
 	ctx = context.WithValue(ctx, fromctx.CtxKeySubnetClientSet, subnetClientset)
 
+	endpoint, err := providerflags.GetServiceEndpointFlagValue(logger, serviceHostnameOperator)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get service endpoint for hostname operator: %w", err)
+	}
+	hostnameOperatorClient, err := kubehostname.NewClient(ctx, logger, endpoint)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create hostname client: %w", err)
+	}
+	ctx = context.WithValue(ctx, cfromctx.CtxKeyClientHostname, hostnameOperatorClient)
+
 	inventory, err := kubeinventory.NewClient(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create inventory client: %w", err)
 	}
 	ctx = context.WithValue(ctx, cfromctx.CtxKeyClientInventory, inventory)
+
+	waitClients := make([]waiter.Waitable, 0)
+	waitClients = append(waitClients, hostnameOperatorClient)
+
+	operatorWaiter := waiter.NewOperatorWaiter(ctx, logger, waitClients...)
 
 	group, ctx := errgroup.WithContext(ctx)
 	ctx = context.WithValue(ctx, fromctx.CtxKeyErrGroup, group)
@@ -101,7 +124,7 @@ func K8sService(lc fx.Lifecycle, cfg *config.C, account *account.AccountService,
 	session := session.New(logger, provider)
 	bus := pubsub.NewBus()
 
-	service, err := k8s.NewServiceFromConfig(ctx, session, bus, client, cfg, bidengine, account.GetClient())
+	service, err := k8s.NewServiceFromConfig(ctx, session, bus, client, cfg, bidengine, account.GetClient(), operatorWaiter)
 	if err != nil {
 		return nil, err
 	}

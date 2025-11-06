@@ -82,7 +82,7 @@ func (c *client) DeclareHostname(ctx context.Context, lID mtypes.LeaseID, host s
 			ExternalPort: externalPort,
 		}
 	}
-	c.log.Info("declaring hostname", "lease", lID, "service-name", serviceName, "external-port", externalPort, "host", host)
+	c.log.WithField("lease", lID).WithField("service-name", serviceName).WithField("external-port", externalPort).WithField("host", host).Info("declaring hostname")
 
 	if obj.Annotations == nil {
 		obj.Annotations = make(map[string]string)

@@ -10,6 +10,7 @@ import (
 	"github.com/boz/go-lifecycle"
 	"github.com/desertbit/timer"
 	"github.com/sirupsen/logrus"
+	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/operator/waiter"
 	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/pubsub"
 
 	tpubsub "github.com/troian/pubsub"
@@ -64,6 +65,7 @@ type inventoryService struct {
 	readych                chan struct{}
 	log                    *logrus.Logger
 	lc                     lifecycle.Lifecycle
+	waiter                 waiter.OperatorWaiter
 	availableExternalPorts uint
 
 	clients struct {
@@ -77,6 +79,7 @@ func newInventoryService(
 	log *logrus.Logger,
 	sub pubsub.Subscriber,
 	client Client,
+	operatorWaiter waiter.OperatorWaiter,
 	deployments []ctypes.IDeployment,
 ) (*inventoryService, error) {
 	sub, err := sub.Clone()
@@ -97,6 +100,7 @@ func newInventoryService(
 		log:                    log.WithField("module", "inventory").Logger,
 		lc:                     lifecycle.New(),
 		availableExternalPorts: config.InventoryExternalPortQuantity,
+		waiter:                 operatorWaiter,
 	}
 
 	is.clients.inventory = cfromctx.ClientInventoryFromContext(ctx)
@@ -323,6 +327,14 @@ func (is *inventoryService) run(ctx context.Context, reservationsArg []*reservat
 		reservations: reservationsArg,
 	}
 	is.log.WithField("qty", len(state.reservations)).Info("Starting with existing reservations")
+
+	// wait on the operators to be ready
+	err := is.waiter.WaitForAll(ctx)
+	if err != nil {
+		is.log.WithError(err).Error("failed to wait for operators to be ready")
+		is.lc.ShutdownInitiated(err)
+		return
+	}
 
 	var currinv ctypes.Inventory
 

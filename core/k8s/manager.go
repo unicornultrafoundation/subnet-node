@@ -382,7 +382,7 @@ func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, []string, 
 		return nil, nil, err
 	}
 
-	dm.log.Info("hostnames withheld", "cnt", len(withheldHostnames))
+	dm.log.WithField("cnt", len(withheldHostnames)).Info("hostnames withheld")
 
 	hostnamesInThisRequest := make(map[string]struct{})
 	for _, hostname := range allHostnames {

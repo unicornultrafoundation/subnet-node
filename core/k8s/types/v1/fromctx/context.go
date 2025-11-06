@@ -3,12 +3,14 @@ package fromctx
 import (
 	"context"
 
+	"github.com/unicornultrafoundation/subnet-node/core/k8s/types/v1/clients/hostname"
 	"github.com/unicornultrafoundation/subnet-node/core/k8s/types/v1/clients/inventory"
 )
 
 type CtxKey string
 
 const (
+	CtxKeyClientHostname  = CtxKey("client-hostname")
 	CtxKeyClientInventory = CtxKey("client-inventory")
 )
 
@@ -21,5 +23,17 @@ func ClientInventoryFromContext(ctx context.Context) inventory.Client {
 	}
 
 	res = val.(inventory.Client)
+	return res
+}
+
+func ClientHostnameFromContext(ctx context.Context) hostname.Client {
+	var res hostname.Client
+
+	val := ctx.Value(CtxKeyClientHostname)
+	if val == nil {
+		return res
+	}
+
+	res = val.(hostname.Client)
 	return res
 }

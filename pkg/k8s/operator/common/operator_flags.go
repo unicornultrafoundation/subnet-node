@@ -35,7 +35,7 @@ const (
 )
 
 func AddOperatorFlags(cmd *cobra.Command) {
-	cmd.Flags().String(FlagK8sManifestNS, "lease", "Cluster manifest namespace")
+	cmd.Flags().String(FlagK8sManifestNS, "subnet-services", "Cluster manifest namespace")
 	if err := viper.BindPFlag(FlagK8sManifestNS, cmd.Flags().Lookup(FlagK8sManifestNS)); err != nil {
 		panic(err)
 	}

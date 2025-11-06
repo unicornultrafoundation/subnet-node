@@ -16,6 +16,7 @@ import (
 	mtypes "github.com/unicornultrafoundation/subnet-node/proto/subnet/k8s/market/v1"
 	unit "github.com/unicornultrafoundation/subnet-node/proto/subnet/k8s/utils"
 
+	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/operator/waiter"
 	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/pubsub"
 	"github.com/unicornultrafoundation/subnet-node/proto/subnet/k8s/testutil"
 
@@ -114,6 +115,7 @@ func TestInventory_ClusterDeploymentNotDeployed(t *testing.T) {
 		myLog,
 		subscriber,
 		clusterClient,
+		waiter.NewNullWaiter(), // Do not need to wait in test
 		deployments)
 	require.NoError(t, err)
 	require.NotNil(t, inv)
@@ -211,6 +213,7 @@ func TestInventory_ClusterDeploymentDeployed(t *testing.T) {
 		myLog,
 		subscriber,
 		clusterClient,
+		waiter.NewNullWaiter(), // Do not need to wait in test
 		deployments)
 	require.NoError(t, err)
 	require.NotNil(t, inv)
@@ -411,6 +414,7 @@ func TestInventory_OverReservations(t *testing.T) {
 		myLog,
 		subscriber,
 		scaffold.clusterClient,
+		waiter.NewNullWaiter(), // Do not need to wait in test
 		make([]ctypes.IDeployment, 0))
 	require.NoError(t, err)
 	require.NotNil(t, inv)

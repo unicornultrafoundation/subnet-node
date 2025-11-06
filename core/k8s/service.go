@@ -22,6 +22,7 @@ import (
 	provider "github.com/unicornultrafoundation/subnet-node/proto/subnet/k8s/provider/v1"
 
 	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/apitypes"
+	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/operator/waiter"
 	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/pubsub"
 	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/sdl"
 
@@ -62,6 +63,8 @@ type service struct {
 
 	log *logrus.Logger
 	lc  lifecycle.Lifecycle
+
+	waiter waiter.OperatorWaiter
 
 	config Config
 
@@ -153,8 +156,9 @@ func NewServiceFromConfig(
 	cfg *config.C,
 	bidengine *bidengine.BidEngine,
 	ethClient *ethclient.Client,
+	operatorWaiter waiter.OperatorWaiter,
 ) (Service, error) {
-	return NewService(ctx, session, bus, client, NewConfig(cfg), bidengine, ethClient)
+	return NewService(ctx, session, bus, client, NewConfig(cfg), bidengine, ethClient, operatorWaiter)
 }
 
 // NewService returns new Service instance
@@ -166,6 +170,7 @@ func NewService(
 	cfg Config,
 	bidengine *bidengine.BidEngine,
 	ethClient *ethclient.Client,
+	operatorWaiter waiter.OperatorWaiter,
 ) (Service, error) {
 	log := session.Log().WithField("module", "provider-cluster").WithField("cmp", "service").Logger
 
@@ -182,7 +187,7 @@ func NewService(
 		return nil, err
 	}
 
-	inventory, err := newInventoryService(ctx, cfg, log, sub, client, deployments)
+	inventory, err := newInventoryService(ctx, cfg, log, sub, client, operatorWaiter, deployments)
 	if err != nil {
 		sub.Close()
 		return nil, err
@@ -224,6 +229,7 @@ func NewService(
 		log:                            log.WithField("service", "k8s").Logger,
 		lc:                             lc,
 		config:                         cfg,
+		waiter:                         operatorWaiter,
 		manifestService:                manifestService,
 		bidengine:                      bidengine,
 		ethClient:                      ethClient,
@@ -481,6 +487,13 @@ func (s *service) ScaleBack(ctx context.Context, leaseID mtypes.LeaseID) error {
 func (s *service) run(ctx context.Context, deployments []ctypes.IDeployment) {
 	defer s.lc.ShutdownCompleted()
 	defer s.sub.Close()
+
+	// wait for configured operators to be online & responsive before proceeding
+	err := s.waiter.WaitForAll(ctx)
+	if err != nil {
+		s.lc.ShutdownInitiated(err)
+		return
+	}
 
 	bus := fromctx.MustPubSubFromCtx(ctx)
 

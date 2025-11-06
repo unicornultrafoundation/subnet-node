@@ -29,7 +29,7 @@ spec:
       containers:
         - name: operator-hostname
           image: u2udepin/subnet-node:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           command:
             - "./subnet"
           args: ["k8s-services", "operator", "hostname"]
