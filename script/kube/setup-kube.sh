@@ -36,6 +36,9 @@ retrywait=1
 CRD_FILE=$rootdir/pkg/k8s/apis/crd.yaml
 STORAGE_CLASS_FILE=$rootdir/pkg/k8s/apis/storageclass.yaml
 NAMESPACE_FILE=$rootdir/pkg/k8s/apis/namespace.yaml
+INGRESS_NGINX_FILE=$rootdir/pkg/k8s/network/ingress-nginx.yaml
+
+KUBE_ROLLOUT_TIMEOUT="${KUBE_ROLLOUT_TIMEOUT:-180}"
 
 # Detect platform and set appropriate commands
 detect_platform() {
@@ -245,6 +248,13 @@ install_network_policies() {
     echo "Network policies installed"
 }
 
+install_ingress() {
+    echo "Installing ingress-nginx"
+    kubectl apply -f "$INGRESS_NGINX_FILE"
+    kubectl rollout status deployment -n ingress-nginx ingress-nginx-controller --timeout="${KUBE_ROLLOUT_TIMEOUT}s"
+    echo "Ingress-nginx installed"
+}
+
 install_inventory_operator() {
     echo "Installing inventory operator"
     kubectl kustomize "$rootdir/pkg/k8s/kustomize/subnet-operator-inventory/" | kubectl apply -f-
@@ -292,6 +302,12 @@ install_inventory_operator() {
     else
         echo "✓ Port configuration appears correct"
     fi
+}
+
+install_hostname_operator() {
+    echo "Installing hostname operator"
+    kubectl kustomize "$rootdir/pkg/k8s/kustomize/subnet-operator-hostname/" | kubectl apply -f-
+    echo "Hostname operator installed"
 }
 
 wait_inventory_available() {
@@ -528,7 +544,9 @@ main() {
     install_ns
     install_crd
     install_network_policies
+    install_ingress
     install_inventory_operator
+    install_hostname_operator
     wait_inventory_available
 }
 

@@ -51,6 +51,7 @@ type service struct {
 	bidengine *bidengine.BidEngine
 
 	inventory *inventoryService
+	hostnames *hostnameService
 
 	checkDeploymentExistsRequestCh chan checkDeploymentExistsRequest
 	statusch                       chan chan<- *apclient.ClusterStatus
@@ -101,6 +102,8 @@ type Service interface {
 	Close() error
 	Ready() <-chan struct{}
 	Done() <-chan struct{}
+	HostnameService() ctypes.HostnameServiceClient
+	TransferHostname(ctx context.Context, leaseID mtypes.LeaseID, hostname string, serviceName string, externalPort uint32) error
 
 	// RequestDeployment requests a deployment to be created
 	RequestDeployment(ctx context.Context, deploymentID dtypes.DeploymentID, sdlManifest sdl.SDL) error
@@ -185,12 +188,31 @@ func NewService(
 		return nil, err
 	}
 
+	allHostnames, err := client.AllHostnames(ctx)
+	if err != nil {
+		sub.Close()
+		return nil, err
+	}
+
+	// Note: one side effect of this code is to add reservations for auto generated hostnames
+	// This is not normally done, but also doesn't cause any problems
+	activeHostnames := make(map[string]mtypes.LeaseID, len(allHostnames))
+	for _, v := range allHostnames {
+		activeHostnames[v.Hostname] = v.ID
+		log.Debug("found existing hostname", "hostname", v.Hostname, "id", v.ID)
+	}
+	hostnames, err := newHostnameService(ctx, cfg, activeHostnames)
+	if err != nil {
+		return nil, err
+	}
+
 	manifestService := manifest.NewService(bus, log, session.Provider().Address())
 	expiryService := newExpiryService(bidengine.GetBidMarket(), ethClient)
 
 	s := &service{
 		session:                        session,
 		client:                         client,
+		hostnames:                      hostnames,
 		bus:                            bus,
 		sub:                            sub,
 		inventory:                      inventory,
@@ -271,6 +293,14 @@ func (s *service) Reserve(order mtypes.OrderID, resources dtypes.ResourceGroup) 
 
 func (s *service) Unreserve(order mtypes.OrderID) error {
 	return s.inventory.unreserve(order)
+}
+
+func (s *service) HostnameService() ctypes.HostnameServiceClient {
+	return s.hostnames
+}
+
+func (s *service) TransferHostname(ctx context.Context, leaseID mtypes.LeaseID, hostname string, serviceName string, externalPort uint32) error {
+	return s.client.DeclareHostname(ctx, leaseID, hostname, serviceName, externalPort)
 }
 
 func (s *service) Status(ctx context.Context) (*apclient.ClusterStatus, error) {

@@ -15,6 +15,9 @@ type Config struct {
 	GPUCommitLevel                  float64
 	MemoryCommitLevel               float64
 	StorageCommitLevel              float64
+	BlockedHostnames                []string
+	DeploymentIngressStaticHosts    bool
+	DeploymentIngressDomain         string
 	MonitorMaxRetries               uint
 	MonitorRetryPeriod              time.Duration
 	MonitorRetryPeriodJitter        time.Duration

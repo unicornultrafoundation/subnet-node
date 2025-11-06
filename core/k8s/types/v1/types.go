@@ -6,8 +6,10 @@ import (
 	"io"
 	"strings"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
 	inventoryV1 "github.com/unicornultrafoundation/subnet-node/proto/subnet/k8s/inventory/v1"
+	mtypes "github.com/unicornultrafoundation/subnet-node/proto/subnet/k8s/market/v1"
 	eventsv1 "k8s.io/api/events/v1"
 )
 
@@ -92,6 +94,13 @@ func (e *eventsFeed) ResultChan() <-chan *eventsv1.Event {
 
 type ExecResult interface {
 	ExitCode() int
+}
+
+type HostnameServiceClient interface {
+	ReserveHostnames(ctx context.Context, hostnames []string, leaseID mtypes.LeaseID) ([]string, error)
+	ReleaseHostnames(leaseID mtypes.LeaseID) error
+	CanReserveHostnames(hostnames []string, ownerAddr common.Address) error
+	PrepareHostnamesForTransfer(ctx context.Context, hostnames []string, leaseID mtypes.LeaseID) error
 }
 
 // FilterGPUInterface ensures interface values are always lower case

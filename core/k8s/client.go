@@ -15,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/version"
 	"k8s.io/client-go/tools/remotecommand"
 
+	chostname "github.com/unicornultrafoundation/subnet-node/core/k8s/types/v1/clients/hostname"
 	apclient "github.com/unicornultrafoundation/subnet-node/core/k8s/types/v1/provider/client"
 	mquery "github.com/unicornultrafoundation/subnet-node/core/k8s/types/v1/query/market"
 	dtypes "github.com/unicornultrafoundation/subnet-node/proto/subnet/k8s/deployment/v1"
@@ -47,7 +48,11 @@ type ReadClient interface {
 	LeaseLogs(context.Context, mtypes.LeaseID, string, bool, *int64) ([]*ctypes.ServiceLog, error)
 	ServiceStatus(context.Context, mtypes.LeaseID, string) (*apclient.ServiceStatus, error)
 
+	AllHostnames(context.Context) ([]chostname.ActiveHostname, error)
 	GetManifestGroup(context.Context, mtypes.LeaseID) (bool, crd.ManifestGroup, error)
+
+	ObserveHostnameState(ctx context.Context) (<-chan chostname.ResourceEvent, error)
+	GetHostnameDeploymentConnections(ctx context.Context) ([]chostname.LeaseIDConnection, error)
 }
 
 // Client interface lease and deployment methods
@@ -68,6 +73,18 @@ type Client interface {
 		stderr io.Writer,
 		tty bool,
 		tsq remotecommand.TerminalSizeQueue) (ctypes.ExecResult, error)
+
+	// ConnectHostnameToDeployment Connect a given hostname to a deployment
+	ConnectHostnameToDeployment(ctx context.Context, directive chostname.ConnectToDeploymentDirective) error
+	// RemoveHostnameFromDeployment Remove a given hostname from a deployment
+	RemoveHostnameFromDeployment(ctx context.Context, hostname string, leaseID mtypes.LeaseID, allowMissing bool) error
+
+	// DeclareHostname Declare that a given deployment should be connected to a given hostname
+	DeclareHostname(ctx context.Context, lID mtypes.LeaseID, host string, serviceName string, externalPort uint32) error
+	// PurgeDeclaredHostnames Purge any hostnames associated with a given deployment
+	PurgeDeclaredHostnames(ctx context.Context, lID mtypes.LeaseID) error
+
+	PurgeDeclaredHostname(ctx context.Context, lID mtypes.LeaseID, hostname string) error
 
 	// KubeVersion returns the version information of kubernetes running in the cluster
 	KubeVersion() (*version.Info, error)
@@ -110,8 +127,36 @@ func NullClient() Client {
 	}
 }
 
+func (c *nullClient) RemoveHostnameFromDeployment(_ context.Context, _ string, _ mtypes.LeaseID, _ bool) error {
+	return errNotImplemented
+}
+
+func (c *nullClient) ObserveHostnameState(_ context.Context) (<-chan chostname.ResourceEvent, error) {
+	return nil, errNotImplemented
+}
+
 func (c *nullClient) GetDeployments(_ context.Context, _ dtypes.DeploymentID) ([]ctypes.IDeployment, error) {
 	return nil, errNotImplemented
+}
+
+func (c *nullClient) GetHostnameDeploymentConnections(_ context.Context) ([]chostname.LeaseIDConnection, error) {
+	return nil, errNotImplemented
+}
+
+func (c *nullClient) ConnectHostnameToDeployment(_ context.Context, _ chostname.ConnectToDeploymentDirective) error {
+	return errNotImplemented
+}
+
+func (c *nullClient) DeclareHostname(_ context.Context, _ mtypes.LeaseID, _ string, _ string, _ uint32) error {
+	return errNotImplemented
+}
+
+func (c *nullClient) PurgeDeclaredHostnames(_ context.Context, _ mtypes.LeaseID) error {
+	return errNotImplemented
+}
+
+func (c *nullClient) PurgeDeclaredHostname(_ context.Context, _ mtypes.LeaseID, _ string) error {
+	return errNotImplemented
 }
 
 func (c *nullClient) Deploy(ctx context.Context, deployment ctypes.IDeployment) error {
@@ -243,6 +288,10 @@ func (c *nullClient) Exec(context.Context, mtypes.LeaseID, string, uint, []strin
 
 func (c *nullClient) GetManifestGroup(context.Context, mtypes.LeaseID) (bool, crd.ManifestGroup, error) {
 	return false, crd.ManifestGroup{}, nil
+}
+
+func (c *nullClient) AllHostnames(context.Context) ([]chostname.ActiveHostname, error) {
+	return nil, nil
 }
 
 func (c *nullClient) KubeVersion() (*version.Info, error) {

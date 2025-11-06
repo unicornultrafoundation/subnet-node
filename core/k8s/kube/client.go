@@ -910,21 +910,41 @@ func (c *client) LeaseStatus(ctx context.Context, lid mtypes.LeaseID) (map[strin
 	}
 
 	// Map external ports to URIs if the virtual IP is set
-	if c.virtualIP == "" || c.virtualIP == "localhost" {
-		return serviceStatus, nil
+	if c.virtualIP != "" && c.virtualIP != "localhost" {
+		forwardedPortSvcs, err := c.ForwardedPortStatus(ctx, lid)
+		if err != nil {
+			return nil, err
+		}
+
+		for svcName, forwardedPorts := range forwardedPortSvcs {
+			for _, port := range forwardedPorts {
+				if port.ExternalPort == 0 {
+					continue
+				}
+				serviceStatus[svcName].URIs = append(serviceStatus[svcName].URIs, c.virtualIP+":"+strconv.Itoa(int(port.ExternalPort)))
+			}
+		}
 	}
 
-	forwardedPortSvcs, err := c.ForwardedPortStatus(ctx, lid)
+	labelSelector := &strings.Builder{}
+	kubeSelectorForLease(labelSelector, lid)
+	// Note: this is a separate call to the Kubernetes API to get this data. It could
+	// be a separate method on the interface entirely
+	phResult, err := wrapKubeCall("providerhosts-list", func() (*crd.ProviderHostList, error) {
+		return c.ac.SubnetV1().ProviderHosts(c.ns).List(ctx, metav1.ListOptions{
+			LabelSelector: labelSelector.String(),
+		})
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	for svcName, forwardedPorts := range forwardedPortSvcs {
-		for _, port := range forwardedPorts {
-			if port.ExternalPort == 0 {
-				continue
-			}
-			serviceStatus[svcName].URIs = append(serviceStatus[svcName].URIs, c.virtualIP+":"+strconv.Itoa(int(port.ExternalPort)))
+	// For each provider host entry, update the status of each service to indicate
+	// the presently assigned hostnames
+	for _, ph := range phResult.Items {
+		entry, ok := serviceStatus[ph.Spec.ServiceName]
+		if ok {
+			entry.URIs = append(entry.URIs, ph.Spec.Hostname)
 		}
 	}
 

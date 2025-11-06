@@ -96,10 +96,7 @@ func (s *ServiceExpose) checkAgainstResources(res *dtypes.ResourceUnit, eps vali
 }
 
 func (s *ServiceExpose) IsIngress() bool {
-	// return s.Proto == TCP && s.Global && 80 == s.GetExternalPort()
-
-	// TODO: Remove the IsIngress related-feature that set up the ingress controller.
-	return false
+	return s.Proto == TCP && s.Global && 80 == s.GetExternalPort()
 }
 
 func (s *ServiceExpose) GetExternalPort() int32 {
