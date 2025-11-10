@@ -33,6 +33,9 @@ func (id DeploymentID) String() string {
 }
 
 func (id DeploymentID) GetOwnerAddress() (common.Address, error) {
+	if !common.IsHexAddress(id.Owner) {
+		return common.Address{}, fmt.Errorf("DeploymentID: Invalid Owner Address")
+	}
 	return common.HexToAddress(id.Owner), nil
 }
 

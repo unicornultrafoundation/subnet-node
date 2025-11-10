@@ -6,12 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"sync/atomic"
+	"time"
 
 	"github.com/boz/go-lifecycle"
 	"github.com/desertbit/timer"
 	"github.com/sirupsen/logrus"
 	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/operator/waiter"
 	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/pubsub"
+	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/runner"
 
 	tpubsub "github.com/troian/pubsub"
 	ptypes "github.com/unicornultrafoundation/subnet-node/pkg/k8s/types"
@@ -21,6 +23,7 @@ import (
 	mtypes "github.com/unicornultrafoundation/subnet-node/proto/subnet/k8s/market/v1"
 	provider "github.com/unicornultrafoundation/subnet-node/proto/subnet/k8s/provider/v1"
 
+	cip "github.com/unicornultrafoundation/subnet-node/core/k8s/types/v1/clients/ip"
 	sdlutil "github.com/unicornultrafoundation/subnet-node/pkg/k8s/sdl/util"
 
 	ctypes "github.com/unicornultrafoundation/subnet-node/core/k8s/types/v1"
@@ -34,6 +37,9 @@ var (
 	// errReservationNotFound is the new error with message "not found"
 	errReservationNotFound      = errors.New("reservation not found")
 	errInventoryNotAvailableYet = errors.New("inventory status not available yet")
+	errInventoryReservation     = errors.New("inventory error")
+	errNoLeasedIPsAvailable     = fmt.Errorf("%w: no leased IPs available", errInventoryReservation)
+	errInsufficientIPs          = fmt.Errorf("%w: insufficient number of IPs", errInventoryReservation)
 )
 
 type invSnapshotResp struct {
@@ -69,6 +75,7 @@ type inventoryService struct {
 	availableExternalPorts uint
 
 	clients struct {
+		ip        cip.Client
 		inventory cinventory.Client
 	}
 }
@@ -104,6 +111,7 @@ func newInventoryService(
 	}
 
 	is.clients.inventory = cfromctx.ClientInventoryFromContext(ctx)
+	is.clients.ip = cfromctx.ClientIPFromContext(ctx)
 
 	reservations := make([]*reservation, 0, len(deployments))
 	for _, d := range deployments {
@@ -291,7 +299,18 @@ func (is *inventoryService) resourcesToCommit(rgroup dtypes.ResourceGroup) dtype
 
 type inventoryServiceState struct {
 	inventory    ctypes.Inventory
+	ipAddrUsage  cip.AddressUsage
 	reservations []*reservation
+}
+
+func countPendingIPs(state *inventoryServiceState) uint {
+	pending := uint(0)
+	for _, entry := range state.reservations {
+		if !entry.ipsConfirmed {
+			pending += entry.endpointQuantity
+		}
+	}
+	return pending
 }
 
 func (is *inventoryService) handleRequest(req inventoryRequest, state *inventoryServiceState) {
@@ -303,6 +322,23 @@ func (is *inventoryService) handleRequest(req inventoryRequest, state *inventory
 	{
 		jReservation, _ := json.Marshal(req.resources.GetResourceUnits())
 		is.log.WithField("order", req.order).WithField("resources", jReservation).Debug("Reservation requested")
+	}
+
+	if reservation.endpointQuantity != 0 {
+		if is.clients.ip == nil {
+			req.ch <- inventoryResponse{err: errNoLeasedIPsAvailable}
+			return
+		}
+		numIPUnused := state.ipAddrUsage.Available - state.ipAddrUsage.InUse
+		pending := countPendingIPs(state)
+		if reservation.endpointQuantity > (numIPUnused - pending) {
+			is.log.WithField("order", req.order).Info("insufficient number of IP addresses available")
+			req.ch <- inventoryResponse{err: fmt.Errorf("%w: unable to reserve %d", errInsufficientIPs, reservation.endpointQuantity)}
+			return
+		}
+		is.log.WithField("order", req.order).WithField("used", reservation.endpointQuantity).WithField("available", state.ipAddrUsage.Available).WithField("in-use", state.ipAddrUsage.InUse).WithField("pending", pending).Info("reservation used leased IPs")
+	} else {
+		reservation.ipsConfirmed = true // No IPs, just mark it as confirmed implicitly
 	}
 
 	err := state.inventory.Adjust(reservation)
@@ -322,6 +358,9 @@ func (is *inventoryService) run(ctx context.Context, reservationsArg []*reservat
 	defer is.lc.ShutdownCompleted()
 	defer is.sub.Close()
 
+	rctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	state := &inventoryServiceState{
 		inventory:    nil,
 		reservations: reservationsArg,
@@ -336,6 +375,7 @@ func (is *inventoryService) run(ctx context.Context, reservationsArg []*reservat
 		return
 	}
 
+	var runch <-chan runner.Result
 	var currinv ctypes.Inventory
 
 	invupch := make(chan ctypes.Inventory, 1)
@@ -343,10 +383,20 @@ func (is *inventoryService) run(ctx context.Context, reservationsArg []*reservat
 	invch := is.clients.inventory.ResultChan()
 	var reservech <-chan inventoryRequest
 
+	resumeProcessingReservations := func() {
+		reservech = is.reservech
+	}
+
 	t := timer.NewStoppedTimer()
 
-	resumeRevesech := func() {
-		if reservech == nil && state.inventory != nil {
+	updateIPs := func() {
+		if is.clients.ip != nil {
+			reservech = nil
+			if runch == nil {
+				t.Stop()
+				runch = is.runCheck(rctx, state)
+			}
+		} else if reservech == nil && state.inventory != nil {
 			reservech = is.reservech
 		}
 	}
@@ -404,10 +454,10 @@ loop:
 					break
 				}
 
-				resumeRevesech()
+				updateIPs()
 			}
 		case <-t.C:
-			resumeRevesech()
+			updateIPs()
 		case req := <-reservech:
 			is.handleRequest(req, state)
 		case req := <-is.lookupch:
@@ -431,6 +481,8 @@ loop:
 				if !res.OrderID().Equals(req.order) {
 					continue
 				}
+
+				is.log.WithField("order", res.OrderID()).Info("removing reservation")
 
 				state.reservations = append(state.reservations[:idx], state.reservations[idx+1:]...)
 				// reclaim availableExternalPorts if unreserving allocated resources
@@ -474,7 +526,7 @@ loop:
 			currinv = inv.Dup()
 			state.inventory = inv
 
-			resumeRevesech()
+			updateIPs()
 
 			// readjust inventory accordingly with pending leases
 			for _, r := range state.reservations {
@@ -486,6 +538,27 @@ loop:
 			}
 
 			trySignal()
+		case run := <-runch:
+			runch = nil
+			t.Reset(5 * time.Second)
+			if err := run.Error(); err == nil {
+				res := run.Value().(runCheckResult)
+				state.ipAddrUsage = res.ipResult
+				// Process confirmed IP addresses usage
+				for _, confirmedOrderID := range res.confirmedResult {
+					for i, entry := range state.reservations {
+						if entry.order.Equals(confirmedOrderID) {
+							state.reservations[i].ipsConfirmed = true
+							is.log.Info("confirmed IP allocation", "orderID", confirmedOrderID)
+							break
+						}
+					}
+				}
+			} else {
+				is.log.Error("checking IP addresses", "err", err)
+			}
+			resumeProcessingReservations()
+			trySignal()
 		case <-signalch:
 			inv, err := is.getStatusV1(state)
 			if err != nil {
@@ -495,7 +568,74 @@ loop:
 			bus.Pub(inv, []string{ptypes.PubSubTopicInventoryStatus}, tpubsub.WithRetain())
 		}
 	}
+
+	is.log.Debug("shutting down")
+	if runch != nil {
+		<-runch
+	}
+	if is.clients.ip != nil {
+		is.clients.ip.Stop()
+	}
+
 	is.log.Debug("Shutdown complete")
+}
+
+type confirmationItem struct {
+	orderID          mtypes.OrderID
+	expectedQuantity uint
+}
+
+type runCheckResult struct {
+	ipResult        cip.AddressUsage
+	confirmedResult []mtypes.OrderID
+}
+
+func (is *inventoryService) runCheck(ctx context.Context, state *inventoryServiceState) <-chan runner.Result {
+	// Look for unconfirmed IPs, these are IPs that have a deployment created
+	// event and are marked allocated. But until the IP address operator has reported
+	// that it has actually created the associated resources, we need to consider the total number of end
+	// points as pending
+
+	confirm := make([]confirmationItem, 0, len(state.reservations))
+
+	for _, entry := range state.reservations {
+		// Skip anything already confirmed or not allocated
+		if entry.ipsConfirmed || !entry.allocated {
+			continue
+		}
+
+		confirm = append(confirm, confirmationItem{
+			orderID:          entry.OrderID(),
+			expectedQuantity: entry.endpointQuantity,
+		})
+	}
+
+	return runner.Do(func() runner.Result {
+		retval := runCheckResult{}
+		var err error
+
+		retval.ipResult, err = is.clients.ip.GetIPAddressUsage(ctx)
+		if err != nil {
+			return runner.NewResult(nil, err)
+		}
+
+		for _, confirmItem := range confirm {
+			status, err := is.clients.ip.GetIPAddressStatus(ctx, confirmItem.orderID)
+			if err != nil {
+				// This error is not really fatal, so don't bail on this entirely. The other results
+				// retrieved in this code are still valid
+				is.log.Error("failed checking IP address usage", "orderID", confirmItem.orderID, "error", err)
+				break
+			}
+
+			numConfirmed := uint(len(status))
+			if numConfirmed == confirmItem.expectedQuantity {
+				retval.confirmedResult = append(retval.confirmedResult, confirmItem.orderID)
+			}
+		}
+
+		return runner.NewResult(retval, nil)
+	})
 }
 
 func (is *inventoryService) getStatus(state *inventoryServiceState) inventoryV1.InventoryMetrics {

@@ -7,6 +7,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/sirupsen/logrus"
+	types "github.com/unicornultrafoundation/subnet-node/core/k8s/types/v1"
 	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/event"
 	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/pubsub"
 	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/sdl"
@@ -15,16 +16,20 @@ import (
 )
 
 type Service struct {
-	bus          pubsub.Bus
-	logger       *logrus.Logger
-	providerAddr common.Address
+	config          ServiceConfig
+	bus             pubsub.Bus
+	logger          *logrus.Logger
+	providerAddr    common.Address
+	hostnameService types.HostnameServiceClient
 }
 
-func NewService(bus pubsub.Bus, logger *logrus.Logger, providerAddr common.Address) *Service {
+func NewService(config ServiceConfig, bus pubsub.Bus, logger *logrus.Logger, providerAddr common.Address, hostnameService types.HostnameServiceClient) *Service {
 	return &Service{
-		bus:          bus,
-		logger:       logger,
-		providerAddr: providerAddr,
+		config:          config,
+		bus:             bus,
+		logger:          logger,
+		providerAddr:    providerAddr,
+		hostnameService: hostnameService,
 	}
 }
 

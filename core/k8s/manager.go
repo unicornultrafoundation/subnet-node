@@ -11,6 +11,7 @@ import (
 	"github.com/boz/go-lifecycle"
 	"github.com/sirupsen/logrus"
 
+	kubeclienterrors "github.com/unicornultrafoundation/subnet-node/core/k8s/kube/errors"
 	"github.com/unicornultrafoundation/subnet-node/core/k8s/util"
 	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/pubsub"
 	mani "github.com/unicornultrafoundation/subnet-node/proto/subnet/k8s/manifest/v1"
@@ -373,6 +374,11 @@ func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, []string, 
 		return nil, nil, err
 	}
 
+	currentIPs, err := dm.client.GetDeclaredIPs(ctx, dm.deployment.LeaseID())
+	if err != nil {
+		return nil, nil, err
+	}
+
 	// Either reserve the hostnames, or confirm that they already are held
 	allHostnames := manifest.AllHostnamesOfManifestGroup(*dm.deployment.ManifestGroup())
 	withheldHostnames, err := dm.hostnameService.ReserveHostnames(ctx, allHostnames, dm.deployment.LeaseID())
@@ -448,6 +454,18 @@ func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, []string, 
 		}
 	}
 
+	for _, currentIP := range currentIPs {
+		// Check if the IP exists in the compute cluster but not in the presently used set of IPs
+		_, stillInUse := ipsInThisRequest[currentIP.SharingKey]
+		if !stillInUse {
+			proto, err := mani.ParseServiceProtocol(currentIP.Protocol)
+			if err != nil {
+				return withheldHostnames, nil, err
+			}
+			cleanupHelper.addIP(currentIP.ServiceName, currentIP.ExternalPort, proto)
+		}
+	}
+
 	for host, serviceExpose := range hosts {
 		externalPort := uint32(serviceExpose.GetExternalPort()) // nolint: gosec
 		err = dm.client.DeclareHostname(ctx, dm.deployment.LeaseID(), host, hostToServiceName[host], externalPort)
@@ -457,7 +475,29 @@ func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, []string, 
 		}
 	}
 
-	return withheldHostnames, nil, nil
+	withheldEndpoints := make([]string, 0)
+	for _, serviceExpose := range leasedIPs {
+		endpointName := serviceExpose.expose.IP
+		sharingKey := util.MakeIPSharingKey(dm.deployment.LeaseID(), endpointName)
+
+		externalPort := serviceExpose.expose.GetExternalPort()
+		port := serviceExpose.expose.Port
+
+		err = dm.client.DeclareIP(ctx, dm.deployment.LeaseID(), serviceExpose.name, port, uint32(externalPort), serviceExpose.expose.Proto, sharingKey, false) // nolint: gosec
+		if err != nil {
+			if !errors.Is(err, kubeclienterrors.ErrAlreadyExists) {
+				dm.log.Error("failed adding IP declaration", "service", serviceExpose.name, "port", externalPort, "endpoint", serviceExpose.expose.IP, "err", err)
+				return withheldHostnames, nil, err
+			}
+			dm.log.Info("IP declaration already exists", "service", serviceExpose.name, "port", externalPort, "endpoint", serviceExpose.expose.IP, "err", err)
+			withheldEndpoints = append(withheldEndpoints, sharingKey)
+
+		} else {
+			dm.log.Debug("added IP declaration", "service", serviceExpose.name, "port", externalPort, "endpoint", serviceExpose.expose.IP)
+		}
+	}
+
+	return withheldHostnames, withheldEndpoints, nil
 }
 
 func (dm *deploymentManager) getCleanupRetryOpts(ctx context.Context) []retry.Option {
@@ -505,6 +545,22 @@ func (dm *deploymentManager) doTeardown(ctx context.Context) error {
 
 		if result == nil {
 			dm.log.Debug("purged hostnames")
+		}
+		teardownResults <- result
+	}()
+
+	go func() {
+		result := retry.Do(func() error {
+			err := dm.client.PurgeDeclaredIPs(ctx, dm.deployment.LeaseID())
+			if err != nil {
+				dm.log.WithError(err).Error("purge declared ips failure")
+			}
+			return err
+		}, dm.getCleanupRetryOpts(ctx)...)
+		// TODO - counter
+
+		if result == nil {
+			dm.log.Debug("purged ips")
 		}
 		teardownResults <- result
 	}()

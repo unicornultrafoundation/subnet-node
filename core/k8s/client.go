@@ -23,6 +23,7 @@ import (
 	mtypes "github.com/unicornultrafoundation/subnet-node/proto/subnet/k8s/market/v1"
 
 	ctypes "github.com/unicornultrafoundation/subnet-node/core/k8s/types/v1"
+	cip "github.com/unicornultrafoundation/subnet-node/core/k8s/types/v1/clients/ip"
 	crd "github.com/unicornultrafoundation/subnet-node/pkg/k8s/apis/subnet.node/v1"
 )
 
@@ -44,6 +45,7 @@ var _ Client = (*nullClient)(nil)
 //go:generate mockery --name ReadClient
 type ReadClient interface {
 	LeaseStatus(context.Context, mtypes.LeaseID) (map[string]*apclient.ServiceStatus, error)
+	ForwardedPortStatus(ctx context.Context, leaseID mtypes.LeaseID) (map[string][]apclient.ForwardedPortStatus, error)
 	LeaseEvents(context.Context, mtypes.LeaseID, string, bool) (ctypes.EventsWatcher, error)
 	LeaseLogs(context.Context, mtypes.LeaseID, string, bool, *int64) ([]*ctypes.ServiceLog, error)
 	ServiceStatus(context.Context, mtypes.LeaseID, string) (*apclient.ServiceStatus, error)
@@ -53,6 +55,9 @@ type ReadClient interface {
 
 	ObserveHostnameState(ctx context.Context) (<-chan chostname.ResourceEvent, error)
 	GetHostnameDeploymentConnections(ctx context.Context) ([]chostname.LeaseIDConnection, error)
+
+	ObserveIPState(ctx context.Context) (<-chan cip.ResourceEvent, error)
+	GetDeclaredIPs(ctx context.Context, leaseID mtypes.LeaseID) ([]crd.ProviderLeasedIPSpec, error)
 }
 
 // Client interface lease and deployment methods
@@ -89,10 +94,12 @@ type Client interface {
 	// KubeVersion returns the version information of kubernetes running in the cluster
 	KubeVersion() (*version.Info, error)
 
-	ForwardedPortStatus(ctx context.Context, leaseID mtypes.LeaseID) (map[string][]apclient.ForwardedPortStatus, error)
-
 	// ScaleServices scales multiple services to their specified replica counts
 	ScaleServices(ctx context.Context, leaseID mtypes.LeaseID, serviceReplicas map[string]int32) error
+
+	DeclareIP(ctx context.Context, lID mtypes.LeaseID, serviceName string, port uint32, externalPort uint32, proto mani.ServiceProtocol, sharingKey string, overwrite bool) error
+	PurgeDeclaredIP(ctx context.Context, lID mtypes.LeaseID, serviceName string, externalPort uint32, proto mani.ServiceProtocol) error
+	PurgeDeclaredIPs(ctx context.Context, lID mtypes.LeaseID) error
 }
 
 func ErrorIsOkToSendToClient(err error) bool {
@@ -174,6 +181,10 @@ func (c *nullClient) Deploy(ctx context.Context, deployment ctypes.IDeployment) 
 	}
 
 	return nil
+}
+
+func (c *nullClient) ForwardedPortStatus(_ context.Context, _ mtypes.LeaseID) (map[string][]apclient.ForwardedPortStatus, error) {
+	return nil, errNotImplemented
 }
 
 func (c *nullClient) LeaseStatus(_ context.Context, lid mtypes.LeaseID) (map[string]*apclient.ServiceStatus, error) {
@@ -298,7 +309,31 @@ func (c *nullClient) KubeVersion() (*version.Info, error) {
 	return nil, nil
 }
 
-func (c *nullClient) ForwardedPortStatus(_ context.Context, _ mtypes.LeaseID) (map[string][]apclient.ForwardedPortStatus, error) {
+func (c *nullClient) DeclareIP(_ context.Context, _ mtypes.LeaseID, _ string, _ uint32, _ uint32, _ mani.ServiceProtocol, _ string, _ bool) error {
+	return errNotImplemented
+}
+
+func (c *nullClient) PurgeDeclaredIPs(_ context.Context, _ mtypes.LeaseID) error {
+	return errNotImplemented
+}
+
+func (c *nullClient) ObserveIPState(_ context.Context) (<-chan cip.ResourceEvent, error) {
+	return nil, errNotImplemented
+}
+
+func (c *nullClient) CreateIPPassthrough(_ context.Context, _ mtypes.LeaseID, _ cip.ClusterIPPassthroughDirective) error {
+	return errNotImplemented
+}
+
+func (c *nullClient) PurgeIPPassthrough(_ context.Context, _ mtypes.LeaseID, _ cip.ClusterIPPassthroughDirective) error {
+	return errNotImplemented
+}
+
+func (c *nullClient) PurgeDeclaredIP(_ context.Context, _ mtypes.LeaseID, _ string, _ uint32, _ mani.ServiceProtocol) error {
+	return errNotImplemented
+}
+
+func (c *nullClient) GetDeclaredIPs(_ context.Context, _ mtypes.LeaseID) ([]crd.ProviderLeasedIPSpec, error) {
 	return nil, errNotImplemented
 }
 

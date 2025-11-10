@@ -20,6 +20,8 @@ import (
 
 	kubehostname "github.com/unicornultrafoundation/subnet-node/core/k8s/kube/operators/clients/hostname"
 	kubeinventory "github.com/unicornultrafoundation/subnet-node/core/k8s/kube/operators/clients/inventory"
+	kubeip "github.com/unicornultrafoundation/subnet-node/core/k8s/kube/operators/clients/ip"
+	cip "github.com/unicornultrafoundation/subnet-node/core/k8s/types/v1/clients/ip"
 	cfromctx "github.com/unicornultrafoundation/subnet-node/core/k8s/types/v1/fromctx"
 	subnetclientset "github.com/unicornultrafoundation/subnet-node/pkg/k8s/client/clientset/versioned"
 
@@ -69,6 +71,19 @@ func K8sService(lc fx.Lifecycle, cfg *config.C, account *account.AccountService,
 	}
 	ctx = context.WithValue(ctx, fromctx.CtxKeySubnetClientSet, subnetClientset)
 
+	// This value can be nil, the operator is not mandatory
+	var ipOperatorClient cip.Client
+	if !cfg.GetBool("k8s.disable_ip_operator", false) {
+		endpoint, err := providerflags.GetServiceEndpointFlagValue(logger, serviceIPOperator)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get service endpoint for ip operator: %w", err)
+		}
+		ipOperatorClient, err = kubeip.NewClient(ctx, logger, endpoint)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create ip operator client: %w", err)
+		}
+	}
+
 	endpoint, err := providerflags.GetServiceEndpointFlagValue(logger, serviceHostnameOperator)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get service endpoint for hostname operator: %w", err)
@@ -87,6 +102,11 @@ func K8sService(lc fx.Lifecycle, cfg *config.C, account *account.AccountService,
 
 	waitClients := make([]waiter.Waitable, 0)
 	waitClients = append(waitClients, hostnameOperatorClient)
+
+	if ipOperatorClient != nil {
+		waitClients = append(waitClients, ipOperatorClient)
+		ctx = context.WithValue(ctx, cfromctx.CtxKeyClientIP, ipOperatorClient)
+	}
 
 	operatorWaiter := waiter.NewOperatorWaiter(ctx, logger, waitClients...)
 

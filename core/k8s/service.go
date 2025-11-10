@@ -211,7 +211,11 @@ func NewService(
 		return nil, err
 	}
 
-	manifestService := manifest.NewService(bus, log, session.Provider().Address())
+	manifestConfig := manifest.ServiceConfig{
+		HTTPServicesRequireAtLeastOneHost: !cfg.DeploymentIngressStaticHosts,
+	}
+	manifestService := manifest.NewService(manifestConfig, bus, log, session.Provider().Address(), hostnames)
+
 	expiryService := newExpiryService(bidengine.GetBidMarket(), ethClient)
 
 	s := &service{
