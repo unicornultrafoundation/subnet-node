@@ -73,6 +73,9 @@ func AddProviderFlag(cmd *cobra.Command) {
 	if err := viper.BindPFlag(flagProviderAddress, cmd.Flags().Lookup(flagProviderAddress)); err != nil {
 		panic(err)
 	}
+	if err := viper.BindEnv(flagProviderAddress, "AP_PROVIDER"); err != nil {
+		panic(err)
+	}
 }
 
 func DetectPort(ctx context.Context, flags *flag.FlagSet, flag string, container, portName string) (int, error) {

@@ -67,8 +67,11 @@ kustomize-deploy-subnet-operator-inventory:
 ###############################################################################
 
 # Run kube setup (namespace, CRDs, operator, policies)
+PROVIDER_ADDRESS ?= ""
 kube-setup:
-	@echo "Running kube setup"
+	@if [ -z "$(PROVIDER_ADDRESS)" ]; then echo "PROVIDER_ADDRESS is not set"; exit 1; fi
+	@echo "Running kube setup with provider address: $(PROVIDER_ADDRESS)"
+	@echo "provider-address=$$(echo $(PROVIDER_ADDRESS) | tr 'A-Z' 'a-z')" > "pkg/k8s/kustomize/subnet-operator-ip/configmap.yaml"
 	@script/kube/setup-kube.sh
 .PHONY: kube-setup
 
