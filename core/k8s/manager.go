@@ -310,12 +310,18 @@ func (dm *deploymentManager) startDeploy(ctx context.Context) <-chan error {
 
 		if len(hostnames) != 0 {
 			// Some hostnames have been withheld
-			dm.log.WithField("cnt", len(hostnames)).WithField("lease", dm.deployment.LeaseID()).Warn("hostnames withheld from deployment")
+			dm.log.
+				WithField("cnt", len(hostnames)).
+				WithField("lease", dm.deployment.LeaseID()).
+				Info("hostnames withheld from deployment")
 		}
 
 		if len(endpoints) != 0 {
 			// Some endpoints have been withheld
-			dm.log.WithField("cnt", len(endpoints)).WithField("lease", dm.deployment.LeaseID()).Warn("endpoints withheld from deployment")
+			dm.log.
+				WithField("cnt", len(endpoints)).
+				WithField("lease", dm.deployment.LeaseID()).
+				Info("endpoints withheld from deployment")
 		}
 
 		groupCopy := *dm.deployment.ManifestGroup()
@@ -486,14 +492,28 @@ func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, []string, 
 		err = dm.client.DeclareIP(ctx, dm.deployment.LeaseID(), serviceExpose.name, port, uint32(externalPort), serviceExpose.expose.Proto, sharingKey, false) // nolint: gosec
 		if err != nil {
 			if !errors.Is(err, kubeclienterrors.ErrAlreadyExists) {
-				dm.log.Error("failed adding IP declaration", "service", serviceExpose.name, "port", externalPort, "endpoint", serviceExpose.expose.IP, "err", err)
+				dm.log.
+					WithError(err).
+					WithField("service", serviceExpose.name).
+					WithField("port", externalPort).
+					WithField("endpoint", serviceExpose.expose.IP).
+					Error("failed adding IP declaration")
 				return withheldHostnames, nil, err
 			}
-			dm.log.Info("IP declaration already exists", "service", serviceExpose.name, "port", externalPort, "endpoint", serviceExpose.expose.IP, "err", err)
+			dm.log.
+				WithField("service", serviceExpose.name).
+				WithField("port", externalPort).
+				WithField("endpoint", serviceExpose.expose.IP).
+				WithError(err).
+				Info("IP declaration already exists")
 			withheldEndpoints = append(withheldEndpoints, sharingKey)
 
 		} else {
-			dm.log.Debug("added IP declaration", "service", serviceExpose.name, "port", externalPort, "endpoint", serviceExpose.expose.IP)
+			dm.log.
+				WithField("service", serviceExpose.name).
+				WithField("port", externalPort).
+				WithField("endpoint", serviceExpose.expose.IP).
+				Debug("added IP declaration")
 		}
 	}
 
@@ -518,14 +538,16 @@ func (dm *deploymentManager) getCleanupRetryOpts(ctx context.Context) []retry.Op
 }
 
 func (dm *deploymentManager) doTeardown(ctx context.Context) error {
-	const teardownActivityCount = 1
+	const teardownActivityCount = 3
 	teardownResults := make(chan error, teardownActivityCount)
 
 	go func() {
 		result := retry.Do(func() error {
 			err := dm.client.TeardownLease(ctx, dm.deployment.LeaseID())
 			if err != nil {
-				dm.log.WithError(err).Error("lease teardown failed")
+				dm.log.
+					WithError(err).
+					Error("lease teardown failed")
 			}
 			return err
 		}, dm.getCleanupRetryOpts(ctx)...)
@@ -537,7 +559,9 @@ func (dm *deploymentManager) doTeardown(ctx context.Context) error {
 		result := retry.Do(func() error {
 			err := dm.client.PurgeDeclaredHostnames(ctx, dm.deployment.LeaseID())
 			if err != nil {
-				dm.log.Error("purge declared hostname failure", "err", err)
+				dm.log.
+					WithError(err).
+					Error("purge declared hostname failure")
 			}
 			return err
 		}, dm.getCleanupRetryOpts(ctx)...)

@@ -101,12 +101,14 @@ func (c *client) DeclareIP(ctx context.Context, lID mtypes.LeaseID, serviceName 
 		},
 	}
 
-	c.log.Info("declaring leased ip", "lease", lID,
-		"service-name", serviceName,
-		"port", port,
-		"external-port", externalPort,
-		"sharing-key", sharingKey,
-		"exists", exists)
+	c.log.
+		WithField("lease", lID).
+		WithField("service-name", serviceName).
+		WithField("port", port).
+		WithField("external-port", externalPort).
+		WithField("sharing-key", sharingKey).
+		WithField("exists", exists).
+		Info("declaring leased ip")
 	// Create or update the entry
 	if exists {
 		obj.ResourceVersion = foundEntry.ResourceVersion

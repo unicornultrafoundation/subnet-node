@@ -332,18 +332,28 @@ func (is *inventoryService) handleRequest(req inventoryRequest, state *inventory
 		numIPUnused := state.ipAddrUsage.Available - state.ipAddrUsage.InUse
 		pending := countPendingIPs(state)
 		if reservation.endpointQuantity > (numIPUnused - pending) {
-			is.log.WithField("order", req.order).Info("insufficient number of IP addresses available")
+			is.log.
+				WithField("order", req.order).
+				Info("insufficient number of IP addresses available")
 			req.ch <- inventoryResponse{err: fmt.Errorf("%w: unable to reserve %d", errInsufficientIPs, reservation.endpointQuantity)}
 			return
 		}
-		is.log.WithField("order", req.order).WithField("used", reservation.endpointQuantity).WithField("available", state.ipAddrUsage.Available).WithField("in-use", state.ipAddrUsage.InUse).WithField("pending", pending).Info("reservation used leased IPs")
+		is.log.
+			WithField("order", req.order).
+			WithField("used", reservation.endpointQuantity).
+			WithField("available", state.ipAddrUsage.Available).
+			WithField("in-use", state.ipAddrUsage.InUse).
+			WithField("pending", pending).
+			Info("reservation used leased IPs")
 	} else {
 		reservation.ipsConfirmed = true // No IPs, just mark it as confirmed implicitly
 	}
 
 	err := state.inventory.Adjust(reservation)
 	if err != nil {
-		is.log.WithField("order", req.order).Info("Insufficient capacity for reservation")
+		is.log.
+			WithField("order", req.order).
+			Info("Insufficient capacity for reservation")
 		req.ch <- inventoryResponse{err: err}
 		return
 	}
@@ -365,12 +375,16 @@ func (is *inventoryService) run(ctx context.Context, reservationsArg []*reservat
 		inventory:    nil,
 		reservations: reservationsArg,
 	}
-	is.log.WithField("qty", len(state.reservations)).Info("Starting with existing reservations")
+	is.log.
+		WithField("qty", len(state.reservations)).
+		Info("Starting with existing reservations")
 
 	// wait on the operators to be ready
 	err := is.waiter.WaitForAll(ctx)
 	if err != nil {
-		is.log.WithError(err).Error("failed to wait for operators to be ready")
+		is.log.
+			WithError(err).
+			Error("failed to wait for operators to be ready")
 		is.lc.ShutdownInitiated(err)
 		return
 	}
@@ -415,7 +429,9 @@ loop:
 	for {
 		select {
 		case err := <-is.lc.ShutdownRequest():
-			is.log.WithError(err).Debug("received shutdown request")
+			is.log.
+				WithError(err).
+				Debug("received shutdown request")
 			is.lc.ShutdownInitiated(err)
 			break loop
 		case ev := <-is.sub.Events():
@@ -441,7 +457,11 @@ loop:
 							is.availableExternalPorts += externalPortCount
 						}
 
-						is.log.WithField("order", res.OrderID()).WithField("resource-group", res.Resources().GetName()).WithField("allocated", res.allocated).Debug("Reservation status update")
+						is.log.
+							WithField("order", res.OrderID()).
+							WithField("resource-group", res.Resources().GetName()).
+							WithField("allocated", res.allocated).
+							Debug("Reservation status update")
 
 						if currinv != nil {
 							select {
@@ -475,14 +495,18 @@ loop:
 
 			req.ch <- inventoryResponse{err: errReservationNotFound}
 		case req := <-is.unreservech:
-			is.log.WithField("order", req.order).Info("Attempting to remove reservation")
+			is.log.
+				WithField("order", req.order).
+				Info("Attempting to remove reservation")
 
 			for idx, res := range state.reservations {
 				if !res.OrderID().Equals(req.order) {
 					continue
 				}
 
-				is.log.WithField("order", res.OrderID()).Info("removing reservation")
+				is.log.
+					WithField("order", res.OrderID()).
+					Info("removing reservation")
 
 				state.reservations = append(state.reservations[:idx], state.reservations[idx+1:]...)
 				// reclaim availableExternalPorts if unreserving allocated resources
@@ -491,7 +515,9 @@ loop:
 				}
 
 				req.ch <- inventoryResponse{value: res}
-				is.log.WithField("order", req.order).Info("Unreserve capacity complete")
+				is.log.
+					WithField("order", req.order).
+					Info("Unreserve capacity complete")
 				continue loop
 			}
 
@@ -549,13 +575,17 @@ loop:
 					for i, entry := range state.reservations {
 						if entry.order.Equals(confirmedOrderID) {
 							state.reservations[i].ipsConfirmed = true
-							is.log.Info("confirmed IP allocation", "orderID", confirmedOrderID)
+							is.log.
+								WithField("orderID", confirmedOrderID).
+								Info("confirmed IP allocation")
 							break
 						}
 					}
 				}
 			} else {
-				is.log.Error("checking IP addresses", "err", err)
+				is.log.
+					WithError(err).
+					Error("checking IP addresses")
 			}
 			resumeProcessingReservations()
 			trySignal()
@@ -624,7 +654,10 @@ func (is *inventoryService) runCheck(ctx context.Context, state *inventoryServic
 			if err != nil {
 				// This error is not really fatal, so don't bail on this entirely. The other results
 				// retrieved in this code are still valid
-				is.log.Error("failed checking IP address usage", "orderID", confirmItem.orderID, "error", err)
+				is.log.
+					WithField("orderID", confirmItem.orderID).
+					WithError(err).
+					Error("failed checking IP address usage")
 				break
 			}
 

@@ -148,7 +148,9 @@ func (c *client) GetManifestGroup(ctx context.Context, lID mtypes.LeaseID) (bool
 
 	if err != nil {
 		if kerrors.IsNotFound(err) {
-			c.log.Info("CRD manifest not found", "lease-ns", leaseNamespace)
+			c.log.
+				WithField("lease-ns", leaseNamespace).
+				Info("CRD manifest not found")
 			return false, crd.ManifestGroup{}, nil
 		}
 
@@ -501,7 +503,10 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 		applies.services = append(applies.services, svc)
 
 		if len(service.Expose) == 0 {
-			c.log.Debug("lease does not have services (no expose configuration provided)", "lease", lid, "service", service.Name)
+			c.log.
+				WithField("lease", lid).
+				WithField("service", service.Name).
+				Debug("lease does not have services (no expose configuration provided)")
 			continue
 		}
 
@@ -511,18 +516,27 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 
 	po.nns, po.uns, po.ons, err = applyNS(ctx, c.kc, applies.ns)
 	if err != nil {
-		c.log.Error("applying namespace", "err", err, "lease", lid)
+		c.log.
+			WithError(err).
+			WithField("lease", lid).
+			Error("applying namespace")
 		return err
 	}
 
 	po.nNetPolicies, po.uNetPolicies, po.oNetPolicies, err = applyNetPolicies(ctx, c.kc, applies.netPol)
 	if err != nil {
-		c.log.Error("applying namespace network policies", "err", err, "lease", lid)
+		c.log.
+			WithError(err).
+			WithField("lease", lid).
+			Error("applying namespace network policies")
 		return err
 	}
 
 	if err = cleanupStaleResources(ctx, c.kc, lid, group); err != nil {
-		c.log.Error("cleaning stale resources", "err", err, "lease", lid)
+		c.log.
+			WithError(err).
+			WithField("lease", lid).
+			Error("cleaning stale resources")
 		return err
 	}
 
@@ -696,7 +710,10 @@ func (c *client) TeardownLease(ctx context.Context, lid mtypes.LeaseID) error {
 	})
 
 	if err != nil {
-		c.log.WithField("lease", lid).WithError(err).Error("Teardown lease: unable to delete manifest")
+		c.log.
+			WithField("lease", lid).
+			WithError(err).
+			Error("teardown lease: unable to delete manifest")
 	}
 
 	return result
@@ -1216,7 +1233,9 @@ func (c *client) ScaleServices(ctx context.Context, leaseID mtypes.LeaseID, serv
 
 		replicas, exists := serviceReplicas[serviceName]
 		if !exists {
-			c.log.Debug("No replica count specified for service", "service", serviceName)
+			c.log.
+				WithField("service", serviceName).
+				Debug("No replica count specified for service")
 			continue
 		}
 
@@ -1235,7 +1254,11 @@ func (c *client) ScaleServices(ctx context.Context, leaseID mtypes.LeaseID, serv
 			return c.kc.AppsV1().Deployments(ns).Patch(ctx, deployment.Name, k8stypes.MergePatchType, patchData, metav1.PatchOptions{})
 		})
 		if err != nil {
-			c.log.Error("deployment patch", "err", err, "name", deployment.Name, "service", serviceName)
+			c.log.
+				WithError(err).
+				WithField("name", deployment.Name).
+				WithField("service", serviceName).
+				Error("deployment patch")
 			return fmt.Errorf("failed to scale deployment %s (service %s): %w", deployment.Name, serviceName, err)
 		}
 
@@ -1262,7 +1285,9 @@ func (c *client) ScaleServices(ctx context.Context, leaseID mtypes.LeaseID, serv
 
 		replicas, exists := serviceReplicas[serviceName]
 		if !exists {
-			c.log.Debug("No replica count specified for service", "service", serviceName)
+			c.log.
+				WithField("service", serviceName).
+				Debug("No replica count specified for service")
 			continue
 		}
 
