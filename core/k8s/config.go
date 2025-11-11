@@ -47,5 +47,8 @@ func NewConfig(cfg *config.C) Config {
 	config.MonitorExpiryCheckPeriod = cfg.GetDuration("deployer.monitor_expiry_check_period", time.Second*30)
 	config.MonitorExpiryCheckPeriodJitter = cfg.GetDuration("deployer.monitor_expiry_check_period_jitter", time.Second*5)
 
+	config.DeploymentIngressStaticHosts = cfg.GetBool("deployer.deployment_ingress_static_hosts", false)
+	config.DeploymentIngressDomain = cfg.GetString("deployer.deployment_ingress_domain", "localhost")
+
 	return config
 }
