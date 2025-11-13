@@ -2,6 +2,7 @@ package manifest
 
 import (
 	"encoding/base32"
+	"regexp"
 	"strings"
 
 	"github.com/google/uuid"
@@ -26,4 +27,23 @@ func IngressHost(lid mtypes.LeaseID, svcName string) string {
 	// MarshalBinary always returns nil
 	data, _ := uid.MarshalBinary()
 	return strings.ToLower(base32.HexEncoding.WithPadding(base32.NoPadding).EncodeToString(data))
+}
+
+func SanitizeSubdomain(name string) string {
+	// Convert to lowercase (DNS is case-insensitive)
+	name = strings.ToLower(name)
+
+	// Keep only letters, digits, and hyphens
+	re := regexp.MustCompile(`[^a-z0-9-]`)
+	name = re.ReplaceAllString(name, "")
+
+	// Trim leading and trailing hyphens
+	name = strings.Trim(name, "-")
+
+	// Limit to 55 characters (max subdomain label length - 8 for the UID)
+	if len(name) > 55 {
+		name = name[:55]
+	}
+
+	return name
 }

@@ -435,8 +435,11 @@ func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, []string, 
 		for _, expose := range service.Expose {
 			if expose.IsIngress() {
 				if dm.config.DeploymentIngressStaticHosts {
+					sanitizedServiceName := manifest.SanitizeSubdomain(service.Name)
 					uid := manifest.IngressHost(dm.deployment.LeaseID(), service.Name)
-					host := fmt.Sprintf("%s.%s", uid, dm.config.DeploymentIngressDomain)
+					shortUid := uid[:8]
+					subdomain := fmt.Sprintf("%s-%s", sanitizedServiceName, shortUid)
+					host := fmt.Sprintf("%s.%s", subdomain, dm.config.DeploymentIngressDomain)
 					hosts[host] = expose
 					hostToServiceName[host] = service.Name
 				}
