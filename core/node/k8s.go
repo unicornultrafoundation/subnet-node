@@ -73,7 +73,7 @@ func K8sService(lc fx.Lifecycle, cfg *config.C, account *account.AccountService,
 
 	// This value can be nil, the operator is not mandatory
 	var ipOperatorClient cip.Client
-	if !cfg.GetBool("k8s.disable_ip_operator", false) {
+	if cfg.GetBool("k8s.enable_ip_operator", false) {
 		endpoint, err := providerflags.GetServiceEndpointFlagValue(logger, serviceIPOperator)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get service endpoint for ip operator: %w", err)
