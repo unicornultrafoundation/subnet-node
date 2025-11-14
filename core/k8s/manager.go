@@ -423,7 +423,12 @@ func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, []string, 
 	for _, hostname := range withheldHostnames {
 		blockedHostnames[hostname] = struct{}{}
 	}
-	hosts := make(map[string]mani.ServiceExpose)
+	type hostDeclaration struct {
+		expose              mani.ServiceExpose
+		skipDNSVerification bool
+	}
+
+	hosts := make(map[string]hostDeclaration)
 	leasedIPs := make([]serviceExposeWithServiceName, 0)
 	hostToServiceName := make(map[string]string)
 
@@ -440,7 +445,7 @@ func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, []string, 
 					shortUid := uid[:8]
 					subdomain := fmt.Sprintf("%s-%s", sanitizedServiceName, shortUid)
 					host := fmt.Sprintf("%s.%s", subdomain, dm.config.DeploymentIngressDomain)
-					hosts[host] = expose
+					hosts[host] = hostDeclaration{expose: expose, skipDNSVerification: true}
 					hostToServiceName[host] = service.Name
 				}
 
@@ -448,7 +453,7 @@ func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, []string, 
 					_, blocked := blockedHostnames[host]
 					if !blocked {
 						dm.currentHostnames[host] = struct{}{}
-						hosts[host] = expose
+						hosts[host] = hostDeclaration{expose: expose, skipDNSVerification: false}
 						hostToServiceName[host] = service.Name
 					}
 				}
@@ -475,9 +480,9 @@ func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, []string, 
 		}
 	}
 
-	for host, serviceExpose := range hosts {
-		externalPort := uint32(serviceExpose.GetExternalPort()) // nolint: gosec
-		err = dm.client.DeclareHostname(ctx, dm.deployment.LeaseID(), host, hostToServiceName[host], externalPort)
+	for host, declaration := range hosts {
+		externalPort := uint32(declaration.expose.GetExternalPort()) // nolint: gosec
+		err = dm.client.DeclareHostname(ctx, dm.deployment.LeaseID(), host, hostToServiceName[host], externalPort, declaration.skipDNSVerification)
 		if err != nil {
 			// TODO - counter
 			return withheldHostnames, nil, err

@@ -52,6 +52,8 @@ type hostnameOperator struct {
 	server             common.OperatorHTTP
 	flagHostnamesData  common.PrepareFlagFn
 	flagIgnoreListData common.PrepareFlagFn
+	dnsVerifyTimeout   time.Duration
+	dnsVerifyInterval  uint32
 }
 
 func newHostnameOperator(ctx context.Context, logger *logrus.Logger, ns string, config common.OperatorConfig, ilc common.IgnoreListConfig) (*hostnameOperator, error) {
@@ -71,15 +73,17 @@ func newHostnameOperator(ctx context.Context, logger *logrus.Logger, ns string, 
 	}
 
 	op := &hostnameOperator{
-		ctx:           ctx,
-		hostnames:     make(map[string]managedHostname),
-		ns:            ns,
-		log:           logger,
-		kc:            kc,
-		ac:            ac,
-		cfg:           config,
-		server:        opHTTP,
-		leasesIgnored: common.NewIgnoreList(ilc),
+		ctx:               ctx,
+		hostnames:         make(map[string]managedHostname),
+		ns:                ns,
+		log:               logger,
+		kc:                kc,
+		ac:                ac,
+		cfg:               config,
+		server:            opHTTP,
+		leasesIgnored:     common.NewIgnoreList(ilc),
+		dnsVerifyTimeout:  10 * time.Second,
+		dnsVerifyInterval: 1,
 	}
 
 	op.flagIgnoreListData = op.server.AddPreparedEndpoint("/ignore-list", op.prepareIgnoreListData)
@@ -156,6 +160,8 @@ func (op *hostnameOperator) monitorUntilError() error {
 	defer pruneTicker.Stop()
 	prepareTicker := time.NewTicker(op.cfg.WebRefreshInterval)
 	defer prepareTicker.Stop()
+	dnsVerifyTicker := time.NewTicker(time.Duration(op.dnsVerifyInterval) * time.Minute)
+	defer dnsVerifyTicker.Stop()
 
 	var exitError error
 loop:
@@ -181,7 +187,8 @@ loop:
 			if err := op.server.PrepareAll(); err != nil {
 				op.log.Error("preparing web data failed", "err", err)
 			}
-
+		case <-dnsVerifyTicker.C:
+			op.verifyAllHostnames(ctx)
 		}
 	}
 
@@ -410,6 +417,38 @@ func (op *hostnameOperator) applyAddOrUpdateEvent(ctx context.Context, ev chostn
 		isSameLease = entry.presentLease.Equals(leaseID)
 	} else {
 		isSameLease = true
+	}
+
+	// Verify DNS before creating/updating Ingress
+	// Always verify on both Add and Update events to ensure DNS is still valid
+	if err := op.verifyHostnameDNS(ctx, ev.GetHostname()); err != nil {
+		op.log.
+			WithField("hostname", ev.GetHostname()).
+			WithField("lease", leaseID).
+			WithField("event-type", ev.GetEventType()).
+			WithField("error", err).
+			Warn("DNS verification failed, removing ingress if it exists")
+
+		// If Ingress already exists but verification now fails, remove it
+		if exists {
+			op.log.
+				WithField("hostname", ev.GetHostname()).
+				WithField("lease", entry.presentLease).
+				Info("removing ingress due to failed DNS verification")
+			if removeErr := op.removeHostnameFromDeployment(ctx, ev.GetHostname(), entry.presentLease, true); removeErr != nil {
+				op.log.
+					WithField("hostname", ev.GetHostname()).
+					WithField("error", removeErr).
+					Error("failed to remove ingress after DNS verification failure")
+			} else {
+				// Remove from tracking map
+				delete(op.hostnames, ev.GetHostname())
+				op.flagHostnamesData()
+			}
+		}
+
+		// Don't create/update Ingress if verification fails
+		return fmt.Errorf("DNS verification failed for hostname %q: %w", ev.GetHostname(), err)
 	}
 
 	directive := buildDirective(ev, selectedExpose)
@@ -771,4 +810,132 @@ func kubeSelectorForLease(dst *strings.Builder, lID mtypes.LeaseID) {
 	_, _ = fmt.Fprintf(dst, ",%s=%d", builder.SubnetNodeLeaseDSeqLabelName, lID.DSeq)
 	_, _ = fmt.Fprintf(dst, ",%s=%d", builder.SubnetNodeLeaseGSeqLabelName, lID.GSeq)
 	_, _ = fmt.Fprintf(dst, ",%s=%d", builder.SubnetNodeLeaseOSeqLabelName, lID.OSeq)
+}
+
+// verifyHostnameDNS verifies that the hostname has the correct verification token in its DNS TXT record
+func (op *hostnameOperator) verifyHostnameDNS(ctx context.Context, hostname string) error {
+	// Get the ProviderHost CRD to retrieve the verification token
+	ph, err := op.ac.SubnetV1().ProviderHosts(op.ns).Get(ctx, hostname, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to get ProviderHost: %w", err)
+	}
+
+	// Skip verification for provider-managed hostnames
+	if ph.Annotations != nil {
+		if skip, ok := ph.Annotations[builder.SubnetNodeSkipDNSVerification]; ok && skip == "true" {
+			op.log.
+				WithField("hostname", hostname).
+				Debug("skipping DNS verification for provider-managed hostname")
+			// Update status to indicate verification is skipped
+			op.updateVerificationStatus(ctx, hostname, true, "verification skipped (provider-managed hostname)")
+			return nil
+		}
+	}
+
+	// Get token from annotations
+	var token string
+	if ph.Annotations != nil {
+		if t, ok := ph.Annotations[builder.SubnetNodeVerificationToken]; ok {
+			token = t
+		}
+	}
+
+	if token == "" {
+		errMsg := fmt.Errorf("no verification token found for hostname %q: token should be generated automatically when hostname is first declared", hostname)
+		err := op.updateVerificationStatus(ctx, hostname, false, errMsg.Error())
+		if err != nil {
+			return fmt.Errorf("failed to update verification status: %w", err)
+		}
+		return errMsg
+	}
+
+	// Use shared DNS verification utility
+	verified, message := clusterutil.VerifyDNSVerification(ctx, hostname, token, op.dnsVerifyTimeout)
+
+	if verified {
+		op.log.
+			WithField("hostname", hostname).
+			Debug("DNS verification successful")
+		op.updateVerificationStatus(ctx, hostname, true, message)
+		return nil
+	}
+
+	// Verification failed
+	op.updateVerificationStatus(ctx, hostname, false, message)
+	return errors.New(message)
+}
+
+// updateVerificationStatus updates the ProviderHost CRD with DNS verification status
+func (op *hostnameOperator) updateVerificationStatus(ctx context.Context, hostname string, verified bool, message string) error {
+	ph, err := op.ac.SubnetV1().ProviderHosts(op.ns).Get(ctx, hostname, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to get ProviderHost for status update: %w", err)
+	}
+
+	if ph.Annotations == nil {
+		ph.Annotations = make(map[string]string)
+	}
+
+	status := "failed"
+	if verified {
+		status = "verified"
+	}
+
+	ph.Annotations[builder.SubnetNodeDNSVerificationStatus] = status
+	ph.Annotations[builder.SubnetNodeDNSVerificationMessage] = message
+	ph.Annotations[builder.SubnetNodeDNSVerificationTimestamp] = time.Now().UTC().Format(time.RFC3339)
+
+	_, err = op.ac.SubnetV1().ProviderHosts(op.ns).Update(ctx, ph, metav1.UpdateOptions{})
+	if err != nil {
+		op.log.
+			WithField("hostname", hostname).
+			WithField("error", err).
+			Warn("failed to update ProviderHost verification status")
+	} else {
+		op.log.
+			WithField("hostname", hostname).
+			WithField("verified", verified).
+			Debug("updated ProviderHost verification status")
+	}
+
+	return err
+}
+
+// verifyAllHostnames periodically verifies all active hostnames
+// If verification fails, removes the Ingress to maintain consistency with event-driven verification
+func (op *hostnameOperator) verifyAllHostnames(ctx context.Context) {
+	op.log.Debug("starting periodic DNS verification for all hostnames")
+	verifiedCount := 0
+	failedCount := 0
+
+	for hostname, entry := range op.hostnames {
+		if err := op.verifyHostnameDNS(ctx, hostname); err != nil {
+			op.log.
+				WithField("hostname", hostname).
+				WithField("lease", entry.presentLease).
+				WithField("error", err).
+				Warn("periodic DNS verification failed, removing ingress")
+			failedCount++
+
+			// Remove Ingress if verification fails (consistent with event-driven behavior)
+			if removeErr := op.removeHostnameFromDeployment(ctx, hostname, entry.presentLease, true); removeErr != nil {
+				op.log.
+					WithField("hostname", hostname).
+					WithField("error", removeErr).
+					Error("failed to remove ingress after periodic DNS verification failure")
+			} else {
+				// Remove from tracking map
+				delete(op.hostnames, hostname)
+				op.flagHostnamesData()
+			}
+		} else {
+			verifiedCount++
+		}
+	}
+
+	op.log.
+		WithField("total", len(op.hostnames)).
+		WithField("verified", verifiedCount).
+		WithField("failed", failedCount).
+		Info("periodic DNS verification completed")
 }

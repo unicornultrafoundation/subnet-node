@@ -2,6 +2,8 @@ package kube
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"strings"
 	"time"
@@ -34,7 +36,7 @@ type hostnameResourceEvent struct {
 	externalPort uint32
 }
 
-func (c *client) DeclareHostname(ctx context.Context, lID mtypes.LeaseID, host string, serviceName string, externalPort uint32) error {
+func (c *client) DeclareHostname(ctx context.Context, lID mtypes.LeaseID, host string, serviceName string, externalPort uint32, skipDNSVerification bool) error {
 	// Label each entry with the standard labels
 	labels := map[string]string{
 		builder.SubnetNodeManagedLabelName: "true",
@@ -50,6 +52,22 @@ func (c *client) DeclareHostname(ctx context.Context, lID mtypes.LeaseID, host s
 		} else {
 			return err
 		}
+	}
+
+	// Check if this is a different lease (owner, dseq, gseq, oseq, or provider changed)
+	// If so, we need to regenerate the token since it's effectively a new ownership
+	// IMPORTANT: Check this BEFORE we overwrite obj.Spec with the new lease ID
+	leaseChanged := false
+	var oldLeaseID mtypes.LeaseID
+	if update {
+		oldLeaseID = mtypes.LeaseID{
+			Owner:    obj.Spec.Owner,
+			DSeq:     obj.Spec.Dseq,
+			GSeq:     obj.Spec.Gseq,
+			OSeq:     obj.Spec.Oseq,
+			Provider: obj.Spec.Provider,
+		}
+		leaseChanged = !oldLeaseID.Equals(lID)
 	}
 
 	if !update {
@@ -89,6 +107,38 @@ func (c *client) DeclareHostname(ctx context.Context, lID mtypes.LeaseID, host s
 	}
 
 	obj.Annotations[builder.SubnetNodeLeaseUpdatedAt] = time.Now().UTC().Format(time.RFC3339)
+
+	// Mark whether this hostname should skip DNS verification (provider-managed hostnames)
+	if skipDNSVerification {
+		obj.Annotations[builder.SubnetNodeSkipDNSVerification] = "true"
+	} else {
+		delete(obj.Annotations, builder.SubnetNodeSkipDNSVerification)
+	}
+
+	// Generate verification token for new ProviderHost OR if lease changed
+	// If a different lease uses the same hostname, we need a new token for security
+	if !update || leaseChanged {
+		// Generate a random 32-byte token (64 hex characters)
+		tokenBytes := make([]byte, 32)
+		if _, err := rand.Read(tokenBytes); err != nil {
+			return fmt.Errorf("failed to generate verification token: %w", err)
+		}
+		token := hex.EncodeToString(tokenBytes)
+		obj.Annotations[builder.SubnetNodeVerificationToken] = token
+		if leaseChanged {
+			c.log.
+				WithField("host", host).
+				WithField("old-lease", oldLeaseID).
+				WithField("new-lease", lID).
+				WithField("token", token).
+				Info("regenerated verification token for hostname due to lease change")
+		} else {
+			c.log.
+				WithField("host", host).
+				WithField("token", token).
+				Info("generated verification token for hostname")
+		}
+	}
 
 	if update {
 		_, err = c.ac.SubnetV1().ProviderHosts(c.ns).Update(ctx, obj, metav1.UpdateOptions{})

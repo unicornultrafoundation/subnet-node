@@ -37,6 +37,11 @@ const (
 	SubnetNodeLeaseManifestVersion     = "subnet.node/manifest.version"
 	SubnetNodeLeaseUpdatedAt           = "subnet.node/lease.updated_at"
 	SubnetNodeManifestResourceVersion  = "subnet.node/manifest.resource.version"
+	SubnetNodeVerificationToken        = "subnet.node/verification-token"
+	SubnetNodeSkipDNSVerification      = "subnet.node/skip-dns-verification"
+	SubnetNodeDNSVerificationStatus    = "subnet.node/dns-verification-status"
+	SubnetNodeDNSVerificationMessage   = "subnet.node/dns-verification-message"
+	SubnetNodeDNSVerificationTimestamp = "subnet.node/dns-verification-timestamp"
 )
 
 const (

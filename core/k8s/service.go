@@ -310,7 +310,7 @@ func (s *service) HostnameService() ctypes.HostnameServiceClient {
 }
 
 func (s *service) TransferHostname(ctx context.Context, leaseID mtypes.LeaseID, hostname string, serviceName string, externalPort uint32) error {
-	return s.client.DeclareHostname(ctx, leaseID, hostname, serviceName, externalPort)
+	return s.client.DeclareHostname(ctx, leaseID, hostname, serviceName, externalPort, false)
 }
 
 func (s *service) Status(ctx context.Context) (*apclient.ClusterStatus, error) {

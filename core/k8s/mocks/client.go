@@ -160,16 +160,16 @@ func (_c *Client_ConnectHostnameToDeployment_Call) RunAndReturn(run func(ctx con
 }
 
 // DeclareHostname provides a mock function for the type Client
-func (_mock *Client) DeclareHostname(ctx context.Context, lID v1beta4.LeaseID, host string, serviceName string, externalPort uint32) error {
-	ret := _mock.Called(ctx, lID, host, serviceName, externalPort)
+func (_mock *Client) DeclareHostname(ctx context.Context, lID v1beta4.LeaseID, host string, serviceName string, externalPort uint32, skipDNSVerification bool) error {
+	ret := _mock.Called(ctx, lID, host, serviceName, externalPort, skipDNSVerification)
 
 	if len(ret) == 0 {
 		panic("no return value specified for DeclareHostname")
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, v1beta4.LeaseID, string, string, uint32) error); ok {
-		r0 = returnFunc(ctx, lID, host, serviceName, externalPort)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, v1beta4.LeaseID, string, string, uint32, bool) error); ok {
+		r0 = returnFunc(ctx, lID, host, serviceName, externalPort, skipDNSVerification)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -187,11 +187,11 @@ type Client_DeclareHostname_Call struct {
 //   - host string
 //   - serviceName string
 //   - externalPort uint32
-func (_e *Client_Expecter) DeclareHostname(ctx interface{}, lID interface{}, host interface{}, serviceName interface{}, externalPort interface{}) *Client_DeclareHostname_Call {
-	return &Client_DeclareHostname_Call{Call: _e.mock.On("DeclareHostname", ctx, lID, host, serviceName, externalPort)}
+func (_e *Client_Expecter) DeclareHostname(ctx interface{}, lID interface{}, host interface{}, serviceName interface{}, externalPort interface{}, skipDNSVerification interface{}) *Client_DeclareHostname_Call {
+	return &Client_DeclareHostname_Call{Call: _e.mock.On("DeclareHostname", ctx, lID, host, serviceName, externalPort, skipDNSVerification)}
 }
 
-func (_c *Client_DeclareHostname_Call) Run(run func(ctx context.Context, lID v1beta4.LeaseID, host string, serviceName string, externalPort uint32)) *Client_DeclareHostname_Call {
+func (_c *Client_DeclareHostname_Call) Run(run func(ctx context.Context, lID v1beta4.LeaseID, host string, serviceName string, externalPort uint32, skipDNSVerification bool)) *Client_DeclareHostname_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -213,12 +213,17 @@ func (_c *Client_DeclareHostname_Call) Run(run func(ctx context.Context, lID v1b
 		if args[4] != nil {
 			arg4 = args[4].(uint32)
 		}
+		var arg5 bool
+		if args[5] != nil {
+			arg5 = args[5].(bool)
+		}
 		run(
 			arg0,
 			arg1,
 			arg2,
 			arg3,
 			arg4,
+			arg5,
 		)
 	})
 	return _c
@@ -229,7 +234,7 @@ func (_c *Client_DeclareHostname_Call) Return(err error) *Client_DeclareHostname
 	return _c
 }
 
-func (_c *Client_DeclareHostname_Call) RunAndReturn(run func(ctx context.Context, lID v1beta4.LeaseID, host string, serviceName string, externalPort uint32) error) *Client_DeclareHostname_Call {
+func (_c *Client_DeclareHostname_Call) RunAndReturn(run func(ctx context.Context, lID v1beta4.LeaseID, host string, serviceName string, externalPort uint32, skipDNSVerification bool) error) *Client_DeclareHostname_Call {
 	_c.Call.Return(run)
 	return _c
 }

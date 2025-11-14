@@ -85,7 +85,7 @@ type Client interface {
 	RemoveHostnameFromDeployment(ctx context.Context, hostname string, leaseID mtypes.LeaseID, allowMissing bool) error
 
 	// DeclareHostname Declare that a given deployment should be connected to a given hostname
-	DeclareHostname(ctx context.Context, lID mtypes.LeaseID, host string, serviceName string, externalPort uint32) error
+	DeclareHostname(ctx context.Context, lID mtypes.LeaseID, host string, serviceName string, externalPort uint32, skipDNSVerification bool) error
 	// PurgeDeclaredHostnames Purge any hostnames associated with a given deployment
 	PurgeDeclaredHostnames(ctx context.Context, lID mtypes.LeaseID) error
 
@@ -154,7 +154,7 @@ func (c *nullClient) ConnectHostnameToDeployment(_ context.Context, _ chostname.
 	return errNotImplemented
 }
 
-func (c *nullClient) DeclareHostname(_ context.Context, _ mtypes.LeaseID, _ string, _ string, _ uint32) error {
+func (c *nullClient) DeclareHostname(_ context.Context, _ mtypes.LeaseID, _ string, _ string, _ uint32, _ bool) error {
 	return errNotImplemented
 }
 
