@@ -71,6 +71,8 @@ type service struct {
 	manifestService *manifest.Service
 	ethClient       *ethclient.Client
 	expiryService   *expiryService
+
+	ctx context.Context
 }
 
 type checkDeploymentExistsRequest struct {
@@ -238,6 +240,7 @@ func NewService(
 		bidengine:                      bidengine,
 		ethClient:                      ethClient,
 		expiryService:                  expiryService,
+		ctx:                            ctx,
 	}
 
 	go s.lc.WatchContext(ctx)

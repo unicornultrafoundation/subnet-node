@@ -91,7 +91,7 @@ func (s *service) GetLeaseStatus(ctx context.Context, leaseID mtypes.LeaseID) (a
 
 	var ipLeaseStatus []cip.LeaseIPStatus
 
-	if clIP := cfromctx.ClientIPFromContext(ctx); clIP != nil {
+	if clIP := cfromctx.ClientIPFromContext(s.ctx); clIP != nil {
 		hasLeasedIPs := false
 
 	ipManifestGroupSearchLoop:
@@ -163,11 +163,11 @@ portManifestGroupSearchLoop:
 
 	// Add hostname verification tokens and status to the response
 	// Query ProviderHost CRDs to get verification tokens and check DNS status
-	ac, err := fromctx.SubnetClientFromCtx(ctx)
+	ac, err := fromctx.SubnetClientFromCtx(s.ctx)
 	if err == nil {
 		labelSelector := &strings.Builder{}
 		kubeSelectorForLease(labelSelector, leaseID)
-		phList, err := ac.SubnetV1().ProviderHosts("lease").List(ctx, metav1.ListOptions{
+		phList, err := ac.SubnetV1().ProviderHosts("subnet-services").List(ctx, metav1.ListOptions{
 			LabelSelector: labelSelector.String(),
 		})
 		if err == nil && len(phList.Items) > 0 {
