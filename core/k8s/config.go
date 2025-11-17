@@ -15,6 +15,9 @@ type Config struct {
 	GPUCommitLevel                  float64
 	MemoryCommitLevel               float64
 	StorageCommitLevel              float64
+	BlockedHostnames                []string
+	DeploymentIngressStaticHosts    bool
+	DeploymentIngressDomain         string
 	MonitorMaxRetries               uint
 	MonitorRetryPeriod              time.Duration
 	MonitorRetryPeriodJitter        time.Duration
@@ -28,14 +31,27 @@ type Config struct {
 func NewConfig(cfg *config.C) Config {
 	config := Config{}
 
+	clusterPublicHostname := cfg.GetString("deployer.cluster_public_hostname", "")
+	deploymentIngressDomain := cfg.GetString("deployer.deployment_ingress_domain", "localhost")
+	deploymentIngressStaticHosts := cfg.GetBool("deployer.deployment_ingress_static_hosts", false)
+
 	kubeSettings := builder.NewDefaultSettings()
+	kubeSettings.DeploymentIngressDomain = deploymentIngressDomain
+	kubeSettings.DeploymentIngressStaticHosts = deploymentIngressStaticHosts
+	kubeSettings.ClusterPublicHostname = clusterPublicHostname
 	config.ClusterSettings = map[interface{}]interface{}{
 		builder.SettingsKey: kubeSettings,
 	}
 
+	config.DeploymentIngressStaticHosts = deploymentIngressStaticHosts
+	config.DeploymentIngressDomain = deploymentIngressDomain
+
+	config.BlockedHostnames = cfg.GetStringSlice("deployer.blocked_hostnames", []string{})
+
 	config.InventoryExternalPortQuantity = uint(cfg.GetUint32("deployer.inventory_external_port_quantity", 10000))
 	config.InventoryResourcePollPeriod = cfg.GetDuration("deployer.inventory_resource_poll_period", time.Second*5)
 	config.InventoryResourceDebugFrequency = uint(cfg.GetUint32("deployer.inventory_resource_debug_frequency", 10))
+
 	config.MonitorMaxRetries = uint(cfg.GetUint32("deployer.monitor_max_retries", 40))
 	config.MonitorRetryPeriod = cfg.GetDuration("deployer.monitor_retry_period", time.Second*4)
 	config.MonitorRetryPeriodJitter = cfg.GetDuration("deployer.monitor_retry_period_jitter", time.Second*15)

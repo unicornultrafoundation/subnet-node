@@ -13,7 +13,9 @@ import (
 	subnetclientset "github.com/unicornultrafoundation/subnet-node/pkg/k8s/client/clientset/versioned"
 	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/operator/common"
 	providerflags "github.com/unicornultrafoundation/subnet-node/pkg/k8s/operator/common"
+	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/operator/hostname"
 	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/operator/inventory"
+	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/operator/ip"
 	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/tools/fromctx"
 )
 
@@ -100,6 +102,8 @@ func OperatorsCmd() *cobra.Command {
 	}
 
 	cmd.AddCommand(inventory.Cmd())
+	cmd.AddCommand(ip.Cmd())
+	cmd.AddCommand(hostname.Cmd())
 
 	return cmd
 }

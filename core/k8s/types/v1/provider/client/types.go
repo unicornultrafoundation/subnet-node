@@ -51,10 +51,17 @@ type LeasedIPStatus struct {
 // LeaseStatus represents the current state of a lease, including any error messages,
 // service statuses, forwarded ports, and IP addresses.
 type LeaseStatus struct {
-	Messages       []string                         `json:"errors,omitempty"`
-	Services       map[string]*ServiceStatus        `json:"services"`
-	ForwardedPorts map[string][]ForwardedPortStatus `json:"forwarded_ports"` // Container services that are externally accessible
-	IPs            map[string][]LeasedIPStatus      `json:"ips,omitempty"`
-	TimeLeft       int64                            `json:"time_left,omitempty"`
-	Status         etypes.DeploymentExpiryStatus    `json:"status,omitempty"`
+	Messages             []string                            `json:"errors,omitempty"`
+	Services             map[string]*ServiceStatus           `json:"services"`
+	ForwardedPorts       map[string][]ForwardedPortStatus    `json:"forwarded_ports"` // Container services that are externally accessible
+	IPs                  map[string][]LeasedIPStatus         `json:"ips,omitempty"`
+	TimeLeft             int64                               `json:"time_left,omitempty"`
+	Status               etypes.DeploymentExpiryStatus       `json:"status,omitempty"`
+	HostnameVerification map[string]HostnameVerificationInfo `json:"hostname_verification,omitempty"`
+}
+
+type HostnameVerificationInfo struct {
+	Token    string `json:"token,omitempty"`
+	Verified bool   `json:"verified"`
+	Message  string `json:"message,omitempty"`
 }

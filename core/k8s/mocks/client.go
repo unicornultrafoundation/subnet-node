@@ -15,9 +15,14 @@ import (
 
 	rest "github.com/unicornultrafoundation/subnet-node/core/k8s/types/v1/provider/client"
 
+	hostname "github.com/unicornultrafoundation/subnet-node/core/k8s/types/v1/clients/hostname"
+	ip "github.com/unicornultrafoundation/subnet-node/core/k8s/types/v1/clients/ip"
+
 	v1beta3 "github.com/unicornultrafoundation/subnet-node/core/k8s/types/v1"
 
 	v1beta4 "github.com/unicornultrafoundation/subnet-node/proto/subnet/k8s/market/v1"
+
+	v2beta3 "github.com/unicornultrafoundation/subnet-node/proto/subnet/k8s/manifest/v1"
 
 	version "k8s.io/apimachinery/pkg/version"
 )
@@ -33,6 +38,298 @@ type Client_Expecter struct {
 
 func (_m *Client) EXPECT() *Client_Expecter {
 	return &Client_Expecter{mock: &_m.Mock}
+}
+
+// AllHostnames provides a mock function for the type Client
+func (_mock *Client) AllHostnames(context1 context.Context) ([]hostname.ActiveHostname, error) {
+	ret := _mock.Called(context1)
+
+	if len(ret) == 0 {
+		panic("no return value specified for AllHostnames")
+	}
+
+	var r0 []hostname.ActiveHostname
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context) ([]hostname.ActiveHostname, error)); ok {
+		return returnFunc(context1)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context) []hostname.ActiveHostname); ok {
+		r0 = returnFunc(context1)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]hostname.ActiveHostname)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context) error); ok {
+		r1 = returnFunc(context1)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// Client_AllHostnames_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'AllHostnames'
+type Client_AllHostnames_Call struct {
+	*mock.Call
+}
+
+// AllHostnames is a helper method to define mock.On call
+//   - context1 context.Context
+func (_e *Client_Expecter) AllHostnames(context1 interface{}) *Client_AllHostnames_Call {
+	return &Client_AllHostnames_Call{Call: _e.mock.On("AllHostnames", context1)}
+}
+
+func (_c *Client_AllHostnames_Call) Run(run func(context1 context.Context)) *Client_AllHostnames_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *Client_AllHostnames_Call) Return(activeHostnames []hostname.ActiveHostname, err error) *Client_AllHostnames_Call {
+	_c.Call.Return(activeHostnames, err)
+	return _c
+}
+
+func (_c *Client_AllHostnames_Call) RunAndReturn(run func(context1 context.Context) ([]hostname.ActiveHostname, error)) *Client_AllHostnames_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// ConnectHostnameToDeployment provides a mock function for the type Client
+func (_mock *Client) ConnectHostnameToDeployment(ctx context.Context, directive hostname.ConnectToDeploymentDirective) error {
+	ret := _mock.Called(ctx, directive)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ConnectHostnameToDeployment")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, hostname.ConnectToDeploymentDirective) error); ok {
+		r0 = returnFunc(ctx, directive)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// Client_ConnectHostnameToDeployment_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ConnectHostnameToDeployment'
+type Client_ConnectHostnameToDeployment_Call struct {
+	*mock.Call
+}
+
+// ConnectHostnameToDeployment is a helper method to define mock.On call
+//   - ctx context.Context
+//   - directive hostname.ConnectToDeploymentDirective
+func (_e *Client_Expecter) ConnectHostnameToDeployment(ctx interface{}, directive interface{}) *Client_ConnectHostnameToDeployment_Call {
+	return &Client_ConnectHostnameToDeployment_Call{Call: _e.mock.On("ConnectHostnameToDeployment", ctx, directive)}
+}
+
+func (_c *Client_ConnectHostnameToDeployment_Call) Run(run func(ctx context.Context, directive hostname.ConnectToDeploymentDirective)) *Client_ConnectHostnameToDeployment_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 hostname.ConnectToDeploymentDirective
+		if args[1] != nil {
+			arg1 = args[1].(hostname.ConnectToDeploymentDirective)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *Client_ConnectHostnameToDeployment_Call) Return(err error) *Client_ConnectHostnameToDeployment_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *Client_ConnectHostnameToDeployment_Call) RunAndReturn(run func(ctx context.Context, directive hostname.ConnectToDeploymentDirective) error) *Client_ConnectHostnameToDeployment_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// DeclareHostname provides a mock function for the type Client
+func (_mock *Client) DeclareHostname(ctx context.Context, lID v1beta4.LeaseID, host string, serviceName string, externalPort uint32, skipDNSVerification bool) error {
+	ret := _mock.Called(ctx, lID, host, serviceName, externalPort, skipDNSVerification)
+
+	if len(ret) == 0 {
+		panic("no return value specified for DeclareHostname")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, v1beta4.LeaseID, string, string, uint32, bool) error); ok {
+		r0 = returnFunc(ctx, lID, host, serviceName, externalPort, skipDNSVerification)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// Client_DeclareHostname_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DeclareHostname'
+type Client_DeclareHostname_Call struct {
+	*mock.Call
+}
+
+// DeclareHostname is a helper method to define mock.On call
+//   - ctx context.Context
+//   - lID v1.LeaseID
+//   - host string
+//   - serviceName string
+//   - externalPort uint32
+func (_e *Client_Expecter) DeclareHostname(ctx interface{}, lID interface{}, host interface{}, serviceName interface{}, externalPort interface{}, skipDNSVerification interface{}) *Client_DeclareHostname_Call {
+	return &Client_DeclareHostname_Call{Call: _e.mock.On("DeclareHostname", ctx, lID, host, serviceName, externalPort, skipDNSVerification)}
+}
+
+func (_c *Client_DeclareHostname_Call) Run(run func(ctx context.Context, lID v1beta4.LeaseID, host string, serviceName string, externalPort uint32, skipDNSVerification bool)) *Client_DeclareHostname_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 v1beta4.LeaseID
+		if args[1] != nil {
+			arg1 = args[1].(v1beta4.LeaseID)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		var arg3 string
+		if args[3] != nil {
+			arg3 = args[3].(string)
+		}
+		var arg4 uint32
+		if args[4] != nil {
+			arg4 = args[4].(uint32)
+		}
+		var arg5 bool
+		if args[5] != nil {
+			arg5 = args[5].(bool)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+			arg4,
+			arg5,
+		)
+	})
+	return _c
+}
+
+func (_c *Client_DeclareHostname_Call) Return(err error) *Client_DeclareHostname_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *Client_DeclareHostname_Call) RunAndReturn(run func(ctx context.Context, lID v1beta4.LeaseID, host string, serviceName string, externalPort uint32, skipDNSVerification bool) error) *Client_DeclareHostname_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// DeclareIP provides a mock function for the type Client
+func (_mock *Client) DeclareIP(ctx context.Context, lID v1beta4.LeaseID, serviceName string, port uint32, externalPort uint32, proto v2beta3.ServiceProtocol, sharingKey string, overwrite bool) error {
+	ret := _mock.Called(ctx, lID, serviceName, port, externalPort, proto, sharingKey, overwrite)
+
+	if len(ret) == 0 {
+		panic("no return value specified for DeclareIP")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, v1beta4.LeaseID, string, uint32, uint32, v2beta3.ServiceProtocol, string, bool) error); ok {
+		r0 = returnFunc(ctx, lID, serviceName, port, externalPort, proto, sharingKey, overwrite)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// Client_DeclareIP_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DeclareIP'
+type Client_DeclareIP_Call struct {
+	*mock.Call
+}
+
+// DeclareIP is a helper method to define mock.On call
+//   - ctx context.Context
+//   - lID v1.LeaseID
+//   - serviceName string
+//   - port uint32
+//   - externalPort uint32
+//   - proto v2beta3.ServiceProtocol
+//   - sharingKey string
+//   - overwrite bool
+func (_e *Client_Expecter) DeclareIP(ctx interface{}, lID interface{}, serviceName interface{}, port interface{}, externalPort interface{}, proto interface{}, sharingKey interface{}, overwrite interface{}) *Client_DeclareIP_Call {
+	return &Client_DeclareIP_Call{Call: _e.mock.On("DeclareIP", ctx, lID, serviceName, port, externalPort, proto, sharingKey, overwrite)}
+}
+
+func (_c *Client_DeclareIP_Call) Run(run func(ctx context.Context, lID v1beta4.LeaseID, serviceName string, port uint32, externalPort uint32, proto v2beta3.ServiceProtocol, sharingKey string, overwrite bool)) *Client_DeclareIP_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 v1beta4.LeaseID
+		if args[1] != nil {
+			arg1 = args[1].(v1beta4.LeaseID)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		var arg3 uint32
+		if args[3] != nil {
+			arg3 = args[3].(uint32)
+		}
+		var arg4 uint32
+		if args[4] != nil {
+			arg4 = args[4].(uint32)
+		}
+		var arg5 v2beta3.ServiceProtocol
+		if args[5] != nil {
+			arg5 = args[5].(v2beta3.ServiceProtocol)
+		}
+		var arg6 string
+		if args[6] != nil {
+			arg6 = args[6].(string)
+		}
+		var arg7 bool
+		if args[7] != nil {
+			arg7 = args[7].(bool)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+			arg4,
+			arg5,
+			arg6,
+			arg7,
+		)
+	})
+	return _c
+}
+
+func (_c *Client_DeclareIP_Call) Return(err error) *Client_DeclareIP_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *Client_DeclareIP_Call) RunAndReturn(run func(ctx context.Context, lID v1beta4.LeaseID, serviceName string, port uint32, externalPort uint32, proto v2beta3.ServiceProtocol, sharingKey string, overwrite bool) error) *Client_DeclareIP_Call {
+	_c.Call.Return(run)
+	return _c
 }
 
 // Deploy provides a mock function with given fields: ctx, deployment
@@ -136,6 +433,327 @@ func (_c *Client_Deployments_Call) Return(_a0 []v1beta3.IDeployment, _a1 error) 
 }
 
 func (_c *Client_Deployments_Call) RunAndReturn(run func(context.Context) ([]v1beta3.IDeployment, error)) *Client_Deployments_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// PurgeDeclaredHostname provides a mock function for the type Client
+func (_mock *Client) PurgeDeclaredHostname(ctx context.Context, lID v1beta4.LeaseID, hostname1 string) error {
+	ret := _mock.Called(ctx, lID, hostname1)
+
+	if len(ret) == 0 {
+		panic("no return value specified for PurgeDeclaredHostname")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, v1beta4.LeaseID, string) error); ok {
+		r0 = returnFunc(ctx, lID, hostname1)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// Client_PurgeDeclaredHostname_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'PurgeDeclaredHostname'
+type Client_PurgeDeclaredHostname_Call struct {
+	*mock.Call
+}
+
+// PurgeDeclaredHostname is a helper method to define mock.On call
+//   - ctx context.Context
+//   - lID v1.LeaseID
+//   - hostname1 string
+func (_e *Client_Expecter) PurgeDeclaredHostname(ctx interface{}, lID interface{}, hostname1 interface{}) *Client_PurgeDeclaredHostname_Call {
+	return &Client_PurgeDeclaredHostname_Call{Call: _e.mock.On("PurgeDeclaredHostname", ctx, lID, hostname1)}
+}
+
+func (_c *Client_PurgeDeclaredHostname_Call) Run(run func(ctx context.Context, lID v1beta4.LeaseID, hostname1 string)) *Client_PurgeDeclaredHostname_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 v1beta4.LeaseID
+		if args[1] != nil {
+			arg1 = args[1].(v1beta4.LeaseID)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *Client_PurgeDeclaredHostname_Call) Return(err error) *Client_PurgeDeclaredHostname_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *Client_PurgeDeclaredHostname_Call) RunAndReturn(run func(ctx context.Context, lID v1beta4.LeaseID, hostname1 string) error) *Client_PurgeDeclaredHostname_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// PurgeDeclaredHostnames provides a mock function for the type Client
+func (_mock *Client) PurgeDeclaredHostnames(ctx context.Context, lID v1beta4.LeaseID) error {
+	ret := _mock.Called(ctx, lID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for PurgeDeclaredHostnames")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, v1beta4.LeaseID) error); ok {
+		r0 = returnFunc(ctx, lID)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// Client_PurgeDeclaredHostnames_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'PurgeDeclaredHostnames'
+type Client_PurgeDeclaredHostnames_Call struct {
+	*mock.Call
+}
+
+// PurgeDeclaredHostnames is a helper method to define mock.On call
+//   - ctx context.Context
+//   - lID v1.LeaseID
+func (_e *Client_Expecter) PurgeDeclaredHostnames(ctx interface{}, lID interface{}) *Client_PurgeDeclaredHostnames_Call {
+	return &Client_PurgeDeclaredHostnames_Call{Call: _e.mock.On("PurgeDeclaredHostnames", ctx, lID)}
+}
+
+func (_c *Client_PurgeDeclaredHostnames_Call) Run(run func(ctx context.Context, lID v1beta4.LeaseID)) *Client_PurgeDeclaredHostnames_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 v1beta4.LeaseID
+		if args[1] != nil {
+			arg1 = args[1].(v1beta4.LeaseID)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *Client_PurgeDeclaredHostnames_Call) Return(err error) *Client_PurgeDeclaredHostnames_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *Client_PurgeDeclaredHostnames_Call) RunAndReturn(run func(ctx context.Context, lID v1beta4.LeaseID) error) *Client_PurgeDeclaredHostnames_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// PurgeDeclaredIP provides a mock function for the type Client
+func (_mock *Client) PurgeDeclaredIP(ctx context.Context, lID v1beta4.LeaseID, serviceName string, externalPort uint32, proto v2beta3.ServiceProtocol) error {
+	ret := _mock.Called(ctx, lID, serviceName, externalPort, proto)
+
+	if len(ret) == 0 {
+		panic("no return value specified for PurgeDeclaredIP")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, v1beta4.LeaseID, string, uint32, v2beta3.ServiceProtocol) error); ok {
+		r0 = returnFunc(ctx, lID, serviceName, externalPort, proto)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// Client_PurgeDeclaredIP_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'PurgeDeclaredIP'
+type Client_PurgeDeclaredIP_Call struct {
+	*mock.Call
+}
+
+// PurgeDeclaredIP is a helper method to define mock.On call
+//   - ctx context.Context
+//   - lID v1.LeaseID
+//   - serviceName string
+//   - externalPort uint32
+//   - proto v2beta3.ServiceProtocol
+func (_e *Client_Expecter) PurgeDeclaredIP(ctx interface{}, lID interface{}, serviceName interface{}, externalPort interface{}, proto interface{}) *Client_PurgeDeclaredIP_Call {
+	return &Client_PurgeDeclaredIP_Call{Call: _e.mock.On("PurgeDeclaredIP", ctx, lID, serviceName, externalPort, proto)}
+}
+
+func (_c *Client_PurgeDeclaredIP_Call) Run(run func(ctx context.Context, lID v1beta4.LeaseID, serviceName string, externalPort uint32, proto v2beta3.ServiceProtocol)) *Client_PurgeDeclaredIP_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 v1beta4.LeaseID
+		if args[1] != nil {
+			arg1 = args[1].(v1beta4.LeaseID)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		var arg3 uint32
+		if args[3] != nil {
+			arg3 = args[3].(uint32)
+		}
+		var arg4 v2beta3.ServiceProtocol
+		if args[4] != nil {
+			arg4 = args[4].(v2beta3.ServiceProtocol)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+			arg4,
+		)
+	})
+	return _c
+}
+
+func (_c *Client_PurgeDeclaredIP_Call) Return(err error) *Client_PurgeDeclaredIP_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *Client_PurgeDeclaredIP_Call) RunAndReturn(run func(ctx context.Context, lID v1beta4.LeaseID, serviceName string, externalPort uint32, proto v2beta3.ServiceProtocol) error) *Client_PurgeDeclaredIP_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// PurgeDeclaredIPs provides a mock function for the type Client
+func (_mock *Client) PurgeDeclaredIPs(ctx context.Context, lID v1beta4.LeaseID) error {
+	ret := _mock.Called(ctx, lID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for PurgeDeclaredIPs")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, v1beta4.LeaseID) error); ok {
+		r0 = returnFunc(ctx, lID)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// Client_PurgeDeclaredIPs_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'PurgeDeclaredIPs'
+type Client_PurgeDeclaredIPs_Call struct {
+	*mock.Call
+}
+
+// PurgeDeclaredIPs is a helper method to define mock.On call
+//   - ctx context.Context
+//   - lID v1.LeaseID
+func (_e *Client_Expecter) PurgeDeclaredIPs(ctx interface{}, lID interface{}) *Client_PurgeDeclaredIPs_Call {
+	return &Client_PurgeDeclaredIPs_Call{Call: _e.mock.On("PurgeDeclaredIPs", ctx, lID)}
+}
+
+func (_c *Client_PurgeDeclaredIPs_Call) Run(run func(ctx context.Context, lID v1beta4.LeaseID)) *Client_PurgeDeclaredIPs_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 v1beta4.LeaseID
+		if args[1] != nil {
+			arg1 = args[1].(v1beta4.LeaseID)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *Client_PurgeDeclaredIPs_Call) Return(err error) *Client_PurgeDeclaredIPs_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *Client_PurgeDeclaredIPs_Call) RunAndReturn(run func(ctx context.Context, lID v1beta4.LeaseID) error) *Client_PurgeDeclaredIPs_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// RemoveHostnameFromDeployment provides a mock function for the type Client
+func (_mock *Client) RemoveHostnameFromDeployment(ctx context.Context, hostname1 string, leaseID v1beta4.LeaseID, allowMissing bool) error {
+	ret := _mock.Called(ctx, hostname1, leaseID, allowMissing)
+
+	if len(ret) == 0 {
+		panic("no return value specified for RemoveHostnameFromDeployment")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, v1beta4.LeaseID, bool) error); ok {
+		r0 = returnFunc(ctx, hostname1, leaseID, allowMissing)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// Client_RemoveHostnameFromDeployment_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RemoveHostnameFromDeployment'
+type Client_RemoveHostnameFromDeployment_Call struct {
+	*mock.Call
+}
+
+// RemoveHostnameFromDeployment is a helper method to define mock.On call
+//   - ctx context.Context
+//   - hostname1 string
+//   - leaseID v1.LeaseID
+//   - allowMissing bool
+func (_e *Client_Expecter) RemoveHostnameFromDeployment(ctx interface{}, hostname1 interface{}, leaseID interface{}, allowMissing interface{}) *Client_RemoveHostnameFromDeployment_Call {
+	return &Client_RemoveHostnameFromDeployment_Call{Call: _e.mock.On("RemoveHostnameFromDeployment", ctx, hostname1, leaseID, allowMissing)}
+}
+
+func (_c *Client_RemoveHostnameFromDeployment_Call) Run(run func(ctx context.Context, hostname1 string, leaseID v1beta4.LeaseID, allowMissing bool)) *Client_RemoveHostnameFromDeployment_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 v1beta4.LeaseID
+		if args[2] != nil {
+			arg2 = args[2].(v1beta4.LeaseID)
+		}
+		var arg3 bool
+		if args[3] != nil {
+			arg3 = args[3].(bool)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
+func (_c *Client_RemoveHostnameFromDeployment_Call) Return(err error) *Client_RemoveHostnameFromDeployment_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *Client_RemoveHostnameFromDeployment_Call) RunAndReturn(run func(ctx context.Context, hostname1 string, leaseID v1beta4.LeaseID, allowMissing bool) error) *Client_RemoveHostnameFromDeployment_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -262,6 +880,136 @@ func (_c *Client_ForwardedPortStatus_Call) Return(_a0 map[string][]rest.Forwarde
 }
 
 func (_c *Client_ForwardedPortStatus_Call) RunAndReturn(run func(context.Context, v1beta4.LeaseID) (map[string][]rest.ForwardedPortStatus, error)) *Client_ForwardedPortStatus_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetDeclaredIPs provides a mock function for the type Client
+func (_mock *Client) GetDeclaredIPs(ctx context.Context, leaseID v1beta4.LeaseID) ([]subnet_networkv2beta2.ProviderLeasedIPSpec, error) {
+	ret := _mock.Called(ctx, leaseID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetDeclaredIPs")
+	}
+
+	var r0 []subnet_networkv2beta2.ProviderLeasedIPSpec
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, v1beta4.LeaseID) ([]subnet_networkv2beta2.ProviderLeasedIPSpec, error)); ok {
+		return returnFunc(ctx, leaseID)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, v1beta4.LeaseID) []subnet_networkv2beta2.ProviderLeasedIPSpec); ok {
+		r0 = returnFunc(ctx, leaseID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]subnet_networkv2beta2.ProviderLeasedIPSpec)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, v1beta4.LeaseID) error); ok {
+		r1 = returnFunc(ctx, leaseID)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// Client_GetDeclaredIPs_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetDeclaredIPs'
+type Client_GetDeclaredIPs_Call struct {
+	*mock.Call
+}
+
+// GetDeclaredIPs is a helper method to define mock.On call
+//   - ctx context.Context
+//   - leaseID v1.LeaseID
+func (_e *Client_Expecter) GetDeclaredIPs(ctx interface{}, leaseID interface{}) *Client_GetDeclaredIPs_Call {
+	return &Client_GetDeclaredIPs_Call{Call: _e.mock.On("GetDeclaredIPs", ctx, leaseID)}
+}
+
+func (_c *Client_GetDeclaredIPs_Call) Run(run func(ctx context.Context, leaseID v1beta4.LeaseID)) *Client_GetDeclaredIPs_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 v1beta4.LeaseID
+		if args[1] != nil {
+			arg1 = args[1].(v1beta4.LeaseID)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *Client_GetDeclaredIPs_Call) Return(providerLeasedIPSpecs []subnet_networkv2beta2.ProviderLeasedIPSpec, err error) *Client_GetDeclaredIPs_Call {
+	_c.Call.Return(providerLeasedIPSpecs, err)
+	return _c
+}
+
+func (_c *Client_GetDeclaredIPs_Call) RunAndReturn(run func(ctx context.Context, leaseID v1beta4.LeaseID) ([]subnet_networkv2beta2.ProviderLeasedIPSpec, error)) *Client_GetDeclaredIPs_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetHostnameDeploymentConnections provides a mock function for the type Client
+func (_mock *Client) GetHostnameDeploymentConnections(ctx context.Context) ([]hostname.LeaseIDConnection, error) {
+	ret := _mock.Called(ctx)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetHostnameDeploymentConnections")
+	}
+
+	var r0 []hostname.LeaseIDConnection
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context) ([]hostname.LeaseIDConnection, error)); ok {
+		return returnFunc(ctx)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context) []hostname.LeaseIDConnection); ok {
+		r0 = returnFunc(ctx)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]hostname.LeaseIDConnection)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context) error); ok {
+		r1 = returnFunc(ctx)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// Client_GetHostnameDeploymentConnections_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetHostnameDeploymentConnections'
+type Client_GetHostnameDeploymentConnections_Call struct {
+	*mock.Call
+}
+
+// GetHostnameDeploymentConnections is a helper method to define mock.On call
+//   - ctx context.Context
+func (_e *Client_Expecter) GetHostnameDeploymentConnections(ctx interface{}) *Client_GetHostnameDeploymentConnections_Call {
+	return &Client_GetHostnameDeploymentConnections_Call{Call: _e.mock.On("GetHostnameDeploymentConnections", ctx)}
+}
+
+func (_c *Client_GetHostnameDeploymentConnections_Call) Run(run func(ctx context.Context)) *Client_GetHostnameDeploymentConnections_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *Client_GetHostnameDeploymentConnections_Call) Return(leaseIDConnections []hostname.LeaseIDConnection, err error) *Client_GetHostnameDeploymentConnections_Call {
+	_c.Call.Return(leaseIDConnections, err)
+	return _c
+}
+
+func (_c *Client_GetHostnameDeploymentConnections_Call) RunAndReturn(run func(ctx context.Context) ([]hostname.LeaseIDConnection, error)) *Client_GetHostnameDeploymentConnections_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -565,6 +1313,130 @@ func (_c *Client_LeaseStatus_Call) Return(_a0 map[string]*rest.ServiceStatus, _a
 }
 
 func (_c *Client_LeaseStatus_Call) RunAndReturn(run func(context.Context, v1beta4.LeaseID) (map[string]*rest.ServiceStatus, error)) *Client_LeaseStatus_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// ObserveHostnameState provides a mock function for the type Client
+func (_mock *Client) ObserveHostnameState(ctx context.Context) (<-chan hostname.ResourceEvent, error) {
+	ret := _mock.Called(ctx)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ObserveHostnameState")
+	}
+
+	var r0 <-chan hostname.ResourceEvent
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context) (<-chan hostname.ResourceEvent, error)); ok {
+		return returnFunc(ctx)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context) <-chan hostname.ResourceEvent); ok {
+		r0 = returnFunc(ctx)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(<-chan hostname.ResourceEvent)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context) error); ok {
+		r1 = returnFunc(ctx)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// Client_ObserveHostnameState_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ObserveHostnameState'
+type Client_ObserveHostnameState_Call struct {
+	*mock.Call
+}
+
+// ObserveHostnameState is a helper method to define mock.On call
+//   - ctx context.Context
+func (_e *Client_Expecter) ObserveHostnameState(ctx interface{}) *Client_ObserveHostnameState_Call {
+	return &Client_ObserveHostnameState_Call{Call: _e.mock.On("ObserveHostnameState", ctx)}
+}
+
+func (_c *Client_ObserveHostnameState_Call) Run(run func(ctx context.Context)) *Client_ObserveHostnameState_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *Client_ObserveHostnameState_Call) Return(resourceEventCh <-chan hostname.ResourceEvent, err error) *Client_ObserveHostnameState_Call {
+	_c.Call.Return(resourceEventCh, err)
+	return _c
+}
+
+func (_c *Client_ObserveHostnameState_Call) RunAndReturn(run func(ctx context.Context) (<-chan hostname.ResourceEvent, error)) *Client_ObserveHostnameState_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// ObserveIPState provides a mock function for the type Client
+func (_mock *Client) ObserveIPState(ctx context.Context) (<-chan ip.ResourceEvent, error) {
+	ret := _mock.Called(ctx)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ObserveIPState")
+	}
+
+	var r0 <-chan ip.ResourceEvent
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context) (<-chan ip.ResourceEvent, error)); ok {
+		return returnFunc(ctx)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context) <-chan ip.ResourceEvent); ok {
+		r0 = returnFunc(ctx)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(<-chan ip.ResourceEvent)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context) error); ok {
+		r1 = returnFunc(ctx)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// Client_ObserveIPState_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ObserveIPState'
+type Client_ObserveIPState_Call struct {
+	*mock.Call
+}
+
+// ObserveIPState is a helper method to define mock.On call
+//   - ctx context.Context
+func (_e *Client_Expecter) ObserveIPState(ctx interface{}) *Client_ObserveIPState_Call {
+	return &Client_ObserveIPState_Call{Call: _e.mock.On("ObserveIPState", ctx)}
+}
+
+func (_c *Client_ObserveIPState_Call) Run(run func(ctx context.Context)) *Client_ObserveIPState_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *Client_ObserveIPState_Call) Return(resourceEventCh <-chan ip.ResourceEvent, err error) *Client_ObserveIPState_Call {
+	_c.Call.Return(resourceEventCh, err)
+	return _c
+}
+
+func (_c *Client_ObserveIPState_Call) RunAndReturn(run func(ctx context.Context) (<-chan ip.ResourceEvent, error)) *Client_ObserveIPState_Call {
 	_c.Call.Return(run)
 	return _c
 }

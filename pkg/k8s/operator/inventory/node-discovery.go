@@ -191,6 +191,7 @@ func (dp *nodeDiscovery) apiConnector() error {
 					Name:            "psutil",
 					Image:           dp.image,
 					ImagePullPolicy: corev1.PullIfNotPresent, // or corev1.PullNever for local-only
+					Command:         []string{"./subnet"},
 					Args: []string{
 						"k8s-services",
 						"tools",

@@ -35,8 +35,11 @@ const (
 )
 
 func AddOperatorFlags(cmd *cobra.Command) {
-	cmd.Flags().String(FlagK8sManifestNS, "lease", "Cluster manifest namespace")
+	cmd.Flags().String(FlagK8sManifestNS, "subnet-services", "Cluster manifest namespace")
 	if err := viper.BindPFlag(FlagK8sManifestNS, cmd.Flags().Lookup(FlagK8sManifestNS)); err != nil {
+		panic(err)
+	}
+	if err := viper.BindEnv(FlagK8sManifestNS, "AP_K8S_MANIFEST_NS"); err != nil {
 		panic(err)
 	}
 
@@ -44,9 +47,15 @@ func AddOperatorFlags(cmd *cobra.Command) {
 	if err := viper.BindPFlag(FlagPruneInterval, cmd.Flags().Lookup(FlagPruneInterval)); err != nil {
 		panic(err)
 	}
+	if err := viper.BindEnv(FlagPruneInterval, "AP_PRUNE_INTERVAL"); err != nil {
+		panic(err)
+	}
 
 	cmd.Flags().Duration(FlagWebRefreshInterval, 5*time.Second, "web data refresh interval")
 	if err := viper.BindPFlag(FlagWebRefreshInterval, cmd.Flags().Lookup(FlagWebRefreshInterval)); err != nil {
+		panic(err)
+	}
+	if err := viper.BindEnv(FlagWebRefreshInterval, "AP_WEB_REFRESH_INTERVAL"); err != nil {
 		panic(err)
 	}
 
@@ -54,11 +63,17 @@ func AddOperatorFlags(cmd *cobra.Command) {
 	if err := viper.BindPFlag(FlagRetryDelay, cmd.Flags().Lookup(FlagRetryDelay)); err != nil {
 		panic(err)
 	}
+	if err := viper.BindEnv(FlagRetryDelay, "AP_RETRY_DELAY"); err != nil {
+		panic(err)
+	}
 }
 
 func AddProviderFlag(cmd *cobra.Command) {
 	cmd.Flags().String(flagProviderAddress, "", "address of associated provider in bech32")
 	if err := viper.BindPFlag(flagProviderAddress, cmd.Flags().Lookup(flagProviderAddress)); err != nil {
+		panic(err)
+	}
+	if err := viper.BindEnv(flagProviderAddress, "AP_PROVIDER"); err != nil {
 		panic(err)
 	}
 }

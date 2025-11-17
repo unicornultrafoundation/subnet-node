@@ -11,12 +11,16 @@ import (
 	"github.com/boz/go-lifecycle"
 	"github.com/sirupsen/logrus"
 
+	kubeclienterrors "github.com/unicornultrafoundation/subnet-node/core/k8s/kube/errors"
+	"github.com/unicornultrafoundation/subnet-node/core/k8s/util"
 	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/pubsub"
+	mani "github.com/unicornultrafoundation/subnet-node/proto/subnet/k8s/manifest/v1"
 	mtypes "github.com/unicornultrafoundation/subnet-node/proto/subnet/k8s/market/v1"
 
 	ctypes "github.com/unicornultrafoundation/subnet-node/core/k8s/types/v1"
 	etypes "github.com/unicornultrafoundation/subnet-node/core/k8s/types/v1/expiry"
 	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/event"
+	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/manifest"
 	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/session"
 	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/tools/fromctx"
 )
@@ -80,6 +84,7 @@ type deploymentManager struct {
 	currentHostnames    map[string]struct{}
 	log                 *logrus.Logger
 	lc                  lifecycle.Lifecycle
+	hostnameService     ctypes.HostnameServiceClient
 	config              Config
 	isNewLease          bool
 	serviceShuttingDown <-chan struct{}
@@ -108,6 +113,7 @@ func newDeploymentManager(s *service, deployment ctypes.IDeployment, isNewLease 
 		teardownch:          make(chan struct{}),
 		log:                 logger,
 		lc:                  lifecycle.New(),
+		hostnameService:     s.HostnameService(),
 		config:              s.config,
 		serviceShuttingDown: s.lc.ShuttingDown(),
 		isNewLease:          isNewLease,
@@ -172,6 +178,14 @@ func (dm *deploymentManager) run(ctx context.Context) {
 	var shutdownErr error
 
 	runch := dm.startDeploy(ctx)
+
+	defer func() {
+		err := dm.hostnameService.ReleaseHostnames(dm.deployment.LeaseID())
+		if err != nil {
+			dm.log.WithError(err).Error("failed releasing hostnames")
+		}
+		dm.log.Debug("hostnames released")
+	}()
 
 	var teardownErr error
 
@@ -288,10 +302,26 @@ func (dm *deploymentManager) startDeploy(ctx context.Context) <-chan error {
 	chErr := make(chan error, 1)
 
 	go func() {
-		err := dm.doDeploy(ctx)
+		hostnames, endpoints, err := dm.doDeploy(ctx)
 		if err != nil {
 			chErr <- err
 			return
+		}
+
+		if len(hostnames) != 0 {
+			// Some hostnames have been withheld
+			dm.log.
+				WithField("cnt", len(hostnames)).
+				WithField("lease", dm.deployment.LeaseID()).
+				Info("hostnames withheld from deployment")
+		}
+
+		if len(endpoints) != 0 {
+			// Some endpoints have been withheld
+			dm.log.
+				WithField("cnt", len(endpoints)).
+				WithField("lease", dm.deployment.LeaseID()).
+				Info("endpoints withheld from deployment")
 		}
 
 		groupCopy := *dm.deployment.ManifestGroup()
@@ -320,7 +350,13 @@ func (dm *deploymentManager) startTeardown() <-chan error {
 	})
 }
 
-func (dm *deploymentManager) doDeploy(ctx context.Context) error {
+type serviceExposeWithServiceName struct {
+	expose mani.ServiceExpose
+	name   string
+}
+
+func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, []string, error) {
+	cleanupHelper := newDeployCleanupHelper(dm.deployment.LeaseID(), dm.client, dm.log)
 	var err error
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -336,11 +372,41 @@ func (dm *deploymentManager) doDeploy(ctx context.Context) error {
 
 	defer func() {
 		// TODO - run on an isolated context
+		cleanupHelper.purgeAll(ctx)
 		cancel()
 	}()
 
 	if err = dm.checkLeaseActive(ctx); err != nil {
-		return err
+		return nil, nil, err
+	}
+
+	currentIPs, err := dm.client.GetDeclaredIPs(ctx, dm.deployment.LeaseID())
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Either reserve the hostnames, or confirm that they already are held
+	allHostnames := manifest.AllHostnamesOfManifestGroup(*dm.deployment.ManifestGroup())
+	withheldHostnames, err := dm.hostnameService.ReserveHostnames(ctx, allHostnames, dm.deployment.LeaseID())
+
+	if err != nil {
+		dm.log.Error("deploy hostname reservation error", "state", dm.state, "err", err)
+		return nil, nil, err
+	}
+
+	dm.log.WithField("cnt", len(withheldHostnames)).Info("hostnames withheld")
+
+	hostnamesInThisRequest := make(map[string]struct{})
+	for _, hostname := range allHostnames {
+		hostnamesInThisRequest[hostname] = struct{}{}
+	}
+
+	// Figure out what hostnames were removed from the manifest if any
+	for hostnameInUse := range dm.currentHostnames {
+		_, stillInUse := hostnamesInThisRequest[hostnameInUse]
+		if !stillInUse {
+			cleanupHelper.addHostname(hostnameInUse)
+		}
 	}
 
 	// Don't use a context tied to the lifecycle, as we don't want to cancel Kubernetes operations
@@ -349,10 +415,117 @@ func (dm *deploymentManager) doDeploy(ctx context.Context) error {
 	err = dm.client.Deploy(deployCtx, dm.deployment)
 	if err != nil {
 		dm.log.WithError(err).Error("deploying workload")
-		return err
+		return nil, nil, err
 	}
 
-	return nil
+	// Figure out what hostnames to declare
+	blockedHostnames := make(map[string]struct{})
+	for _, hostname := range withheldHostnames {
+		blockedHostnames[hostname] = struct{}{}
+	}
+	type hostDeclaration struct {
+		expose              mani.ServiceExpose
+		skipDNSVerification bool
+	}
+
+	hosts := make(map[string]hostDeclaration)
+	leasedIPs := make([]serviceExposeWithServiceName, 0)
+	hostToServiceName := make(map[string]string)
+
+	ipsInThisRequest := make(map[string]serviceExposeWithServiceName)
+	// clear this out so it gets repopulated
+	dm.currentHostnames = make(map[string]struct{})
+	// Iterate over each entry, extracting the ingress services & leased IPs
+	for _, service := range dm.deployment.ManifestGroup().Services {
+		for _, expose := range service.Expose {
+			if expose.IsIngress() {
+				if dm.config.DeploymentIngressStaticHosts {
+					sanitizedServiceName := manifest.SanitizeSubdomain(service.Name)
+					uid := manifest.IngressHost(dm.deployment.LeaseID(), service.Name)
+					shortUid := uid[:8]
+					subdomain := fmt.Sprintf("%s-%s", sanitizedServiceName, shortUid)
+					host := fmt.Sprintf("%s.%s", subdomain, dm.config.DeploymentIngressDomain)
+					hosts[host] = hostDeclaration{expose: expose, skipDNSVerification: true}
+					hostToServiceName[host] = service.Name
+				}
+
+				for _, host := range expose.Hosts {
+					_, blocked := blockedHostnames[host]
+					if !blocked {
+						dm.currentHostnames[host] = struct{}{}
+						hosts[host] = hostDeclaration{expose: expose, skipDNSVerification: false}
+						hostToServiceName[host] = service.Name
+					}
+				}
+			}
+
+			if expose.Global && len(expose.IP) != 0 {
+				v := serviceExposeWithServiceName{expose: expose, name: service.Name}
+				leasedIPs = append(leasedIPs, v)
+				sharingKey := util.MakeIPSharingKey(dm.deployment.LeaseID(), expose.IP)
+				ipsInThisRequest[sharingKey] = v
+			}
+		}
+	}
+
+	for _, currentIP := range currentIPs {
+		// Check if the IP exists in the compute cluster but not in the presently used set of IPs
+		_, stillInUse := ipsInThisRequest[currentIP.SharingKey]
+		if !stillInUse {
+			proto, err := mani.ParseServiceProtocol(currentIP.Protocol)
+			if err != nil {
+				return withheldHostnames, nil, err
+			}
+			cleanupHelper.addIP(currentIP.ServiceName, currentIP.ExternalPort, proto)
+		}
+	}
+
+	for host, declaration := range hosts {
+		externalPort := uint32(declaration.expose.GetExternalPort()) // nolint: gosec
+		err = dm.client.DeclareHostname(ctx, dm.deployment.LeaseID(), host, hostToServiceName[host], externalPort, declaration.skipDNSVerification)
+		if err != nil {
+			// TODO - counter
+			return withheldHostnames, nil, err
+		}
+	}
+
+	withheldEndpoints := make([]string, 0)
+	for _, serviceExpose := range leasedIPs {
+		endpointName := serviceExpose.expose.IP
+		sharingKey := util.MakeIPSharingKey(dm.deployment.LeaseID(), endpointName)
+
+		externalPort := serviceExpose.expose.GetExternalPort()
+		port := serviceExpose.expose.Port
+
+		err = dm.client.DeclareIP(ctx, dm.deployment.LeaseID(), serviceExpose.name, port, uint32(externalPort), serviceExpose.expose.Proto, sharingKey, false) // nolint: gosec
+		if err != nil {
+			if !errors.Is(err, kubeclienterrors.ErrAlreadyExists) {
+				dm.log.
+					WithError(err).
+					WithField("service", serviceExpose.name).
+					WithField("port", externalPort).
+					WithField("endpoint", serviceExpose.expose.IP).
+					Error("failed adding IP declaration")
+				return withheldHostnames, nil, err
+			}
+			dm.log.
+				WithField("service", serviceExpose.name).
+				WithField("port", externalPort).
+				WithField("endpoint", serviceExpose.expose.IP).
+				WithError(err).
+				Info("IP declaration already exists")
+			withheldEndpoints = append(withheldEndpoints, sharingKey)
+
+		} else {
+			dm.log.
+				WithField("service", serviceExpose.name).
+				WithField("port", externalPort).
+				WithField("endpoint", serviceExpose.expose.IP).
+				Debug("added IP declaration")
+		}
+	}
+
+	return withheldHostnames, withheldEndpoints, nil
 }
 
 func (dm *deploymentManager) getCleanupRetryOpts(ctx context.Context) []retry.Option {
@@ -373,18 +546,54 @@ func (dm *deploymentManager) getCleanupRetryOpts(ctx context.Context) []retry.Op
 }
 
 func (dm *deploymentManager) doTeardown(ctx context.Context) error {
-	const teardownActivityCount = 1
+	const teardownActivityCount = 3
 	teardownResults := make(chan error, teardownActivityCount)
 
 	go func() {
 		result := retry.Do(func() error {
 			err := dm.client.TeardownLease(ctx, dm.deployment.LeaseID())
 			if err != nil {
-				dm.log.WithError(err).Error("lease teardown failed")
+				dm.log.
+					WithError(err).
+					Error("lease teardown failed")
 			}
 			return err
 		}, dm.getCleanupRetryOpts(ctx)...)
 
+		teardownResults <- result
+	}()
+
+	go func() {
+		result := retry.Do(func() error {
+			err := dm.client.PurgeDeclaredHostnames(ctx, dm.deployment.LeaseID())
+			if err != nil {
+				dm.log.
+					WithError(err).
+					Error("purge declared hostname failure")
+			}
+			return err
+		}, dm.getCleanupRetryOpts(ctx)...)
+		// TODO - counter
+
+		if result == nil {
+			dm.log.Debug("purged hostnames")
+		}
+		teardownResults <- result
+	}()
+
+	go func() {
+		result := retry.Do(func() error {
+			err := dm.client.PurgeDeclaredIPs(ctx, dm.deployment.LeaseID())
+			if err != nil {
+				dm.log.WithError(err).Error("purge declared ips failure")
+			}
+			return err
+		}, dm.getCleanupRetryOpts(ctx)...)
+		// TODO - counter
+
+		if result == nil {
+			dm.log.Debug("purged ips")
+		}
 		teardownResults <- result
 	}()
 

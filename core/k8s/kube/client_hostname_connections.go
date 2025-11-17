@@ -1,0 +1,379 @@
+package kube
+
+import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/ethereum/go-ethereum/common"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/client-go/tools/pager"
+
+	mtypes "github.com/unicornultrafoundation/subnet-node/proto/subnet/k8s/market/v1"
+
+	"github.com/unicornultrafoundation/subnet-node/core/k8s/kube/builder"
+	ctypes "github.com/unicornultrafoundation/subnet-node/core/k8s/types/v1"
+	chostname "github.com/unicornultrafoundation/subnet-node/core/k8s/types/v1/clients/hostname"
+	crd "github.com/unicornultrafoundation/subnet-node/pkg/k8s/apis/subnet.node/v1"
+)
+
+type hostnameResourceEvent struct {
+	eventType ctypes.ProviderResourceEvent
+	hostname  string
+
+	owner        common.Address
+	dseq         uint64
+	oseq         uint32
+	gseq         uint32
+	provider     common.Address
+	serviceName  string
+	externalPort uint32
+}
+
+func (c *client) DeclareHostname(ctx context.Context, lID mtypes.LeaseID, host string, serviceName string, externalPort uint32, skipDNSVerification bool) error {
+	// Label each entry with the standard labels
+	labels := map[string]string{
+		builder.SubnetNodeManagedLabelName: "true",
+	}
+
+	builder.AppendLeaseLabels(lID, labels)
+
+	update := true
+	obj, err := c.ac.SubnetV1().ProviderHosts(c.ns).Get(ctx, host, metav1.GetOptions{})
+	if err != nil {
+		if kerrors.IsNotFound(err) {
+			update = false
+		} else {
+			return err
+		}
+	}
+
+	// Check if this is a different lease (owner, dseq, gseq, oseq, or provider changed)
+	// If so, we need to regenerate the token since it's effectively a new ownership
+	// IMPORTANT: Check this BEFORE we overwrite obj.Spec with the new lease ID
+	leaseChanged := false
+	var oldLeaseID mtypes.LeaseID
+	if update {
+		oldLeaseID = mtypes.LeaseID{
+			Owner:    obj.Spec.Owner,
+			DSeq:     obj.Spec.Dseq,
+			GSeq:     obj.Spec.Gseq,
+			OSeq:     obj.Spec.Oseq,
+			Provider: obj.Spec.Provider,
+		}
+		leaseChanged = !oldLeaseID.Equals(lID)
+	}
+
+	if !update {
+		obj = &crd.ProviderHost{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:   host, // Name is always the hostname, to prevent duplicates
+				Labels: labels,
+			},
+			Spec: crd.ProviderHostSpec{
+				Hostname:     host,
+				Owner:        lID.GetOwner(),
+				Dseq:         lID.GetDSeq(),
+				Oseq:         lID.GetOSeq(),
+				Gseq:         lID.GetGSeq(),
+				Provider:     lID.GetProvider(),
+				ServiceName:  serviceName,
+				ExternalPort: externalPort,
+			},
+		}
+	} else {
+		obj.Labels = labels
+		obj.Spec = crd.ProviderHostSpec{
+			Hostname:     host,
+			Owner:        lID.GetOwner(),
+			Dseq:         lID.GetDSeq(),
+			Oseq:         lID.GetOSeq(),
+			Gseq:         lID.GetGSeq(),
+			Provider:     lID.GetProvider(),
+			ServiceName:  serviceName,
+			ExternalPort: externalPort,
+		}
+	}
+	c.log.WithField("lease", lID).WithField("service-name", serviceName).WithField("external-port", externalPort).WithField("host", host).Info("declaring hostname")
+
+	if obj.Annotations == nil {
+		obj.Annotations = make(map[string]string)
+	}
+
+	obj.Annotations[builder.SubnetNodeLeaseUpdatedAt] = time.Now().UTC().Format(time.RFC3339)
+
+	// Mark whether this hostname should skip DNS verification (provider-managed hostnames)
+	if skipDNSVerification {
+		obj.Annotations[builder.SubnetNodeSkipDNSVerification] = "true"
+	} else {
+		delete(obj.Annotations, builder.SubnetNodeSkipDNSVerification)
+	}
+
+	// Generate verification token for new ProviderHost OR if lease changed
+	// If a different lease uses the same hostname, we need a new token for security
+	if !update || leaseChanged {
+		// Generate a random 32-byte token (64 hex characters)
+		tokenBytes := make([]byte, 32)
+		if _, err := rand.Read(tokenBytes); err != nil {
+			return fmt.Errorf("failed to generate verification token: %w", err)
+		}
+		token := hex.EncodeToString(tokenBytes)
+		obj.Annotations[builder.SubnetNodeVerificationToken] = token
+		if leaseChanged {
+			c.log.
+				WithField("host", host).
+				WithField("old-lease", oldLeaseID).
+				WithField("new-lease", lID).
+				WithField("token", token).
+				Info("regenerated verification token for hostname due to lease change")
+		} else {
+			c.log.
+				WithField("host", host).
+				WithField("token", token).
+				Info("generated verification token for hostname")
+		}
+	}
+
+	if update {
+		_, err = c.ac.SubnetV1().ProviderHosts(c.ns).Update(ctx, obj, metav1.UpdateOptions{})
+	} else {
+		_, err = c.ac.SubnetV1().ProviderHosts(c.ns).Create(ctx, obj, metav1.CreateOptions{})
+	}
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c *client) PurgeDeclaredHostname(ctx context.Context, lID mtypes.LeaseID, hostname string) error {
+	labelSelector := &strings.Builder{}
+	kubeSelectorForLease(labelSelector, lID)
+
+	return c.ac.SubnetV1().ProviderHosts(c.ns).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{
+		LabelSelector: labelSelector.String(),
+		FieldSelector: fmt.Sprintf("metadata.name=%s", hostname),
+	})
+}
+
+func (c *client) PurgeDeclaredHostnames(ctx context.Context, lID mtypes.LeaseID) error {
+	labelSelector := &strings.Builder{}
+	kubeSelectorForLease(labelSelector, lID)
+	result := c.ac.SubnetV1().ProviderHosts(c.ns).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{
+		LabelSelector: labelSelector.String(),
+	})
+
+	return result
+}
+
+func (ev hostnameResourceEvent) GetLeaseID() mtypes.LeaseID {
+	return mtypes.LeaseID{
+		Owner:    ev.owner.String(),
+		DSeq:     ev.dseq,
+		GSeq:     ev.gseq,
+		OSeq:     ev.oseq,
+		Provider: ev.provider.String(),
+	}
+}
+
+func (ev hostnameResourceEvent) GetHostname() string {
+	return ev.hostname
+}
+
+func (ev hostnameResourceEvent) GetEventType() ctypes.ProviderResourceEvent {
+	return ev.eventType
+}
+
+func (ev hostnameResourceEvent) GetServiceName() string {
+	return ev.serviceName
+}
+
+func (ev hostnameResourceEvent) GetExternalPort() uint32 {
+	return ev.externalPort
+}
+
+func (c *client) ObserveHostnameState(ctx context.Context) (<-chan chostname.ResourceEvent, error) {
+	var lastResourceVersion string
+	phpager := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
+		resources, err := c.ac.SubnetV1().ProviderHosts(c.ns).List(ctx, opts)
+
+		if err == nil && len(resources.GetResourceVersion()) != 0 {
+			lastResourceVersion = resources.GetResourceVersion()
+		}
+		return resources, err
+	})
+
+	data := make([]crd.ProviderHost, 0, 128)
+	err := phpager.EachListItem(ctx, metav1.ListOptions{}, func(obj runtime.Object) error {
+		ph := obj.(*crd.ProviderHost)
+		data = append(data, *ph)
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	c.log.Info("starting hostname watch", "resourceVersion", lastResourceVersion)
+	watcher, err := c.ac.SubnetV1().ProviderHosts(c.ns).Watch(ctx, metav1.ListOptions{
+		TypeMeta:             metav1.TypeMeta{},
+		LabelSelector:        "",
+		FieldSelector:        "",
+		Watch:                false,
+		AllowWatchBookmarks:  false,
+		ResourceVersion:      lastResourceVersion,
+		ResourceVersionMatch: "",
+		TimeoutSeconds:       nil,
+		Limit:                0,
+		Continue:             "",
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	evData := make([]hostnameResourceEvent, len(data))
+	for i, v := range data {
+		if !common.IsHexAddress(v.Spec.Owner) {
+			return nil, fmt.Errorf("invalid owner address")
+		}
+		ownerAddr := common.HexToAddress(v.Spec.Owner)
+		if !common.IsHexAddress(v.Spec.Provider) {
+			return nil, fmt.Errorf("invalid provider address")
+		}
+		providerAddr := common.HexToAddress(v.Spec.Provider)
+		ev := hostnameResourceEvent{
+			eventType:    ctypes.ProviderResourceAdd,
+			hostname:     v.Spec.Hostname,
+			oseq:         v.Spec.Oseq,
+			gseq:         v.Spec.Gseq,
+			dseq:         v.Spec.Dseq,
+			owner:        ownerAddr,
+			provider:     providerAddr,
+			serviceName:  v.Spec.ServiceName,
+			externalPort: v.Spec.ExternalPort,
+		}
+		evData[i] = ev
+	}
+
+	data = nil
+
+	output := make(chan chostname.ResourceEvent)
+
+	go func() {
+		defer close(output)
+		for _, v := range evData {
+			output <- v
+		}
+		evData = nil // do not hold the reference
+
+		results := watcher.ResultChan()
+		for {
+			select {
+			case result, ok := <-results:
+				if !ok { // Channel closed when an error happens
+					return
+				}
+				ph := result.Object.(*crd.ProviderHost)
+				if !common.IsHexAddress(ph.Spec.Owner) {
+					c.log.Error("invalid owner address in provider host", "addr", ph.Spec.Owner)
+					continue // Ignore event
+				}
+				ownerAddr := common.HexToAddress(ph.Spec.Owner)
+				if !common.IsHexAddress(ph.Spec.Provider) {
+					c.log.Error("invalid provider address in provider host", "addr", ph.Spec.Provider)
+					continue // Ignore event
+				}
+				providerAddr := common.HexToAddress(ph.Spec.Provider)
+				ev := hostnameResourceEvent{
+					hostname:     ph.Spec.Hostname,
+					dseq:         ph.Spec.Dseq,
+					oseq:         ph.Spec.Oseq,
+					gseq:         ph.Spec.Gseq,
+					owner:        ownerAddr,
+					provider:     providerAddr,
+					serviceName:  ph.Spec.ServiceName,
+					externalPort: ph.Spec.ExternalPort,
+				}
+				switch result.Type {
+
+				case watch.Added:
+					ev.eventType = ctypes.ProviderResourceAdd
+				case watch.Modified:
+					ev.eventType = ctypes.ProviderResourceUpdate
+				case watch.Deleted:
+					ev.eventType = ctypes.ProviderResourceDelete
+
+				case watch.Error:
+					// Based on examination of the implementation code, this is basically never called anyways
+					c.log.Error("watch error", "err", result.Object)
+
+				default:
+
+					continue
+				}
+
+				output <- ev
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	return output, nil
+}
+
+func (c *client) AllHostnames(ctx context.Context) ([]chostname.ActiveHostname, error) {
+	ingressPager := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
+		return c.ac.SubnetV1().ProviderHosts(c.ns).List(ctx, opts)
+	})
+
+	listOptions := metav1.ListOptions{
+		LabelSelector: fmt.Sprintf("%s=true", builder.SubnetNodeManagedLabelName),
+	}
+
+	result := make([]chostname.ActiveHostname, 0)
+
+	err := ingressPager.EachListItem(ctx, listOptions, func(obj runtime.Object) error {
+		ph := obj.(*crd.ProviderHost)
+		hostname := ph.Spec.Hostname
+		dseq := ph.Spec.Dseq
+		gseq := ph.Spec.Gseq
+		oseq := ph.Spec.Oseq
+
+		owner, ok := ph.Labels[builder.SubnetNodeLeaseOwnerLabelName]
+		if !ok || len(owner) == 0 {
+			c.log.Error("providerhost missing owner label", "host", hostname)
+			return nil
+		}
+		provider, ok := ph.Labels[builder.SubnetNodeLeaseProviderLabelName]
+		if !ok || len(provider) == 0 {
+			c.log.Error("providerhost missing provider label", "host", hostname)
+			return nil
+		}
+
+		leaseID := mtypes.LeaseID{
+			Owner:    owner,
+			DSeq:     dseq,
+			GSeq:     gseq,
+			OSeq:     oseq,
+			Provider: provider,
+		}
+
+		result = append(result, chostname.ActiveHostname{
+			ID:       leaseID,
+			Hostname: hostname,
+		})
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}

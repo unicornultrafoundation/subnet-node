@@ -22,6 +22,7 @@ import (
 	provider "github.com/unicornultrafoundation/subnet-node/proto/subnet/k8s/provider/v1"
 
 	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/apitypes"
+	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/operator/waiter"
 	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/pubsub"
 	"github.com/unicornultrafoundation/subnet-node/pkg/k8s/sdl"
 
@@ -51,6 +52,7 @@ type service struct {
 	bidengine *bidengine.BidEngine
 
 	inventory *inventoryService
+	hostnames *hostnameService
 
 	checkDeploymentExistsRequestCh chan checkDeploymentExistsRequest
 	statusch                       chan chan<- *apclient.ClusterStatus
@@ -62,11 +64,15 @@ type service struct {
 	log *logrus.Logger
 	lc  lifecycle.Lifecycle
 
+	waiter waiter.OperatorWaiter
+
 	config Config
 
 	manifestService *manifest.Service
 	ethClient       *ethclient.Client
 	expiryService   *expiryService
+
+	ctx context.Context
 }
 
 type checkDeploymentExistsRequest struct {
@@ -101,6 +107,8 @@ type Service interface {
 	Close() error
 	Ready() <-chan struct{}
 	Done() <-chan struct{}
+	HostnameService() ctypes.HostnameServiceClient
+	TransferHostname(ctx context.Context, leaseID mtypes.LeaseID, hostname string, serviceName string, externalPort uint32) error
 
 	// RequestDeployment requests a deployment to be created
 	RequestDeployment(ctx context.Context, deploymentID dtypes.DeploymentID, sdlManifest sdl.SDL) error
@@ -150,8 +158,9 @@ func NewServiceFromConfig(
 	cfg *config.C,
 	bidengine *bidengine.BidEngine,
 	ethClient *ethclient.Client,
+	operatorWaiter waiter.OperatorWaiter,
 ) (Service, error) {
-	return NewService(ctx, session, bus, client, NewConfig(cfg), bidengine, ethClient)
+	return NewService(ctx, session, bus, client, NewConfig(cfg), bidengine, ethClient, operatorWaiter)
 }
 
 // NewService returns new Service instance
@@ -163,6 +172,7 @@ func NewService(
 	cfg Config,
 	bidengine *bidengine.BidEngine,
 	ethClient *ethclient.Client,
+	operatorWaiter waiter.OperatorWaiter,
 ) (Service, error) {
 	log := session.Log().WithField("module", "provider-cluster").WithField("cmp", "service").Logger
 
@@ -179,18 +189,41 @@ func NewService(
 		return nil, err
 	}
 
-	inventory, err := newInventoryService(ctx, cfg, log, sub, client, deployments)
+	inventory, err := newInventoryService(ctx, cfg, log, sub, client, operatorWaiter, deployments)
 	if err != nil {
 		sub.Close()
 		return nil, err
 	}
 
-	manifestService := manifest.NewService(bus, log, session.Provider().Address())
+	allHostnames, err := client.AllHostnames(ctx)
+	if err != nil {
+		sub.Close()
+		return nil, err
+	}
+
+	// Note: one side effect of this code is to add reservations for auto generated hostnames
+	// This is not normally done, but also doesn't cause any problems
+	activeHostnames := make(map[string]mtypes.LeaseID, len(allHostnames))
+	for _, v := range allHostnames {
+		activeHostnames[v.Hostname] = v.ID
+		log.Debug("found existing hostname", "hostname", v.Hostname, "id", v.ID)
+	}
+	hostnames, err := newHostnameService(ctx, cfg, activeHostnames)
+	if err != nil {
+		return nil, err
+	}
+
+	manifestConfig := manifest.ServiceConfig{
+		HTTPServicesRequireAtLeastOneHost: !cfg.DeploymentIngressStaticHosts,
+	}
+	manifestService := manifest.NewService(manifestConfig, bus, log, session.Provider().Address(), hostnames)
+
 	expiryService := newExpiryService(bidengine.GetBidMarket(), ethClient)
 
 	s := &service{
 		session:                        session,
 		client:                         client,
+		hostnames:                      hostnames,
 		bus:                            bus,
 		sub:                            sub,
 		inventory:                      inventory,
@@ -202,10 +235,12 @@ func NewService(
 		log:                            log.WithField("service", "k8s").Logger,
 		lc:                             lc,
 		config:                         cfg,
+		waiter:                         operatorWaiter,
 		manifestService:                manifestService,
 		bidengine:                      bidengine,
 		ethClient:                      ethClient,
 		expiryService:                  expiryService,
+		ctx:                            ctx,
 	}
 
 	go s.lc.WatchContext(ctx)
@@ -271,6 +306,14 @@ func (s *service) Reserve(order mtypes.OrderID, resources dtypes.ResourceGroup) 
 
 func (s *service) Unreserve(order mtypes.OrderID) error {
 	return s.inventory.unreserve(order)
+}
+
+func (s *service) HostnameService() ctypes.HostnameServiceClient {
+	return s.hostnames
+}
+
+func (s *service) TransferHostname(ctx context.Context, leaseID mtypes.LeaseID, hostname string, serviceName string, externalPort uint32) error {
+	return s.client.DeclareHostname(ctx, leaseID, hostname, serviceName, externalPort, false)
 }
 
 func (s *service) Status(ctx context.Context) (*apclient.ClusterStatus, error) {
@@ -451,6 +494,13 @@ func (s *service) ScaleBack(ctx context.Context, leaseID mtypes.LeaseID) error {
 func (s *service) run(ctx context.Context, deployments []ctypes.IDeployment) {
 	defer s.lc.ShutdownCompleted()
 	defer s.sub.Close()
+
+	// wait for configured operators to be online & responsive before proceeding
+	err := s.waiter.WaitForAll(ctx)
+	if err != nil {
+		s.lc.ShutdownInitiated(err)
+		return
+	}
 
 	bus := fromctx.MustPubSubFromCtx(ctx)
 

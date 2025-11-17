@@ -23,6 +23,7 @@ type reservation struct {
 	clusterParams     interface{}
 	endpointQuantity  uint
 	allocated         bool
+	ipsConfirmed      bool
 }
 
 var _ ctypes.Reservation = (*reservation)(nil)
