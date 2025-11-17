@@ -560,7 +560,7 @@ main() {
     install_ingress
     install_inventory_operator
     install_hostname_operator
-    install_ip_operator
+    # install_ip_operator
     wait_inventory_available
 }
 
