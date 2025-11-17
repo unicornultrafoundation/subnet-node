@@ -50,7 +50,7 @@ func VerifyDNSVerification(ctx context.Context, hostname, token string, timeout 
 		var dnsErr *net.DNSError
 		if errors.As(err, &dnsErr) {
 			if dnsErr.IsNotFound {
-				return false, fmt.Sprintf("DNS TXT record not found: please add a TXT record '%s.%s' with value %s in your DNS provider", subnetPrefixVerify, hostname, token)
+				return false, fmt.Sprintf("DNS TXT record not found: please add a TXT record '%s' (or '%s.%s') with value %s in your DNS provider", subnetPrefixVerify, subnetPrefixVerify, hostname, token)
 			}
 			if dnsErr.IsTimeout {
 				return false, fmt.Sprintf("DNS lookup timeout: DNS server did not respond within %v, please check your DNS configuration", timeout)
@@ -69,7 +69,7 @@ func VerifyDNSVerification(ctx context.Context, hostname, token string, timeout 
 
 	// Check if any TXT record matches the expected token
 	if len(txtRecords) == 0 {
-		return false, fmt.Sprintf("no TXT records found: please add a TXT record '%s.%s' with value %s in your DNS provider", subnetPrefixVerify, hostname, token)
+		return false, fmt.Sprintf("no TXT records found: please add a TXT record '%s' (or '%s.%s') with value %s in your DNS provider", subnetPrefixVerify, subnetPrefixVerify, hostname, token)
 	}
 
 	for _, txt := range txtRecords {
@@ -81,5 +81,5 @@ func VerifyDNSVerification(ctx context.Context, hostname, token string, timeout 
 	}
 
 	// Token mismatch - provide helpful message
-	return false, fmt.Sprintf("verification token mismatch: expected %s, but found TXT record(s): %v. Please update your DNS TXT record '%s.%s' to contain exactly: %s", token, txtRecords, subnetPrefixVerify, hostname, token)
+	return false, fmt.Sprintf("verification token mismatch: expected %s, but found TXT record(s): %v. Please update your DNS TXT record '%s' (or '%s.%s') to contain exactly: %s", token, txtRecords, subnetPrefixVerify, subnetPrefixVerify, hostname, token)
 }
